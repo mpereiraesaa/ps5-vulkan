@@ -3,6 +3,13 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define PASS_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define PASS_MARK(...) ((void)0)
+#endif
+
 static int layout(VkImageLayout value, int depth, int initial)
 {
     return (initial && value == VK_IMAGE_LAYOUT_UNDEFINED) ||
@@ -200,6 +207,9 @@ static VkResult owned_bytes(const VkRenderPassCreateInfo *info, size_t *total)
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     const VkRenderPassCreateInfo *info, const VkAllocationCallbacks *allocator, VkRenderPass *out)
 {
+    PASS_MARK("PS5VK_RENDER_PASS_CREATE attachments=%u subpasses=%u dependencies=%u",
+        info ? info->attachmentCount : 0u, info ? info->subpassCount : 0u,
+        info ? info->dependencyCount : 0u);
     if (!out) return VK_ERROR_UNKNOWN;
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO)

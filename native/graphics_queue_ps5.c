@@ -392,7 +392,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     unsigned site_report=0;
     VkResult rc=VK_SUCCESS;
     struct graphics_job *j=NULL;
+    /* The phase the preparation is in, logged as it is entered. A preparation
+     * that does not return leaves no failure record of its own, so the last
+     * phase in the log is what names the step a crash happened in - the same
+     * reasoning the shape walk's step log uses. */
     const char *phase="shape";
+#define PHASE(name) do { phase=(name);                                            \
+        ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_PHASE serial=%llu phase=%s",     \
+            (unsigned long long)j->serial,phase); } while(0)
     /* Which refusal inside the draw phase fired. Every one of them returns the
      * same error code from a different line, so a failure reports "phase=draw"
      * and nothing else - which cost a window per gate while opening the
@@ -661,7 +668,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * colour image, and the helpers below already treat a missing one as
      * "no colour work in this range" rather than as an error. */
     j->color=color_count?begin->framebuffer->attachments[colour_attachment[0]]->image:NULL;
-    phase="command-arena";
+    PHASE("command-arena");
     rc=ps5vk_draw_batch_open(&j->chain,j->serial);
     if(rc==VK_ERROR_DEVICE_LOST)retain("command-create");
     if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
@@ -675,7 +682,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     /* Owned, cache-line-aligned, zeroed GPU-visible slot. Creation zeroes it,
      * which is what makes an unwritten pair read as unavailable. */
-    phase="occlusion-slot";
+    PHASE("occlusion-slot");
     rc=ps5vk_command_arena_create(&j->slot);
     if(rc==VK_ERROR_DEVICE_LOST)retain("occlusion-slot-create");
     if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
@@ -688,13 +695,13 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
 #endif
     /* Prelude transitions/clears precede attachment load operations in both
      * the command stream and the tentative layout transaction. */
-    phase="prelude";
+    PHASE("prelude");
     rc=ps5vk_upload_commands(d,cb->operations+range_first,first-range_first,j->color,
         &j->layouts,&cursor,end,cache);
     if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
     /* Record the scoped render-pass transitions transactionally. Resource
      * state becomes committed only after the exact GPU completion label. */
-    phase="attachment-layout";
+    PHASE("attachment-layout");
     /* Every colour target the pass carries takes its own layout SEQUENCE, in
      * attachment order: a second target is a separate surface with its own
      * tracked layout, not part of attachment zero's. The sequence is the
@@ -826,7 +833,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 (unsigned long long)j->serial,a,word,(unsigned long long)bytes);
         }
     }
-    phase="draw";
+    PHASE("draw");
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
         size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),(uint64_t)(uintptr_t)j->slot.address);
@@ -1316,7 +1323,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         rc=resolve_draw_emit(d,j,&cursor,&end,begin,pass->subpass_count-1u,defaults,&draw_site);
         if(rc!=VK_SUCCESS)goto fail;
     }
-    phase="postlude";
+    PHASE("postlude");
     BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u);
     if(last+1<range_end) {
         const struct ps5vk_operation *postlude=cb->operations+last+1;
@@ -1351,7 +1358,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     size_t probe_words=ps5vk_graphics_register_probe(cursor,(size_t)(end-cursor),(uintptr_t)probe);
     if(!probe_words){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=probe_words;
 #endif
-    phase="release-packet";
+    PHASE("release-packet");
 #if defined(PS5VK_TESS_END_VS_FLUSH) && PS5VK_TESS_END_VS_FLUSH
     /* Diagnostic only: wait for pre-raster shader work before the ordinary
      * release/label and native ring restoration. This tests ordering, not a
@@ -1418,6 +1425,7 @@ fail:
     if(j)release(d,j);
     return rc;
 }
+#undef PHASE
 /* Submit arena `index` of the chain. The first arena keeps the historic
  * PS5VK_GRAPHICS_SUBMIT / SUSPEND_POINT lines, exactly one pair per job, so
  * every verifier that pairs a submit with a completion still sees one of each;

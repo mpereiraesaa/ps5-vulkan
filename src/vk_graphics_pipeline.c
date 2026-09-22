@@ -5,7 +5,15 @@
 #include "color_attachment_contract.h"
 #if (defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE) || (defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG)
 #define PS5VK_PIPELINE_DIAGNOSTICS 1
+#endif
+/* Console-only markers: the host build has neither the transport nor the
+ * header on its include path, and a pipeline that never gets created is
+ * exactly what "the case died before it recorded anything" looks like. */
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
 #include "ps5log.h"
+#define PIPE_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define PIPE_MARK(...) ((void)0)
 #endif
 #include <float.h>
 #include <string.h>
@@ -548,6 +556,23 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineC
     if (!out) return VK_ERROR_UNKNOWN;
     for (uint32_t i=0;i<count;++i) out[i]=VK_NULL_HANDLE;
     if (!d || !count || !infos) return VK_ERROR_UNKNOWN;
+    for (uint32_t i=0;i<count;++i)
+        PIPE_MARK("PS5VK_PIPELINE_CREATE subpass=%u samples=%u stages=%u topology=%u vb=%u va=%u "
+            "colors=%u dyn=%u ds=%u rp=%u",
+            (unsigned)infos[i].subpass,
+            (unsigned)(infos[i].pMultisampleState ?
+                infos[i].pMultisampleState->rasterizationSamples : 0u),
+            (unsigned)infos[i].stageCount,
+            (unsigned)(infos[i].pInputAssemblyState ?
+                infos[i].pInputAssemblyState->topology : 0xffffffffu),
+            (unsigned)(infos[i].pVertexInputState ?
+                infos[i].pVertexInputState->vertexBindingDescriptionCount : 0u),
+            (unsigned)(infos[i].pVertexInputState ?
+                infos[i].pVertexInputState->vertexAttributeDescriptionCount : 0u),
+            (unsigned)(infos[i].pColorBlendState ? infos[i].pColorBlendState->attachmentCount : 0u),
+            (unsigned)(infos[i].pDynamicState != NULL),
+            (unsigned)(infos[i].pDepthStencilState != NULL),
+            (unsigned)(infos[i].renderPass != NULL));
     /* A live same-device cache is accepted and carries no portable records yet. */
     if ((cache && !ps5vk_pipeline_cache_usable(d, cache)) ||
         !d->graphics_enabled || (!d->graphics_library && !d->graphics_acquire) ||

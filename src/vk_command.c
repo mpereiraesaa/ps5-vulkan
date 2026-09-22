@@ -2,6 +2,14 @@
 #if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
 #include "ps5log.h"
 #endif
+/* Recorder step markers. The host build has no console transport, so they
+ * compile to nothing there; on the console they are what turns "a case died
+ * while recording" into the call it died in. */
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#define CMD_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define CMD_MARK(...) ((void)0)
+#endif
 #include "vk_indirect.h"
 #include "vk_query_pool.h"
 #include "vk_image.h"
@@ -464,6 +472,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer c)
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(VkCommandBuffer c, VkPipelineBindPoint point, VkPipeline p)
 {
+    CMD_MARK("PS5VK_CMD_BIND_PIPELINE subpass=%u samples=%u",
+        p ? (unsigned)p->subpass : 0xffffffffu,
+        p ? (unsigned)p->samples : 0u);
     if (!c || c->state != PS5VK_RECORDING || !p || p->device != c->pool->device) { invalid(c); return; }
     if (point == VK_PIPELINE_BIND_POINT_GRAPHICS && p->graphics && c->pool->device->graphics_enabled) {
         c->graphics_pipeline = p; return;
@@ -715,6 +726,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(VkCommandBuffer c,VkBuffer buff
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRenderPassBeginInfo *info,
     VkSubpassContents contents)
 {
+    /* Announced before the call decides anything: a case that dies while
+     * recording leaves the begin as the last thing the log names, which is how
+     * a crash in the recorder is told from one in the objects it is handed. */
+    CMD_MARK("PS5VK_CMD_BEGIN_RENDER_PASS clear_values=%u",
+        info ? info->clearValueCount : 0u);
     /* Primary-only: a secondary inherits a render pass, it never begins one. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         !c->pool->device->graphics_enabled || c->render_pass ||
@@ -934,6 +950,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(VkCommandBuffer c,VkBuffer buffe
 VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint32_t instances,
     uint32_t first_vertex, uint32_t first_instance)
 {
+    CMD_MARK("PS5VK_CMD_DRAW vertices=%u instances=%u",
+        vertices,instances);
     if (!c || c->state != PS5VK_RECORDING || !c->render_pass || !c->graphics_pipeline ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkPipeline p = c->graphics_pipeline;

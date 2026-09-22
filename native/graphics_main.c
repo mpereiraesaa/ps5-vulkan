@@ -4556,7 +4556,32 @@ int main(void)
      * submission. The last step in the log is the step that did not return. */
     {
         struct ps5vk_sample_rate_shape_params shape_params = {
-            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 32u,
+            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 32u, .sample_shading_min = 1.0f,
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .write_fragment = ps5vk_runtime_subpass_write_fragment,
+            .write_fragment_words = sizeof(ps5vk_runtime_subpass_write_fragment) / 4,
+            .spread_fragment = ps5vk_runtime_subpass_write_spread_fragment,
+            .spread_fragment_words = sizeof(ps5vk_runtime_subpass_write_spread_fragment) / 4,
+            .fetch_fragment = ps5vk_runtime_subpass_fetch_fragment,
+            .fetch_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_fragment) / 4,
+            .sample_fragment = ps5vk_runtime_sample_id_fragment,
+            .sample_fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4,
+            .fetch_const_fragment = ps5vk_runtime_subpass_fetch_const_fragment,
+            .fetch_const_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_const_fragment) / 4,
+            .resolve_fragment = ps5vk_runtime_subpass_resolve_fragment,
+            .resolve_fragment_words = sizeof(ps5vk_runtime_subpass_resolve_fragment) / 4};
+        CHECK(ps5vk_sample_rate_shape_probe(device, &shape_params));
+    }
+    /* The same walk at the OTHER served count. The focused CTS selection's
+     * first sample-rate leaf that reaches execution is
+     * min_sample_shading.min_0_0.samples_2.primitive_triangle, and the payload
+     * process dies inside it - so the 2x shape is the one this run has to walk,
+     * step by step, for the failure to name itself the way the 4x walk did. */
+    {
+        struct ps5vk_sample_rate_shape_params shape_params = {
+            /* min_sample_shading 0.0 is the state the crashing leaf asks for. */
+            .samples = VK_SAMPLE_COUNT_2_BIT, .extent = 32u, .sample_shading_min = 0.0f,
             .vertex = ps5vk_runtime_sample_id_vertex,
             .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
             .write_fragment = ps5vk_runtime_subpass_write_fragment,

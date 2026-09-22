@@ -40,6 +40,11 @@ VkResult ps5vk_sample_rate_probe(VkDevice, const struct ps5vk_sample_rate_probe_
 struct ps5vk_sample_rate_shape_params {
     VkSampleCountFlagBits samples;
     uint32_t extent;
+    /* The fraction the subpass-0 pipeline asks for when per-sample shading is
+     * enabled. 1.0 is one invocation per sample (what the witness measures);
+     * 0.0 is what the pinned min_sample_shading leaves ask for, and it is the
+     * state the payload died in, so the walk has to be able to name it. */
+    float sample_shading_min;
     /* The vertex module whose triangle covers the target, the subpass-0
      * fragment module and the per-sample fetch module (input attachment plus
      * the uniform sample index the upstream stage declares). */

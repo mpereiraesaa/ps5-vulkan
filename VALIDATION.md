@@ -3793,3 +3793,100 @@ not establish yet: no upstream CTS leaf has been run against this path, the row
 stays a blocker, and nothing is advertised. `make check` is green; the console
 window that produced this run left the acceptance payload restored and
 `running=none`.
+
+## The focused CTS selection, and the compiler assertion behind it (2026-09-22)
+
+The row's last axis is CTS, and this window both measured it and named the
+blocker - in the compiler, not in the driver's execution path.
+
+Two runs of the same measurement selection (512 cases: the frozen 462-case
+acceptance set plus the 50 `t06-sample-rate-pending` leaves moved into `cases`)
+say the whole story:
+
+- **Without the feature advertised** (`PS5VK_SAMPLE_RATE_DIAGNOSTIC` unset, so
+  the shipping platform does not set the bit): run `20260922T173812017Z`, log
+  `77ff13e863d48a86fdf9c889502ce4d4a8e9abe75cbd8349c6db80f3a2ae4cf8`, payload
+  eboot `bea19ce65db1c2dc328e6134d211c3e1acc6e3c9f9b9d0b1c678cacec5f9c99c` -
+  `Test execution complete: pass=462 fail=0 notSupported=50 total=512`,
+  `UPSTREAM_CTS_COMPLETE status=0`, clean `BYE`. dEQP skips the leaves at
+  feature-query time, so no leaf is judged at all.
+- **With it advertised** (the measurement switch on; the shipping bit is still
+  off): run `20260922T175103500Z`, log
+  `d4ca09dbce54431b3b863a887ed84122e4e50f83124f941da23f3da791cbd631`, payload
+  eboot `9735d96702e8ab94e159972660e8660c0896cab80ddec68ea4e779f4b62af31f` - the
+  process dies inside the first sample-rate leaf that actually runs,
+  `dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle`,
+  and the log ends without `BYE` (`clean=false`).
+
+The payload now logs the case each run is in (`UPSTREAM_CTS_CASE`, added here
+because an unclean close leaves no result to name), the queue preparation phase
+(`PS5VK_GRAPHICS_PHASE`), and the front-end calls that build a case
+(`PS5VK_IMAGE_CREATE`, `PS5VK_IMAGE_BIND`, `PS5VK_IMAGE_VIEW`,
+`PS5VK_RENDER_PASS_CREATE`, `PS5VK_FRAMEBUFFER_CREATE`, `PS5VK_PIPELINE_CREATE`,
+`PS5VK_NATIVE_PIPELINE_CREATE`). The last records of the failing run are:
+
+```text
+UPSTREAM_CTS_CASE name=dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle
+PS5VK_IMAGE_CREATE format=37 samples=2 usage=00000011 extent=32x32
+PS5VK_IMAGE_BIND samples=2 usage=00000011 extent=32x32
+PS5VK_IMAGE_CREATE format=37 samples=1 usage=00000013 extent=32x32
+PS5VK_IMAGE_BIND samples=1 usage=00000013 extent=32x32
+PS5VK_IMAGE_VIEW format=37 type=1
+PS5VK_IMAGE_VIEW format=37 type=1
+PS5VK_RENDER_PASS_CREATE attachments=2 subpasses=1 dependencies=0
+PS5VK_FRAMEBUFFER_CREATE attachments=2 extent=32x32 layers=1
+PS5VK_PIPELINE_CREATE subpass=0 samples=2 stages=2 topology=3 vb=1 va=2 colors=1 dyn=0 ds=1 rp=1
+```
+
+and then nothing: the native pipeline entry is never reached, so the death is
+inside `vkCreateGraphicsPipelines`' own front-end/compile phase for that one
+call.
+
+The cause was then reproduced on the host, outside the console, with the
+sources the run itself logged: the case's vertex and fragment GLSL were
+extracted from the reassembled QPA, compiled with `glslangValidator -V
+--target-env vulkan1.0`, and handed to the same runtime compiler the console
+uses (`ps5vk_runtime_graphics_compile`), under AddressSanitizer. The pair
+aborts:
+
+```text
+SPIR-V WARNING: Unsupported SPIR-V capability: SpvCapabilitySampleRateShading (35)
+src/amd/common/nir/ac_nir.c:185: ac_nir_load_arg_at_offset: Assertion `arg.used' failed.
+  #0 ac_nir_load_arg_at_offset
+  #7 ac_nir_unpack_arg (rshift=24, bitwidth=1)
+  #9 lower_abi_instr            src/amd/vulkan/nir/radv_nir_lower_abi.c:455
+  #13 radv_nir_lower_abi
+  #14 radv_postprocess_nir      src/amd/vulkan/radv_postprocess_nir_standalone.c:283
+  #15 psbc_compile_impl         libpsbc/psbc_compile.c:3623
+  #17 ps5vk_runtime_graphics_compile
+```
+
+`radv_nir_lower_abi.c:455` is the `load_ps_iter_mask_amd` case, which unpacks the
+`PS_STATE_PS_ITER_MASK` bit out of the `ps_state` argument - and that argument is
+not marked used for this compile.
+
+Bisected by hand with the same harness, one shader at a time:
+
+| fragment stage | result |
+| -------------- | ------ |
+| reads `gl_SampleID`, never `gl_FragCoord` (the sample-rate probe's spread module) | compiles |
+| reads `gl_FragCoord`, never `gl_SampleID` | compiles |
+| reads `gl_FragCoord` and declares `gl_SampleID` (the CTS leaf's own module - its `sampleId` is even dead code) | aborts with the assertion above |
+
+The compiler skips its fragment-coordinate lowering whenever the shader
+declares sample shading (`libpsbc/psbc_compile.c`: the
+`radv_nir_lower_opt_fs_frag_pos` call is guarded by
+`!gfx_state.ms.sample_shading_enable && !nir->info.fs.uses_sample_shading`), and
+`gfx_state.ms.sample_shading_enable` is never set from the compile options at
+all, so the two facts cannot agree: the shader keeps a built-in whose argument
+the ABI never marks used. A driver-side attempt was measured and REJECTED:
+compiling the pixel stage with `rasterization_samples=1` whenever the pipeline
+does not enable sample shading does not avoid the abort, so the fix belongs in
+the compiler's fragment-coordinate/sample-shading path. That change was
+reverted; no rendering behaviour changed in this window.
+
+What this establishes: the CTS blocker is a pinned-compiler abort on one shape
+(a fragment stage that reads `gl_FragCoord` and declares `gl_SampleID`), with a
+host reproduction that needs no console. What it does not establish: the
+remaining 49 leaves have not been reached, the row stays a blocker, and nothing
+is advertised.

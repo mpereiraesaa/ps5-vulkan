@@ -2,6 +2,13 @@
 #include "color_attachment_contract.h"
 #include <string.h>
 
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define FB_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define FB_MARK(...) ((void)0)
+#endif
+
 /* The array layers an attachment view has to carry for a pass that uses view
  * masks: one layer per view, so the highest view index any subpass that names
  * this attachment renders, plus one. Zero means the pass has no masks at all,
@@ -29,6 +36,9 @@ static uint32_t attachment_view_count(VkRenderPass pass, uint32_t attachment)
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebufferCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkFramebuffer *out)
 {
+    FB_MARK("PS5VK_FRAMEBUFFER_CREATE attachments=%u extent=%ux%u layers=%u",
+        info ? info->attachmentCount : 0u, info ? info->width : 0u,
+        info ? info->height : 0u, info ? info->layers : 0u);
     if (!out) return VK_ERROR_UNKNOWN;
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO) return VK_ERROR_UNKNOWN;

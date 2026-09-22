@@ -8,6 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define IMAGE_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define IMAGE_MARK(...) ((void)0)
+#endif
+
 /* Exactly the descriptor the pinned upstream draw module's host readback
  * creates: RGBA8, 2D, one mip, one layer, one sample, LINEAR tiling, usage
  * TRANSFER_DST alone, exclusive sharing and an UNDEFINED initial layout. Every
@@ -349,6 +356,12 @@ VkResult ps5vk_buffer_cache(VkDevice d, VkBuffer b, VkDeviceSize offset,
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkImage *out)
 {
+    IMAGE_MARK("PS5VK_IMAGE_CREATE format=%u samples=%u usage=%08x extent=%ux%u",
+        info ? (unsigned)info->format : 0u,
+        info ? (unsigned)info->samples : 0u,
+        info ? (unsigned)info->usage : 0u,
+        info ? info->extent.width : 0u,
+        info ? info->extent.height : 0u);
     if (!out) return INVALID;
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO) return INVALID;
@@ -485,6 +498,11 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(VkDevice d, VkImage image
 
 VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(VkDevice d, VkImage image, VkDeviceMemory m, VkDeviceSize offset)
 {
+    IMAGE_MARK("PS5VK_IMAGE_BIND samples=%u usage=%08x extent=%ux%u",
+        image && image->device == d ? (unsigned)image->info.samples : 0u,
+        image && image->device == d ? (unsigned)image->info.usage : 0u,
+        image && image->device == d ? image->info.extent.width : 0u,
+        image && image->device == d ? image->info.extent.height : 0u);
     if (!d || !image || image->device != d || !m || m->device != d || image->ever_bound ||
         offset % image->requirements.alignment || offset > m->size ||
         image->requirements.size > m->size - offset) return INVALID;

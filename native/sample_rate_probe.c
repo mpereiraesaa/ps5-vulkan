@@ -307,12 +307,19 @@ static int shape_step(const char *name, VkResult rc)
  * 0..3 patterns into the memory this target's allocation reuses, so a stale
  * word must not be able to masquerade as a sample. */
 static void sample_rate_census(struct ps5vk_sample_rate_census *out,
-    const void *span, uint32_t words)
+    const void *span, uint32_t words, uint32_t samples)
 {
     static const uint32_t sample_words[8] = {
         0xff000004u, 0xff000008u, 0xff00000cu, 0xff000010u,
         0xff040000u, 0xff080000u, 0xff0c0000u, 0xff100000u};
-    static const uint32_t average_words[2] = {0xff00000au, 0xff0a0000u};
+    /* The SPREAD pattern's samples hold 4, 8, ... 4*samples, so their average
+     * is 2*(samples+1): 6 at two samples, 10 at four. The oracle computes it
+     * from the count instead of carrying one constant, because a 2x resolve
+     * judged against the 4x average is a false negative - which is exactly what
+     * the first 2x walk produced before this line existed. */
+    const uint32_t average = 2u * (samples + 1u);
+    const uint32_t average_words[2] = {0xff000000u | average,
+                                      0xff000000u | (average << 16)};
     const uint32_t clear_word = 0xffbf8040u;
     memset(out, 0, sizeof(*out));
     out->words = words;
@@ -342,13 +349,13 @@ static void sample_rate_census(struct ps5vk_sample_rate_census *out,
  * names itself instead of silently reporting nothing. Returns 0 when the
  * target could not be mapped at all. */
 static int sample_rate_census_log(VkDevice device, VkImage image, const char *marker,
-    struct ps5vk_sample_rate_census *out)
+    uint32_t samples, struct ps5vk_sample_rate_census *out)
 {
     void *span = NULL;
     VkDeviceSize bytes = 0;
     if (!shape_step(marker, ps5vk_image_span(device, image, &span, &bytes))) return 0;
     struct ps5vk_sample_rate_census census;
-    sample_rate_census(&census, span, (uint32_t)(bytes / 4u));
+    sample_rate_census(&census, span, (uint32_t)(bytes / 4u), samples);
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_SAMPLE_RATE_TARGET_CENSUS marker=%s words=%u distinct=%u clear_hits=%u "
         "sample_hits=%u average_hits=%u verdict=%d value0=%08x hits0=%u first0=%u last0=%u "
@@ -631,7 +638,7 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
         const VkPipelineMultisampleStateCreateInfo multisample[2] = {
             {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
              .rasterizationSamples = params->samples, .sampleShadingEnable = VK_TRUE,
-             .minSampleShading = 1.0f, .pSampleMask = &mask},
+             .minSampleShading = params->sample_shading_min, .pSampleMask = &mask},
             {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
              .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT}};
         for (unsigned subpass = 0; subpass < 3; ++subpass) {
@@ -1392,10 +1399,10 @@ two_cleanup:
         {
             struct ps5vk_sample_rate_census resolved;
             const int visible = sample_rate_census_log(device, images[1],
-                "resolve_target_map", &resolved);
-            sample_rate_census_log(device, images[0], "source_target_map", NULL);
-            sample_rate_census_log(device, images[2], "fetch_target0_map", NULL);
-            sample_rate_census_log(device, images[3], "fetch_target1_map", NULL);
+                "resolve_target_map", count, &resolved);
+            sample_rate_census_log(device, images[0], "source_target_map", count, NULL);
+            sample_rate_census_log(device, images[2], "fetch_target0_map", count, NULL);
+            sample_rate_census_log(device, images[3], "fetch_target1_map", count, NULL);
             if (visible)
                 ps5log_printf(PS5LOG_MARK,
                     "PS5VK_SAMPLE_RATE_RESOLVED extent=%ux%u words=%u distinct=%u "
