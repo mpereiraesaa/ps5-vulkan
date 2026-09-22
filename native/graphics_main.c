@@ -4553,6 +4553,25 @@ int main(void)
             .fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4};
         CHECK(ps5vk_sample_rate_probe(device, &sample_rate_params));
     }
+    /* The feature's own oracle shape: the pinned min_sample_shading leaves
+     * colour each sample with fract(gl_FragCoord.xy) and require as many
+     * distinct values as the sample count, so a 4x draw whose pixel stage
+     * publishes the sample positions and interpolates the position at the
+     * iterated sample leaves one value per sample and the pixel centre cannot
+     * pass it. This is the shipping witness for the row: no diagnostic
+     * register override is involved. */
+    {
+        struct ps5vk_sample_rate_probe_params frag_coord_params = {
+            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 64u,
+            .clear = {0.25f, 0.5f, 0.75f, 1.0f},
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .fragment = ps5vk_runtime_frag_coord_xy_fragment,
+            .fragment_words = sizeof(ps5vk_runtime_frag_coord_xy_fragment) / 4,
+            .coordinate_oracle = 1u};
+        CHECK(ps5vk_sample_rate_probe(device, &frag_coord_params));
+    }
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
     /* The same witness with a fragment that colours each sample with
      * fract(gl_FragCoord.xy) - the pinned min_sample_shading leaves' own
      * oracle, judged here by the rule that oracle uses (as many distinct
@@ -4671,6 +4690,7 @@ int main(void)
                 sample_id_pass[i].name, (int)sid_rc);
         }
     }
+#endif
 #if PS5VK_SAMPLE_RATE_PROBE == 2
     /* The same run then walks the CTS oracle's render pass one step at a time:
      * the multisampled attachment with the usage that oracle builds, the

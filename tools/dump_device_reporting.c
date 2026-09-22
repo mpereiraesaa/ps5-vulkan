@@ -119,7 +119,18 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                         PS5VK_FEATURE_DEPTH_BIAS_CLAMP |
                                         PS5VK_FEATURE_DEPTH_CLAMP |
                                         PS5VK_FEATURE_FILL_MODE_NON_SOLID |
-                                        PS5VK_FEATURE_MULTI_VIEWPORT;
+                                        PS5VK_FEATURE_MULTI_VIEWPORT |
+                                        /* DXVK262-T06 sampleRateShading,
+                                         * promoted on 2026-09-23: the raster
+                                         * stage publishes the sample positions
+                                         * and interpolates the position at the
+                                         * iterated sample, the colour-to-texture
+                                         * barrier waits for a confirmed
+                                         * writeback, and the feature's own oracle
+                                         * passes at both served counts. This dump
+                                         * mirrors the console initializer, so the
+                                         * published matrix is the console's. */
+                                        PS5VK_FEATURE_SAMPLE_RATE_SHADING;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

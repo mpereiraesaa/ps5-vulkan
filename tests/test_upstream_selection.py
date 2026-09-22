@@ -82,16 +82,19 @@ class UpstreamSelectionTests(unittest.TestCase):
         # t06-independent-blend-pending: two of them (suballocation) are
         # acceptance now that the promotion advertised the feature and served
         # the integer colour target, and the two dedicated_allocation leaves
-        # stay diagnostics because they need VK_KHR_dedicated_allocation. Plus
-        # the 50 leaves the T06 sampleRateShading line holds as
-        # t06-sample-rate-pending: the only class in the pinned multisample
-        # module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING, at the
-        # 2x/4x counts this profile serves and without the point size that needs
-        # largePoints. The 96 diagnostics that remain document refusals,
-        # capability gaps and pending measurement windows. `leaves` counts every
-        # attachment_write_mask leaf the pinned factory generates, wherever the
-        # manifest now keeps it.
-        self.assertEqual((464, 96, 48),
+        # stay diagnostics because they need VK_KHR_dedicated_allocation. The
+        # T06 sampleRateShading line selected 50 leaves from the only class in
+        # the pinned multisample module that requires
+        # DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING, at the 2x/4x counts this
+        # profile serves and without the point size that needs largePoints: 30
+        # of them - the triangle and quad shapes - are measured Pass and are
+        # now the sample-rate-shading acceptance group, and the 20 line and
+        # point_1px shapes moved to plain-point-line-pipeline-refused, whose
+        # pipeline shape this profile refuses at creation. The 66 diagnostics
+        # that remain document refusals, capability gaps and pending
+        # measurement windows. `leaves` counts every attachment_write_mask leaf
+        # the pinned factory generates, wherever the manifest now keeps it.
+        self.assertEqual((494, 66, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
@@ -334,14 +337,20 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual(6, self.capabilities["max_multiview_view_count"])
 
     def test_t06_sample_rate_leaves_are_the_feature_gated_oracle(self):
-        """The pending sampleRateShading category is exactly the leaves whose
-        own checkSupport requires the feature, at the counts this profile
-        serves. The recognizer derives them per group from the pinned tables,
-        so a leaf moved between the enabled and the disabled group - or a
-        primitive the group does not register - stops matching."""
-        category = "t06-sample-rate-pending"
-        selected = [d for d in self.current_manifest["diagnostics"]
-                    if d.get("category") == category]
+        """The leaves whose own checkSupport requires sampleRateShading are
+        exactly the feature's oracle at the counts this profile serves, wherever
+        the manifest keeps them: the shapes this profile renders are the
+        `sample-rate-shading` acceptance group, and the point and line shapes
+        whose PIPELINE SHAPE it refuses sit with the rest of those refusals. The
+        recognizer derives the leaves per group from the pinned tables, so a leaf
+        moved between the enabled and the disabled group - or a primitive the
+        group does not register - stops matching."""
+        accepted = [c for c in self.current_manifest["cases"]
+                    if c.get("category") == "sample-rate-shading"]
+        refused = [d for d in self.current_manifest["diagnostics"]
+                   if d.get("category") == "plain-point-line-pipeline-refused" and
+                   d.get("features_required") == ["core:sampleRateShading"]]
+        selected = accepted + refused
         module_source = ("external/vulkancts/modules/vulkan/pipeline/"
                          "vktPipelineMultisampleTests.cpp")
         module = (UPSTREAM / module_source).read_text()
@@ -358,12 +367,26 @@ class UpstreamSelectionTests(unittest.TestCase):
             path = diagnostic["path"]
             source = diagnostic["source"]
             self.assertTrue(source.startswith(module_source + ":"), source)
-            self.assertEqual("Pass", diagnostic["expected_status"])
             self.assertEqual(["core:sampleRateShading"], diagnostic["features_required"])
             self.assertEqual({path}, self.gate._min_sample_shading_leaf_names(module, path))
             derived.add(path)
         # 5 minSampleShading values x 2 served counts x (3 primitives + 2 quads).
         self.assertEqual(50, len(derived))
+        # The 30 shapes this profile serves are acceptance members, promoted with
+        # the run that measured them; the 20 whose topology it refuses are
+        # diagnostics that expect the refusal.
+        self.assertEqual(30, len(accepted))
+        self.assertEqual(20, len(refused))
+        for entry in accepted:
+            self.assertEqual("Pass", entry["expected_status"])
+            self.assertTrue(entry["path"].endswith((".primitive_triangle", ".quad")),
+                            entry["path"])
+            self.assertIn("PROMOTED", entry["rationale"])
+        for entry in refused:
+            self.assertEqual("Fail", entry["expected_status"])
+            self.assertTrue(entry["path"].endswith((".primitive_line", ".primitive_point_1px")),
+                            entry["path"])
+            self.assertIn("REFUSED", entry["rationale"])
         self.assertTrue(all("samples_2." in p or "samples_4." in p for p in derived))
         # The counts this profile refuses and the sparse variants it cannot bind
         # are derived by the factory but deliberately not selected.

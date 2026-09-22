@@ -260,24 +260,21 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                     PS5VK_FEATURE_DEPTH_CLAMP |
                                     PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                                     PS5VK_FEATURE_MULTI_VIEWPORT;
-    /* DXVK262-T06 sampleRateShading MEASUREMENT switch
-     * (PS5VK_SAMPLE_RATE_DIAGNOSTIC=1, honoured by tools/build_sdk.py,
-     * tools/build_native.py and therefore by tools/build_upstream_cts.py, which
-     * restages the SDK from source). The native side of this row is measured
-     * and green (a 4x colour target shaded per sample, a named sample read
-     * through the resource-only record, and the resolve target receiving the
-     * AVERAGE from a draw the driver emits); what is NOT green yet is the CTS
-     * axis, and the reason is named precisely in the 2026-09-22 measurement:
-     * with this bit advertised, the first sample-rate leaf that executes -
-     * dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle
-     * - kills the payload during its setup, after two image bindings and two
-     * view creations, so the promotion stays here until that case is fixed and
-     * passing. The switch is off by default and never set in the shipping
-     * build, so the console keeps reporting false and refusing the request
-     * until the promotion change carries its own hardware evidence. */
-#if defined(PS5VK_SAMPLE_RATE_DIAGNOSTIC) && PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    /* DXVK262-T06 sampleRateShading, promoted on 2026-09-23. The row's four
+     * axes are measured: the device reports and accepts the feature, the pixel
+     * stage publishes the sample positions, the position at the iterated
+     * sample and the synchronous colour-to-texture barrier its leaves need, and
+     * the feature's own oracle passes. The thirty leaves whose own checkSupport
+     * requires the feature and whose shapes this profile renders are the
+     * sample-rate-shading acceptance group (5 minSampleShading values x 2
+     * served counts x the triangle and quad shapes), measured Pass three times
+     * in a row; the twenty point/line shapes the same oracle selects are
+     * refused by this profile's pipeline resolver, not by this feature, and
+     * stay diagnostics next to the rest of those refusals. The measurement
+     * switch that carried this bit before the promotion
+     * (PS5VK_SAMPLE_RATE_DIAGNOSTIC) no longer guards it, and nothing else in
+     * this file sets it. */
     platform->supported_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
-#endif
     /* DXVK262-T06 fragment storage side effects.  The public-SDK witness
      * distinguishes a zero-write control from exactly 4096 fragment writes,
      * preserves 30 guard words and completes its fence.  The two unchanged

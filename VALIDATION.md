@@ -489,7 +489,7 @@ evidence; the selected CTS leaves alone do not test the maximum instance index.
 The three corresponding profile rows were satisfied by that run; the matrix
 was **4/62 ready, 58 blockers** at the time (see
 [the DXVK v2.6.2 profile section](#dxvk-262-public-abi-capability-probe) for the current
-15/62). This does not advertise the Vulkan 1.2 aggregate query
+17/62). This does not advertise the Vulkan 1.2 aggregate query
 structures or raise `apiVersion` above 1.0. The equivalent KHR fields and the
 separate unmet API-1.3 requirement remain explicit. Raw QPA and transport logs
 remain private; sanitized identities are recorded here and in the manifest.
@@ -1943,11 +1943,12 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **15/62 satisfied and 47 blockers**. Core
+The current checked result is **17/62 satisfied and 45 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
 `fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,
-`dualSrcBlend` and the four rasterization and viewport features (`depthClamp`,
+`dualSrcBlend`, `independentBlend`, `sampleRateShading` and the four
+rasterization and viewport features (`depthClamp`,
 `depthBiasClamp`, `fillModeNonSolid`, `multiViewport`) have all four axes. See
 [their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16),
 [the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20),
@@ -4290,3 +4291,72 @@ The twenty are the POINT/LINE refusals alone, so the 30 applicable
 `min_sample_shading*` leaves - the five min-fractions at both served counts for
 the triangle and quad geometries - pass deterministically, which is what the row
 needs and what the frozen selection cannot carry as a flaky member.
+
+## DXVK262-T06 sampleRateShading promotion (2026-09-23)
+
+T06 is complete: the four requirements of the tranche -
+`fragmentStoresAndAtomics`, `dualSrcBlend`, `independentBlend` and
+`sampleRateShading` - are satisfied on all four axes, so the live matrix reads
+**17/62 ready with 45 blockers** (from 16/62).
+
+The promotion moved the row's own oracle into the frozen selection. The
+multisample module has exactly one class whose `checkSupport` requires
+`DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING`; it registers five min-fractions at
+two served counts over five primitives. Thirty of those fifty leaves - the
+triangle and quad shapes - are the group `sample-rate-shading`, measured Pass;
+the twenty line and `primitive_point_1px` shapes moved to
+`plain-point-line-pipeline-refused`, because what refuses them is this
+profile's pipeline resolver, not this feature: `vkCreateGraphicsPipelines`
+returns `VK_ERROR_FEATURE_NOT_PRESENT` and the CTS reports it at
+`vkPipelineConstructionUtil.cpp:178` with the driver's own
+`PS5VK_PIPELINE_CREATE` line as the last record. The frozen selection is now
+494 acceptance cases and 66 diagnostics.
+
+The four axes, each with its own artifact:
+
+* **API** - the public-ABI capability probe on the promoted profile, artifact
+  SELF SHA-256
+  `439de5c96579b634bb4698adf439631dd545f9298bdccd1c5e1129f750184a07`, run
+  `20260922T234500151Z_PPSA99994_ps5vk_0x1c394a882c7bf`, log SHA-256
+  `2b04497f8ae6a8d01feb3961f2a7b724bb763c611b69b78d9f3c7b497ece8d20`
+  (rebuilt against the promoted matrix, and a first run on the same artifact,
+  `20260922T233053671Z` log
+  `93268e3d01eadd0a8d922bd7459cc3618010b2e7f03844eb50d6473ac059b13b`,
+  verified against the pre-promotion snapshot). Both strict verifications
+  reconstructed all 62 rows, observed `sampleRateShading = 1`, and derived the
+  same **19 satisfied / 43 blockers** result;
+  `framebufferColorSampleCounts` moved to 1x|2x|4x with it.
+* **CTS** - three consecutive runs of the 514-case measurement selection
+  (frozen 464 + the 50 pending leaves) reported 494 Pass / 20 Fail / 0
+  NotSupported each time, the twenty being the POINT/LINE refusals and every
+  one of the thirty applicable sample-rate leaves Pass. Payload eboot
+  `7eed073a5e49b52ed9df75932b3e3b22504106e1a5d5a824b99765f89d22f27d`
+  (measurement selection, register survey available), runs
+  `20260922T231948101Z`, `20260922T232046070Z` and `20260922T232129201Z`.
+* **Native** - the frozen acceptance selection itself, on the shipping profile
+  and without the measurement switch: payload eboot SELF SHA-256
+  `e1ed40fb0089c5a39eb0b6c333b74b9aa430d524c10d4f74220452263d40b4cb`,
+  selection SHA-256 `f6924b34930a837f88635e47cf388bf9a88fd72e1082a0f3ee9ab6bba5a540ed`,
+  run `20260922T232928853Z_PPSA99994_upstream-cts_0x1c2bbd396dece`, log SHA-256
+  `287f98ec1e81ccb09642bbf12b75062ed60bb95501d3451849d8f3d5f6633b54`: **494
+  reported, 494 Pass, 0 Fail, 0 NotSupported**, clean lifecycle. The
+  shipping witness payload (no measurement switch, eboot
+  `1ce2fe9cf7d0647535f044c69f48316272a860c2dead603ae9b2135e12a60613`, run
+  `20260922T233238023Z_PPSA99994_ps5vk_0x1c2e7dee46277`, log SHA-256
+  `0b82307d624e9adeb405e9ce93a782e577246dba50c54be894556f4f6293a570`) is the
+  row's own oracle executed directly:
+
+```text
+PS5VK_SAMPLE_RATE_SHADED extent=64x64 samples=4 words=65536 shaded_values=4 expected_values=4 matched=4 covered_words=16384 values=ff000000,ff010000,ff020000,ff030000 oracle=sample-id verdict=1
+PS5VK_SAMPLE_RATE_SHADED extent=64x64 samples=4 words=65536 shaded_values=4 expected_values=4 matched=4 covered_words=16384 values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+```
+
+One limit the promotion made applicable is NOT satisfied and is recorded rather
+than claimed. While `sampleRateShading` is unreported the CTS leaves the
+interpolation-offset limits out and this profile reports them relaxed; reporting
+the feature brings the core table's own floors (`maxInterpolationOffset >= 0.5`,
+`minInterpolationOffset <= -0.5`, `subPixelInterpolationOffsetBits >= 4`) into
+scope. This driver reports 0 for all three: no path lowers an interpolation
+offset, so they are documented as blockers in the reporting matrix
+(`tools/check_reporting_matrix.py`, `KNOWN_BLOCKERS`) instead of being raised to
+values nothing measured.

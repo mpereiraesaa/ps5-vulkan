@@ -20,13 +20,16 @@ candidate run (those 99 stay outside the frozen acceptance selection;
 `geometryShader` and `tessellationShader` are positive on the API,
 implementation and CTS axes but still `reported-not-executed` natively, so
 both remain blockers); the four DXVK262-T05 rasterization and viewport
-features were promoted on 2026-09-21, and the frozen acceptance selection,
-now 362 cases, passes 362/362 with them reported; and of T06,
-`fragmentStoresAndAtomics` and `dualSrcBlend` are satisfied with their four
-axes and `independentBlend` was promoted on 2026-09-22, while
-`sampleRateShading` remains a blocker on all four. The live matrix is 16/62
-ready with 46 blockers. The ordered table preserves the original tranche
-membership.
+features were promoted on 2026-09-21; and DXVK262-T06 is complete, with all
+four of its requirements satisfied: `fragmentStoresAndAtomics` and
+`dualSrcBlend` with their four axes, `independentBlend` promoted on
+2026-09-22, and `sampleRateShading` promoted on 2026-09-23 - the pixel stage
+publishes Vulkan's standard sample positions and interpolates the position at
+the iterated sample, the colour-to-texture barrier waits for a confirmed
+writeback, and the feature's own oracle, thirty leaves at both served counts,
+passes inside the frozen acceptance selection, which now carries them and
+passes 494/494. The live matrix is 17/62 ready with 45 blockers. The ordered
+table preserves the original tranche membership.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
 11_0 baseline. Reaching 62/62 means that this profile has complete API,
