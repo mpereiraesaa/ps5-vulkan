@@ -169,7 +169,16 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
          * single-sample data - measured: every sample index returned plane
          * zero's value. */
         words[3]&=(uint32_t)~((UINT32_C(0xf)<<28)|UINT32_C(0x000ff000));
-        words[3]|=(UINT32_C(14)<<28)|(ps5vk_sample_count_log2(image->info.samples)<<16);
+        words[3]|=(UINT32_C(15)<<28)|(ps5vk_sample_count_log2(image->info.samples)<<16);
+        /* The pinned compiler lowers a subpassInputMS to a TWO DIMENSIONAL
+         * ARRAY MSAA image (ac_shader_util.c: GLSL_SAMPLER_DIM_SUBPASS_MS ->
+         * ac_image_2darraymsaa), so the resource type tag is
+         * V_008F1C_SQ_RSRC_IMG_2D_MSAA_ARRAY (15) - not the plain 2D_MSAA tag
+         * (14) - and the single layer this profile serves is described with a
+         * zero depth field. The plain subpassInput the multiview witness reads
+         * is the same story with the non-MSAA array tag, which is why that
+         * record already carries 13. */
+        words[4]=0;
     }
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }

@@ -3415,3 +3415,41 @@ What this establishes: the read executes end to end with the index in the
 instruction, and the value always comes from plane 0. What it does not
 establish: the per-sample read, the resolve, any passing CTS leaf, the row - all
 unchanged, and nothing is advertised.
+
+## The per-sample read, re-measured without a confound (2026-09-22)
+
+The previous measurement concluded that the read "always returns plane zero",
+and that conclusion was confounded by the probe's own clear value: the fetch
+pass cleared its target to `{0, 0, 0, 1}`, whose RGBA8 word is `0xff000000` -
+exactly the value the gl_SampleID module writes for sample 0. A fetch that wrote
+nothing looked the same as a fetch that read plane zero.
+
+With a clear no sample can hold (`{0.5, 0.5, 0.5, 1}` = `0xff808080`), the same
+sweep (run `20260922T124831879Z_PPSA99994_ps5vk_0x19fc1fd2698b0`, log SHA-256
+`c852c65e13c01356f2b7a3c40764064c9224fd5b0e1d1ec868c29a8961341269`) reads:
+
+- `sample_index=0`: `matched=1024 expected=1024`, `seen=ff000000,ff808080` -
+  the fetch subpass ran, read a REAL sample of the multisampled attachment and
+  wrote it across its own target's plane, with the pass clear left in the tiled
+  padding. Verdict 1: the multisampled input-attachment read executes.
+- `sample_index=3` (the module with the index baked in, whose ISA carries
+  `v_mov_b32 3` into the sample operand): the plane holds `ff000000` again -
+  sample 0's value, not sample 3's.
+
+The record now also carries the resource type the pinned compiler's own mapping
+implies: `ac_shader_util.c` lowers `GLSL_SAMPLER_DIM_SUBPASS_MS` to
+`ac_image_2darraymsaa`, so a `subpassInputMS` is a TWO-DIMENSIONAL ARRAY MSAA
+image - `V_008F1C_SQ_RSRC_IMG_2D_MSAA_ARRAY` (15), with the single layer
+described by a zero depth field - and not the plain 2D MSAA tag (14) the
+previous window carried. Both tags were measured and both return plane 0 for a
+non-zero index, so the tag alone is not what selects the sample.
+
+What this establishes, positively: the multisampled input-attachment read runs
+on this hardware and delivers a real sample plane into the subpass's own target.
+What it does not establish: selecting a sample other than the first, which is
+what the oracle's fetch subpass and a resolve both need. The open question is
+now narrower than "the read does not work": it is how the sample index selects a
+plane in the storage this profile backs a multisampled colour attachment with,
+and whether the tile mode the record carries describes that storage - the same
+question the previous window raised, now with the confound removed and one
+positive result in hand.

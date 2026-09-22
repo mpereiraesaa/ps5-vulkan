@@ -859,9 +859,14 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
                         rc = vkFlushMappedMemoryRanges(device, 1, &ubo_range);
                         if (!shape_step("fetch_ubo_flush", rc) || rc != VK_SUCCESS) goto fetch_cleanup;
                     }
+                    /* The clear has to be a value NO sample can hold: the
+                     * sample-id module writes 0xff0k0000, and a clear of
+                     * {0,0,0,1} is exactly 0xff000000 - indistinguishable from
+                     * sample zero, which would make a fetch that wrote nothing
+                     * look like a fetch that read plane zero. */
                     VkClearValue fetch_clears[2] = {
-                        {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
-                        {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}}};
+                        {.color = {.float32 = {0.5f, 0.5f, 0.5f, 1.0f}}},
+                        {.color = {.float32 = {0.5f, 0.5f, 0.5f, 1.0f}}}};
                     const VkRenderPassBeginInfo fetch_begin_info = {
                         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = fetch_pass,
                         .framebuffer = fetch_fb,
