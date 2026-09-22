@@ -404,8 +404,9 @@ static void exercise_device(void)
     assert_barrier_refused(pinned_source_stage, pinned_destination_stage, &boundary);
 
     /* The shape the leaves actually create, and the integer format they draw
-     * into, exist only in the build that serves them. */
-#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
+     * into, are part of the served capability set now that independentBlend is
+     * promoted: the sampled colour readback shape and R8G8B8A8_UINT are what
+     * the two upstream leaves that require the feature build. */
     const VkFormat pinned_formats[2] = {VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_R8G8B8A8_UNORM};
     VkDeviceMemory pinned_memory[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkImage pinned[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
@@ -456,19 +457,6 @@ static void exercise_device(void)
         vkDestroyImage(device, pinned[i], NULL);
         vkFreeMemory(device, pinned_memory[i], NULL);
     }
-#else
-    /* The shipping capability set serves neither the sampled colour readback
-     * shape nor an integer colour target, so the leaf's own images cannot even
-     * be created. That is the refusal the leaves met before the measurement
-     * build existed, and it stays until the promotion moves both roles into the
-     * shipping set. */
-    VkImage unsupported = VK_NULL_HANDLE;
-    VkDeviceMemory unsupported_memory = VK_NULL_HANDLE;
-    assert(create_image(VK_FORMAT_R8G8B8A8_UNORM, pinned_usage, &unsupported,
-                        &unsupported_memory) == VK_ERROR_FORMAT_NOT_SUPPORTED);
-    assert(create_image(VK_FORMAT_R8G8B8A8_UINT, pinned_usage, &unsupported,
-                        &unsupported_memory) == VK_ERROR_FORMAT_NOT_SUPPORTED);
-#endif
 
     vkDestroyImage(device, first, NULL);
     vkFreeMemory(device, first_memory, NULL);

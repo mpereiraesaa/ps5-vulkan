@@ -229,19 +229,6 @@ def main():
               if os.environ.get("PS5VK_TESS_HULL_TRACE") == "1" else []),
             *(["-DPS5VK_TESS_OFFCHIP_BIND=1"]
               if os.environ.get("PS5VK_TESS_OFFCHIP_BIND") == "1" else []),
-            # Private measurement build (DXVK262-T06 independentBlend): report
-            # the capability so the two-colour-target witness can negotiate it
-            # through the public API. Off by default, and the shipping platform
-            # never sets it; the promotion is a separate, evidence-backed
-            # change.
-            *(["-DPS5VK_INDEPENDENT_BLEND_DIAGNOSTIC=1"]
-              if os.environ.get("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC") == "1" else []),
-            # The same measurement's prerequisite: the only upstream leaves that
-            # require independentBlend draw into R8G8B8A8_UINT plus
-            # R8G8B8A8_UNORM, so the measurement build serves an integer colour
-            # target. Off by default and never set by the shipping platform.
-            *(["-DPS5VK_INTEGER_TARGET_DIAGNOSTIC=1"]
-              if os.environ.get("PS5VK_INTEGER_TARGET_DIAGNOSTIC") == "1" else []),
         ]
         # The DXVK262-T05 measurement switch is gone: the four rasterization
         # and viewport features are advertised by the shipping platform on

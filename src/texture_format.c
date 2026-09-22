@@ -31,16 +31,12 @@
 
 /* Sampled row: the GFX1013 word/selectors/texel size are the pinned GPL
  * encoding. ENABLED carries additional directly qualified roles. */
-/* The DXVK262-T06 independentBlend measurement serves one integer colour
- * target: the only upstream leaves that require the feature draw into
- * R8G8B8A8_UINT plus R8G8B8A8_UNORM, so the measurement build has to render
- * into it and read it back. Behind the private switch, so the shipped
- * capability set is unchanged until that oracle passes. */
-#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
+/* The DXVK262-T06 independentBlend target: the only upstream leaves that
+ * require the feature draw into R8G8B8A8_UINT plus R8G8B8A8_UNORM, so the
+ * integer colour target is part of the served capability set - it renders, it
+ * is blended-free, it clears with its raw word and it is read back. Promoted
+ * with the feature (measured 2026-09-22). */
 #define CAP_INTEGER_TARGET (CAP_COLOR | CAP_COLOR_READBACK | CAP_SRC)
-#else
-#define CAP_INTEGER_TARGET 0
-#endif
 #define SAMPLED(f, bpt, word, s0, s1, s2, s3, EXTRA, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), \

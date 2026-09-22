@@ -4760,7 +4760,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8B8A8_UINT lacks mandatory VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8B8A8_UINT reports VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT",
       "format": "VK_FORMAT_R8G8B8A8_UINT",
       "kind": "format-cell",
@@ -4768,7 +4768,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -16490,11 +16490,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
+      "detail": "core: reported 2 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
       "kind": "limit",
       "limit": "maxColorAttachments",
       "profile": "graphics",
-      "reported": 1,
+      "reported": 2,
       "verdict": "blocker"
     },
     {
@@ -18306,11 +18306,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 4; blocker: one color attachment plus the single sampled descriptor",
+      "detail": "core: reported 2 must be >= 4; blocker: one color attachment plus the single sampled descriptor",
       "kind": "limit",
       "limit": "maxFragmentCombinedOutputResources",
       "profile": "graphics",
-      "reported": 1,
+      "reported": 2,
       "verdict": "blocker"
     },
     {
@@ -18456,11 +18456,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 1 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
+      "detail": "untagged-core: reported 2 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
       "kind": "limit",
       "limit": "maxFragmentOutputAttachments",
       "profile": "graphics",
-      "reported": 1,
+      "reported": 2,
       "verdict": "blocker"
     },
     {
@@ -27105,9 +27105,9 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 523,
+      "blocker": 522,
       "not-applicable": 2,
-      "satisfied": 139
+      "satisfied": 140
     },
     "limits": {
       "blocker": 59,

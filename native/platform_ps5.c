@@ -279,18 +279,18 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * the front end and the compiler still refuse a SRC1 equation without it,
      * and without the proven secondary export. */
     platform->supported_features |= PS5VK_FEATURE_DUAL_SRC_BLEND;
-    /* Private measurement build for DXVK262-T06 independentBlend
-     * (tools/build_native.py honours PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC=1):
-     * report the capability so the private two-colour-target witness can
-     * negotiate it through the public API and measure a two-MRT draw on
-     * hardware. Default off, never set in the shipping build, and nothing else
-     * in this file sets it. The shipping promotion is a separate,
-     * evidence-backed change that also raises the advertised
-     * maxColorAttachments, which this switch deliberately does not touch: the
-     * witness asks for the feature, not for the served limit. */
-#if defined(PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC) && PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC
+    /* DXVK262-T06 independentBlend, promoted 2026-09-22. The two-colour-target
+     * path is built and measured end to end: the private two-MRT witness
+     * (src/two_mrt_oracle.c, native/two_mrt_probe.c) showed one draw writing
+     * two attachments with different values, and the four upstream leaves that
+     * require the feature now run on hardware - the two
+     * suballocation.attachment_write_mask leaves pass, and the two
+     * dedicated_allocation ones stay out because they need
+     * VK_KHR_dedicated_allocation, which this profile does not advertise. The
+     * advertised maxColorAttachments moves with it in src/graphics_limits.h;
+     * the front end, the pipeline key and the native per-target programming
+     * already carry the bound. */
     platform->supported_features |= PS5VK_FEATURE_INDEPENDENT_BLEND;
-#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

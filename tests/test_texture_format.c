@@ -161,10 +161,13 @@ int main(void)
             VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT};
         for (unsigned i = 0; i < sizeof(rejected)/sizeof(rejected[0]); ++i)
             assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM, rejected[i]));
-        const VkFormat other[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
-                                  VK_FORMAT_R8G8B8A8_UINT};
+        const VkFormat other[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM};
         for (unsigned i = 0; i < sizeof(other)/sizeof(other[0]); ++i)
             assert(!ps5vk_texture_format_image_usage(other[i], exact));
+        /* The integer colour target is served now that independentBlend is
+         * promoted, and the upstream leaves that require the feature create it
+         * with exactly this readback shape. */
+        assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UINT, exact));
     }
 
     assert(ps5vk_texture_format_has(VK_FORMAT_A8B8G8R8_UNORM_PACK32,
@@ -672,7 +675,11 @@ int main(void)
         VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+    /* The upstream render-pass module adds the sampled role to that same
+     * attachment because the format publishes it; that combination is served
+     * now that independentBlend and the integer target it needs are promoted,
+     * and it is what the two leaves that require the feature create. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
     /* The combination is the readback row's alone: the other colour format
