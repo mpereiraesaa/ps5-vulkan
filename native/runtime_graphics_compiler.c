@@ -315,6 +315,25 @@ static int ps5vk_reject(const struct ps5vk_graphics_key *key,unsigned site){
     return 0;
 }
 
+/* The sample-rate contract this adapter compiles for (DXVK262-T06).
+ *
+ * The count is the one the front end already accepted: the pipeline and the
+ * subpass it draws in agree on it, and the platform mask is what bounds both
+ * (src/sample_rate_contract.h). This adapter is not a feature-promotion gate,
+ * so it repeats only the two facts it can see for itself: a count this profile
+ * does not implement is refused, and per-sample shading - the state that turns
+ * one fragment invocation into one per sample - needs sampleRateShading
+ * enabled on the logical device the application created, with a fraction
+ * bounded to [0,1]. The accepted count then rides into PSBC's
+ * rasterization_samples option, which is what the pinned compiler turns into
+ * the per-sample pixel ABI. */
+static int sample_rate_key_supported(const struct ps5vk_graphics_key *key)
+{
+    if (!ps5vk_sample_count_implemented(key->samples)) return 0;
+    if (!key->sample_shading_enable) return 1;
+    if (!(key->feature_mask & PS5VK_FEATURE_SAMPLE_RATE_SHADING)) return 0;
+    return key->min_sample_shading >= 0.0f && key->min_sample_shading <= 1.0f;
+}
 static int blend_factor_uses_src1(VkBlendFactor factor)
 {
     return factor==VK_BLEND_FACTOR_SRC1_COLOR ||
@@ -451,7 +470,7 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,5);
         uint32_t patch_type=0;
         if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
-        if(key->samples!=VK_SAMPLE_COUNT_1_BIT ||
+        if(!sample_rate_key_supported(key) ||
            !color_target_supported(key) ||
            !blend_profile_supported(key))return ps5vk_reject(key,8);
         if(!descriptor_profile_supported(key))return ps5vk_reject(key,9);
@@ -518,7 +537,7 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
     if(!ps5vk_graphics_has_geometry(key) && ps5vk_agc_primitive_needs_geometry(primitive_type))
         return ps5vk_reject(key,22);
     if(!color_target_supported(key) ||
-       key->samples!=VK_SAMPLE_COUNT_1_BIT ||
+       !sample_rate_key_supported(key) ||
        !blend_profile_supported(key))return ps5vk_reject(key,23);
     /* Binding counts/pointers were checked above. Keep every remaining
      * refusal observable, including the non-tessellated CTS reference path. */
@@ -726,7 +745,14 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     VkResult failure=VK_ERROR_FEATURE_NOT_PRESENT;
     PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
         .entrypoint=key->fragment.entry,.optimise=true,.address32_hi=2,
-        .primitive_type=0,.rasterization_samples=1};
+        /* The pixel stage compiles for the sample count the pipeline carries:
+         * the pinned compiler turns it into the per-sample ABI (screen position
+         * per sample, sample-rate interpolation and the sample id), which is
+         * what makes sampleRateShading executable rather than merely accepted
+         * (DXVK262-T06). A single-sample pipeline passes 1, exactly as every
+         * earlier build did. */
+        .primitive_type=0,
+        .rasterization_samples=ps5vk_sample_count_number(key->samples)};
     /* Mesa ac_choose_spi_color_formats: RGBA8 UNORM blending uses FP16_ABGR,
      * paired with matching SX conversion at draw time; unblended keeps 32_ABGR.
      * The option is one nibble per colour attachment, so it is derived from the

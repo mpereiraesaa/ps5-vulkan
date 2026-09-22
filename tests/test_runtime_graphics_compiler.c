@@ -84,6 +84,49 @@ static uint32_t compiled_ps_input_ena(const char *fragment_path)
     return ena;
 }
 
+/* The sample-rate contract the compiler adapter repeats (DXVK262-T06): a count
+ * this profile implements compiles, per-sample shading additionally needs the
+ * feature the logical device enabled, and a count outside the envelope is
+ * refused before any compiler work. The count reaches PSBC as
+ * rasterization_samples, which is the option the pinned compiler turns into
+ * its per-sample pixel ABI; the fragment metadata below is what proves the
+ * option was accepted rather than ignored. */
+static void check_sample_rate_compilation(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    /* 4x without per-sample shading: the multisample state the front end
+     * accepts compiles, and it is a different program from the 1x one. */
+    key.samples=VK_SAMPLE_COUNT_4_BIT;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *quad=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&quad)==VK_SUCCESS && quad);
+    ps5vk_runtime_graphics_free(NULL,quad);
+    /* Per-sample shading needs sampleRateShading on the logical device, and
+     * the fraction the front end accepted. */
+    key.sample_shading_enable=VK_TRUE;
+    key.min_sample_shading=0.5f;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    key.feature_mask|=PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *shaded=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&shaded)==VK_SUCCESS && shaded);
+    ps5vk_runtime_graphics_free(NULL,shaded);
+    /* A fraction outside [0,1] is not a state this contract carries, and a
+     * count outside the envelope is refused by the adapter itself. */
+    key.min_sample_shading=1.5f;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    key.min_sample_shading=1.0f;
+    key.samples=VK_SAMPLE_COUNT_8_BIT;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 static void check_fragment_position(void)
 {
     /* gl_FragCoord needs no export from the pre-raster stage and no feature:
@@ -1951,6 +1994,7 @@ int main(void)
     check_depth_only_target();
     check_fragment_distance_read();
     check_fragment_position();
+    check_sample_rate_compilation();
     check_dual_source_exports();
     check_dual_source_blend_contract();
     check_two_mrt_exports();
