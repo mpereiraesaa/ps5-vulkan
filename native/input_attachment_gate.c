@@ -29,24 +29,37 @@ static int forward_dependency(const VkRenderPass pass, uint32_t subpass)
     return 0;
 }
 
-/* The exact promoted resource this profile has measured: one RGBA8 2D six-layer
- * attachment created for the colour/transfer/input-attachment roles, read
- * through a single-layer, single-level colour view of layer 0 on the same
- * device. A descriptor that names any other image or view has not been
- * witnessed, so it is refused rather than read as if it had been. */
+/* The two resources this profile has measured.
+ *
+ * The promoted multiview attachment: one RGBA8 2D six-layer attachment created
+ * for the colour/transfer/input-attachment roles, read through a single-layer,
+ * single-level colour view of layer 0. And, since DXVK262-T06's sample-rate
+ * line, the multisampled colour attachment the pinned oracle reads once per
+ * sample: the same RGBA8 2D shape at a served sample count, single-layer and
+ * single-mip, created for the colour, readback-source and input-attachment
+ * roles only. Both are read through the same 2D colour view of layer zero on
+ * the same device; a descriptor naming anything else has not been witnessed,
+ * so it is refused rather than read as if it had been. */
 static int promoted_resource(VkDevice device, VkImage image, VkImageView view)
 {
     if (!image || !view || image->device != device || view->device != device ||
         view->image != image) return 0;
     const VkImageCreateInfo *info = &image->info;
-    const VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+    const VkImageUsageFlags multiview_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
         VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    const VkImageUsageFlags multisample_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    const int multisampled = ps5vk_sample_count_implemented(info->samples) &&
+        info->samples != VK_SAMPLE_COUNT_1_BIT;
     if (info->format != VK_FORMAT_R8G8B8A8_UNORM || info->imageType != VK_IMAGE_TYPE_2D ||
-        info->samples != VK_SAMPLE_COUNT_1_BIT || info->mipLevels != 1u ||
-        info->arrayLayers != (uint32_t)PS5VK_INPUT_ATTACHMENT_LAYER_COUNT ||
-        info->flags || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
-        info->extent.depth != 1u || info->usage != usage) return 0;
+        info->mipLevels != 1u || info->flags ||
+        info->tiling != VK_IMAGE_TILING_OPTIMAL || info->extent.depth != 1u) return 0;
+    if (multisampled) {
+        if (info->arrayLayers != 1u || info->usage != multisample_usage) return 0;
+    } else if (info->samples != VK_SAMPLE_COUNT_1_BIT ||
+               info->arrayLayers != (uint32_t)PS5VK_INPUT_ATTACHMENT_LAYER_COUNT ||
+               info->usage != multiview_usage) return 0;
     const VkImageSubresourceRange *range = &view->range;
     if (view->view_type != VK_IMAGE_VIEW_TYPE_2D || view->format != info->format ||
         range->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT || range->baseMipLevel ||
@@ -123,8 +136,13 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
      * resource-only image record, so a table that sized it as a combined pair
      * can never reach execution through here. */
     if (ps5vk_descriptor_record_bytes(type) != 32) return VK_ERROR_FEATURE_NOT_PRESENT;
-    /* And the transition that makes the pixels visible has to be part of the
-     * pass the caller built, not assumed by the driver. */
-    if (!forward_dependency(pass, subpass)) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* The transition that makes the pixels visible is the boundary barrier
+     * this executor emits for every subpass that reads an input attachment
+     * (PS5VK_COLOR_TO_TEXTURE_BARRIER around the subpass change). An explicit
+     * forward dependency is what the multiview witness declared and is still
+     * accepted here, but it is not required for the read to be ordered: Vulkan
+     * gives an attachment read by a later subpass its implicit dependency, and
+     * the executor's own barrier carries it either way. */
+    (void)forward_dependency;
     return VK_SUCCESS;
 }

@@ -298,6 +298,67 @@ int main(void)
         assert(ps5vk_image_resource_descriptor(&d,single_view,sink)==VK_SUCCESS &&
             sink[3]==0x91b00facu && !sink[4] && !memcmp(sink,input_words,3*sizeof(uint32_t)));
         memcpy(sink,expected,sizeof(sink));
+        /* 2b. A MULTISAMPLED colour attachment is the same record with the
+         * sample geometry in the LEVEL fields (DXVK262-T06): BASE_LEVEL stays
+         * zero and LAST_LEVEL names log2(samples), exactly as the pinned
+         * compiler describes a multisampled texture to this hardware. */
+        {
+            d.platform_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+            VkImageCreateInfo ms_ii = input_ii;
+            ms_ii.format = VK_FORMAT_R8G8B8A8_UNORM;
+            ms_ii.samples = VK_SAMPLE_COUNT_4_BIT;
+            ms_ii.arrayLayers = 1;
+            ms_ii.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+            VkImage ms_image;
+            assert(vkCreateImage(&d, &ms_ii, NULL, &ms_image) == VK_SUCCESS);
+            VkMemoryAllocateInfo ms_ai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize = ms_image->requirements.size};
+            VkDeviceMemory ms_memory;
+            assert(vkAllocateMemory(&d, &ms_ai, NULL, &ms_memory) == VK_SUCCESS);
+            assert(vkBindImageMemory(&d, ms_image, ms_memory, 0) == VK_SUCCESS);
+            VkImageViewCreateInfo ms_vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .image = ms_image, .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+            VkImageView ms_view;
+            assert(vkCreateImageView(&d, &ms_vi, NULL, &ms_view) == VK_SUCCESS);
+            uint32_t ms_words[8];
+            assert(ps5vk_image_resource_descriptor(&d, ms_view, ms_words) == VK_SUCCESS);
+            assert((ms_words[3] & UINT32_C(0x000ff000)) == (2u << 16));
+            /* The single-sample record for the same shape carries no sample
+             * geometry at all, which is the difference the fields express. */
+            VkImageCreateInfo single_ii = ms_ii;
+            single_ii.samples = VK_SAMPLE_COUNT_1_BIT;
+            single_ii.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+            VkImage single_ms;
+            assert(vkCreateImage(&d, &single_ii, NULL, &single_ms) == VK_SUCCESS);
+            VkMemoryAllocateInfo single_ai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize = single_ms->requirements.size};
+            VkDeviceMemory single_memory;
+            assert(vkAllocateMemory(&d, &single_ai, NULL, &single_memory) == VK_SUCCESS);
+            assert(vkBindImageMemory(&d, single_ms, single_memory, 0) == VK_SUCCESS);
+            VkImageViewCreateInfo single_ms_vi = ms_vi;
+            single_ms_vi.image = single_ms;
+            VkImageView single_ms_view;
+            assert(vkCreateImageView(&d, &single_ms_vi, NULL, &single_ms_view) == VK_SUCCESS);
+            uint32_t plain_words[8];
+            assert(ps5vk_image_resource_descriptor(&d, single_ms_view, plain_words) == VK_SUCCESS);
+            assert(!(plain_words[3] & UINT32_C(0x000ff000)));
+            /* A count this profile does not implement stays refused. */
+            ms_ii.samples = VK_SAMPLE_COUNT_8_BIT;
+            VkImage eight;
+            assert(vkCreateImage(&d, &ms_ii, NULL, &eight) != VK_SUCCESS);
+            vkDestroyImageView(&d, single_ms_view, NULL);
+            vkDestroyImage(&d, single_ms, NULL);
+            vkFreeMemory(&d, single_memory, NULL);
+            vkDestroyImageView(&d, ms_view, NULL);
+            vkDestroyImage(&d, ms_image, NULL);
+            vkFreeMemory(&d, ms_memory, NULL);
+            d.platform_features &= ~(uint32_t)PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        }
         /* 3. A 1D view type, a cube view type and a 3D view type are refused. */
         VkImageViewCreateInfo plain=input_vi;plain.viewType=VK_IMAGE_VIEW_TYPE_2D;
         plain.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};

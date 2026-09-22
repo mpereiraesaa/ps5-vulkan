@@ -127,9 +127,20 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
      * or 2D_ARRAY image. Anything else - another format, a sampled-only image,
      * a deeper or multisampled image, a 3D/1D/cube view - fails closed rather
      * than being encoded as something the GPU was never witnessed to read. */
+    /* A multisampled colour attachment is readable through the same record
+     * (DXVK262-T06): the pinned gfx6+ texture descriptor carries the sample
+     * geometry in the LEVEL fields - BASE_LEVEL 0 and LAST_LEVEL
+     * log2(samples) for a multisampled surface
+     * (ac_descriptors.c ac_build_gfx6_texture_descriptor) - so a multisampled
+     * surface is single-layer, single-mip and otherwise the same attachment.
+     * A count this profile does not implement stays refused here. */
+    const uint32_t samples=ps5vk_sample_count_number(image->info.samples);
+    const int multisampled=samples>1u;
     if(view->format!=VK_FORMAT_R8G8B8A8_UNORM || image->info.format!=view->format ||
         image->info.imageType!=VK_IMAGE_TYPE_2D || image->info.extent.depth!=1u ||
-        image->info.mipLevels!=1u || image->info.samples!=VK_SAMPLE_COUNT_1_BIT ||
+        image->info.mipLevels!=1u ||
+        (!multisampled && image->info.samples!=VK_SAMPLE_COUNT_1_BIT) ||
+        (multisampled && image->info.arrayLayers!=1u) ||
         !image->info.arrayLayers ||
         image->info.arrayLayers>(uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR ||
         !(image->info.usage&VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) ||
@@ -147,5 +158,12 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
      * here addresses valid memory with the wrong equation and collapses a
      * subpassLoad to an unrelated constant texel on hardware. */
     words[3]|=UINT32_C(0x01b00000);
+    if(multisampled) {
+        /* BASE_LEVEL [12,15] stays zero and LAST_LEVEL [16,19] names the sample
+         * count, which is exactly how the pinned compiler describes a
+         * multisampled texture to this hardware. */
+        words[3]&=~UINT32_C(0x000ff000);
+        words[3]|=ps5vk_sample_count_log2(image->info.samples)<<16;
+    }
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }

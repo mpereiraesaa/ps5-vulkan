@@ -3330,3 +3330,39 @@ executor keeps that promise on hardware, which is the shape the oracle's fetch
 subpasses use for their siblings. What it does not establish: the resolve
 target and the per-sample input read are still unexecuted, no CTS leaf passes,
 the row stays a blocker, and nothing is advertised.
+
+## The multisampled resource read, enabled (2026-09-22)
+
+Reading sample k of a multisampled colour attachment is the enabler the last two
+executor gates share: the oracle's fetch subpass reads its multisampled input
+attachment once per sample, and a resolve is the same read averaged over every
+sample. Two places kept it out, and both are now open in the bounded shape the
+profile serves.
+
+The resource record: `ps5vk_image_resource_descriptor` refused any multisampled
+image. The pinned gfx6+ texture descriptor carries the sample geometry in the
+LEVEL fields - BASE_LEVEL zero and LAST_LEVEL log2(samples) for a multisampled
+surface (`ac_descriptors.c`, `ac_build_gfx6_texture_descriptor`) - so a
+multisampled attachment is the same RGBA8 2D one-mip record with those two
+fields naming the count, single-layer, over the render target's own tiled
+storage. A count this profile does not implement is still refused before the
+record is written, and `tests/test_texture_descriptor.c` pins the multisampled
+record (LAST_LEVEL = log2(4)), the single-sample record carrying no sample
+geometry, and the 8x refusal.
+
+The gate: `ps5vk_input_attachment_gate` served exactly one resource - the
+promoted multiview attachment, six layers with the colour/transfer-source/
+input-attachment/transfer-destination roles. It now serves the multisampled
+single-layer attachment as well (colour, readback source and input-attachment
+roles), and it no longer requires an explicit forward dependency: the executor
+emits the colour-to-texture barrier around every subpass change that reads an
+input attachment, and Vulkan gives an attachment read by a later subpass its
+implicit dependency, so the barrier the profile already emits is what orders
+the read.
+
+What this establishes: the two layers between the oracle's fetch draw and
+execution now describe the shape it needs, with the descriptor arithmetic
+pinned against the pinned compiler. What it does not establish: the read has
+not yet been measured on hardware, the resolve is still refused by the
+executor, no CTS leaf passes, the row stays a blocker, and nothing is
+advertised.

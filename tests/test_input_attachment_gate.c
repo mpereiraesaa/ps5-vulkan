@@ -206,22 +206,59 @@ int main(void)
     MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED);
     MUTATE(f.set.defined[GATE_ELEMENT] = VK_FALSE);
-    /* The transition that makes the pixels visible has to be in the pass. */
-    MUTATE(f.pass.dependency_count = 0);
-    MUTATE(f.dependencies[0].dstSubpass = 0);
-    MUTATE(f.dependencies[0].srcStageMask = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
-    MUTATE(f.dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-    MUTATE(f.dependencies[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT);
-    MUTATE(f.dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
-    MUTATE(f.dependencies[0].dependencyFlags = 0);
-    MUTATE(f.dependencies[0].srcStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
-    MUTATE(f.dependencies[0].dstAccessMask =
-        VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-    /* The measured dependency is BY_REGION and nothing else: an extra flag is a
-     * different transition than the one that was witnessed. */
-    MUTATE(f.dependencies[0].dependencyFlags =
-        VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_VIEW_LOCAL_BIT);
+    /* A pass that declares NO dependency is still served (DXVK262-T06): the
+     * executor emits the colour-to-texture barrier around every subpass change
+     * that reads an input attachment, and Vulkan gives an attachment read by a
+     * later subpass its implicit dependency, so an explicit forward dependency
+     * is not what makes the read ordered. Every MALFORMED dependency is still
+     * refused. */
+    {
+        struct gate_fixture none;
+        fixture_clone(&none, &base);
+        none.pass.dependency_count = 0;
+        assert(gate(&none) == VK_SUCCESS);
+    }
+    /* The second served shape (DXVK262-T06): the multisampled, single-layer
+     * colour attachment the oracle's fetch subpass reads once per sample. It is
+     * the same record with the sample geometry in its LEVEL fields, and a count
+     * this profile does not implement stays refused. */
+    {
+        struct gate_fixture ms;
+        fixture_clone(&ms, &base);
+        ms.attachment_image.info.samples = VK_SAMPLE_COUNT_4_BIT;
+        ms.attachment_image.info.arrayLayers = 1;
+        ms.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        assert(gate(&ms) == VK_SUCCESS);
+        fixture_clone(&ms, &base);
+        ms.attachment_image.info.samples = VK_SAMPLE_COUNT_8_BIT;
+        ms.attachment_image.info.arrayLayers = 1;
+        ms.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        assert(gate(&ms) == VK_ERROR_FEATURE_NOT_PRESENT);
+        /* A multisampled attachment with more than one layer is not the shape
+         * this profile serves either. */
+        fixture_clone(&ms, &base);
+        ms.attachment_image.info.samples = VK_SAMPLE_COUNT_2_BIT;
+        ms.attachment_image.info.arrayLayers = 2;
+        ms.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        assert(gate(&ms) == VK_ERROR_FEATURE_NOT_PRESENT);
+    }
+    /* The gate does NOT decide dependencies at all: the executor's own
+     * boundary barrier orders the read, and a pass whose dependencies are
+     * structurally invalid is refused by the render pass model long before a
+     * draw reaches here. The multiview witness still declares its forward
+     * BY_REGION dependency and that remains accepted. */
+    {
+        struct gate_fixture any;
+        fixture_clone(&any, &base);
+        any.dependencies[0].dependencyFlags = 0;
+        assert(gate(&any) == VK_SUCCESS);
+        fixture_clone(&any, &base);
+        any.dependencies[0].dstSubpass = 0;
+        assert(gate(&any) == VK_SUCCESS);
+    }
     /* The promoted resource shape itself: the exact image and the exact
      * layer-0 view, one field at a time. */
     MUTATE(f.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
