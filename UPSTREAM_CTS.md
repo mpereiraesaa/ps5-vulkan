@@ -230,6 +230,26 @@ reported the feature and opened the runtime blend space to the whole GFX1013
 and then moved into the frozen acceptance selection unchanged - see
 [the promotion](#dual-source-blend-promotion-2026-09-21) in `VALIDATION.md`.
 
+The T06 `sampleRateShading` line holds its own leaves the same way. Measured
+from the pinned sources, `MinSampleShadingTest::checkSupport` is the only
+`requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING)` call in
+`vktPipelineMultisampleTests.cpp` (`:1344`), and `createMultisampleTests` builds
+exactly three groups from that class: `min_sample_shading` (its opaque
+primitives), `min_sample_shading_enabled` and `min_sample_shading_disabled`
+(both a quad). At the counts this profile serves, with the sparse variants
+excluded because no sparse binding is advertised here and with
+`primitive_point` excluded because its 3.0 point size needs the `largePoints`
+feature this profile does not advertise, that is 50 leaves under
+`t06-sample-rate-pending`; each one renders the multisampled colour target,
+resolves it into the single-sample image and then reads the multisampled colour
+back once per sample through `subpassLoad(imageMS, sampleNdx)`, so a build that
+shades once per pixel cannot pass it. The category's traceability is derived by
+`_min_sample_shading_leaf_names` in `tools/check_upstream_selection.py`, which
+composes the names from the module's own sample-count array, minSampleShading
+value table and per-group constructor literals, and the `samples_<count>` group
+segment - which the factory prints rather than writes as a literal - comes from
+`_multisample_generated_segments` against the same table.
+
 ## Host checks versus hardware evidence
 
 `make check-upstream-cts` runs entirely on the host and needs no console. It

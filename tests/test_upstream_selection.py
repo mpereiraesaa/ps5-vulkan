@@ -79,10 +79,14 @@ class UpstreamSelectionTests(unittest.TestCase):
         # multi_viewport, 6 draw.renderpass.scissor, 2 clip_volume.depth_clamp,
         # 6 draw.renderpass.depth_clamp), plus the four render-pass
         # attachment-write-mask leaves the T06 independentBlend line holds as
-        # t06-independent-blend-pending until a measurement window reports on
-        # them. The 44 diagnostics that remain document refusals and capability
-        # gaps.
-        self.assertEqual((462, 48, 48),
+        # t06-independent-blend-pending, plus the 50 leaves the T06
+        # sampleRateShading line holds as t06-sample-rate-pending: the only
+        # class in the pinned multisample module that requires
+        # DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING, at the 2x/4x counts this
+        # profile serves and without the point size that needs largePoints. The
+        # 98 diagnostics that remain document refusals,
+        # capability gaps and pending measurement windows.
+        self.assertEqual((462, 98, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
@@ -323,6 +327,96 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertFalse(self.capabilities["features"]["multiviewGeometryShader"])
         self.assertFalse(self.capabilities["features"]["multiviewTessellationShader"])
         self.assertEqual(6, self.capabilities["max_multiview_view_count"])
+
+    def test_t06_sample_rate_leaves_are_the_feature_gated_oracle(self):
+        """The pending sampleRateShading category is exactly the leaves whose
+        own checkSupport requires the feature, at the counts this profile
+        serves. The recognizer derives them per group from the pinned tables,
+        so a leaf moved between the enabled and the disabled group - or a
+        primitive the group does not register - stops matching."""
+        category = "t06-sample-rate-pending"
+        selected = [d for d in self.current_manifest["diagnostics"]
+                    if d.get("category") == category]
+        module_source = ("external/vulkancts/modules/vulkan/pipeline/"
+                         "vktPipelineMultisampleTests.cpp")
+        module = (UPSTREAM / module_source).read_text()
+
+        # Both halves of the gate are pinned: the only feature requirement in
+        # this module is MinSampleShadingTest's, and it is what the category is
+        # for.
+        self.assertEqual(1, module.count("DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING"))
+        self.assertIn("void MinSampleShadingTest::checkSupport(Context &context) const",
+                      module)
+
+        derived = set()
+        for diagnostic in selected:
+            path = diagnostic["path"]
+            source = diagnostic["source"]
+            self.assertTrue(source.startswith(module_source + ":"), source)
+            self.assertEqual("Pass", diagnostic["expected_status"])
+            self.assertEqual(["core:sampleRateShading"], diagnostic["features_required"])
+            self.assertEqual({path}, self.gate._min_sample_shading_leaf_names(module, path))
+            derived.add(path)
+        # 5 minSampleShading values x 2 served counts x (3 primitives + 2 quads).
+        self.assertEqual(50, len(derived))
+        self.assertTrue(all("samples_2." in p or "samples_4." in p for p in derived))
+        # The counts this profile refuses and the sparse variants it cannot bind
+        # are derived by the factory but deliberately not selected.
+        self.assertNotIn(f"dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled"
+                         f".min_0_0.samples_8.quad", derived)
+        self.assertNotIn(f"dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+                         f".min_0_0.samples_4.primitive_triangle_sparse", derived)
+        # The fourth primitive is measured out of the category: its 3.0 point
+        # size needs largePoints, which the measurement reported as a
+        # NotSupported instead of a driver defect.
+        self.assertFalse([p for p in derived if p.endswith(".primitive_point")])
+        self.assertEqual([], [p for p in derived if "_sparse" in p])
+
+        # The factory builds those wider shapes, which is why their absence is a
+        # selection decision and not a recognizer that cannot see them.
+        self.assertEqual(
+            {"dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+             ".min_0_0.samples_8.primitive_triangle"},
+            self.gate._min_sample_shading_leaf_names(module,
+                "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+                ".min_0_0.samples_8.primitive_triangle"))
+        self.assertEqual(
+            {"dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+             ".min_0_0.samples_4.primitive_triangle_sparse"},
+            self.gate._min_sample_shading_leaf_names(module,
+                "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+                ".min_0_0.samples_4.primitive_triangle_sparse"))
+
+        # The enabled and disabled groups register only the quad, and the plain
+        # group only the primitives: a leaf that swaps groups is not a leaf.
+        for path in (
+            "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+            ".min_0_0.samples_2.quad",
+            "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled"
+            ".min_0_0.samples_2.primitive_triangle",
+            "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled"
+            ".min_0_0.samples_4.primitive_line",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(set(),
+                                 self.gate._min_sample_shading_leaf_names(module, path))
+
+        # A rewritten factory stops matching instead of yielding invented names.
+        self.assertEqual(set(), self.gate._min_sample_shading_leaf_names(
+            module.replace("DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING",
+                           "DEVICE_CORE_FEATURE_MULTIVIEW"), next(iter(derived))))
+        self.assertEqual(set(), self.gate._min_sample_shading_leaf_names(
+            module.replace('{"min_0_75", 0.75f}', '{"min_three_quarters", 0.75f}'),
+            next(iter(derived))))
+        self.assertEqual(set(), self.gate._min_sample_shading_leaf_names(
+            module.replace("VK_SAMPLE_COUNT_4_BIT,  VK_SAMPLE_COUNT_8_BIT",
+                           "VK_SAMPLE_COUNT_4_BIT,  VK_SAMPLE_COUNT_3_BIT"),
+            next(iter(derived))))
+        # The sample-count group segment is composed, not written as a literal,
+        # so the gate derives it from the same table.
+        self.assertEqual({"samples_2", "samples_4", "samples_8", "samples_16",
+                          "samples_32", "samples_64"},
+                         self.gate._multisample_generated_segments(module))
 
     def test_contract_is_derived_from_the_selected_factory_branches(self):
         """(1) The contract comes from the branches the selected families use,

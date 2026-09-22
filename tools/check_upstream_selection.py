@@ -130,6 +130,108 @@ def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
             for capability in capabilities for type_name in type_names}
 
 
+def _multisample_factory(text: str) -> str:
+    """Return the body of the pinned multisample factory.
+
+    The module declares several `samples[]` tables (the fragment-mask and
+    interpolation factories carry their own), so every derivation below is
+    bounded to `createMultisampleTests` instead of the whole file.
+    """
+    match = re.search(r"tcu::TestCaseGroup \*createMultisampleTests\(", text)
+    if not match:
+        return ""
+    return _source_function_at_line(text, text.count("\n", 0, match.start()) + 1)
+
+
+def _multisample_generated_segments(text: str) -> set[str]:
+    """Group segments the multisample factory composes from its sample table.
+
+    `createMultisampleTests` names every sample-count group with
+    ``caseName << "samples_" << samples[samplesNdx]``, so the segment is the
+    numeric value of the flag rather than a string literal. Bounded to that
+    module's own samples array.
+    """
+    factory = _multisample_factory(text)
+    if not factory:
+        return set()
+    samples_match = re.search(
+        r"const VkSampleCountFlagBits samples\[\]\s*=\s*\{(.*?)\};",
+        factory,
+        re.DOTALL,
+    )
+    if not samples_match or not re.search(
+            r'caseName\s*<<\s*"samples_"\s*<<\s*samples\[samplesNdx\]', factory):
+        return set()
+    return {f"samples_{value}"
+            for value in re.findall(r"VK_SAMPLE_COUNT_([0-9]+)_BIT", samples_match.group(1))}
+
+
+def _min_sample_shading_leaf_names(text: str, path: str) -> set[str]:
+    """Leaves of the pipeline module that require sampleRateShading.
+
+    `MinSampleShadingTest::checkSupport` is the only
+    requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING) call in
+    the pinned multisample module, and `createMultisampleTests` builds every
+    leaf of its three groups from three bounded tables in that file: the
+    sample-count array (whose names are the numeric flag value), the
+    minSampleShading value table, and the case literals each block passes to
+    `MinSampleShadingTest`. Membership is checked against exactly those tables
+    and registrations, per group, so a leaf moved between the enabled and
+    disabled groups - or a primitive the group does not register - stops
+    matching instead of being accepted by a literal that exists elsewhere.
+    Bounded to this one pinned module: the derived names carry the module's own
+    group and family segments, while the registered parents above them are the
+    integration gate's business.
+    """
+    if "DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING" not in text:
+        return set()
+    factory = _multisample_factory(text)
+    if not factory:
+        return set()
+    samples_match = re.search(
+        r"const VkSampleCountFlagBits samples\[\]\s*=\s*\{(.*?)\};",
+        factory,
+        re.DOTALL,
+    )
+    configs_match = re.search(
+        r"const TestConfig testConfigs\[\]\s*=\s*\{(.*?)\n\s*\};",
+        factory,
+        re.DOTALL,
+    )
+    if not (samples_match and configs_match):
+        return set()
+    if not re.search(r'caseName\s*<<\s*"samples_"\s*<<\s*samples\[samplesNdx\]', factory):
+        return set()
+    sample_counts = re.findall(r"VK_SAMPLE_COUNT_([0-9]+)_BIT", samples_match.group(1))
+    configs = re.findall(r'\{"(min_[0-9_]+)"\s*,', configs_match.group(1))
+    # Both tables are pinned: the six Vulkan counts in their declared order and
+    # the five minSampleShading values the family names.
+    if sample_counts != ["2", "4", "8", "16", "32", "64"]:
+        return set()
+    if configs != ["min_0_0", "min_0_25", "min_0_5", "min_0_75", "min_1_0"]:
+        return set()
+    markers = [(match.group(1), match.start()) for match in re.finditer(
+        r'new tcu::TestCaseGroup\(testCtx, "([a-z0-9_]+)"\)', factory)]
+    derived: set[str] = set()
+    for index, (name, start) in enumerate(markers):
+        if name not in ("min_sample_shading", "min_sample_shading_enabled",
+                        "min_sample_shading_disabled"):
+            continue
+        end = markers[index + 1][1] if index + 1 < len(markers) else len(factory)
+        block = factory[start:end]
+        cases = re.findall(
+            r"new MinSampleShadingTest\(\s*(?:\n\s*)?testCtx,\s*\"([a-z0-9_]+)\"", block)
+        if not cases:
+            return set()
+        for count in sample_counts:
+            for config in configs:
+                for case in cases:
+                    derived.add(f"{name}.{config}.samples_{count}.{case}")
+    if any(path.endswith("." + candidate) for candidate in derived):
+        return {path}
+    return set()
+
+
 def _dual_source_blend_leaf_names(text: str, leaf: str) -> set[str]:
     """Leaves of the pipeline module's dual-source blend family.
 
@@ -1421,6 +1523,8 @@ def main() -> int:
             _clip_distance_generated_segments(text)
             if source_path.name == "vktClippingTests.cpp" else set()
         )
+        if source_path.name == "vktPipelineMultisampleTests.cpp":
+            generated_segments |= _multisample_generated_segments(text)
         if source_path.name == "vktRenderPassTests.cpp":
             generated_segments |= _attachment_write_mask_generated_segments(text)
         for segment in segments[1:-1]:
@@ -1511,6 +1615,13 @@ def main() -> int:
         # expressions.
         if (source_path.name == "vktPipelineBlendTests.cpp" and
                 leaf in _dual_source_blend_leaf_names(text, leaf)):
+            continue
+        # The multisample module's sampleRateShading leaves: the only class in
+        # the pinned tree the feature's own oracle gates on builds three groups
+        # from the sample-count and minSampleShading tables in that file.
+        # Membership is per group, so it is checked against the whole path.
+        if (source_path.name == "vktPipelineMultisampleTests.cpp" and
+                path in _min_sample_shading_leaf_names(text, path)):
             continue
         # The fragment_ops multi-viewport family, the clipping clip_volume groups
         # and the draw depth_clamp family compose their names from a prefix or a

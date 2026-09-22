@@ -2958,7 +2958,7 @@ not have, each found by the run below and fixed in this change:
 
 The frozen selection is now the union of both lines - **462 acceptance cases**
 (the 404 the T06 line carried, including the 98 dual-source leaves and the two
-fragment side-effect leaves, plus the 58 T05 leaves) and 44 diagnostics - and
+fragment side-effect leaves, plus the 58 T05 leaves) and 98 diagnostics - and
 the shipping build passes all of it:
 
 - run `20260922T014510656Z_PPSA99994_upstream-cts_0x17b8f2b94697f`,
@@ -2983,3 +2983,65 @@ tree, and `make check` is green on it.
 `independentBlend` and `sampleRateShading` remain blockers: the MRT path is
 described but not served (the advertised `maxColorAttachments` is still one)
 and the multisample contract is still empty.
+
+## Focused upstream selection for sampleRateShading (2026-09-22)
+
+The `sampleRateShading` row's CTS axis needs a focused, applicable selection
+before anything can be measured. Read from the pinned sources rather than
+guessed, `MinSampleShadingTest::checkSupport` is the only
+`requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING)` call in
+`external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp`
+(`:1344`), and `createMultisampleTests` builds exactly three groups from that
+class: `min_sample_shading` (its opaque primitives), `min_sample_shading_enabled`
+and `min_sample_shading_disabled` (both a quad). At the counts this profile
+serves that is 50 leaves under the new `t06-sample-rate-pending` diagnostic
+category: 5 `minSampleShading` values x 2 counts x 3 primitives, plus the
+enabled and disabled quads. The sparse variants are left out because this
+profile binds no sparse memory, and `primitive_point` is left out because the
+measurement below reported it as `NotSupported` for `largePoints`, a feature
+this profile does not advertise - which is a scope statement, not a driver
+defect. Each selected leaf renders the multisampled colour target, resolves it
+into the single-sample image, then reads the multisampled colour back once per
+sample through `subpassLoad(imageMS, sampleNdx)`, so a build that shades once
+per pixel cannot pass it.
+
+The category's traceability is derived, not transcribed: `tools/
+check_upstream_selection.py` grows `_min_sample_shading_leaf_names`, which
+composes the names per group from that module's own sample-count array, its
+`minSampleShading` value table and the case literals each block registers, plus
+`_multisample_generated_segments`, because the `samples_<count>` group segment
+is printed by the factory rather than written as a literal. A leaf moved
+between the enabled and disabled groups, or a primitive a group does not
+register, stops matching; a rewritten factory stops matching too.
+
+Measurement run 1 (`20260922T083940138Z_PPSA99994_upstream-cts_0x1922d783e3ecc`,
+log SHA-256 `ae9d271ee5096419caf91151744c853b7a8f6628e89c77e1486001472972b0b9`, 522
+cases = 462 frozen acceptance + the first 60 leaves): 522/522 reported, 462
+Pass, 50 Fail, 10 `NotSupported`. The ten `NotSupported` leaves are exactly the
+`primitive_point` ones, refused as "Requested core feature is not supported:
+largePoints" (`vktTestCase.cpp:1227`), which is why they left the category.
+
+Measurement run 2, with the corrected 50-leaf category
+(`20260922T084825463Z_PPSA99994_upstream-cts_0x192a7c7884dc5`, log SHA-256
+`2993b6e47ffbfa3fb08aa9c3ad70b3785d81ac1cb7eebb53a534b13a107acdba`): payload
+eboot SHA-256 `88d9ca738842e9f05021a5f0e429405eee74d480d956d17b0a78414b35f0e2db`,
+built with `PS5VK_SAMPLE_RATE_DIAGNOSTIC=1`; measurement selection SHA-256
+`73f85a4a290ffe1e5e1b74ad022747af847cd9135e7aeca1274d16269bda88c2` derived from
+the frozen selection `aafc4062b267b88ea1b395aae924fcf0451eff411e9522dd889ce9638073d0ab`;
+512/512 cases reported, no missing, unexpected or duplicate results, 462 Pass
+(the frozen acceptance selection is unchanged and still fully green on this
+tree), 50 Fail, zero `NotSupported`, `lifecycle_ok` true and the title closed
+and confirmed stopped. All 50 leaves fail at the same first gate:
+`vk.createImage(...) VK_ERROR_FEATURE_NOT_PRESENT`, because the multisampled
+colour image the oracle builds carries
+`COLOR_ATTACHMENT | TRANSFER_SRC` (`| INPUT_ATTACHMENT` for the per-sample
+fetch render pass) while this profile serves exactly one observed multisampled
+role.
+
+What this establishes: the applicable focused selection exists, it is
+traceable to the pinned sources, the packaged payload reports every selected
+leaf (the silently-dropped-leaf trap is closed at 512/512), and the first gate
+the row has to open is the multisampled image's usage combination. What it does
+not establish: no leaf passes, the multisample render pass, the resolve and the
+per-sample input read are still unexecuted, the `sampleRateShading` row stays a
+blocker, and the shipping platform mask still advertises no sample-rate bit.
