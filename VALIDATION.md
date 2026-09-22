@@ -4048,3 +4048,35 @@ That is the next slice, and it is now stated as a driver-side gap with two
 concrete halves: supply the sample positions the fragment path reads, and make
 the compile decision follow the pipeline's state rather than only the shader's
 declaration.
+
+### Correction to the paragraph above (2026-09-22)
+
+The claim that this shader's per-sample coordinate needs the ring's
+sample-positions table is WRONG, and the compiled ISA says so. Disassembling the
+leaf's own fragment module (compiled through the same runtime compiler with
+`PSBC_DEBUG_DISASM=1`) shows it never reads a sample position:
+
+```text
+v_cvt_f32_u32                     ; the integer pixel coordinate
+v_add_f32 0.5, ...                ; pixel_coord + 0.5, the pixel centre
+v_cndmask_b32 <+0.5 value>, <interpolated coord>, <condition>
+v_fract_f32 ...
+```
+
+The condition comes from `load_use_float_frag_coord_xy_amd`, i.e. the
+`PS_STATE_USE_FLOAT_FRAG_COORD_XY` bit of the PS-state user SGPR - a slot this
+driver never writes - so it reads as zero, the shader takes the pixel-centre
+branch on every iteration, and every sample gets (0.5, 0.5). That is the
+failure; no sample-position table is involved for this shader at all.
+
+The next slice is therefore: (1) make the pipeline say which fragment
+coordinate it really delivers - the SPI input-address register's
+`POS_FIXED_PT_ENA` (`ac_shader_util.c` reads it, and
+`ac_nir_lower_intrinsics_to_args.c` unpacks the `pos_fixed_pt` argument), since
+per-sample positions are only reachable with it disabled and the float path
+selected - and (2) publish and program the PS-state user SGPR
+(`ps_state_user_data_dword`, alongside the existing base-vertex and
+push-constant slots) with that bit plus `NUM_SAMPLES`, `PS_ITER_MASK`
+(`ac_get_ps_iter_mask`), `USE_QUAD_POS` and `USE_SAMPLE_MASK_IN`, so the branch
+and the hardware agree. Nothing about the rendered images above changes: they
+still show the pixel centre for every sample.
