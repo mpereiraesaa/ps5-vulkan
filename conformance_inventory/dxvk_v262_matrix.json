@@ -9,7 +9,7 @@
       "VK_KHR_storage_buffer_storage_class"
     ],
     "native_probe": {
-      "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+      "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
       "blockers": 45,
       "device_api": "1.0.0",
       "device_extensions": 5,
@@ -24,8 +24,8 @@
       "requirements": 62,
       "runs": [
         {
-          "id": "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad",
-          "log_sha256": "8c4577c6782b50203b0eea9174bdcda5ca01854d677de60c10b1ba107f3a13d5"
+          "id": "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c",
+          "log_sha256": "86e945042300b4acdf78c141af6ff0a78f122c496d640faa4ceb3035151e2225"
         }
       ],
       "satisfied": 17,
@@ -48,7 +48,7 @@
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
       ],
-      "source_matrix_sha256": "f3365af79eaa520e8cc79cf8842d9d0ce7e2df92d0c553f13ad29854a6444397",
+      "source_matrix_sha256": "406be4ddc26df256dfebf1ed822ad1c8a6d70e1d83b28bccfbbdbf20854c5e04",
       "transport": "ps5log/1",
       "verifier": "tools/verify_dxvk_probe.py"
     },
@@ -151,13 +151,13 @@
       "kind": "extension",
       "name": "VK_EXT_robustness2",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -193,13 +193,13 @@
       "kind": "extension",
       "name": "VK_EXT_transform_feedback",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -857,13 +857,13 @@
       "kind": "feature",
       "name": "imageCubeArray",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -905,13 +905,13 @@
       "kind": "feature",
       "name": "independentBlend",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1104,13 +1104,13 @@
       "kind": "feature",
       "name": "occlusionQueryPrecise",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1209,13 +1209,13 @@
       "kind": "feature",
       "name": "sampleRateShading",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1480,13 +1480,13 @@
       "kind": "feature",
       "name": "shaderImageGatherExtended",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1524,13 +1524,13 @@
       "kind": "feature",
       "name": "tessellationShader",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "The native query reports the requested value, but the probe does not execute the capability.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "reported-not-executed"
       },
@@ -1565,13 +1565,13 @@
       "kind": "feature",
       "name": "textureCompressionBC",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1610,13 +1610,13 @@
       "kind": "feature",
       "name": "nullDescriptor",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1655,13 +1655,13 @@
       "kind": "feature",
       "name": "robustBufferAccess2",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1697,13 +1697,13 @@
       "kind": "feature",
       "name": "geometryStreams",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1739,13 +1739,13 @@
       "kind": "feature",
       "name": "transformFeedback",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1949,13 +1949,13 @@
       "kind": "feature",
       "name": "bufferDeviceAddress",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -1991,13 +1991,13 @@
       "kind": "feature",
       "name": "hostQueryReset",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2036,13 +2036,13 @@
       "kind": "feature",
       "name": "imagelessFramebuffer",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2084,13 +2084,13 @@
       "kind": "feature",
       "name": "samplerMirrorClampToEdge",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2126,13 +2126,13 @@
       "kind": "feature",
       "name": "separateDepthStencilLayouts",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2168,13 +2168,13 @@
       "kind": "feature",
       "name": "shaderSubgroupExtendedTypes",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2210,13 +2210,13 @@
       "kind": "feature",
       "name": "subgroupBroadcastDynamicId",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2255,13 +2255,13 @@
       "kind": "feature",
       "name": "timelineSemaphore",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2297,13 +2297,13 @@
       "kind": "feature",
       "name": "uniformBufferStandardLayout",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2339,13 +2339,13 @@
       "kind": "feature",
       "name": "vulkanMemoryModel",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2381,13 +2381,13 @@
       "kind": "feature",
       "name": "vulkanMemoryModelDeviceScope",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2423,13 +2423,13 @@
       "kind": "feature",
       "name": "computeFullSubgroups",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2469,13 +2469,13 @@
       "kind": "feature",
       "name": "dynamicRendering",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2511,13 +2511,13 @@
       "kind": "feature",
       "name": "inlineUniformBlock",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2553,13 +2553,13 @@
       "kind": "feature",
       "name": "maintenance4",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2595,13 +2595,13 @@
       "kind": "feature",
       "name": "pipelineCreationCacheControl",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2640,13 +2640,13 @@
       "kind": "feature",
       "name": "robustImageAccess",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2682,13 +2682,13 @@
       "kind": "feature",
       "name": "shaderDemoteToHelperInvocation",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2724,13 +2724,13 @@
       "kind": "feature",
       "name": "shaderIntegerDotProduct",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2766,13 +2766,13 @@
       "kind": "feature",
       "name": "shaderTerminateInvocation",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2808,13 +2808,13 @@
       "kind": "feature",
       "name": "shaderZeroInitializeWorkgroupMemory",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2850,13 +2850,13 @@
       "kind": "feature",
       "name": "subgroupSizeControl",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -2895,13 +2895,13 @@
       "kind": "feature",
       "name": "synchronization2",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -3133,13 +3133,13 @@
       "kind": "property",
       "name": "maxTimelineSemaphoreValueDifference",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -3177,13 +3177,13 @@
       "kind": "property",
       "name": "maxBufferSize",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -3217,13 +3217,13 @@
       "kind": "property",
       "name": "maxDescriptorSetInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -3257,13 +3257,13 @@
       "kind": "property",
       "name": "maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -3297,13 +3297,13 @@
       "kind": "property",
       "name": "maxInlineUniformBlockSize",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -3337,13 +3337,13 @@
       "kind": "property",
       "name": "maxInlineUniformTotalSize",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -3377,13 +3377,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },
@@ -3417,13 +3417,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+        "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad"
+          "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c"
         ],
         "state": "witnessed-blocker"
       },

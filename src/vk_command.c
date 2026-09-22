@@ -90,7 +90,15 @@ void ps5vk_command_invalidate(VkCommandBuffer c)
 {
     if (c) { ++c->pool->device->lifetime_errors; if (c->state != PS5VK_PENDING) c->state = PS5VK_INVALID; }
 }
+/* TEMPORARY EXPERIMENT (not for commit): name the refusing line in the native
+ * log so the failing upstream leaf can be localised from its run. */
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define invalid(c) do { ps5log_printf(PS5LOG_MARK,"PS5VK_RECORD_REFUSAL site=%d",__LINE__); \
+    ps5vk_command_invalidate(c); } while (0)
+#else
 #define invalid ps5vk_command_invalidate
+#endif
 
 struct ps5vk_operation *ps5vk_command_reserve_operations(VkCommandBuffer c,
     enum ps5vk_operation_type type, enum ps5vk_operation_scope scope, uint32_t count)
@@ -718,13 +726,20 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;
+    /* Every colour role the subpass names must be the one the framebuffer
+     * carries, in order, and the depth role after them. A subpass that names
+     * no colour role at all - the DEPTH-ONLY shape - has an empty list on both
+     * sides, so the loop below simply does not run. */
+    const struct ps5vk_subpass *first=ps5vk_render_pass_subpass(pass, 0);
     if (fb->attachment_count != pass->attachment_count ||
-        fb->color_attachments[0] != ps5vk_render_pass_subpass(pass, 0)->color[0].attachment ||
-        fb->depth_attachment != ps5vk_render_pass_subpass(pass, 0)->depth.attachment ||
+        fb->color_count != first->color_count ||
+        fb->depth_attachment != first->depth.attachment ||
         area.offset.x < 0 || area.offset.y < 0 ||
         !area.extent.width || !area.extent.height || (uint32_t)area.offset.x > fb->width ||
         (uint32_t)area.offset.y > fb->height || area.extent.width > fb->width - (uint32_t)area.offset.x ||
         area.extent.height > fb->height - (uint32_t)area.offset.y) { invalid(c); return; }
+    for (uint32_t role = 0; role < first->color_count; ++role)
+        if (fb->color_attachments[role] != first->color[role].attachment) { invalid(c); return; }
     for (uint32_t j = 0; j < pass->attachment_count; ++j) {
         const VkAttachmentDescription *a = &pass->attachments[j];
         if (fb->formats[j] != a->format || fb->samples[j] != a->samples ||

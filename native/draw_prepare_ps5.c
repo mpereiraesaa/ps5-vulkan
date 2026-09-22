@@ -138,7 +138,11 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         (fb->color_count && fb->color_attachments[0] >= fb->attachment_count) ||
         (fb->depth_attachment != VK_ATTACHMENT_UNUSED && fb->depth_attachment >= fb->attachment_count))
         return VK_ERROR_UNKNOWN;
-    struct ps5vk_target_registers colors[PS5VK_MAX_COLOR_ATTACHMENTS], depth;
+    /* Zeroed, so a DEPTH-ONLY draw's unused colour slots never carry a
+     * previous call's registers into the draw state. */
+    struct ps5vk_target_registers colors[PS5VK_MAX_COLOR_ATTACHMENTS];
+    struct ps5vk_target_registers depth;
+    memset(colors, 0, sizeof(colors));
     VkResult rc = VK_SUCCESS;
     for (uint32_t attachment = 0; attachment < fb->color_count; ++attachment) {
         if (fb->color_attachments[attachment] >= fb->attachment_count)

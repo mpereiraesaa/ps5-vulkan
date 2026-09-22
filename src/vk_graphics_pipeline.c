@@ -110,6 +110,9 @@ static int specialization_key(const VkSpecializationInfo *info,
  * device and the compiler-proven export, whichever attachment asked for it. */
 static int color_state_uses_src1(const VkPipelineColorBlendStateCreateInfo *b)
 {
+    /* Vulkan makes pColorBlendState optional: a subpass with no colour
+     * attachment may omit it entirely, and then there is no state to inspect. */
+    if (!b) return 0;
     for (uint32_t attachment = 0; attachment < b->attachmentCount; ++attachment)
         if (ps5vk_color_attachment_uses_src1(&b->pAttachments[attachment])) return 1;
     return 0;
@@ -269,10 +272,14 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         vp->pNext || vp->flags || !vp->viewportCount || vp->viewportCount > PS5VK_MAX_VIEWPORTS ||
         vp->scissorCount != vp->viewportCount ||
         (vp->viewportCount > 1 && !(d->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)) ||
-        !ps5vk_color_blend_state_shape_supported(b))
+        (b && !ps5vk_color_blend_state_shape_supported(b)))
         return refuse(15);
+    /* Vulkan makes pColorBlendState optional. A subpass that names no colour
+     * attachment may omit it, and then it describes exactly zero attachments,
+     * which is the same count a supplied empty state carries. */
+    const uint32_t blend_attachment_count = b ? b->attachmentCount : 0u;
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
-        (b->attachmentCount && !b->pAttachments)) return VK_ERROR_UNKNOWN;
+        (b && b->attachmentCount && !b->pAttachments)) return VK_ERROR_UNKNOWN;
     /* SRC1 names the fragment shader's secondary output for attachment zero.
      * Refuse it before compiler/backend work unless the application enabled
      * dualSrcBlend on this logical device.  The compiler separately proves
@@ -338,7 +345,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * every colour field keeps the value the zeroed initialiser gave it
      * (VK_FORMAT_UNDEFINED, no write mask, no blend), which is exactly what the
      * compiler and the native path key the depth-only case on. */
-    if (b->attachmentCount != subpass->color_count) return refuse(15);
+    if (blend_attachment_count != subpass->color_count) return refuse(15);
     key.color_attachment_count = subpass->color_count;
     int any_blend = 0;
     for (uint32_t attachment = 0; attachment < subpass->color_count; ++attachment) {

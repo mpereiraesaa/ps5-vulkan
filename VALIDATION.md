@@ -2929,3 +2929,57 @@ only: `B8G8R8A8_UNORM` keeps the all-channel write mask and reports no blend
 feature, because a BGRA target's export applies a channel swap the mask cannot
 express and no leaf measured it. `independentBlend` and `sampleRateShading`
 remain blockers with no implementation.
+
+## Main integration (DXVK262-T05 into the T06 line), verified 2026-09-22
+
+`codex/t06-final` merged `main` after the DXVK262-T05 promotion. Both lines had
+changed the same colour- and depth-target code, so the merge keeps one
+capability set: the per-attachment colour contract (render pass, framebuffer,
+pipeline key, native target list) grows the DEPTH-ONLY shape - a subpass with no
+colour reference, a pipeline with an undefined colour format and no write mask,
+a framebuffer whose only role is depth, and a native draw state that programmes
+no colour target while still writing the blend word pair - while the runtime
+compiler keeps its per-attachment blend, write-mask and export gates and adds
+the depth-only target with the NONE export class. `PS5VK_RASTER_DIAGNOSTIC`
+stays retired; `gl_FragCoord` is admitted once, by the rule T05 added.
+
+Merging the two lines surfaced three real defects that the individual lines did
+not have, each found by the run below and fixed in this change:
+
+1. `pColorBlendState` is optional in Vulkan and the depth-clamp module omits it
+   for its depth-only subpass; the per-attachment pipeline gate treated a
+   missing state as malformed and refused `vkCreateGraphicsPipelines`.
+2. The begin-render-pass check compared `fb->color_attachments[0]` with the
+   subpass's first colour reference even at a colour count of zero, where
+   neither side is meaningful.
+3. The depth-only draw state passed its caller's *uninitialised* prepared-target
+   array to the render-target builder because it tested the pointer rather than
+   the count.
+
+The frozen selection is now the union of both lines - **462 acceptance cases**
+(the 404 the T06 line carried, including the 98 dual-source leaves and the two
+fragment side-effect leaves, plus the 58 T05 leaves) and 44 diagnostics - and
+the shipping build passes all of it:
+
+- run `20260922T014510656Z_PPSA99994_upstream-cts_0x17b8f2b94697f`,
+  **462/462 Pass**, zero Fail, zero NotSupported, no missing, unexpected or
+  duplicate results, `strict_verified`, `cts_verified` and `lifecycle_ok` true,
+  title closed and confirmed stopped.
+- deployed SELF SHA-256
+  `2aefe2ca1b69baa7218883e94668bee689c6d576d37469a8afd2a4bfc508a1c8`, read back
+  exactly through FTP before launch; reassembled report SHA-256
+  `c93560567795a75610c994d5b7e4241bdbd53d7c0a858862b837d3260e195654`; selection
+  SHA-256 `aafc4062b267b88ea1b395aae924fcf0451eff411e9522dd889ce9638073d0ab`.
+
+The public-ABI capability probe was rebuilt against the merged profile and
+re-run, so the merged tree's own report - not the sum of two older reports -
+is what the evidence records: run
+`20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c`, artifact
+`549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0`,
+`strict_verified=1`, **17 of the 62 profile requirements satisfied** and 45
+blockers. The DXVK matrix reads **15/62 ready with 47 blockers** on the merged
+tree, and `make check` is green on it.
+
+`independentBlend` and `sampleRateShading` remain blockers: the MRT path is
+described but not served (the advertised `maxColorAttachments` is still one)
+and the multisample contract is still empty.

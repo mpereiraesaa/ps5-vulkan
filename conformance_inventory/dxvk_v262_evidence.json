@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "c592965a4cc7da3f997f48bcfd350680247cc8248a36c0bd33133d2e8952de04",
+    "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
     "device_api": "1.0.0",
     "device_extensions": 5,
     "requirements": 62,
@@ -27,8 +27,8 @@
     ],
     "runs": [
       {
-        "id": "20260921T160521750Z_PPSA99994_ps5vk_0x15beb5be675ad",
-        "log_sha256": "8c4577c6782b50203b0eea9174bdcda5ca01854d677de60c10b1ba107f3a13d5"
+        "id": "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c",
+        "log_sha256": "86e945042300b4acdf78c141af6ff0a78f122c496d640faa4ceb3035151e2225"
       }
     ],
     "transport": "ps5log/1",
@@ -41,7 +41,7 @@
         "maxMultiviewInstanceIndex": "134217727"
       }
     ],
-    "source_matrix_sha256": "f3365af79eaa520e8cc79cf8842d9d0ce7e2df92d0c553f13ad29854a6444397",
+    "source_matrix_sha256": "406be4ddc26df256dfebf1ed822ad1c8a6d70e1d83b28bccfbbdbf20854c5e04",
     "satisfied": 17,
     "blockers": 45
   },

@@ -68,16 +68,18 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state ||
         !width || !height || width > 16384 || height > 16384 ||
         /* The colour targets are one per attachment the pipeline was created
-         * for. A NULL list is a DEPTH-ONLY pass: the pipeline for such a
+         * for. A count of zero is a DEPTH-ONLY pass: the pipeline for such a
          * subpass records no colour attachment and an undefined colour format,
          * so the two always agree - a colour target with an undefined format,
-         * or a missing one with a real format, are both refused here. */
+         * or a missing one with a real format, are both refused here. The
+         * pointer itself carries no meaning at a count of zero (the caller
+         * hands over its prepared-target array whatever the count is), so only
+         * the count is read. */
         (p->color_attachment_count ?
             (!colors || colors[0].count != 16 ||
              (p->color_format[0] != VK_FORMAT_B8G8R8A8_UNORM &&
               p->color_format[0] != VK_FORMAT_R8G8B8A8_UNORM)) :
-            (colors != NULL || color_count || !depth ||
-             p->color_format[0] != VK_FORMAT_UNDEFINED)) ||
+            (color_count || !depth || p->color_format[0] != VK_FORMAT_UNDEFINED)) ||
         (p->cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
@@ -116,7 +118,11 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         color_count != p->color_attachment_count ||
         (color_count && !colors)) return VK_ERROR_UNKNOWN;
     struct ps5_pipeline_registers base;
-    if (ps5_pipeline_build(&base, colors ? colors[0].registers : NULL, &pair->cx, &pair->uc,
+    /* The render-target block comes from the pipeline's colour target. At a
+     * colour count of zero - the DEPTH-ONLY shape - there is no such target
+     * and the caller's prepared array is not initialised, so the builder is
+     * handed nothing and emits the zeroed block itself. */
+    if (ps5_pipeline_build(&base, color_count ? colors[0].registers : NULL, &pair->cx, &pair->uc,
         runtime?vs->context:pair->gs.cx, runtime?fs->context:pair->ps.cx,
         runtime?vs->shader:pair->gs.sh,runtime?fs->shader:pair->ps.sh,width,height)) return VK_ERROR_UNKNOWN;
     for (unsigned j = 0; j < PS5VK_VIEWPORT_REGISTERS; ++j) {
