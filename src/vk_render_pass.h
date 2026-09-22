@@ -78,12 +78,18 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
  * earlier attachment is a real structure this model has to describe honestly.
  * One measured profile of them is now consumed: native execution admits a
  * single input reference at index 0 of a later subpass when it names the
- * promoted attachment, is read in GENERAL through that attachment's own
- * framebuffer view at the resource-only record width, and is ordered by one
- * forward BY_REGION dependency (see native/input_attachment_gate.c). Every
- * broader shape - a second reference, another index, another layout, another
- * subpass pair - stays stored-only and fails closed, and no shader or
- * reporting surface claims more than that one measured read. */
+ * promoted attachment, is read through that attachment's own framebuffer view
+ * at the resource-only record width, and is ordered by the boundary transition
+ * the executor emits for the reading subpass (see
+ * native/input_attachment_gate.c). The reference and the descriptor may name
+ * either read layout this profile admits - GENERAL, which the multiview witness
+ * declares, or SHADER_READ_ONLY_OPTIMAL, which the pinned multisample oracle
+ * declares for the colour attachment its fetch subpasses read - and the queue
+ * carries the attachment through that declared layout at the boundary rather
+ * than assuming GENERAL. Every broader shape - a second reference, another
+ * index, another layout, another subpass pair - stays stored-only and fails
+ * closed, and no shader or reporting surface claims more than that one measured
+ * read. */
 struct ps5vk_subpass {
     /* The subpass's colour references, in attachment order. The count is the
      * subpass's own, bounded by the colour-attachment contract; every consumer
@@ -190,6 +196,50 @@ static inline int ps5vk_subpass_uses_resolve(const struct ps5vk_subpass *subpass
     if (!subpass) return 0;
     for (uint32_t c = 0; c < subpass->resolve_count; ++c)
         if (subpass->resolve[c].attachment != VK_ATTACHMENT_UNUSED) return 1;
+    return 0;
+}
+
+/* The layout one subpass NAMES for one attachment, and whether it names it at
+ * all. A pass is therefore a sequence of layouts per attachment: the
+ * attachment's initial layout, then what each subpass declares as the pass
+ * reaches it (colour, then resolve, then an input read - the order a subpass
+ * uses them in), then the attachment's final layout. The native executor walks
+ * that sequence, because a render pass is what carries an attachment from one
+ * layout to the next at a subpass boundary: the pinned multisample oracle
+ * renders its multisampled colour attachment as colour in subpass 0 and reads
+ * it as an input attachment in SHADER_READ_ONLY_OPTIMAL in the fetch subpasses,
+ * and the identity of that read layout is exactly what the input-attachment
+ * gate checks the recorded descriptor against.
+ *
+ * A subpass that names the attachment only in its preserve list names no
+ * layout, and that is a real answer: a preserved attachment is neither read nor
+ * written by the subpass, so it carries its layout through the subpass
+ * unchanged. */
+static inline int ps5vk_render_pass_attachment_layout(VkRenderPass pass,
+    uint32_t subpass_index, uint32_t attachment, VkImageLayout *out)
+{
+    if (!pass || !out || subpass_index >= pass->subpass_count ||
+        attachment == VK_ATTACHMENT_UNUSED) return 0;
+    const struct ps5vk_subpass *subpass = &pass->subpasses[subpass_index];
+    for (uint32_t c = 0; c < subpass->color_count; ++c)
+        if (subpass->color[c].attachment == attachment) {
+            *out = subpass->color[c].layout;
+            return 1;
+        }
+    for (uint32_t r = 0; r < subpass->resolve_count; ++r)
+        if (subpass->resolve[r].attachment == attachment) {
+            *out = subpass->resolve[r].layout;
+            return 1;
+        }
+    for (uint32_t i = 0; i < subpass->input_count; ++i)
+        if (pass->inputs[subpass->input_first + i].attachment == attachment) {
+            *out = pass->inputs[subpass->input_first + i].layout;
+            return 1;
+        }
+    if (subpass->depth.attachment == attachment) {
+        *out = subpass->depth.layout;
+        return 1;
+    }
     return 0;
 }
 #endif

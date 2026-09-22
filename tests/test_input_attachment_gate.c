@@ -3,9 +3,9 @@
  * The bounded one-input subpass-read admission rule: exactly the shape the
  * native oracle executes is admitted, and every neighbouring shape - a
  * combined record's width, a vertex-visible declaration, a missing or UNUSED
- * input reference, another view or layer, another layout, a missing or
- * mismatched dependency, a second input binding and a read in subpass 0 - is
- * refused before any packet could be emitted. */
+ * input reference, another view or layer, a layout that is not one of the two
+ * read layouts, a missing or mismatched dependency, a second input binding and
+ * a read in subpass 0 - is refused before any packet could be emitted. */
 #include "input_attachment_gate.h"
 #include "descriptor_table_layout.h"
 #include <assert.h>
@@ -171,6 +171,29 @@ int main(void)
     struct gate_fixture f;
 #define MUTATE(statement) do { fixture_clone(&f, &base); statement; \
         assert(gate(&f) == VK_ERROR_FEATURE_NOT_PRESENT); } while (0)
+    /* The pinned multisample oracle's read layout is the second shape this gate
+     * serves: its fetch subpass declares pInputAttachments[0] in
+     * SHADER_READ_ONLY_OPTIMAL and writes the input-attachment descriptor with
+     * the same layout
+     * (external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp,
+     * MSCaseBaseResolveAndPerSampleFetch), which is the shape the native walk
+     * reproduces. Each side is constrained by its OWN pinned rule - the
+     * reference by the layouts an input reference may name (VUID 06912 excludes
+     * the attachment layouts) and the descriptor record by the input-attachment
+     * layout list - so either read layout is admitted on either side, and the
+     * boundary transition is what carries the attachment into the layout the
+     * READING subpass declares. */
+    {
+        static const VkImageLayout read_layouts[2] = {
+            VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        for (unsigned r = 0; r < 2; ++r)
+            for (unsigned d = 0; d < 2; ++d) {
+                fixture_clone(&f, &base);
+                f.pass.inputs[0].layout = read_layouts[r];
+                f.set.images[GATE_ELEMENT].imageLayout = read_layouts[d];
+                assert(gate(&f) == VK_SUCCESS);
+            }
+    }
     MUTATE(f.set.signature.binding[GATE_BINDING].stages = VK_SHADER_STAGE_VERTEX_BIT);
     MUTATE(f.set.signature.binding[GATE_BINDING].stages =
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -195,16 +218,18 @@ int main(void)
     MUTATE(f.pass.input_count = 0);
     MUTATE(f.pass.inputs[0].attachment = VK_ATTACHMENT_UNUSED);
     MUTATE(f.pass.inputs[0].attachment = 1);
-    MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_UNDEFINED);
+    MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     /* The descriptor must BE that framebuffer view, recorded in GENERAL. */
     MUTATE(f.framebuffer.attachment_count = 0);
     MUTATE(f.framebuffer.attachments[0] = NULL);
     MUTATE(f.framebuffer.attachments[0] = &f.other_view);
     MUTATE(f.set.image_resources[GATE_ELEMENT] = &f.other_image);
     MUTATE(f.set.images[GATE_ELEMENT].imageView = &f.other_view);
-    MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED);
+    MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     MUTATE(f.set.defined[GATE_ELEMENT] = VK_FALSE);
     /* A pass that declares NO dependency is still served (DXVK262-T06): the
      * executor emits the colour-to-texture barrier around every subpass change

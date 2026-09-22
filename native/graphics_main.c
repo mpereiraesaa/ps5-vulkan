@@ -4561,6 +4561,8 @@ int main(void)
             .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
             .write_fragment = ps5vk_runtime_subpass_write_fragment,
             .write_fragment_words = sizeof(ps5vk_runtime_subpass_write_fragment) / 4,
+            .spread_fragment = ps5vk_runtime_subpass_write_spread_fragment,
+            .spread_fragment_words = sizeof(ps5vk_runtime_subpass_write_spread_fragment) / 4,
             .fetch_fragment = ps5vk_runtime_subpass_fetch_fragment,
             .fetch_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_fragment) / 4,
             .sample_fragment = ps5vk_runtime_sample_id_fragment,

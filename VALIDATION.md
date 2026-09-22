@@ -3672,3 +3672,124 @@ high-address check needs the loaded pair's aperture, so the runtime entry is
 used). Both host tests and the console runs remain green before this window's
 last refusal: the walk's own phases - per-sample fetch, resolve arithmetic,
 two-subpass targets with a preserve list - all still pass.
+
+## The layout equation, and the resolve that lands (2026-09-22)
+
+The last window left two things open: the layout the pinned oracle reads its
+colour attachment in, and whether the resolve draw the executor emits actually
+reaches its target. Both are closed here. The second one cost five console runs,
+because each run removed exactly one layer and named the next.
+
+What changed:
+
+- The input-attachment gate accepts the two READ layouts the render-pass
+  frontend (`src/vk_render_pass.c`) already admits: `GENERAL`, which the
+  multiview witness declares, and `SHADER_READ_ONLY_OPTIMAL`, which the pinned
+  multisample oracle declares for its fetch subpasses
+  (`external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp`:
+  `pInputAttachments[0].layout` and the descriptor's `imageLayout` are both
+  `SHADER_READ_ONLY_OPTIMAL`). Each side is admitted by its own pinned rule -
+  the reference by the layouts an input reference may name, the record by the
+  input-attachment layout list - and a layout that is not a read layout is still
+  refused on either side.
+- The prelude walks each attachment's LAYOUT SEQUENCE in subpass order, through
+  the new `ps5vk_render_pass_attachment_layout`: the attachment's initial
+  layout, then the layout each subpass declares for it as the pass reaches that
+  subpass, then the attachment's final layout. The boundary transition therefore
+  leaves the attachment in the layout the READING subpass declares instead of
+  assuming `GENERAL`, which is what the gate then checks the recorded descriptor
+  against.
+- A resolve target now honours the pass's `LOAD_OP_CLEAR`: the whole surface is
+  filled before the pass begins (`PS5VK_RESOLVE_CLEAR_PREPARED`), as Vulkan
+  requires for an attachment whose load operation is clear. The driver used to
+  leave the target holding whatever its allocation contained, which is why a
+  readback of a resolve target could show an earlier phase's pattern.
+- Three defects in the emission itself, each measured:
+  the synthetic operation carried no vertex or instance count, and a zero count
+  is Vulkan's "no rasterization side effects" draw - the emitter returned
+  success without writing a word (`words=8`, i.e. only the barrier);
+  the synthetic pipeline set `color_write_mask` but not the blend block
+  `CB_TARGET_MASK` is actually carried from, so the hardware mask was zero;
+  and the prepared draw's AGC context block and the loaded shader pair were
+  released INSIDE the walk, while the command stream references both by address
+  and the GPU reads them at submit. The last one is the defect that kept the
+  target untouched: the draw went out, ran, and read freed memory.
+- The probe's resolve oracle draws a SPREAD pattern now
+  (`experiments/graphics/runtime_subpass_write_spread.frag`, R = 4*(gl_SampleID+1)/255
+  with per-sample shading enabled), so the samples hold 4, 8, 12 and 16 and
+  their average is 10: a value NO sample holds, and one no 0..3 pattern an
+  earlier phase of the same payload leaves in reused memory can counterfeit. It
+  also censuses all four targets of the oracle's pass, not just the resolve one.
+
+Measured, the decisive run (`20260922T160651821Z`, log
+`1737a9bb1f187ec2c3f7d381be33469e7f166872541f39bab4bf3bac159e6d9`, payload eboot
+`fb7c519df9339de207f5b9605c1cfa69cb4edb639d3788c8d579670f55dd0f4e`):
+
+```text
+PS5VK_RESOLVE_CLEAR_PREPARED serial=7 target=1 word=ffbf8040 bytes=131072
+PS5VK_RESOLVE_DRAW serial=7 subpass=0 samples=4 colour=0 resolve=1 targets=1 words=37
+PS5VK_GRAPHICS_PREPARED serial=7 draws=3 words=228
+PS5VK_SAMPLE_RATE_TARGET_CENSUS marker=source_target_map words=65536 distinct=5 clear_hits=61440 sample_hits=4096 average_hits=0 verdict=0 value0=ff000004 hits0=1024 first0=0 last0=3327 value1=ffbf8040 hits1=61440 value2=ff000008 hits2=1024 value3=ff00000c hits3=1024 value4=ff000010 hits4=1024
+PS5VK_SAMPLE_RATE_RESOLVED extent=32x32 words=32768 distinct=2 clear_hits=31744 sample_hits=0 average_hits=1024 verdict=1 value0=ff00000a hits0=1024 first0=0 last0=3327 value1=ffbf8040 hits1=31744
+```
+
+The resolve target holds the AVERAGE (`ff00000a`, R = 10) across exactly its
+32x32 plane and no sample's value anywhere in its span, with the pass clear in
+the tiled padding; the source holds the four distinct sample planes the SPREAD
+pattern wrote (4, 8, 12, 16). Every other phase of the walk passes in the same
+run: `PS5VK_SAMPLE_RATE_SHADED ... verdict=1`, `PS5VK_SAMPLE_RATE_FETCH ...
+sample_index=0 ... verdict=1` and `sample_index=3 ... value=ff000003 ... verdict=1`,
+`PS5VK_SAMPLE_RATE_TARGETS ... subpasses=2 ... preserved_hits=4096 verdict=1`, and
+the lifecycle closes clean (`PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0`,
+`PS5VK_GRAPHICS_API_CLEANUP_COMPLETE`, `BYE seq=367`).
+
+The runs that named each layer, every one of them a clean lifecycle (each entry
+is run id, log sha256 prefix, payload eboot sha256 prefix, and what it showed):
+
+- `20260922T155027168Z` / `7b8c12468891fd39` / `d0084438` - the oracle's pass
+  executes end to end for the first time (submit `rc=0`, `draws=3`), and the
+  resolve target reads back as four sample-looking values.
+- `20260922T155421552Z` / `a7dae8bd647c5349` / `63dcc5a8` - the sharpened oracle
+  is in place, and the TWO-SUBPASS verdict collapses to 0: the two phases of the
+  walk had been sharing one subpass-0 module, so the spread pattern had replaced
+  the flat one the two-subpass variant measures. Separated into their own
+  modules.
+- `20260922T155629250Z` / `3e8f8a3b352e0008` / `c1c37579` - modules separated,
+  two-subpass verdict back to 1, all four targets censused. The resolve target's
+  content is byte-for-byte the 0..3 pattern and clear of the witness phase
+  earlier in the same payload: it is STALE MEMORY, not a resolve result.
+- `20260922T155759226Z` / `a0ba629adae5d43f` / `23380172` - per-sample shading
+  enabled, so the source shows four distinct planes (4, 8, 12, 16) and the
+  resolve's expected average (10) is distinguishable from every sample. The
+  target is still stale, and the target registers differ from the source's in
+  their address word only.
+- `20260922T155923914Z` / `78fbeaff61953ce2` / `f004d02b` - the missing vertex
+  and instance counts: the emission grows from 8 words to 37 and the submission
+  from 199 to 228, and the target is STILL untouched.
+- `20260922T160123400Z` / `6f80a485a1a7b47b` / `0cb256b2` - the resolve target's
+  own `LOAD_OP_CLEAR` is honoured, so the target reads back as one value across
+  the whole span (`clear_hits=32768`): the draw writes nothing into it, rather
+  than writing something that looked like stale data. The image spans logged in
+  the same run (`200020000` for the resolve target) match the target register's
+  address word exactly, so the draw IS aimed at the right memory.
+- `20260922T160301551Z` / `e1b4bcbd732d0d7f` / `752b67de` - the pipeline's blend
+  block carries `CB_TARGET_MASK`; a synthetic pipeline that sets only
+  `color_write_mask` hands the hardware a zero mask. Set both, as
+  `vkCreateGraphicsPipelines` does. The target is still untouched.
+- `20260922T160423999Z` / `72a8f71398b587bd` / `400a7339` - the emitted words are
+  logged: the barrier, the AGC context and link packets, and a
+  `PKT3_DRAW_INDEX_AUTO` of three vertices are all there, so the draw leaves the
+  queue as a draw. The context address it references is the one the procedure
+  prepared.
+- `20260922T160651821Z` / `1737a9bb1f187ec2` / `fb7c519d` - the last change:
+  the prepared draw and the loaded shader pair are handed to the JOB instead of
+  being released inside the walk. `PS5VK_SAMPLE_RATE_RESOLVED ... verdict=1`.
+
+What this establishes: the pinned oracle's pass runs end to end through this
+driver, its per-sample reads deliver the plane each index names, and its resolve
+attachment receives the AVERAGE of the samples - written by a draw the driver
+owns, on hardware, with no sample's value anywhere in the target. What it does
+not establish yet: no upstream CTS leaf has been run against this path, the row
+stays a blocker, and nothing is advertised. `make check` is green; the console
+window that produced this run left the acceptance payload restored and
+`running=none`.

@@ -80,7 +80,19 @@ struct graphics_job {
     struct ps5vk_draw_batch_chain chain;
     struct ps5vk_command_arena slot;
     struct ps5vk_prepared_draw draws[PS5VK_MAX_OPERATIONS];
-    unsigned count, words, attempted, complete, slot_active, launched;
+    /* The draws the DRIVER emits for its own resolve boundaries (DXVK262-T06).
+     * They are prepared draws like any other, so their AGC context block has to
+     * stay alive until the GPU has executed this submission: the command stream
+     * only REFERENCES that block by address. The first version of the emission
+     * released its prepared draw inside the walk, so the context the hardware
+     * read had already been freed - the draw went out, ran, and wrote nothing. */
+    struct ps5vk_prepared_draw resolve_draws[PS5VK_MAX_SUBPASSES];
+    /* The loaded pair each of those draws was built from. The context block the
+     * command stream references holds pointers into the uploaded shader code,
+     * so the loaded state has to outlive the walk exactly like the prepared
+     * draw itself. */
+    void *resolve_states[PS5VK_MAX_SUBPASSES];
+    unsigned count, words, attempted, complete, slot_active, launched, resolve_count;
     uint64_t serial, start;
     VkImage color;
     VkImage readback_image;
@@ -111,6 +123,10 @@ static void release(VkDevice d,void *opaque)
 #endif
     if(ps5vk_draw_batch_release(&j->chain)!=VK_SUCCESS)retain("command-release");
     for(unsigned i=0;i<j->count;++i)ps5vk_native_release_draw(&j->draws[i]);
+    for(unsigned i=0;i<j->resolve_count;++i) {
+        ps5vk_native_release_draw(&j->resolve_draws[i]);
+        if(j->resolve_states[i])ps5vk_native_graphics_release(d,j->resolve_states[i]);
+    }
     free(j);
 }
 /* A draw that rasterizes nothing: Vulkan gives a zero vertex, index or
@@ -180,6 +196,11 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
     VkRenderPass pass = begin->render_pass;
     const struct ps5vk_subpass *stage = ps5vk_render_pass_subpass(pass, subpass);
     VkFramebuffer fb = begin->framebuffer;
+    /* Declared here rather than where they are filled in: the handover to the
+     * job at `done` has to see an initialised (or explicitly null) value on
+     * every path out of this function. */
+    struct ps5vk_prepared_draw *prepared = NULL;
+    void *loaded_state = NULL;
     if (!stage || !ps5vk_subpass_uses_resolve(stage)) return VK_SUCCESS;
     /* One colour reference with a real resolve target: the shape the oracle
      * builds and the only one this emission describes. */
@@ -238,7 +259,6 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
      * which is what the app path builds when it creates a graphics pipeline.
      * The resolve draw uses the same loader, so its stages go through exactly
      * the path every other pipeline's do. */
-    void *loaded_state = NULL;
     const struct ps5vk_runtime_graphics_program *pair = program.pair;
     rc = ps5vk_native_runtime_graphics_create(d, pair, pair->primitive_type, &loaded_state);
     if (rc != VK_SUCCESS) {
@@ -252,14 +272,35 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
         .viewport_count = 1u, .viewport = viewport, .scissor = scissor,
         .color_attachment_count = 1u, .color_format = {VK_FORMAT_R8G8B8A8_UNORM},
         .color_write_mask = {0xfu}, .front_face = VK_FRONT_FACE_CLOCKWISE,
+        /* CB_TARGET_MASK is carried from the pipeline's BLEND block, not from
+         * the write-mask array: ps5vk_native_draw_state reads
+         * color_blend[attachment].colorWriteMask, so a synthetic pipeline that
+         * sets only color_write_mask hands the hardware a target mask of ZERO -
+         * the draw runs and every colour write is discarded, which is exactly
+         * how the first emitted resolve managed to leave its target at the
+         * clear. Both fields are set here, the way vkCreateGraphicsPipelines
+         * sets both. */
+        .color_blend = {{.colorWriteMask = 0xfu}},
         .graphics_state = synthetic_state};
     synthetic_pipeline.sets[0] = synthetic_set.signature;
+    /* The count is not decoration: `ps5vk_native_emit_runtime_draw` treats a
+     * zero vertex or instance count as Vulkan's "no rasterization side
+     * effects" draw and returns success WITHOUT writing a single word - which
+     * is exactly how the first emission of this draw managed to log a resolve
+     * and leave the target untouched. The resolve program's vertex stage is the
+     * oversized triangle every runtime pipeline uses, so the emission is three
+     * vertices, one instance. */
     struct ps5vk_operation op = {.type = PS5VK_DRAW, .pipeline = &synthetic_pipeline,
         .framebuffer = &synthetic_fb, .render_pass = &synthetic_pass,
+        .vertex_count = 3u, .instance_count = 1u,
         .viewport_count = 1u, .viewport = viewport, .scissor = scissor};
     op.sets[0] = &synthetic_set;
     op.generations[0] = synthetic_set.generation;
-    struct ps5vk_prepared_draw prepared = {0};
+    /* The prepared draw lives in the JOB, not on this frame: its context block
+     * is referenced by address from the command stream and is read by the GPU
+     * long after this walk returns. */
+    if (j->resolve_count >= PS5VK_MAX_SUBPASSES) { *site = 41u; rc = VK_ERROR_TOO_MANY_OBJECTS; goto done; }
+    prepared = &j->resolve_draws[j->resolve_count];
     const VkRect2D area = {{0, 0}, {fb->width, fb->height}};
     /* The three ingredients of the synthetic draw are checked one at a time so
      * a refusal names which of them the profile cannot describe. */
@@ -284,7 +325,7 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
         resolve_targets.color[0] = 1u;
         resolve_targets.depth = VK_ATTACHMENT_UNUSED;
         rc = ps5vk_native_prepare_resource_draw(d, &op, &area, defaults,
-            (uintptr_t)synthetic_state->pair, &resolve_targets, &prepared);
+            (uintptr_t)synthetic_state->pair, &resolve_targets, prepared);
     }
     if (rc != VK_SUCCESS) {
         *site = 34u;
@@ -293,7 +334,7 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
     }
     if (rc == VK_SUCCESS) {
         uint32_t tables[PS5VK_RUNTIME_DESCRIPTOR_SETS] = {0};
-        tables[0] = (uint32_t)(uintptr_t)prepared.descriptor_tables[0];
+        tables[0] = (uint32_t)(uintptr_t)prepared->descriptor_tables[0];
         uint32_t *cursor = *cursor_io, *end = *end_io;
         /* The multisampled attachment has to be readable by the resolve draw,
          * which is the same transition the fetch path's boundary emits. */
@@ -311,8 +352,8 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
                 cursor = j->chain.cursor;
                 end = j->chain.end;
                 rc = ps5vk_native_emit_runtime_draw(&cursor, (uint32_t)(end - cursor),
-                    prepared.state, prepared.state, prepared.bytes, &op,
-                    (uint32_t)(uintptr_t)prepared.vertex_table, tables, NULL, NULL,
+                    prepared->state, prepared->state, prepared->bytes, &op,
+                    (uint32_t)(uintptr_t)prepared->vertex_table, tables, NULL, NULL,
                     sceAgcDcbDrawIndex);
                 if (rc != VK_SUCCESS) *site = 40u;
                 else
@@ -327,8 +368,19 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
         *cursor_io = cursor;
         *end_io = end;
     }
-    ps5vk_native_release_draw(&prepared);
-    ps5vk_native_graphics_release(d, loaded_state);
+    /* The job owns the prepared draw AND the loaded pair from here: the command
+     * stream references the context block by address and the context references
+     * the uploaded shader code, so both are read by the GPU after this walk has
+     * returned. Handing them over is what makes the draw land. */
+    if (rc == VK_SUCCESS && prepared->state) {
+        j->resolve_states[j->resolve_count] = loaded_state;
+        ++j->resolve_count;
+        loaded_state = NULL;
+    } else if (prepared->state) {
+        ps5vk_native_release_draw(prepared);
+    }
+done:
+    if (loaded_state) ps5vk_native_graphics_release(d, loaded_state);
     ps5vk_resolve_program_release(d, &program);
     return rc;
 }
@@ -643,14 +695,47 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     /* Record the scoped render-pass transitions transactionally. Resource
      * state becomes committed only after the exact GPU completion label. */
     phase="attachment-layout";
-    /* Every colour target the pass carries takes its own initial-to-final
-     * transition, in attachment order: a second target is a separate surface
-     * with its own tracked layout, not part of attachment zero's. */
+    /* Every colour target the pass carries takes its own layout SEQUENCE, in
+     * attachment order: a second target is a separate surface with its own
+     * tracked layout, not part of attachment zero's. The sequence is the
+     * attachment's initial layout, then the layout each subpass declares for it
+     * as the pass reaches that subpass, then the attachment's final layout,
+     * because that is exactly what a render pass does to an attachment - and it
+     * is where the pinned multisample oracle's read layout enters: subpass 0
+     * renders the multisampled colour attachment as a colour target, and the
+     * fetch subpasses declare that same attachment as an input attachment in
+     * SHADER_READ_ONLY_OPTIMAL. The boundary transition therefore leaves the
+     * attachment in the layout the READING subpass declares, which is what the
+     * input-attachment gate then checks the recorded descriptor against. */
     for(uint32_t k=0;k<color_count;++k) {
         const uint32_t a=colour_attachment[k];
-        rc=ps5vk_layout_transition(&j->layouts,begin->framebuffer->attachments[a]->image,
-            pass->attachments[a].initialLayout,pass->attachments[a].finalLayout);
-        if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
+        const VkImage image=begin->framebuffer->attachments[a]->image;
+        VkImageLayout current=pass->attachments[a].initialLayout;
+        int moved=0;
+        for(uint32_t s=0;s<pass->subpass_count;++s) {
+            VkImageLayout declared;
+            if(!ps5vk_render_pass_attachment_layout(pass,s,a,&declared) ||
+               declared==current)continue;
+            rc=ps5vk_layout_transition(&j->layouts,image,current,declared);
+            if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
+            current=declared;moved=1;
+        }
+        if(!moved) {
+            /* No subpass moved it: one transition registers the surface in the
+             * transaction and lands it on the pass's final layout, which is the
+             * single-layout behaviour every measured pass had before this
+             * walk existed. */
+            rc=ps5vk_layout_transition(&j->layouts,image,
+                pass->attachments[a].initialLayout,pass->attachments[a].finalLayout);
+            if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
+            current=pass->attachments[a].finalLayout;
+        } else if(current!=pass->attachments[a].finalLayout) {
+            /* Whatever a middle subpass declared for it, the pass leaves the
+             * attachment in that attachment's final layout. */
+            rc=ps5vk_layout_transition(&j->layouts,image,current,
+                pass->attachments[a].finalLayout);
+            if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
+        }
     }
     if(depth) {
         rc=ps5vk_layout_transition(&j->layouts,begin->framebuffer->attachments[depth_attachment]->image,
@@ -690,6 +775,56 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
         n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
+    }
+    /* A RESOLVE target is an attachment of the pass like any other, so Vulkan's
+     * load operation applies to it: when the pass declares CLEAR for the
+     * single-sample attachment that receives a subpass's resolved result, the
+     * whole surface is cleared before the pass begins. The driver used to leave
+     * it to gather whatever its allocation happened to hold - which is why a
+     * readback of a resolve target could show an earlier phase's pattern, and
+     * why "the resolve draw wrote nothing" was indistinguishable from "the
+     * resolve draw wrote somewhere else". A target a colour reference already
+     * cleared is not cleared twice. */
+    for(uint32_t s=0;s<pass->subpass_count;++s) {
+        const struct ps5vk_subpass *sp=ps5vk_render_pass_subpass(pass,s);
+        for(uint32_t r=0;r<sp->resolve_count;++r) {
+            const uint32_t a=sp->resolve[r].attachment;
+            if(a==VK_ATTACHMENT_UNUSED||a>=pass->attachment_count||
+               a>=begin->framebuffer->attachment_count||
+               !begin->framebuffer->attachments[a])continue;
+            int seen=0;
+            for(uint32_t k=0;k<color_count&&!seen;++k)seen=colour_attachment[k]==a;
+            for(uint32_t earlier=0;earlier<s&&!seen;++earlier) {
+                const struct ps5vk_subpass *previous=ps5vk_render_pass_subpass(pass,earlier);
+                for(uint32_t q=0;q<previous->resolve_count&&!seen;++q)
+                    seen=previous->resolve[q].attachment==a;
+            }
+            if(seen||pass->attachments[a].loadOp!=VK_ATTACHMENT_LOAD_OP_CLEAR)continue;
+            if(begin->clear_count<=a){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=__LINE__;goto fail;}
+            VkImage image=begin->framebuffer->attachments[a]->image;
+            uint32_t word;
+            const int clear_ok=ps5vk_color_target_integer_served(image->info.format)?
+                ps5vk_color_clear_rgba8_uint(begin->clears[a].color.uint32,&word):
+                (image->info.format==VK_FORMAT_B8G8R8A8_UNORM?
+                    ps5vk_color_clear_bgra8(begin->clears[a].color.float32,&word):
+                    ps5vk_color_clear_rgba8(begin->clears[a].color.float32,&word));
+            if(!clear_ok||image->info.samples!=VK_SAMPLE_COUNT_1_BIT||
+               begin->render_area.offset.x||begin->render_area.offset.y||
+               image->info.extent.width!=begin->render_area.extent.width||
+               image->info.extent.height!=begin->render_area.extent.height)
+                {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=__LINE__;goto fail;}
+            void *address;VkDeviceSize bytes;
+            rc=ps5vk_image_span(d,image,&address,&bytes);
+            if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
+            cache(address,(size_t)bytes);
+            size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,bytes,word);
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
+            n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_RESOLVE_CLEAR_PREPARED serial=%llu target=%u word=%08x bytes=%llu",
+                (unsigned long long)j->serial,a,word,(unsigned long long)bytes);
+        }
     }
     phase="draw";
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15

@@ -11,6 +11,34 @@
 unsigned ps5vk_input_attachment_gate_site;
 #include "descriptor_table_layout.h"
 
+/* The two read layouts this profile serves for a subpass input.
+ *
+ * GENERAL is what the multiview witness declares: its colour attachment is
+ * transitioned to GENERAL for the whole pass. SHADER_READ_ONLY_OPTIMAL is what
+ * the pinned multisample oracle declares for the attachment its fetch subpasses
+ * read - external/vulkancts/modules/vulkan/pipeline/
+ * vktPipelineMultisampleTests.cpp builds pInputAttachments[0] with
+ * VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL and writes the input-attachment
+ * descriptor with the same layout, and the native walk reproduces that shape.
+ * Both are read layouts the render-pass frontend (src/vk_render_pass.c) already
+ * admits for an input reference, and the boundary transition this executor emits
+ * for a reading subpass is the same CB flush and acquire for either: what tells
+ * the two apart is the layout bookkeeping, not a different packet (the GFX10
+ * RELEASE_MEM in src/graphics_sync.c is layout-agnostic).
+ *
+ * The pinned rules constrain each side on its own - the spec requires an
+ * input-attachment descriptor's imageLayout to be a member of the input
+ * attachment layout list, and VUID 06912 excludes the attachment layouts for
+ * the reference - so this gate decides the same way instead of inventing a
+ * pairing rule between two legal read layouts. What it refuses is a layout that
+ * is not a read layout at all: UNDEFINED, a colour- or depth-attachment layout,
+ * a transfer layout. */
+static int read_layout(VkImageLayout layout)
+{
+    return layout == VK_IMAGE_LAYOUT_GENERAL ||
+        layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+}
+
 /* The one forward dependency this profile accepts: subpass 0's colour write
  * visible to the later subpass's fragment input-attachment read, in the same
  * BY_REGION scope, and nothing else on either side. A dependency that names a
@@ -116,16 +144,16 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
         reference->attachment >= framebuffer->attachment_count ||
         !framebuffer->attachments[reference->attachment])
         { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
-    /* A subpass input reference is a read layout; the colour- and
-     * depth-attachment layouts are refused at pass creation for the same
-     * reason, and GENERAL is what this profile's boundary transition leaves the
-     * attachment in. */
-    if (reference->layout != VK_IMAGE_LAYOUT_GENERAL) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
+    /* A subpass input reference is a read layout, and the boundary transition
+     * this executor emits for this subpass leaves the attachment in the layout
+     * the subpass DECLARES - which is why the gate decides on both read layouts
+     * and why the queue walks the pass's layouts in subpass order. */
+    if (!read_layout(reference->layout)) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     if (!set->defined[element_index]) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* The descriptor must BE the framebuffer view of that reference - not
      * another view of the same image, not another layer - and it must be
-     * recorded in GENERAL, the layout the acquire at the subpass boundary
-     * really leaves behind. */
+     * recorded in a read layout, the layouts the acquire at the subpass
+     * boundary really leaves behind. */
     if (!set->images[element_index].imageView ||
         set->images[element_index].imageView != framebuffer->attachments[reference->attachment] ||
         set->image_resources[element_index] !=
@@ -134,7 +162,7 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
     if (!promoted_resource(device, set->image_resources[element_index],
             set->images[element_index].imageView))
         { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
-    if (set->images[element_index].imageLayout != VK_IMAGE_LAYOUT_GENERAL)
+    if (!read_layout(set->images[element_index].imageLayout))
         { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* No sampler words: the record this role occupies is the eight DWORD
      * resource-only image record, so a table that sized it as a combined pair

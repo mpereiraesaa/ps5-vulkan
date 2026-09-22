@@ -78,6 +78,8 @@ def main():
          "runtime_sample_id.frag.spv", "sample_id_fragment"),
         ("experiments/graphics/runtime_subpass_write.frag",
          "runtime_subpass_write.frag.spv", "subpass_write_fragment"),
+        ("experiments/graphics/runtime_subpass_write_spread.frag",
+         "runtime_subpass_write_spread.frag.spv", "subpass_write_spread_fragment"),
         ("experiments/graphics/runtime_subpass_fetch.frag",
          "runtime_subpass_fetch.frag.spv", "subpass_fetch_fragment"),
         ("experiments/graphics/runtime_subpass_fetch_const.frag",

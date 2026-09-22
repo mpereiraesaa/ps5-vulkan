@@ -396,6 +396,26 @@ static void oracle_multisample_render_pass(struct VkDevice_T *d)
         for (uint32_t k = 0; k < s->preserve_count; ++k)
             assert(ps5vk_render_pass_preserves(pass, 1 + i)[k] != 2 + i);
     }
+    /* The same pass as a layout SEQUENCE, which is what the native queue walks
+     * before it emits anything: attachment 0 is subpass 0's colour target and
+     * every fetch subpass's SHADER_READ_ONLY_OPTIMAL input, attachment 1 is
+     * subpass 0's resolve target, and an attachment a subpass only PRESERVES is
+     * named by no role of that subpass - it carries its layout through. */
+    {
+        VkImageLayout declared = VK_IMAGE_LAYOUT_UNDEFINED;
+        assert(ps5vk_render_pass_attachment_layout(pass, 0, 0, &declared) &&
+               declared == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        assert(ps5vk_render_pass_attachment_layout(pass, 0, 1, &declared) &&
+               declared == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        for (uint32_t i = 0; i < PS5VK_SAMPLE_COUNT_MAX_SERVED; ++i) {
+            const uint32_t preserved = 2 + (i + 1) % PS5VK_SAMPLE_COUNT_MAX_SERVED;
+            assert(ps5vk_render_pass_attachment_layout(pass, 1 + i, 0, &declared) &&
+                   declared == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            assert(ps5vk_render_pass_attachment_layout(pass, 1 + i, 2 + i, &declared) &&
+                   declared == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            assert(!ps5vk_render_pass_attachment_layout(pass, 1 + i, preserved, &declared));
+        }
+    }
     vkDestroyRenderPass(d, pass, NULL);
     /* The bound follows that shape: one attachment past it is refused. */
     assert(create_oracle_multisample_pass(d, 6, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
@@ -637,6 +657,25 @@ static void input_attachments(struct VkDevice_T *d)
     const VkAttachmentReference *owned = ps5vk_render_pass_inputs(pass, 1);
     assert(owned[0].attachment == 1 && owned[0].layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     assert(owned[1].attachment == VK_ATTACHMENT_UNUSED);
+    /* The layout SEQUENCE a pass declares per attachment, which is what the
+     * native queue walks in subpass order: subpass 0 names attachment 0 as
+     * colour, subpass 1 names attachment 1 through its
+     * SHADER_READ_ONLY_OPTIMAL input reference, and attachment 1 is named by no
+     * role of subpass 0 at all. */
+    {
+        VkImageLayout declared = VK_IMAGE_LAYOUT_UNDEFINED;
+        assert(ps5vk_render_pass_attachment_layout(pass, 0, 0, &declared) &&
+               declared == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        assert(ps5vk_render_pass_attachment_layout(pass, 1, 0, &declared) &&
+               declared == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        assert(ps5vk_render_pass_attachment_layout(pass, 1, 1, &declared) &&
+               declared == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        assert(!ps5vk_render_pass_attachment_layout(pass, 0, 1, &declared));
+        assert(!ps5vk_render_pass_attachment_layout(pass, 2, 0, &declared));
+        assert(!ps5vk_render_pass_attachment_layout(pass, 1, VK_ATTACHMENT_UNUSED, &declared));
+        assert(!ps5vk_render_pass_attachment_layout(NULL, 0, 0, &declared));
+        assert(!ps5vk_render_pass_attachment_layout(pass, 0, 0, NULL));
+    }
     /* The owned copy is the pass's, not the caller's: mutating either the
      * reference array or the subpass description afterwards changes nothing. */
     inputs[0].layout = VK_IMAGE_LAYOUT_GENERAL; inputs[0].attachment = VK_ATTACHMENT_UNUSED;

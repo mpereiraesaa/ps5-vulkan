@@ -47,6 +47,16 @@ struct ps5vk_sample_rate_shape_params {
     size_t vertex_words;
     const uint32_t *write_fragment;
     size_t write_fragment_words;
+    /* The subpass-0 module the RESOLVE oracle draws with: the same per-sample
+     * shape as write_fragment, but writing a value per sample whose average no
+     * sample can hold (R = 4 * (gl_SampleID + 1) / 255, so the samples hold 4,
+     * 8, 12, 16 and their average is 10). With the plain 0,1,2,3 pattern the
+     * average (1.5, rounded) IS a sample value, so a target that received one
+     * sample's plane cannot be told from one that received the average; and
+     * starting the pattern at 4 keeps every sample word clear of the 0..3
+     * patterns earlier phases of the payload leave in reused memory. */
+    const uint32_t *spread_fragment;
+    size_t spread_fragment_words;
     const uint32_t *fetch_fragment;
     size_t fetch_fragment_words;
     /* The fragment module whose output varies with gl_SampleID, used by the

@@ -12,6 +12,19 @@
  * already a failure. */
 enum { PROBE_DISTINCT_LIMIT = 8 };
 
+/* One target's census, as the resolve oracle counts it: how many words the span
+ * holds of each of the three word sets (the SPREAD samples, their average, the
+ * pass clear), and what the distinct words are, with the first and last index
+ * each one appears at. The bound on distinct words is the census' own, not the
+ * target's: a span with more than six distinct words is already described by
+ * the first six. */
+struct ps5vk_sample_rate_census {
+    uint32_t words, distinct;
+    uint32_t clear_hits, sample_hits, average_hits;
+    uint32_t value[6], hits[6], first[6], last[6];
+    int verdict;
+};
+
 VkResult ps5vk_sample_rate_probe(VkDevice device,
     const struct ps5vk_sample_rate_probe_params *params)
 {
@@ -282,6 +295,73 @@ static int shape_step(const char *name, VkResult rc)
     return rc == VK_SUCCESS;
 }
 
+/* The resolve oracle's judgement as one counting rule over a span of words.
+ *
+ * Subpass 0 of the oracle's own pass draws the SPREAD pattern, so the samples
+ * hold R = 4, 8, 12 and 16 (each in whichever byte the target's format puts the
+ * red channel) and their average is 10. The three word sets are therefore the
+ * samples, their average, and the pass clear; a target that received ONE
+ * sample's plane and a target that received the AVERAGE are told apart by the
+ * presence of the average word together with the absence of every sample word.
+ * The samples start at 4 on purpose: an earlier phase of this payload writes
+ * 0..3 patterns into the memory this target's allocation reuses, so a stale
+ * word must not be able to masquerade as a sample. */
+static void sample_rate_census(struct ps5vk_sample_rate_census *out,
+    const void *span, uint32_t words)
+{
+    static const uint32_t sample_words[8] = {
+        0xff000004u, 0xff000008u, 0xff00000cu, 0xff000010u,
+        0xff040000u, 0xff080000u, 0xff0c0000u, 0xff100000u};
+    static const uint32_t average_words[2] = {0xff00000au, 0xff0a0000u};
+    const uint32_t clear_word = 0xffbf8040u;
+    memset(out, 0, sizeof(*out));
+    out->words = words;
+    for (uint32_t i = 0; i < words; ++i) {
+        uint32_t word = 0;
+        memcpy(&word, (const unsigned char *)span + (size_t)i * 4u, sizeof(word));
+        for (unsigned k = 0; k < 8; ++k) if (word == sample_words[k]) ++out->sample_hits;
+        for (unsigned k = 0; k < 2; ++k) if (word == average_words[k]) ++out->average_hits;
+        if (word == clear_word) ++out->clear_hits;
+        unsigned slot = out->distinct;
+        for (unsigned k = 0; k < out->distinct; ++k)
+            if (out->value[k] == word) { slot = k; break; }
+        if (slot == out->distinct) {
+            if (out->distinct == 6u) continue;
+            out->value[out->distinct] = word;
+            out->first[out->distinct] = i;
+            ++out->distinct;
+        }
+        ++out->hits[slot];
+        out->last[slot] = i;
+    }
+    out->verdict = out->sample_hits == 0 && out->average_hits > 0;
+}
+
+/* One target's census, read back through the driver's own span. The mapping
+ * step is announced like every other step, so a target that cannot be read
+ * names itself instead of silently reporting nothing. Returns 0 when the
+ * target could not be mapped at all. */
+static int sample_rate_census_log(VkDevice device, VkImage image, const char *marker,
+    struct ps5vk_sample_rate_census *out)
+{
+    void *span = NULL;
+    VkDeviceSize bytes = 0;
+    if (!shape_step(marker, ps5vk_image_span(device, image, &span, &bytes))) return 0;
+    struct ps5vk_sample_rate_census census;
+    sample_rate_census(&census, span, (uint32_t)(bytes / 4u));
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_SAMPLE_RATE_TARGET_CENSUS marker=%s words=%u distinct=%u clear_hits=%u "
+        "sample_hits=%u average_hits=%u verdict=%d value0=%08x hits0=%u first0=%u last0=%u "
+        "value1=%08x hits1=%u value2=%08x hits2=%u value3=%08x hits3=%u value4=%08x hits4=%u",
+        marker, census.words, census.distinct, census.clear_hits, census.sample_hits,
+        census.average_hits, census.verdict, census.value[0], census.hits[0],
+        census.first[0], census.last[0], census.value[1], census.hits[1],
+        census.value[2], census.hits[2], census.value[3], census.hits[3],
+        census.value[4], census.hits[4]);
+    if (out) *out = census;
+    return 1;
+}
+
 VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
     const struct ps5vk_sample_rate_shape_params *params)
 {
@@ -294,7 +374,10 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
     VkDescriptorPool pool = VK_NULL_HANDLE;
     VkDescriptorSet set = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
-    VkShaderModule modules[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    /* modules[0] vertex, modules[1] the flat subpass-0 writer the two-subpass
+     * variant measures, modules[2] the per-sample fetch stage, modules[3] the
+     * SPREAD writer only the resolve oracle's pass draws with. */
+    VkShaderModule modules[4] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkPipeline pipelines[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkBuffer ubo = VK_NULL_HANDLE;
     VkDeviceMemory ubo_memory = VK_NULL_HANDLE;
@@ -307,6 +390,7 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
     if (!device || !params || !params->extent || !count || count < 2u ||
         !params->vertex || !params->vertex_words ||
         !params->write_fragment || !params->write_fragment_words ||
+        !params->spread_fragment || !params->spread_fragment_words ||
         !params->fetch_fragment || !params->fetch_fragment_words ||
         !params->sample_fragment || !params->sample_fragment_words ||
         !params->fetch_const_fragment || !params->fetch_const_fragment_words ||
@@ -492,10 +576,17 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .setLayoutCount = 1, .pSetLayouts = &set_layout};
         SHAPE_TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
-        const uint32_t *sources[3] = {params->vertex, params->write_fragment, params->fetch_fragment};
-        const size_t words[3] = {params->vertex_words, params->write_fragment_words,
-                                 params->fetch_fragment_words};
-        for (unsigned i = 0; i < 3; ++i) {
+        /* Four modules, because two phases of this walk draw subpass 0 with
+         * DIFFERENT patterns: the two-subpass variant measures the flat writer,
+         * and the resolve oracle's pass draws the SPREAD pattern, whose samples
+         * average to a value none of them holds. Mixing them up once already
+         * made the two-subpass verdict fail here, which is why they are
+         * separate modules rather than one writer used twice. */
+        const uint32_t *sources[4] = {params->vertex, params->write_fragment,
+            params->fetch_fragment, params->spread_fragment};
+        const size_t words[4] = {params->vertex_words, params->write_fragment_words,
+                                 params->fetch_fragment_words, params->spread_fragment_words};
+        for (unsigned i = 0; i < 4; ++i) {
             const VkShaderModuleCreateInfo module_info = {
                 .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                 .codeSize = words[i] * 4u, .pCode = sources[i]};
@@ -505,7 +596,7 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
             {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
               VK_SHADER_STAGE_VERTEX_BIT, modules[0], "main", NULL},
              {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
-              VK_SHADER_STAGE_FRAGMENT_BIT, modules[1], "main", NULL}},
+              VK_SHADER_STAGE_FRAGMENT_BIT, modules[3], "main", NULL}},
             {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
               VK_SHADER_STAGE_VERTEX_BIT, modules[0], "main", NULL},
              {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
@@ -529,12 +620,18 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
         const VkPipelineColorBlendStateCreateInfo blend = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .attachmentCount = 1, .pAttachments = &blend_attachment};
-        /* Subpass 0 keeps the oracle's multisample state without per-sample
-         * shading; the fetch subpasses are the single-sample ones. */
+        /* Subpass 0 keeps the oracle's multisample state and ENABLES per-sample
+         * shading, because gl_SampleID only varies between invocations when the
+         * pipeline asks for it: without it every sample of a pixel would hold
+         * the same SPREAD value, the samples would not differ, and a resolve
+         * that averaged them would be indistinguishable from one that copied a
+         * single plane. minSampleShading 1.0 is the state the pinned oracle's
+         * sample-shading leaves build. The fetch subpasses stay single-sample. */
         VkSampleMask mask = ps5vk_sample_count_full_mask(params->samples);
         const VkPipelineMultisampleStateCreateInfo multisample[2] = {
             {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-             .rasterizationSamples = params->samples, .pSampleMask = &mask},
+             .rasterizationSamples = params->samples, .sampleShadingEnable = VK_TRUE,
+             .minSampleShading = 1.0f, .pSampleMask = &mask},
             {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
              .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT}};
         for (unsigned subpass = 0; subpass < 3; ++subpass) {
@@ -1225,6 +1322,18 @@ two_cleanup:
         }
         const VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         SHAPE_TRY(vkBeginCommandBuffer(command, &begin));
+        /* Where each attachment of this pass actually lives, logged next to the
+         * target registers the executor programs for its resolve draw: the two
+         * readings together are what tell "the resolve wrote nothing" from "the
+         * resolve wrote into another surface". */
+        for (unsigned i = 0; i < 4; ++i) {
+            void *address = NULL;
+            VkDeviceSize bytes = 0;
+            if (ps5vk_image_span(device, images[i], &address, &bytes) == VK_SUCCESS)
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_SAMPLE_RATE_SHAPE step=image_span index=%u address=%llx bytes=%llu",
+                    i, (unsigned long long)(uintptr_t)address, (unsigned long long)bytes);
+        }
         /* One clear value per attachment, as the oracle passes: the pass
          * clears all four, and a shorter array is a malformed begin rather
          * than a shape the driver refuses. */
@@ -1267,38 +1376,35 @@ two_cleanup:
         SHAPE_TRY(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
         SHAPE_TRY(vkDeviceWaitIdle(device));
         shape_step("submitted", VK_SUCCESS);
-        /* The oracle's own pass now runs end to end, so its resolve target is
-         * read back: the resolved result has to LAND in the attachment the pass
-         * declares, whatever value the samples happen to hold. */
+        /* The oracle's own pass now runs end to end, so EVERY target it declares
+         * is read back and counted - and that is the point, not thoroughness for
+         * its own sake: the previous window read only the resolve target and
+         * reported four sample-looking values, which turned out to be the 0..3
+         * pattern an EARLIER phase of the same payload had left in the memory
+         * this allocation reused. A reading that names only one target cannot
+         * say whether the driver's resolve output landed somewhere else, so this
+         * one names all four: the source (where subpass 0 drew the SPREAD
+         * pattern), the resolve target (where the driver's own draw must land),
+         * and the two fetch targets.
+         *
+         * The resolve verdict is the counting rule in sample_rate_census: the
+         * average word present, no sample word present. */
         {
-            void *resolved = NULL;
-            VkDeviceSize resolved_bytes = 0;
-            VkResult map_rc = ps5vk_image_span(device, images[1], &resolved, &resolved_bytes);
-            if (shape_step("resolve_target_map", map_rc) && map_rc == VK_SUCCESS) {
-                const uint32_t words = (uint32_t)(resolved_bytes / 4u);
-                uint32_t census[4] = {0}, hits[4] = {0};
-                unsigned distinct = 0;
-                for (uint32_t i = 0; i < words; ++i) {
-                    uint32_t word = 0;
-                    memcpy(&word, (const unsigned char *)resolved + (size_t)i * 4u, sizeof(word));
-                    unsigned slot = distinct;
-                    for (unsigned k = 0; k < distinct; ++k)
-                        if (census[k] == word) { slot = k; break; }
-                    if (slot == distinct) {
-                        if (distinct == 4u) continue;
-                        census[distinct] = word;
-                        ++distinct;
-                    }
-                    ++hits[slot];
-                }
+            struct ps5vk_sample_rate_census resolved;
+            const int visible = sample_rate_census_log(device, images[1],
+                "resolve_target_map", &resolved);
+            sample_rate_census_log(device, images[0], "source_target_map", NULL);
+            sample_rate_census_log(device, images[2], "fetch_target0_map", NULL);
+            sample_rate_census_log(device, images[3], "fetch_target1_map", NULL);
+            if (visible)
                 ps5log_printf(PS5LOG_MARK,
                     "PS5VK_SAMPLE_RATE_RESOLVED extent=%ux%u words=%u distinct=%u "
-                    "value0=%08x hits0=%u value1=%08x hits1=%u value2=%08x hits2=%u "
-                    "value3=%08x hits3=%u",
-                    params->extent, params->extent, words, distinct,
-                    census[0], hits[0], census[1], hits[1], census[2], hits[2],
-                    census[3], hits[3]);
-            }
+                    "clear_hits=%u sample_hits=%u average_hits=%u verdict=%d value0=%08x "
+                    "hits0=%u first0=%u last0=%u value1=%08x hits1=%u",
+                    params->extent, params->extent, resolved.words, resolved.distinct,
+                    resolved.clear_hits, resolved.sample_hits, resolved.average_hits,
+                    resolved.verdict, resolved.value[0], resolved.hits[0], resolved.first[0],
+                    resolved.last[0], resolved.value[1], resolved.hits[1]);
         }
     }
 
@@ -1318,7 +1424,7 @@ cleanup:
     if (command_pool) SHAPE_CLEANUP(vkDestroyCommandPool(device, command_pool, NULL));
     for (unsigned i = 0; i < 3; ++i)
         if (pipelines[i]) SHAPE_CLEANUP(vkDestroyPipeline(device, pipelines[i], NULL));
-    for (unsigned i = 0; i < 3; ++i)
+    for (unsigned i = 0; i < 4; ++i)
         if (modules[i]) SHAPE_CLEANUP(vkDestroyShaderModule(device, modules[i], NULL));
     if (layout) SHAPE_CLEANUP(vkDestroyPipelineLayout(device, layout, NULL));
     if (pool) SHAPE_CLEANUP(vkDestroyDescriptorPool(device, pool, NULL));
