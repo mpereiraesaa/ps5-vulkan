@@ -12,9 +12,17 @@ struct ps5vk_attachment_plan {
 
 /* Native single-sample attachment contract.  This is deliberately narrower
  * than render-pass object creation: it describes semantics the AGC queue can
- * execute without silently weakening LOAD, CLEAR, or final-layout ownership. */
+ * execute without silently weakening LOAD, CLEAR, or final-layout ownership.
+ *
+ * `readback` says the colour attachment is also read back after the pass. The
+ * pinned render-pass module reads every attachment of its pass back, and its
+ * own final layout for them is the transfer source: the pass is the transition
+ * that hands the rendered surface to its readback, which is exactly what the
+ * executor programmes for that role (one initial-to-final transition per
+ * target). Every other attachment keeps ending in its attachment layout or
+ * GENERAL. */
 static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
-    VkFormat format, VkImageLayout reference, VkBool32 depth,
+    VkFormat format, VkImageLayout reference, VkBool32 depth, VkBool32 readback,
     struct ps5vk_attachment_plan *out)
 {
     const VkImageLayout attachment = depth ?
@@ -26,7 +34,9 @@ static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
         (reference != attachment && reference != VK_IMAGE_LAYOUT_GENERAL) ||
         (a->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
          a->initialLayout != attachment && a->initialLayout != VK_IMAGE_LAYOUT_GENERAL) ||
-        (a->finalLayout != attachment && a->finalLayout != VK_IMAGE_LAYOUT_GENERAL) ||
+        (a->finalLayout != attachment && a->finalLayout != VK_IMAGE_LAYOUT_GENERAL &&
+         !(readback && !depth &&
+           a->finalLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)) ||
         a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
         a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
         (a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&

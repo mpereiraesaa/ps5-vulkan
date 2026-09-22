@@ -37,6 +37,60 @@ static inline VkAccessFlags ps5vk_attachment_initialization_write_mask(void)
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 }
 
+/* Handing a rendered colour attachment to its readback. The render-pass
+ * module's own pass already leaves the attachment in its final layout, the
+ * transfer-source one, so this barrier is the identity and all it does is order
+ * the writes the pass performed against the copy's read
+ * (pushReadImagesToBuffers, vktRenderPassTests.cpp:3582: the source is every
+ * memory write plus the layout's own access, the destination is every memory
+ * read). The identity is admitted only with a write on the source side and the
+ * copy's own read on the destination side, so an empty or foreign scope is
+ * still refused. The recorded image barrier profile and the native readback
+ * validator both ask this one predicate rather than spelling it twice. */
+static inline int ps5vk_colour_readback_handover_barrier(const VkImageMemoryBarrier *b)
+{
+    return b &&
+        b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+        b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+        (b->srcAccessMask & ps5vk_attachment_initialization_write_mask()) &&
+        !(b->srcAccessMask &
+          ~(ps5vk_attachment_initialization_write_mask() |
+            (VkAccessFlags)VK_ACCESS_TRANSFER_READ_BIT)) &&
+        (b->dstAccessMask & VK_ACCESS_TRANSFER_READ_BIT) &&
+        !(b->dstAccessMask & ~ps5vk_attachment_initialization_read_mask());
+}
+
+/* The pair the pinned render-pass module records around a clear it performs
+ * itself, before the pass that will render into the cleared attachment: the
+ * acquire that discards the old contents into the transfer-destination layout
+ * with the module's whole read scope plus the write the clear performs, and the
+ * handover that gives the cleared attachment to its attachment layout with the
+ * module's read scope plus the access that layout's owner writes with. The
+ * recorder accepts exactly these two, and the native executor agrees with the
+ * same two predicates rather than spelling them again. */
+static inline int ps5vk_attachment_initialization_acquire_barrier(const VkImageMemoryBarrier *b)
+{
+    return b && b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+        b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && !b->srcAccessMask &&
+        (b->dstAccessMask & VK_ACCESS_TRANSFER_WRITE_BIT) &&
+        !(b->dstAccessMask &
+          ~(ps5vk_attachment_initialization_read_mask() |
+            (VkAccessFlags)VK_ACCESS_TRANSFER_WRITE_BIT));
+}
+static inline int ps5vk_attachment_initialization_handover_barrier(const VkImageMemoryBarrier *b)
+{
+    return b && b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+        b->newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+        b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT &&
+        (b->dstAccessMask & (VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                             VK_ACCESS_SHADER_WRITE_BIT)) &&
+        !(b->dstAccessMask &
+          ~(ps5vk_attachment_initialization_read_mask() |
+            (VkAccessFlags)(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                            VK_ACCESS_SHADER_WRITE_BIT)));
+}
+
 /* Initial discard transition. Access masks select a scope, not a prescribed
  * READ|WRITE pair. The frontend separately checks stage/access compatibility,
  * ownership and the complete subresource range. */

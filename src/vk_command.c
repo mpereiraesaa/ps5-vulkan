@@ -1314,43 +1314,13 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          * the transition really needs and the destination bounded to that read
          * scope plus those access flags, so an empty destination, a read-only
          * one, or any foreign access bit still refuses the barrier. */
-        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
-         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-         !b->srcAccessMask &&
-         (b->dstAccessMask & VK_ACCESS_TRANSFER_WRITE_BIT) &&
-         !(b->dstAccessMask &
-           ~(ps5vk_attachment_initialization_read_mask() |
-             (VkAccessFlags)VK_ACCESS_TRANSFER_WRITE_BIT))) ||
-        (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-         b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
-         (b->dstAccessMask & (VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                              VK_ACCESS_SHADER_WRITE_BIT)) &&
-         !(b->dstAccessMask &
-           ~(ps5vk_attachment_initialization_read_mask() |
-             (VkAccessFlags)(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                             VK_ACCESS_SHADER_WRITE_BIT)))) ||
-        /* Handing a rendered attachment to its readback. The render-pass
-         * module's own pass already leaves the attachment in its final layout,
-         * the transfer-source one, so this barrier is the identity and all it
-         * does is order the writes the pass performed against the copy's read
-         * (pushReadImagesToBuffers, vktRenderPassTests.cpp:3582: the source is
-         * every memory write plus the layout's own access - the same write
-         * scope above - and the destination is every memory read). The
-         * identity is admitted only for the readback role, the source must
-         * name a write, and the copy's own read is still required; every other
-         * layout, an empty or foreign source scope and a destination that
-         * cannot read stay refused. */
+        (ps5vk_attachment_initialization_acquire_barrier(b) ||
+         ps5vk_attachment_initialization_handover_barrier(b)) ||
+        /* Handing a rendered attachment to its readback, bounded to exactly
+         * the barrier the pinned module records (see
+         * ps5vk_colour_readback_handover_barrier, src/color_barrier.h). */
         ((usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
-         b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
-         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
-         (b->srcAccessMask & ps5vk_attachment_initialization_write_mask()) &&
-         !(b->srcAccessMask &
-           ~(ps5vk_attachment_initialization_write_mask() |
-             (VkAccessFlags)VK_ACCESS_TRANSFER_READ_BIT)) &&
-         (b->dstAccessMask & VK_ACCESS_TRANSFER_READ_BIT) &&
-         !(b->dstAccessMask & ~ps5vk_attachment_initialization_read_mask()));
+         ps5vk_colour_readback_handover_barrier(b));
     /* The linear staging image the pinned draw module reads back through gets
      * exactly the two transitions that module records
      * (vktDrawImageObjectUtil.cpp:415-443): UNDEFINED to GENERAL for the

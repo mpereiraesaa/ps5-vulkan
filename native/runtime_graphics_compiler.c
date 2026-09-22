@@ -351,13 +351,20 @@ static int blend_state_uses_src1(const struct ps5vk_graphics_key *key)
  * stream. */
 static int color_write_mask_supported(const struct ps5vk_graphics_key *key)
 {
+    /* CB_TARGET_MASK carries one four-bit field per target, so every value the
+     * register can hold is a shape this profile can programme - including
+     * zero, which writes no channel of that target while the render pass's own
+     * load or clear still writes the whole surface. The pinned render-pass
+     * module's attachment_write_mask leaves are built on exactly that
+     * (vktRenderPassTests.cpp:2912: with start_index_1 the first target's mask
+     * is zero and the second's is fifteen). Every other served target keeps
+     * the full mask it was measured with whenever it is written at all, and a
+     * mask wider than the field stays refused. */
     for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment) {
-        if (key->color_format[attachment] == VK_FORMAT_R8G8B8A8_UNORM) {
-            if (!key->color_write_mask[attachment] || key->color_write_mask[attachment] > 0xfu)
-                return 0;
-            continue;
-        }
-        if (key->color_write_mask[attachment] != 15) return 0;
+        const uint32_t mask = key->color_write_mask[attachment];
+        if (mask > 0xfu) return 0;
+        if (key->color_format[attachment] == VK_FORMAT_R8G8B8A8_UNORM) continue;
+        if (mask && mask != 0xfu) return 0;
     }
     return 1;
 }

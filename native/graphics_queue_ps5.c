@@ -77,9 +77,10 @@ struct graphics_job {
     unsigned count, words, attempted, complete, slot_active, launched;
     uint64_t serial, start;
     VkImage color;
-    VkImage readback_image;
-    VkBuffer readback_buffer;
-    VkDeviceSize readback_stride;
+    /* The targets this submission reads back after exact completion: one for
+     * the draw module's own readback, and as many as the subpass named for the
+     * render-pass module's. */
+    struct ps5vk_readback_set readback;
     struct ps5vk_layout_state layouts;
 };
 static uint64_t now(void *unused)
@@ -127,15 +128,26 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
     if(rc==VK_ERROR_DEVICE_LOST)retain("upload-command-create");
     if(rc!=VK_SUCCESS)goto fail;
     uint32_t *cursor=j->chain.cursor,*end=j->chain.end;
-    unsigned readback=0;
+    unsigned copies=0;
     for(unsigned i=0;i<count;++i)
-        readback|=cb->operations[first+i].type==PS5VK_COPY_IMAGE_BUFFER;
-    if(readback) {
+        copies+=cb->operations[first+i].type==PS5VK_COPY_IMAGE_BUFFER;
+    if(copies>1u) {
+        /* The render-pass module's readback: one target per attachment it
+         * rendered. Its own validator owns the whole shape and the plans it
+         * stages, one per target. */
+        struct ps5vk_readback_set set={0};
+        rc=ps5vk_readback_commands_set(d,cb->operations+first,count,NULL,&j->layouts,&set);
+        if(rc==VK_SUCCESS) {
+            j->color=set.target[0].image;
+            j->readback=set;
+        }
+    } else if(copies) {
         struct ps5vk_readback_plan plan={0};
         rc=ps5vk_readback_commands(d,cb->operations+first,count,NULL,&j->layouts,&plan);
         if(rc==VK_SUCCESS) {
-            j->color=j->readback_image=plan.image;j->readback_buffer=plan.buffer;
-            j->readback_stride=plan.layer_stride;
+            j->color=plan.image;
+            j->readback.count=1u;
+            j->readback.target[0]=plan;
         }
     } else rc=ps5vk_upload_commands(d,cb->operations+first,count,NULL,&j->layouts,&cursor,end,cache);
     if(rc!=VK_SUCCESS)goto fail;
@@ -144,14 +156,28 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
     if(rc!=VK_SUCCESS)goto fail;
     j->words=j->chain.words[0];*out=j;
     ps5log_printf(PS5LOG_MARK,"PS5VK_UPLOAD_PREPARED serial=%llu operations=%u words=%u readback=%u",
-        (unsigned long long)j->serial,count,j->words,readback);
+        (unsigned long long)j->serial,count,j->words,j->readback.count);
     return VK_SUCCESS;
 fail:
     ps5log_printf(PS5LOG_ERR,"PS5VK_UPLOAD_PREPARE_FAILED serial=%llu rc=%d",
         (unsigned long long)j->serial,rc);
     release(d,j);return rc;
 }
+/* The bounded shapes this executor accepts, and the reason a submission that
+ * is not one of them never reaches a job. A refusal here is a submission the
+ * driver refuses AFTER recording accepted it, which the queue turns into a
+ * lost device; naming it in the log is what makes such a refusal measurable
+ * instead of silent. */
+static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void **out);
 static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
+{
+    VkResult rc=prepare_shape(d,s,out);
+    if(rc!=VK_SUCCESS)
+        ps5log_printf(PS5LOG_ERR,"PS5VK_GRAPHICS_PREPARE_REFUSED serial=%llu rc=%d",
+            (unsigned long long)(s?s->serial:0u),(int)rc);
+    return rc;
+}
+static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void **out)
 {
     const char *phase="shape";
     /* Which refusal inside the draw phase fired. Every one of them returns the
@@ -164,17 +190,43 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     /* One color pass, optional D32 and texture-upload prelude.  LOAD preserves
      * an attachment only when its tracked initial layout matches.  CLEAR is
      * bounded to the full render area until a rectangular clear path exists. */
-    /* Buffer 0 is always the recording that owns the scope. A segment with
-     * more buffers is a render pass whose work is NAMED by secondaries: they
-     * follow in recorded order, each with its own range, and this is the only
-     * shape that admits more than one. */
+    /* A submission is an ordered list of segments, one per primary command
+     * buffer it names: the transfer work the pinned render-pass module records
+     * before its pass, the pass itself (whose work secondaries may NAMED, in
+     * recorded order), and the readback it records after. Exactly one buffer
+     * may carry a render pass - the executor builds one - and every other
+     * buffer's range must be transfer work the same prelude and postlude
+     * emitters already serve. */
     if(!s->count || s->count>PS5VK_MAX_SUBMITTED_BUFFERS || !s->serial)
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    VkCommandBuffer cb=s->buffers[0];
-    uint32_t range_first=ps5vk_submission_first_operation(s,0);
-    uint32_t range_count=ps5vk_submission_operation_count(s,0);
-    if(range_first>cb->operation_count || range_count>cb->operation_count-range_first)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+    unsigned pass_buffer=s->count;
+    for(unsigned i=0;i<s->count;++i) {
+        VkCommandBuffer listed=s->buffers[i];
+        uint32_t listed_first=ps5vk_submission_first_operation(s,i);
+        uint32_t listed_count=ps5vk_submission_operation_count(s,i);
+        if(!listed || !listed_count || listed->operation_count>PS5VK_MAX_OPERATIONS ||
+           listed_first>listed->operation_count ||
+           listed_count>listed->operation_count-listed_first)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        for(uint32_t k=listed_first;k<listed_first+listed_count;++k)
+            if(listed->operations[k].type==PS5VK_BEGIN_RENDER_PASS) {
+                /* Two passes in one submission, or a pass named twice, is a
+                 * graph this executor does not build. */
+                if(pass_buffer!=s->count)return VK_ERROR_FEATURE_NOT_PRESENT;
+                pass_buffer=i;
+            }
+    }
+    /* No render pass anywhere in the submission: a transfer-only segment
+     * names one buffer, which the transfer path owns end to end. */
+    if(pass_buffer==s->count) {
+        if(s->count!=1)return VK_ERROR_FEATURE_NOT_PRESENT;
+        return prepare_transfer(d,s,s->buffers[0],
+            ps5vk_submission_first_operation(s,0),
+            ps5vk_submission_operation_count(s,0),out);
+    }
+    VkCommandBuffer cb=s->buffers[pass_buffer];
+    uint32_t range_first=ps5vk_submission_first_operation(s,pass_buffer);
+    uint32_t range_count=ps5vk_submission_operation_count(s,pass_buffer);
     uint32_t range_end=range_first+range_count;
     unsigned first=range_first;
     while(first<range_end && cb->operations[first].type!=PS5VK_BEGIN_RENDER_PASS) {
@@ -184,11 +236,6 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
            type!=PS5VK_CLEAR_DEPTH_STENCIL_IMAGE && type!=PS5VK_CLEAR_COLOR_IMAGE)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         ++first;
-    }
-    /* No render pass in this range: a transfer-only segment names one buffer. */
-    if(first==range_end) {
-        if(s->count!=1)return VK_ERROR_FEATURE_NOT_PRESENT;
-        return prepare_transfer(d,s,cb,range_first,range_count,out);
     }
     unsigned last=first+1;
     while(last<range_end && cb->operations[last].type!=PS5VK_END_RENDER_PASS)++last;
@@ -268,11 +315,17 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * ask for different values. */
     uint32_t clear_word[PS5VK_MAX_COLOR_ATTACHMENTS]={0};
     for(uint32_t c=0;c<color_count;++c) {
+        /* The pinned render-pass module reads every attachment of its pass
+         * back, so its colour attachments end the pass in the transfer-source
+         * layout. The role predicate bounds which images may do that. */
+        VkImage target=begin->framebuffer->attachments[c]->image;
+        const VkBool32 readback=(VkBool32)(ps5vk_colour_transfer_image(target) &&
+            (target->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
         if(ps5vk_attachment_plan(&pass->attachments[c],color_format[c],
-            subpass->color[c].layout,VK_FALSE,&color_plan[c])!=VK_SUCCESS)
+            subpass->color[c].layout,VK_FALSE,readback,&color_plan[c])!=VK_SUCCESS)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if(!color_plan[c].clear) continue;
-        VkImage image=begin->framebuffer->attachments[c]->image;
+        VkImage image=target;
         /* An integer target's clear is the raw 32-bit word its components
          * pack into, not a UNORM conversion. */
         int clear_ok=ps5vk_color_target_integer_served(color_format[c]) ?
@@ -290,7 +343,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         const VkAttachmentDescription *a=&pass->attachments[color_count];
         VkImage image=begin->framebuffer->attachments[color_count]->image;
         if(ps5vk_attachment_plan(a,VK_FORMAT_D32_SFLOAT,subpass->depth.layout,
-            VK_TRUE,&depth_plan)!=VK_SUCCESS ||
+            VK_TRUE,VK_FALSE,&depth_plan)!=VK_SUCCESS ||
             image->info.extent.width!=begin->framebuffer->width ||
             image->info.extent.height!=begin->framebuffer->height)return VK_ERROR_FEATURE_NOT_PRESENT;
         if(depth_plan.clear) {
@@ -310,7 +363,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * itself names, matched by identity so this code cannot invent the
      * association. */
     const struct ps5vk_operation *body[PS5VK_MAX_OPERATIONS];
-    unsigned body_count=0,next_buffer=1;
+    unsigned body_count=0,next_buffer=pass_buffer+1;
     for(unsigned i=first+1;i<last;++i) {
         const struct ps5vk_operation *op=&cb->operations[i];
         if(op->type==PS5VK_NEXT_SUBPASS || op->type==PS5VK_CLEAR_ATTACHMENT) {
@@ -358,7 +411,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * to no draws at all, which is the zero-body shape recording already
      * refuses. Defence in depth behind that check and the submission-time one,
      * on the immutable record this backend is handed. */
-    if(next_buffer!=s->count || !body_count)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(!body_count)return VK_ERROR_FEATURE_NOT_PRESENT;
     struct graphics_job *j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial;
     /* The image the prelude and postlude act on. A depth-only pass has no
@@ -390,8 +443,25 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     cache(j->slot.address,(size_t)PS5VK_OCCLUSION_PROBE_BYTES);
     j->slot_active=1;
 #endif
-    /* Prelude transitions/clears precede attachment load operations in both
-     * the command stream and the tentative layout transaction. */
+    /* The segments the submission recorded BEFORE the pass belong to the same
+     * command stream and the same layout transaction: the pinned module
+     * initializes its attachments in a command buffer of its own, one acquire,
+     * one clear and one handover per target, and the pass that follows
+     * consumes exactly those layouts. */
+    phase="prelude-segments";
+    for(unsigned i=0;i<pass_buffer;++i) {
+        VkCommandBuffer listed=s->buffers[i];
+        const uint32_t listed_first=ps5vk_submission_first_operation(s,i);
+        const uint32_t listed_count=ps5vk_submission_operation_count(s,i);
+        j->chain.cursor=cursor;
+        rc=ps5vk_upload_commands(d,listed->operations+listed_first,listed_count,NULL,
+            &j->layouts,&cursor,end,cache);
+        if(rc!=VK_SUCCESS)goto fail;
+    }
+    j->chain.cursor=cursor;
+    /* Prelude transitions and clears precede the pass's attachment load
+     * operations in both the command stream and the tentative layout
+     * transaction. */
     phase="prelude";
     rc=ps5vk_upload_commands(d,cb->operations+range_first,first-range_first,j->color,
         &j->layouts,&cursor,end,cache);
@@ -899,14 +969,41 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
                 rc=ps5vk_readback_commands(d,postlude+partition.readback_first,
                     partition.readback_count,j->color,&j->layouts,&plan);
             if(rc!=VK_SUCCESS)goto fail;
-            j->readback_image=plan.image;j->readback_buffer=plan.buffer;
-            j->readback_stride=plan.layer_stride;
+            j->readback.count=1u;j->readback.target[0]=plan;
         } else {
             rc=ps5vk_upload_commands(d,postlude,postlude_count,j->color,
                 &j->layouts,&cursor,end,cache);
             if(rc!=VK_SUCCESS)goto fail;
         }
     }
+    /* The segments the submission recorded AFTER the pass. The pinned module's
+     * readback reads every attachment its pass rendered back into its own
+     * buffer and publishes those copies; the executor stages the plan here,
+     * because the bytes become readable over the CPU detile that runs after
+     * this submission's exact completion label. Any other trailing segment is
+     * transfer work the same emitter already owns. */
+    phase="postlude-segments";
+    for(unsigned i=next_buffer;i<s->count;++i) {
+        VkCommandBuffer listed=s->buffers[i];
+        const uint32_t listed_first=ps5vk_submission_first_operation(s,i);
+        const uint32_t listed_count=ps5vk_submission_operation_count(s,i);
+        unsigned readback=0;
+        for(uint32_t k=listed_first;k<listed_first+listed_count;++k)
+            readback|=listed->operations[k].type==PS5VK_COPY_IMAGE_BUFFER;
+        j->chain.cursor=cursor;
+        if(readback) {
+            struct ps5vk_readback_set set={0};
+            rc=ps5vk_readback_commands_set(d,listed->operations+listed_first,listed_count,
+                NULL,&j->layouts,&set);
+            if(rc!=VK_SUCCESS)goto fail;
+            j->readback=set;
+        } else {
+            rc=ps5vk_upload_commands(d,listed->operations+listed_first,listed_count,NULL,
+                &j->layouts,&cursor,end,cache);
+            if(rc!=VK_SUCCESS)goto fail;
+        }
+    }
+    j->chain.cursor=cursor;
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=15
     _Static_assert(8+PS5VK_GRAPHICS_PROBE_REGISTERS*4<=64,"probe must not overlap command words or leave reserved tail");
     BATCH_RESERVE(PS5VK_GRAPHICS_PROBE_WORDS+16u);
@@ -1111,21 +1208,24 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
             if(ps5vk_image_span(d,j->color,&address,&bytes)!=VK_SUCCESS)return VK_ERROR_DEVICE_LOST;
             cache(address,(size_t)bytes);
         }
-        if(j->readback_buffer) {
+        for(unsigned r=0;r<j->readback.count;++r) {
+            void *source;VkDeviceSize source_bytes;
             void *destination;VkDeviceSize destination_bytes;
-            VkImage image=j->readback_image;
-            if(!image || ps5vk_buffer_span(d,j->readback_buffer,0,VK_WHOLE_SIZE,
+            VkImage image=j->readback.target[r].image;
+            if(!image || ps5vk_image_span(d,image,&source,&source_bytes)!=VK_SUCCESS ||
+               ps5vk_buffer_span(d,j->readback.target[r].buffer,0,VK_WHOLE_SIZE,
                     &destination,&destination_bytes)!=VK_SUCCESS ||
-               ps5vk_readback_detile(image,(size_t)j->readback_stride,
-                    destination,(size_t)destination_bytes,address,(size_t)bytes))
+               ps5vk_readback_detile(image,(size_t)j->readback.target[r].layer_stride,
+                    destination,(size_t)destination_bytes,source,source_bytes))
                 return VK_ERROR_DEVICE_LOST;
             /* This bounded implementation performs the transfer-copy result
              * publication on the CPU only after exact GPU completion. The
              * allocation remains non-coherent; the application still calls
              * vkInvalidateMappedMemoryRanges before host reads. */
             ps5log_printf(PS5LOG_MARK,
-                "PS5VK_GRAPHICS_READBACK serial=%llu width=%u height=%u bytes=%llu mode=cpu-detile-after-gpu",
-                (unsigned long long)j->serial,image->info.extent.width,image->info.extent.height,
+                "PS5VK_GRAPHICS_READBACK serial=%llu target=%u width=%u height=%u bytes=%llu "
+                "mode=cpu-detile-after-gpu",
+                (unsigned long long)j->serial,r,image->info.extent.width,image->info.extent.height,
                 (unsigned long long)destination_bytes);
 #if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 4
             /* Private diagnostic only. Never change pixels or upstream's
