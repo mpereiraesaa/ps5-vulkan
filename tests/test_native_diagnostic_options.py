@@ -238,8 +238,8 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.rejected({"PS5VK_SAMPLE_RATE_PROBE": "1"},
                       "requires graphics API, runtime graphics and draw")
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
-                       "PS5VK_SAMPLE_RATE_PROBE": "2"},
-                      "must be 0 or 1")
+                       "PS5VK_SAMPLE_RATE_PROBE": "3"},
+                      "must be 0, 1 or 2")
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
                        "PS5VK_RUNTIME_GRAPHICS": "1",
                        "PS5VK_GRAPHICS_DRAW": "1",
@@ -253,6 +253,18 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertIn("PS5VK_SAMPLE_RATE_PROBE is a bounded standalone scene", builder)
         self.assertIn("distinct == 1u && correct == words && first == expected", source)
         self.assertIn("PS5VK_SAMPLE_RATE_CLEAR extent=", source)
+        # Value 2 is the same witness followed by the step walk through the CTS
+        # oracle's render pass: every step is announced before it runs, so the
+        # last step in the log names the call that did not return, and a
+        # refusal names the step and the Vulkan result instead of dying.
+        self.assertIn('"PS5VK_SAMPLE_RATE_PROBE must be 0, 1 or 2"', builder)
+        self.assertIn("PS5VK_SAMPLE_RATE_SHAPE step=%s rc=%d ok=%u", source)
+        self.assertIn("step=create_pipeline subpass=%u", source)
+        header = (ROOT / "native/sample_rate_probe.h").read_text()
+        self.assertIn("ps5vk_sample_rate_shape_probe", header)
+        main = (ROOT / "native/graphics_main.c").read_text()
+        self.assertIn("#if PS5VK_SAMPLE_RATE_PROBE == 2", main)
+        self.assertIn("ps5vk_runtime_subpass_fetch_fragment", main)
 
     def test_promoted_dual_source_has_no_measurement_switch(self):
         """dualSrcBlend is advertised by the shipping platform now.

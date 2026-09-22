@@ -3096,3 +3096,56 @@ the only switch that reaches it. What it does not establish: no leaf passes,
 the render pass with its resolve and per-sample fetch is still unexecuted, the
 driver does not yet fail closed on that shape, the row stays a blocker, and
 nothing is advertised.
+
+## CTS shape walk (2026-09-22)
+
+The measurement above ended with a payload that died without closing its log,
+which names no defect. The walk turns that into steps: `PS5VK_SAMPLE_RATE_PROBE=2`
+is the witness scene followed by `ps5vk_sample_rate_shape_probe`, which performs
+the CTS oracle's own sequence - the multisampled colour attachment with its
+exact usage, the resolve and per-sample single-sample targets, their views, the
+input-attachment plus uniform-buffer descriptor set, the pass whose subpass 0
+resolves and whose subpasses 1 and 2 fetch per sample and preserve their
+sibling's target, both pipelines and one submission - announcing every step
+before it runs and stopping at the first refusal with that step and its Vulkan
+result. A step that never returns is named by the log it left behind, and a
+refusal is fail-closed evidence instead of a dead process.
+
+Measured on the console (run `20260922T095638715Z_PPSA99994_ps5vk_0x19660cd1cb450`,
+log SHA-256 `e9b376d80dd3187d87d9d1fe579e0ec525f521aa817dbbfe4270f8029249e317`,
+payload eboot `f45e30ac879d8b345398ea98d7cbc18a07e64ea4834364026267641d0c8b4a6c`):
+
+- the multisampled colour attachment with `COLOR_ATTACHMENT | TRANSFER_SRC |
+  INPUT_ATTACHMENT` is created on hardware (`vkCreateImage` rc=0), which is the
+  image role the previous slice opened;
+- the resolve target and both per-sample targets, their memory, their views,
+  the UBO, the descriptor set layout, pool and set all succeed;
+- `vkCreateRenderPass` returns `VK_ERROR_FEATURE_NOT_PRESENT` (-8) and the walk
+  stops there, logging the step and the code, then closes cleanly
+  (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE reason=graphics-api-end`).
+
+The first walk iteration had stopped one step earlier - at the resolve target's
+`vkCreateImage` - and that was the walk's own mistake, not a driver finding: it
+used `B8G8R8A8_UNORM` for the single-sample targets, and this profile carries
+the readback-capability colour row only for `R8G8B8A8_UNORM`, so the
+attachment-with-its-readback-pair combination exists for the one format. The
+walk now uses the oracle's format, and the reason is recorded in the code
+beside it.
+
+The same window measured the stage that follows the pass, on the host, with the
+real adapter and the pinned compiler: the oracle's per-sample fetch fragment
+stage (`subpassInputMS` plus `subpassLoad(imageMS, sampleNdx)`, compiled from
+`vktPipelineMultisampleBaseResolveAndPerSampleFetch.cpp`) is accepted by the
+SPIR-V interface and reported as supported, and then
+`ps5vk_runtime_graphics_compile` returns `VK_ERROR_FEATURE_NOT_PRESENT` with
+`pair = NULL` and no adapter refusal site, while the pinned compiler's own NIR
+front end logs `Unsupported SPIR-V capability: SpvCapabilityInputAttachment (40)`. So the fetch stage is a second gate behind the pass, and it is a
+compiler-side one.
+
+What this establishes: the oracle's attachment and descriptor steps run on
+hardware; the first gate after them is the render pass itself, with the
+internal attachment bound (two) the obvious candidate, and the per-sample fetch
+stage is refused by the pinned compiler rather than by this profile's adapter.
+What it does not establish: no leaf passes, the resolve is not executed, the
+per-sample fetch is not executed, the row stays a blocker, and nothing is
+advertised.

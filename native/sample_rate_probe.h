@@ -25,4 +25,33 @@ struct ps5vk_sample_rate_probe_params {
 };
 
 VkResult ps5vk_sample_rate_probe(VkDevice, const struct ps5vk_sample_rate_probe_params *);
+
+/* DXVK262-T06 shape walk: the CTS oracle's render pass, one step at a time.
+ *
+ * The focused upstream selection renders the multisampled colour target in a
+ * pass whose subpass 0 resolves it and whose subpass 1 reads it back once per
+ * sample as an input attachment, writing a single-sample target of its own.
+ * That shape is what the measurement reached before the payload died without
+ * closing its log, so this walk performs exactly those steps in that order and
+ * logs each one before it runs: the last step in the log is the step that
+ * killed the process, which is what turns "the payload died" into a named
+ * defect. Every refusal is logged with its own step and the walk stops there
+ * instead of continuing into a shape nothing described. */
+struct ps5vk_sample_rate_shape_params {
+    VkSampleCountFlagBits samples;
+    uint32_t extent;
+    /* The vertex module whose triangle covers the target, the subpass-0
+     * fragment module and the per-sample fetch module (input attachment plus
+     * the uniform sample index the upstream stage declares). */
+    const uint32_t *vertex;
+    size_t vertex_words;
+    const uint32_t *write_fragment;
+    size_t write_fragment_words;
+    const uint32_t *fetch_fragment;
+    size_t fetch_fragment_words;
+};
+
+/* Returns VK_SUCCESS when every step ran or stopped at a named refusal; the
+ * log, not the return code, is the evidence. */
+VkResult ps5vk_sample_rate_shape_probe(VkDevice, const struct ps5vk_sample_rate_shape_params *);
 #endif

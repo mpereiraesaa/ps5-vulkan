@@ -205,15 +205,17 @@ def main():
     # the same diagnostic build whose platform carries the sample-rate bit, so
     # no shipping payload can contain it.
     sample_rate_probe = os.environ.get("PS5VK_SAMPLE_RATE_PROBE", "0")
-    if sample_rate_probe not in ("0", "1"):
-        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE must be 0 or 1")
-    if sample_rate_probe == "1" and (not graphics_api or
+    # 1 is the witness scene (clear plus per-sample shaded draw), 2 is the same
+    # scene followed by the step walk through the CTS oracle's render pass.
+    if sample_rate_probe not in ("0", "1", "2"):
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE must be 0, 1 or 2")
+    if sample_rate_probe != "0" and (not graphics_api or
             os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
             os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
         raise SystemExit("PS5VK_SAMPLE_RATE_PROBE requires graphics API, runtime graphics and draw")
-    if sample_rate_probe == "1" and sample_rate_diagnostic != "1":
+    if sample_rate_probe != "0" and sample_rate_diagnostic != "1":
         raise SystemExit("PS5VK_SAMPLE_RATE_PROBE requires PS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
-    if sample_rate_probe == "1" and (multiview_view_probe == "1" or
+    if sample_rate_probe != "0" and (multiview_view_probe == "1" or
             input_attachment_probe == "1" or fragment_store_probe == "1" or
             dual_source_probe == "1" or two_mrt_probe == "1" or
             clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1" or

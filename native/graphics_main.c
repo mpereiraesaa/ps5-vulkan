@@ -4548,6 +4548,24 @@ int main(void)
             .fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4};
         CHECK(ps5vk_sample_rate_probe(device, &sample_rate_params));
     }
+#if PS5VK_SAMPLE_RATE_PROBE == 2
+    /* The same run then walks the CTS oracle's render pass one step at a time:
+     * the multisampled attachment with the usage that oracle builds, the
+     * resolve and per-sample targets, the input-attachment descriptor set, the
+     * pass with its resolve and preserve lists, the two pipelines and the
+     * submission. The last step in the log is the step that did not return. */
+    {
+        struct ps5vk_sample_rate_shape_params shape_params = {
+            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 32u,
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .write_fragment = ps5vk_runtime_subpass_write_fragment,
+            .write_fragment_words = sizeof(ps5vk_runtime_subpass_write_fragment) / 4,
+            .fetch_fragment = ps5vk_runtime_subpass_fetch_fragment,
+            .fetch_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_fragment) / 4};
+        CHECK(ps5vk_sample_rate_shape_probe(device, &shape_params));
+    }
+#endif
     vkDestroyDevice(device,NULL);
     vkDestroyInstance(instance,NULL);
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
