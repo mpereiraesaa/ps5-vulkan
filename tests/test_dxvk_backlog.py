@@ -34,9 +34,11 @@ class DxvkBacklogTests(unittest.TestCase):
         summary = backlog.validate(self.document, self.matrix)
         self.assertEqual(15, summary["tranches"])
         self.assertEqual(61, summary["requirements"])
-        self.assertEqual(14, summary["implementation_ready"])
-        self.assertEqual(14, summary["profile_satisfied"])
-        self.assertEqual(47, summary["remaining_profile_blockers"])
+        # DXVK262-T06 independentBlend was promoted on 2026-09-22: one more
+        # requirement is implementation-ready and profile-satisfied.
+        self.assertEqual(15, summary["implementation_ready"])
+        self.assertEqual(15, summary["profile_satisfied"])
+        self.assertEqual(46, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,

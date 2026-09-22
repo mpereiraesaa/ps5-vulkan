@@ -56,11 +56,9 @@ DUMP_BINARY = ROOT / "build/tests/dump_device_reporting"
 FEATURE_GATES = {
     "imageCubeArray": ("src/vk_memory.c", "info->imageType != VK_IMAGE_TYPE_2D",
                        "only 2D images are created"),
-    # The ABI can describe two colour attachments now; what the profile SERVES
-    # is still one, and the boundary is the runtime adapter refusing a
-    # two-target program (plus the advertised limit of 1).
-    "independentBlend": ("native/runtime_graphics_compiler.c", "PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT",
-                         "one color attachment per pipeline"),
+    # independentBlend was promoted on 2026-09-22: the platform reports the bit,
+    # the profile advertises two colour attachments, and both upstream leaves
+    # that require the feature pass, so it is no longer a gated VK_FALSE report.
     "sampleRateShading": ("src/vk_graphics_pipeline.c", "m->sampleShadingEnable",
                           "sample shading state is rejected"),
     "logicOp": ("src/color_attachment_contract.c", "state->logicOpEnable",
@@ -457,6 +455,35 @@ ADVERTISED_FEATURES["dualSrcBlend"] = {
         "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_s1c_min_alpha_1mcc_s1c_rsub-color_ca_1mca_add_alpha_cc_1ms1a_min-color_ca_1ms1c_rsub_alpha_sa_sas_min-color_1ms1c_s1a_add_alpha_1mda_1ms1a_min",
         "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_sa_rsub_alpha_o_1ms1a_sub-color_1ms1c_1ms1c_min_alpha_sa_s1a_max-color_sa_cc_sub_alpha_sc_1mdc_min-color_o_1mca_add_alpha_da_ca_sub",
         "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_sc_add_alpha_1ms1c_sa_min-color_dc_1mca_add_alpha_z_1mca_max-color_1ms1c_sa_max_alpha_1mcc_sc_sub-color_s1c_1mda_add_alpha_s1c_1mda_add",
+    ),
+}
+
+# DXVK262-T05, promoted 2026-09-21 on physical-console evidence. Each feature
+# DXVK262-T06 independentBlend, promoted 2026-09-22. The two upstream leaves
+# that require it both pass; the citations name the per-attachment contract end
+# to end.
+ADVERTISED_FEATURES["independentBlend"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_INDEPENDENT_BLEND"),
+        ("native/runtime_graphics_compiler.c", "key->color_attachment_count!=PS5VK_MAX_COLOR_ATTACHMENTS"),
+        ("native/draw_state_ps5.c", "ps5vk_color_attachment_offsets[attachment]"),
+        ("src/color_attachment_contract.h", "PS5VK_MAX_COLOR_ATTACHMENTS = 2"),
+        ("src/graphics_limits.h", "limits->maxColorAttachments=PS5VK_MAX_COLOR_ATTACHMENTS"),
+        ("native/two_mrt_probe.c", "PS5VK_TWO_MRT_READBACK"),
+    ),
+    "detail": ("the render pass, the framebuffer, the pipeline key and the native "
+               "per-target programming each carry one colour target per attachment with its "
+               "own CB_COLORn block, its own blend control and its own CB_TARGET_MASK nibble, "
+               "and the readback copies every attachment into its own buffer; the runtime "
+               "compiler admits a two-target pipeline only when the device carries the "
+               "capability, and the private two-MRT witness recorded one draw writing two "
+               "attachments with different values before the upstream leaves were selected. "
+               "Both attachment_write_mask attachment_count_2 suballocation leaves passed in "
+               "the 464-case hardware run"),
+    "cts": (
+        "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+        "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1",
     ),
 }
 

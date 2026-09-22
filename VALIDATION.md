@@ -3021,3 +3021,26 @@ renumbering the second-target-only shape needs, the readback plan and the
 fail-closed gates around them; only the hardware writes and reads the integer
 surface. This is focused validation of one requirement, not Vulkan conformance,
 and `sampleRateShading` remains a blocker on the same row set.
+
+**Canonical acceptance on the promoted candidate.** The shipping payload (no
+measurement switch; the two switches are gone), eboot sha256
+`713150da90f4a30b6f407aba1083958e0783f4cd3781e9f215088b5cb7c1bd03`, ran the
+frozen selection - now **464 acceptance cases** (the 462 of the main integration
+plus the two `suballocation.attachment_write_mask` leaves the feature owns) and
+46 diagnostics - in
+`20260922T103049552Z_PPSA99994_upstream-cts_0x1983e4b36fa05` (selection SHA-256
+`91c37ed06f78d1048b8fa1e693986ab047a749dd55e9585e2e8565a421603d2a`) and reported
+**UPSTREAM ACCEPTANCE PASSED: every selected case matched its upstream oracle
+and the title was closed**, with the two `dedicated_allocation` siblings
+reported `NotSupported` because `VK_KHR_dedicated_allocation` is not advertised.
+
+**Public-ABI capability probe on the same candidate.** eboot sha256
+`c438a98123c86925d62b6627b7b640734930dbcae5b8af6f88a4ed0dc61e8201`, run
+`20260922T103414212Z_PPSA99994_ps5vk_0x1986df1aeed66` (log SHA-256
+`3fa5f0c0049890f2c2679889616f2d0ccaa303d36a9f62ac9a19e0ba0aba6c62`), strictly
+verified by `tools/verify_dxvk_probe.py`: the device itself reports
+`independentBlend=1` and the probe ends `valid=1 total=62 satisfied=18
+blockers=44`, one requirement more than the merged tip's 17/45. With that
+receipt the DXVK matrix row for `feature:VkPhysicalDeviceFeatures:independentBlend`
+is **satisfied on all four axes** (api, implementation, cts, native) and the
+profile reads **16 of 62 requirements ready with 46 blockers**.
