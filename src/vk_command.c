@@ -1088,12 +1088,23 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
          * target to the draw with this mask. */
         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    /* INDEX_READ, UNIFORM_READ and INPUT_ATTACHMENT_READ are accesses this
+     * profile really serves in a graphics command: the promoted index path
+     * reads the index buffer, descriptors feed uniform buffers to the vertex
+     * and fragment stages, and subpassLoad reads the input attachments of the
+     * promoted subpass chain. They were missing here only because no earlier
+     * accepted case named them in a barrier; the pinned upstream render-pass
+     * module does, because it initializes an attachment with a destination
+     * scope of every memory read (vktRenderPassTests.cpp:457). Their stage
+     * rules below keep each one tied to the stage that performs it. */
     const VkAccessFlags supported=VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
         VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
         VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
         VK_ACCESS_SHADER_WRITE_BIT |
         VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
+        VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT |
+        VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
         VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
@@ -1103,6 +1114,24 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         !(stages & VK_PIPELINE_STAGE_HOST_BIT))return 0;
     if((access & VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* An index read happens in the vertex input stage, exactly where an
+     * attribute read happens. */
+    if((access & VK_ACCESS_INDEX_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* A uniform buffer read happens in a shader stage; this scope's stage mask
+     * names the two the profile compiles, and the compute scope carries the
+     * compute one. */
+    if((access & VK_ACCESS_UNIFORM_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* Vulkan reads an input attachment with subpassLoad, which exists only in
+     * the fragment shader, so an input-attachment read cannot be ordered by a
+     * stage mask that leaves the fragment shader out. ALL_GRAPHICS stands for
+     * the whole graphics pipeline and contains it. */
+    if((access & VK_ACCESS_INPUT_ATTACHMENT_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                    VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & (VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & (VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
@@ -1260,15 +1289,39 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          * vkCmdClearColorImage: the image is acquired as a transfer
          * destination from UNDEFINED, and handed to the colour attachment
          * stage afterwards with the helper's own destination access, which is
-         * SHADER_WRITE for the tcu::Vec4 overload the draw module calls. Both
-         * are accepted exactly as the helper writes them. */
+         * SHADER_WRITE for the tcu::Vec4 overload the draw module calls.
+         *
+         * The pinned render-pass module records the same two transitions for
+         * the same image shape, but names a whole read scope in the
+         * destination instead of one write
+         * (pushImageInitializationCommands, vktRenderPassTests.cpp:3150):
+         * every memory read the module can later perform on that attachment,
+         * plus the write the clear performs, for the acquire; and the same
+         * read scope for the handover, naming the access the helper hands the
+         * cleared image to: the colour attachment's own access for the
+         * render-pass module, SHADER_WRITE for the draw module's clear helper
+         * (vkImageUtil.cpp clearColorImage), which is also what the two
+         * transitions above accepted before. Both are accepted with the write
+         * the transition really needs and the destination bounded to that read
+         * scope plus those access flags, so an empty destination, a read-only
+         * one, or any foreign access bit still refuses the barrier. */
         (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+         !b->srcAccessMask &&
+         (b->dstAccessMask & VK_ACCESS_TRANSFER_WRITE_BIT) &&
+         !(b->dstAccessMask &
+           ~(ps5vk_attachment_initialization_read_mask() |
+             (VkAccessFlags)VK_ACCESS_TRANSFER_WRITE_BIT))) ||
         (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
          b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
-         b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT);
+         (b->dstAccessMask & (VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                              VK_ACCESS_SHADER_WRITE_BIT)) &&
+         !(b->dstAccessMask &
+           ~(ps5vk_attachment_initialization_read_mask() |
+             (VkAccessFlags)(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                             VK_ACCESS_SHADER_WRITE_BIT))));
     /* The linear staging image the pinned draw module reads back through gets
      * exactly the two transitions that module records
      * (vktDrawImageObjectUtil.cpp:415-443): UNDEFINED to GENERAL for the
