@@ -179,6 +179,15 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
          * is the same story with the non-MSAA array tag, which is why that
          * record already carries 13. */
         words[4]=0;
+        /* The pinned compiler's multisampled surface descriptor ALSO names the
+         * sample geometry in the MAX_MIP field (ac_descriptors.c,
+         * ac_build_gfx6_texture_descriptor: desc[5] MAX_MIP(log2(num_samples))
+         * on the GFX9 path). The GFX10 path in the same function does not write
+         * it, but this profile's hardware is reached through AGC rather than
+         * through that builder, so the field is carried here too: measured
+         * separately, and recorded as measured. */
+        words[5]&=(uint32_t)~UINT32_C(0x000000f0);
+        words[5]|=(ps5vk_sample_count_log2(image->info.samples)<<4);
     }
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }

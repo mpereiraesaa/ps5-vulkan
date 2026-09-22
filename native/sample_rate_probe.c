@@ -902,10 +902,12 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
                     VkResult map_rc = ps5vk_image_span(device, images[2], &fetched, &fetched_bytes);
                     if (!shape_step("fetch_readback_map", map_rc) || map_rc != VK_SUCCESS)
                         goto fetch_cleanup;
-                    /* The value a plane holds is R = sampleID/255 in the first
-                     * byte of the RGBA8 word, which the witness measured for
-                     * every sample of this target. */
-                    const uint32_t wanted_word = UINT32_C(0xff000000) | ((uint32_t)wanted << 16);
+                    /* The value a plane holds is R = sampleID/255: the byte
+                     * is the sample id itself, which the 32x32 source census
+                     * measures directly (sample 1 -> ff000001, sample 2 ->
+                     * ff000002, sample 3 -> ff000003); the 64x64 witness wrote
+                     * the same ids through a different format path. */
+                    const uint32_t wanted_word = UINT32_C(0xff000000) | (uint32_t)wanted;
                     const uint32_t words = (uint32_t)(fetched_bytes / 4u);
                     const uint32_t plane_words = params->extent * params->extent;
                     uint32_t matched = 0;

@@ -332,6 +332,9 @@ int main(void)
              * field. */
             assert((ms_words[3] >> 28) == 15u);
             assert(ms_words[4] == 0u);
+            /* MAX_MIP carries the same sample geometry the pinned GFX9 path
+             * writes for a multisampled surface. */
+            assert(((ms_words[5] >> 4) & 0xf) == 2u);
             /* The single-sample record for the same shape carries no sample
              * geometry at all, which is the difference the fields express. */
             VkImageCreateInfo single_ii = ms_ii;

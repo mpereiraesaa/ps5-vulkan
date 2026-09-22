@@ -3523,3 +3523,43 @@ in `ac_descriptors.c` belong to `DB_Z_INFO` (depth/stencil state), not to the
 image resource descriptor, so they are not the field a colour-attachment read
 would need. The image descriptor's sample geometry really is the level-field
 encoding this profile already emits.
+
+## The per-sample read works: MAX_MIP was the missing field (2026-09-22)
+
+The sample-addressing question is answered, and the answer is a field the
+pinned compiler writes for exactly this case. A multisampled resource record
+needs the sample geometry in **three** places, not two: the ARRAY MSAA type tag
+(15), the level fields (BASE_LEVEL 0, LAST_LEVEL log2(samples)) - and
+**MAX_MIP = log2(samples)**, the field `ac_descriptors.c`'s
+`ac_build_gfx6_texture_descriptor` writes for a multisampled surface on its GFX9
+path (`desc[5] MAX_MIP(log2(num_samples))`) and which the GFX10 path of that
+same function leaves out. This profile reaches the hardware through AGC rather
+than through that builder, and its descriptor does consume it.
+
+Measured on the console (run `20260922T133537885Z_PPSA99994_ps5vk_0x1a253f5f849fd`,
+log SHA-256 `449aaac4288736465bdb7886d4344c7a796c245ecbd24aaff34d34d654779154`,
+payload eboot `d90ca072307571ea240fdfa92503bd6cccc4d304cb9f820779c524d7d96497ae`):
+
+```
+PS5VK_SAMPLE_RATE_FETCH sample_index=0 matched=1024 expected=1024 value=ff000000 verdict=1
+PS5VK_SAMPLE_RATE_FETCH sample_index=3 matched=1024 expected=1024 value=ff000003 verdict=1
+```
+
+Both indices read the sample they ask for: sample 3's plane holds sample 3's
+value and sample 0's holds sample 0's, each across exactly the plane it covers,
+with the pass clear left in the tiled padding. The sweep is a sweep over the
+uniform-driven pipeline; the baked-index module reads the same planes with the
+same values.
+
+Note on the oracle's constant: the previous windows compared against
+`0xff030000`, the encoding the 64x64 witness measured, while the 32x32 source
+census writes the sample id in the FIRST byte (`ff000001`, `ff000002`,
+`ff000003`). With the constant taken from the census the verdict is 1; the
+earlier "verdict 0" lines were the wrong expectation, not the wrong read - and
+that is why the census mattered.
+
+What this establishes: the multisampled input-attachment read selects and
+delivers an arbitrary sample on this hardware, which is the enabler the oracle's
+fetch subpass needs and the same read a resolve is built from. What it does not
+establish: the resolve itself, the CTS leaves, the row - all unchanged, and
+nothing is advertised.
