@@ -127,12 +127,36 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
      * or 2D_ARRAY image. Anything else - another format, a sampled-only image,
      * a deeper or multisampled image, a 3D/1D/cube view - fails closed rather
      * than being encoded as something the GPU was never witnessed to read. */
+    /* A multisampled colour attachment is readable through the same record
+     * (DXVK262-T06): the pinned gfx6+ texture descriptor carries the sample
+     * geometry in the LEVEL fields - BASE_LEVEL 0 and LAST_LEVEL
+     * log2(samples) for a multisampled surface
+     * (ac_descriptors.c ac_build_gfx6_texture_descriptor) - so a multisampled
+     * surface is single-layer, single-mip and otherwise the same attachment.
+     * A count this profile does not implement stays refused here. */
+    const uint32_t samples=ps5vk_sample_count_number(image->info.samples);
+    const int multisampled=samples>1u;
     if(view->format!=VK_FORMAT_R8G8B8A8_UNORM || image->info.format!=view->format ||
         image->info.imageType!=VK_IMAGE_TYPE_2D || image->info.extent.depth!=1u ||
-        image->info.mipLevels!=1u || image->info.samples!=VK_SAMPLE_COUNT_1_BIT ||
+        image->info.mipLevels!=1u ||
+        (!multisampled && image->info.samples!=VK_SAMPLE_COUNT_1_BIT) ||
+        (multisampled && image->info.arrayLayers!=1u) ||
         !image->info.arrayLayers ||
         image->info.arrayLayers>(uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR ||
-        !(image->info.usage&VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) ||
+        /* The INPUT_ATTACHMENT role is what an APPLICATION's descriptor read
+         * requires, and the input-attachment gate is where that shape is
+         * enforced for app-recorded sets. The driver's own resolve draw reads
+         * the multisampled colour attachment of the subpass it resolves, and a
+         * subpass resolve is implementation work rather than an app read: the
+         * pinned CTS creates exactly that image with COLOR_ATTACHMENT and
+         * TRANSFER_SRC alone (RENDER_TYPE_RESOLVE,
+         * vktPipelineMultisampleTests.cpp), so a multisampled record needs the
+         * colour-attachment role the pass itself promises instead - measured:
+         * without this, every min_sample_shading triangle leaf failed at
+         * vkQueueSubmit with VK_ERROR_FEATURE_NOT_PRESENT from the resolve
+         * emission's descriptor build. */
+        (!multisampled && !(image->info.usage&VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) ||
+        (multisampled && !(image->info.usage&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) ||
         !(view->view_type==VK_IMAGE_VIEW_TYPE_2D || view->view_type==VK_IMAGE_VIEW_TYPE_2D_ARRAY))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t words[8];
@@ -147,5 +171,36 @@ VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t ou
      * here addresses valid memory with the wrong equation and collapses a
      * subpassLoad to an unrelated constant texel on hardware. */
     words[3]|=UINT32_C(0x01b00000);
+    if(multisampled) {
+        /* The resource TYPE has to say the surface is multisampled - the pinned
+         * compiler's own type tag is V_008F1C_SQ_RSRC_IMG_2D_MSAA (14) rather
+         * than the plain 2D tag (9) - and BASE_LEVEL [12,15] stays zero while
+         * LAST_LEVEL [16,19] names the sample count, which is how the same
+         * compiler describes a multisampled texture to this hardware
+         * (ac_descriptors.c, ac_build_gfx6_texture_descriptor). A record with
+         * the plain 2D tag and no sample geometry reads the surface as
+         * single-sample data - measured: every sample index returned plane
+         * zero's value. */
+        words[3]&=(uint32_t)~((UINT32_C(0xf)<<28)|UINT32_C(0x000ff000));
+        words[3]|=(UINT32_C(15)<<28)|(ps5vk_sample_count_log2(image->info.samples)<<16);
+        /* The pinned compiler lowers a subpassInputMS to a TWO DIMENSIONAL
+         * ARRAY MSAA image (ac_shader_util.c: GLSL_SAMPLER_DIM_SUBPASS_MS ->
+         * ac_image_2darraymsaa), so the resource type tag is
+         * V_008F1C_SQ_RSRC_IMG_2D_MSAA_ARRAY (15) - not the plain 2D_MSAA tag
+         * (14) - and the single layer this profile serves is described with a
+         * zero depth field. The plain subpassInput the multiview witness reads
+         * is the same story with the non-MSAA array tag, which is why that
+         * record already carries 13. */
+        words[4]=0;
+        /* The pinned compiler's multisampled surface descriptor ALSO names the
+         * sample geometry in the MAX_MIP field (ac_descriptors.c,
+         * ac_build_gfx6_texture_descriptor: desc[5] MAX_MIP(log2(num_samples))
+         * on the GFX9 path). The GFX10 path in the same function does not write
+         * it, but this profile's hardware is reached through AGC rather than
+         * through that builder, so the field is carried here too: measured
+         * separately, and recorded as measured. */
+        words[5]&=(uint32_t)~UINT32_C(0x000000f0);
+        words[5]|=(ps5vk_sample_count_log2(image->info.samples)<<4);
+    }
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }

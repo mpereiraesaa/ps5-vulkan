@@ -2958,7 +2958,7 @@ not have, each found by the run below and fixed in this change:
 
 The frozen selection is now the union of both lines - **462 acceptance cases**
 (the 404 the T06 line carried, including the 98 dual-source leaves and the two
-fragment side-effect leaves, plus the 58 T05 leaves) and 44 diagnostics - and
+fragment side-effect leaves, plus the 58 T05 leaves) and 98 diagnostics - and
 the shipping build passes all of it:
 
 - run `20260922T014510656Z_PPSA99994_upstream-cts_0x17b8f2b94697f`,
@@ -3044,3 +3044,1099 @@ blockers=44`, one requirement more than the merged tip's 17/45. With that
 receipt the DXVK matrix row for `feature:VkPhysicalDeviceFeatures:independentBlend`
 is **satisfied on all four axes** (api, implementation, cts, native) and the
 profile reads **16 of 62 requirements ready with 46 blockers**.
+## Focused upstream selection for sampleRateShading (2026-09-22)
+
+The `sampleRateShading` row's CTS axis needs a focused, applicable selection
+before anything can be measured. Read from the pinned sources rather than
+guessed, `MinSampleShadingTest::checkSupport` is the only
+`requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING)` call in
+`external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp`
+(`:1344`), and `createMultisampleTests` builds exactly three groups from that
+class: `min_sample_shading` (its opaque primitives), `min_sample_shading_enabled`
+and `min_sample_shading_disabled` (both a quad). At the counts this profile
+serves that is 50 leaves under the new `t06-sample-rate-pending` diagnostic
+category: 5 `minSampleShading` values x 2 counts x 3 primitives, plus the
+enabled and disabled quads. The sparse variants are left out because this
+profile binds no sparse memory, and `primitive_point` is left out because the
+measurement below reported it as `NotSupported` for `largePoints`, a feature
+this profile does not advertise - which is a scope statement, not a driver
+defect. Each selected leaf renders the multisampled colour target, resolves it
+into the single-sample image, then reads the multisampled colour back once per
+sample through `subpassLoad(imageMS, sampleNdx)`, so a build that shades once
+per pixel cannot pass it.
+
+The category's traceability is derived, not transcribed: `tools/
+check_upstream_selection.py` grows `_min_sample_shading_leaf_names`, which
+composes the names per group from that module's own sample-count array, its
+`minSampleShading` value table and the case literals each block registers, plus
+`_multisample_generated_segments`, because the `samples_<count>` group segment
+is printed by the factory rather than written as a literal. A leaf moved
+between the enabled and disabled groups, or a primitive a group does not
+register, stops matching; a rewritten factory stops matching too.
+
+Measurement run 1 (`20260922T083940138Z_PPSA99994_upstream-cts_0x1922d783e3ecc`,
+log SHA-256 `ae9d271ee5096419caf91151744c853b7a8f6628e89c77e1486001472972b0b9`, 522
+cases = 462 frozen acceptance + the first 60 leaves): 522/522 reported, 462
+Pass, 50 Fail, 10 `NotSupported`. The ten `NotSupported` leaves are exactly the
+`primitive_point` ones, refused as "Requested core feature is not supported:
+largePoints" (`vktTestCase.cpp:1227`), which is why they left the category.
+
+Measurement run 2, with the corrected 50-leaf category
+(`20260922T084825463Z_PPSA99994_upstream-cts_0x192a7c7884dc5`, log SHA-256
+`2993b6e47ffbfa3fb08aa9c3ad70b3785d81ac1cb7eebb53a534b13a107acdba`): payload
+eboot SHA-256 `88d9ca738842e9f05021a5f0e429405eee74d480d956d17b0a78414b35f0e2db`,
+built with `PS5VK_SAMPLE_RATE_DIAGNOSTIC=1`; measurement selection SHA-256
+`73f85a4a290ffe1e5e1b74ad022747af847cd9135e7aeca1274d16269bda88c2` derived from
+the frozen selection `aafc4062b267b88ea1b395aae924fcf0451eff411e9522dd889ce9638073d0ab`;
+512/512 cases reported, no missing, unexpected or duplicate results, 462 Pass
+(the frozen acceptance selection is unchanged and still fully green on this
+tree), 50 Fail, zero `NotSupported`, `lifecycle_ok` true and the title closed
+and confirmed stopped. All 50 leaves fail at the same first gate:
+`vk.createImage(...) VK_ERROR_FEATURE_NOT_PRESENT`, because the multisampled
+colour image the oracle builds carries
+`COLOR_ATTACHMENT | TRANSFER_SRC` (`| INPUT_ATTACHMENT` for the per-sample
+fetch render pass) while this profile serves exactly one observed multisampled
+role.
+
+What this establishes: the applicable focused selection exists, it is
+traceable to the pinned sources, the packaged payload reports every selected
+leaf (the silently-dropped-leaf trap is closed at 512/512), and the first gate
+the row has to open is the multisampled image's usage combination. What it does
+not establish: no leaf passes, the multisample render pass, the resolve and the
+per-sample input read are still unexecuted, the `sampleRateShading` row stays a
+blocker, and the shipping platform mask still advertises no sample-rate bit.
+
+## Multisampled colour image role (2026-09-22)
+
+The measurement above named the first gate precisely: the oracle's
+multisampled colour image carries `COLOR_ATTACHMENT | TRANSFER_SRC`
+(`vktPipelineMultisampleTests.cpp:3368-3371`) and adds `INPUT_ATTACHMENT` for
+the render type that reads that image back once per sample, while this profile
+admitted exactly one observed multisampled role. This change admits those
+combinations and nothing else: `ps5vk_multisampled_color_usage` in
+`src/sample_rate_contract.h` is consumed by the two count-aware sites,
+`vkCreateImage` and `ps5vk_native_image_requirements`, both of which still
+require a 2D one-mip `B8G8R8A8_UNORM`/`R8G8B8A8_UNORM` colour image, no create
+flags, and a platform whose served-count mask carries the requested count. A
+multisampled image naming the input role without the readback source, the
+transfer-destination pair, the sampled role or any other combination keeps the
+failure it had. The per-format query stays sample-agnostic and is left for the
+promotion slice, which is where it has to be measured through the public ABI;
+the shipping mask is untouched, so an unadvertised build still refuses every
+multisampled image.
+
+Measured on the console with the same 512-case measurement selection
+(`20260922T091910948Z_PPSA99994_upstream-cts_0x1945575a966d5`, log SHA-256
+`7cd77372601c2300846e4d092f51b196feb311c03ee16a522eec59f9ceded4c5`, payload
+eboot `e46e07c604531c6e29f5907da3c7052c96bfc98fc8785bfcac4706caf931db5a`):
+the image gate opened - none of the 50 leaves fails at `vkCreateImage` any
+more - and the payload then died without closing its log. The run file records
+`bye=false, clean=false, close_reason=eof` after 20.9 s, with no refusal and no
+`Fail` verdict anywhere; the last records are the per-sample fetch fragment
+shader (`subpassInputMS` + `subpassLoad(imageMS, sampleNdx)`) being assembled,
+then two 131072-byte allocations - the resolve and per-sample single-sample
+targets - and then EOF. This is a fail-closed defect, not a capability
+verdict: the title is not running (the close request found nothing to close),
+nothing is hung on the console, and the next slice is a bounded native probe
+that walks exactly this CTS shape step by step so the step that kills the
+process names itself before it is fixed.
+
+Two provenance notes from the same window, both measured rather than assumed.
+First, a payload built while a concurrent `make check` restaged the SDK without
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC` reported every selected leaf `NotSupported` for
+`sampleRateShading` - a run that would have read as a driver verdict. Second,
+`tools/build_upstream_cts.py` did not record that switch in its build profile,
+so the two payloads were indistinguishable in the receipt; the switch is now in
+the captured switch set and the measurement payload records
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC = 1`.
+
+What this establishes: the image-role gate the previous measurement named is
+open and bounded to the oracle's own combinations, with the platform mask as
+the only switch that reaches it. What it does not establish: no leaf passes,
+the render pass with its resolve and per-sample fetch is still unexecuted, the
+driver does not yet fail closed on that shape, the row stays a blocker, and
+nothing is advertised.
+
+## CTS shape walk (2026-09-22)
+
+The measurement above ended with a payload that died without closing its log,
+which names no defect. The walk turns that into steps: `PS5VK_SAMPLE_RATE_PROBE=2`
+is the witness scene followed by `ps5vk_sample_rate_shape_probe`, which performs
+the CTS oracle's own sequence - the multisampled colour attachment with its
+exact usage, the resolve and per-sample single-sample targets, their views, the
+input-attachment plus uniform-buffer descriptor set, the pass whose subpass 0
+resolves and whose subpasses 1 and 2 fetch per sample and preserve their
+sibling's target, both pipelines and one submission - announcing every step
+before it runs and stopping at the first refusal with that step and its Vulkan
+result. A step that never returns is named by the log it left behind, and a
+refusal is fail-closed evidence instead of a dead process.
+
+Measured on the console (run `20260922T095638715Z_PPSA99994_ps5vk_0x19660cd1cb450`,
+log SHA-256 `e9b376d80dd3187d87d9d1fe579e0ec525f521aa817dbbfe4270f8029249e317`,
+payload eboot `f45e30ac879d8b345398ea98d7cbc18a07e64ea4834364026267641d0c8b4a6c`):
+
+- the multisampled colour attachment with `COLOR_ATTACHMENT | TRANSFER_SRC |
+  INPUT_ATTACHMENT` is created on hardware (`vkCreateImage` rc=0), which is the
+  image role the previous slice opened;
+- the resolve target and both per-sample targets, their memory, their views,
+  the UBO, the descriptor set layout, pool and set all succeed;
+- `vkCreateRenderPass` returns `VK_ERROR_FEATURE_NOT_PRESENT` (-8) and the walk
+  stops there, logging the step and the code, then closes cleanly
+  (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE reason=graphics-api-end`).
+
+The first walk iteration had stopped one step earlier - at the resolve target's
+`vkCreateImage` - and that was the walk's own mistake, not a driver finding: it
+used `B8G8R8A8_UNORM` for the single-sample targets, and this profile carries
+the readback-capability colour row only for `R8G8B8A8_UNORM`, so the
+attachment-with-its-readback-pair combination exists for the one format. The
+walk now uses the oracle's format, and the reason is recorded in the code
+beside it.
+
+The same window's first host probe of the stage behind the pass looked like a
+compiler gate and was not one, so the correction is recorded here rather than
+quietly dropped. That probe handed the adapter the oracle's per-sample fetch
+module (`subpassInputMS` plus `subpassLoad(imageMS, sampleNdx)`, compiled from
+`vktPipelineMultisampleBaseResolveAndPerSampleFetch.cpp`) with **no
+pipeline-layout signature at all**: `ps5vk_runtime_graphics_compile` refused it
+with no named site while the pinned compiler logged `Unsupported SPIR-V
+capability: SpvCapabilityInputAttachment (40)`, and both facts read as "this
+stage cannot be compiled". With the layout the oracle actually uses - an input
+attachment at set 0 binding 0 and a uniform buffer at binding 1 - the same
+module measures the opposite, and `tests/test_runtime_graphics_compiler.c` now
+pins all of it: the interface accepts the module, the descriptor table layout
+accepts the signature, `psbc_compile_shader` returns OK on its own (88 bytes of
+machine code, measured directly), the adapter compile returns `VK_SUCCESS` with
+108 bytes of fragment machine code, the compiled metadata names both bindings as
+used (`descriptor_used_binding_mask[0] == 3`), and dropping the layout signature
+is what makes the compile fail. The InputAttachment line is a warning from the
+NIR front end, not a refusal. The fetch stage is therefore not a compiler-side
+gate.
+
+What this establishes: the oracle's attachment and descriptor steps run on
+hardware; the first gate after them is the render pass itself, with the
+internal attachment bound (two) the obvious candidate; and the per-sample fetch
+stage is supported by the pinned compiler and by this profile's adapter once
+the pipeline layout declares what it reads.
+What it does not establish: no leaf passes, the resolve is not executed, the
+per-sample fetch is not executed, the row stays a blocker, and nothing is
+advertised.
+
+## The pass bound, and the framebuffer defect it exposed (2026-09-22)
+
+The walk named the render-pass gate, and the arithmetic behind it was one enum:
+`PS5VK_MAX_ATTACHMENTS` was `PS5VK_MAX_COLOR_ATTACHMENTS + 1`, which answers how
+many colour targets a draw may write but not how many attachments a pass may
+name. It is now `PS5VK_SAMPLE_COUNT_MAX_SERVED + 3` (seven), derived from a
+named constant in `src/sample_rate_contract.h`, because the pinned oracle's
+pass carries the multisampled colour attachment, its resolve target and one
+single-sample target per sample it fetches back, plus the optional depth
+attachment. `PS5VK_MAX_COLOR_ATTACHMENTS` still bounds what a subpass may render
+into, and `tests/test_vk_render_pass.c` now holds both directions: the oracle's
+six-attachment pass is accepted and one attachment past the bound is refused.
+
+Moving the pass bound exposed a real defect one layer down, and the walk is what
+found it. `struct VkFramebuffer_T` held its attachment slots in fixed arrays of
+two (`attachments[2]`, `formats[2]`, `samples[2]`), so a framebuffer built for
+the oracle's four attachments wrote past itself. Measured on the console with
+the bound raised but this fix not yet in place: run
+`20260922T102334060Z_PPSA99994_ps5vk_0x197d8e621b19e`, log SHA-256
+`d9d9018e2ca43405970f5dd0c268860f09ffba2d7d95685d81320eb14f5c5916`, payload
+eboot `49933aef329b1fb62de3b6f82ae8f3691309944478de973fd1a19279f6689f1c` - the
+walk reached `vkCreateRenderPass` rc=0, `vkCreateFramebuffer` rc=0,
+`create_pipeline subpass=0` rc=0, `create_pipeline subpass=1` rc=0 (the
+per-sample fetch stage compiles on the console build), `vkBeginCommandBuffer`
+rc=0, and then `vkEndCommandBuffer` returned `-13`; the payload never closed its
+log. Instrumenting the teardown named the killer: run
+`20260922T102625871Z_PPSA99994_ps5vk_0x19800e6cf4e94`, log SHA-256
+`e96e7988849fbe8a3e5caad2b4a965eb38eed8cbdf765abbb5d184a796480c94`, whose last
+record is the announcement of `vkDestroyFramebuffer` - the process died inside
+it, after every other teardown step had returned.
+
+The fix is the slots following the same bound the pass does, and the new case in
+`tests/test_vk_image.c` proves both directions: with the two-slot arrays, the
+sanitizer build reports `index 2 out of bounds for type 'VkImageView_T *[2]'` at
+`src/vk_framebuffer.c:88` and the framebuffer's fourth slot reads as garbage;
+with the fix the oracle's four-attachment framebuffer round-trips and its
+teardown is clean. The record roles are unchanged - `color_attachments` and
+`resolve_attachments` stay bounded by the colour-attachment contract, because
+that is how many targets a draw may write.
+
+What this establishes: the oracle's pass, framebuffer, pipeline layout, shader
+modules and both pipelines exist on hardware, and the framebuffer no longer
+corrupts memory for the shape the pass now admits. What it does not establish:
+no leaf passes, `vkEndCommandBuffer` still refuses the recording with `-13`
+(the executor does not run a resolve or a preserve list yet), the row stays a
+blocker, and nothing is advertised.
+
+Confirmed after the fix, one more bounded window (run
+`20260922T104105309Z_PPSA99994_ps5vk_0x198cda8a48718`, log SHA-256
+`3b8d5b8131567bff1b6590006951f0e2acf430de166137b0ff75942e50b1df67`, payload
+eboot `aa398bb707f21667f4211d932966d80674da67a642360653492bbfed2786033e`): 117
+records, every step of the walk `ok=1` except one, the teardown running to its
+end, `PS5VK_PLATFORM_CLOSE rc=0` and a clean `BYE`. The single refusal is the
+recording: `vkEndCommandBuffer` rc=-13. So the object path for the oracle's
+shape now stands end to end, and the gate the row has to open next is the
+executor - the resolve, the per-sample input read and the preserve list are
+described, created and compiled, but not run.
+
+## Recording the oracle's pass, and the gate behind it (2026-09-22)
+
+Two probe defects stood between the walk and the driver, and both are recorded
+because both looked like driver gates until they were named:
+
+1. The walk declared three subpasses and recorded work in two of them, and the
+   recording refuses to end a pass before its last subpass. Announcing every
+   recorded call is what showed it: `vkCmdEndRenderPass` was announced and
+   `vkEndCommandBuffer` then refused, i.e. the pass had never been left. The
+   walk now creates one pipeline per subpass and records every one of them.
+2. The walk handed one clear value to a pass that clears four attachments, and
+   `vkCmdBeginRenderPass` requires a value for every attachment it clears - the
+   clear-value count is the caller's and the pass's, not a pair. That is the
+   first real driver limitation this walk found on the recording side:
+   `struct ps5vk_operation` stored two clear values and the begin bound the
+   count at two, while the oracle's pass carries four.
+
+This change raises both to the attachment bound the pass itself uses
+(`PS5VK_MAX_ATTACHMENTS`), so one begin can carry a value per attachment the
+pass names, and `tests/test_vk_command.c` pins both directions: the oracle's
+four-attachment pass records with four clear values (and the fourth value is
+the one the record carries), while one value short of what the pass clears
+still poisons the recording. The executor already indexes the clears per colour
+attachment and bounds them by the recorded count, so nothing else moved.
+
+Measured on the console after the change (run
+`20260922T111728603Z_PPSA99994_ps5vk_0x19ac9fd1c7523`, log SHA-256
+`20dbfad9b6b8049404c139200f41d875f7e442809a8f79b4e1c4ad553e664952`, payload
+eboot `76f1f3c653b951e76b68c80d1c303777c3b71299af434ef220b82aff80a4e44c`): the
+walk records the whole pass - `vkCmdBeginRenderPass` with four clear values,
+both draws, both subpass boundaries, the descriptor binds and
+`vkCmdEndRenderPass` - and `vkEndCommandBuffer` returns **rc=0**. The next call,
+`vkQueueSubmit`, returns **VK_ERROR_FEATURE_NOT_PRESENT (-8)**: the executor
+does not run the resolve, the per-sample input read or the preserve list yet,
+and it says so instead of executing a pass whose promise it would drop. The
+title closed cleanly (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: the oracle's pass is recordable end to end with its own
+clear set, and the gate is now the executor at submission, named by its own
+return code. What it does not establish: no leaf passes, the resolve, the
+per-sample read and the preserve list are still unexecuted, the row stays a
+blocker, and nothing is advertised.
+
+## Executing a subpass that renders elsewhere (2026-09-22)
+
+The executor prepared every draw from the framebuffer's colour and depth role
+lists, and those lists are subpass 0's roles, so a pass whose later subpasses
+render targets of their own was refused three times over: a resolve target, a
+preserve list, and subpasses that do not name the same attachments. This change
+lifts the third one. What a draw renders into is its OWN subpass's set - the
+seam the draw preparation now takes as `struct ps5vk_target_set` - and the pass
+carries the union of the references its subpasses name, with the depth role
+single and shared, an attachment that is named twice required to agree with
+itself on format and layout, and the resolve and preserve refusals untouched.
+The prelude now derives one plan, one clear word and one layout transition per
+ATTACHMENT rather than per subpass-0 colour slot.
+
+Measured on the console (run `20260922T113731886Z_PPSA99994_ps5vk_0x19be2253813fd`,
+log SHA-256 `d5d48c50ccae7a03f34687e13c4690b63ce43bc338ebb5d81a7f619818d9e16c`,
+payload eboot `6ede50ef50cb46838175453dfa4ddad5cbab22ebef259f22cefface956dd4a49`):
+
+- a two-subpass pass, each subpass rendering its own colour attachment, is
+  created, recorded (`vkEndCommandBuffer` rc=0), submitted (`vkQueueSubmit`
+  rc=0) and completed (`vkWaitForFences` rc=0);
+- the SECOND subpass's target is read back through the driver's own span and
+  holds the fragment's colour across exactly the plane it covers:
+  `PS5VK_SAMPLE_RATE_TARGETS extent=32x32 samples=4 subpasses=2
+  target_words=32768 shaded=1024 expected=1024 word=ffbf8040 verdict=1` - 1024
+  words is the 32x32 RGBA8 plane, and the tiled padding around it keeps the
+  clear, so the draw really landed in that subpass's own attachment;
+- the oracle's own pass still refuses at `vkQueueSubmit` rc=-8, because it also
+  carries a resolve target, an input attachment and a preserve list, and those
+  three are the next refusals to lift;
+- the title closed cleanly (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: the executor runs a multi-subpass pass whose subpasses
+render their own targets, with hardware-comparable output, which is the
+structural half of the oracle's pass. What it does not establish: the resolve,
+the per-sample input read and the preserve list are still unexecuted, no CTS
+leaf passes, the row stays a blocker, and nothing is advertised.
+
+## A subpass that preserves another subpass's target (2026-09-22)
+
+The executor refused any pass carrying a preserve list, on the grounds that it
+did not carry attachment contents across a subpass boundary. With every subpass
+rendering its own targets that promise is one this path keeps: a preserved
+attachment is one the subpass does not write, the pass's load ops are applied
+once at its start, and the boundary between subpasses publishes the previous
+subpass's writes without touching anything else. The refusal is therefore
+replaced by a bounds check on every preserve entry the pass carries - a record
+that reached this backend naming an attachment outside the pass is refused
+rather than read out of bounds - and the resolve refusal stays exactly where it
+was.
+
+Measured on the console (run `20260922T115140401Z_PPSA99994_ps5vk_0x19ca7b3ec8c32`,
+log SHA-256 `4a3a6e4db059d29225ca8ed12a5badfffa33ecdc3a8396ee484164de8ee8daef`,
+payload eboot `42d1b5c95dfb8d8048f0cb8c51223b0e2982242751e660fa6ec455caa39d5f74`):
+the two-subpass pass now has subpass 1 preserve attachment 0 - the target
+subpass 0 renders - and the readback checks both directions in one verdict:
+the second subpass's own target holds the fragment's colour across its 32x32
+plane (`shaded=1024 expected=1024`), and the PRESERVED target still holds what
+subpass 0 drew (`preserved_hits=4096` of 65536 words, which is exactly the
+32x32 plane at 4 samples). A subpass that clobbered it would have left the
+pass's own clear value there instead. The title closed cleanly
+(`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: a subpass may preserve another subpass's target and the
+executor keeps that promise on hardware, which is the shape the oracle's fetch
+subpasses use for their siblings. What it does not establish: the resolve
+target and the per-sample input read are still unexecuted, no CTS leaf passes,
+the row stays a blocker, and nothing is advertised.
+
+## The multisampled resource read, enabled (2026-09-22)
+
+Reading sample k of a multisampled colour attachment is the enabler the last two
+executor gates share: the oracle's fetch subpass reads its multisampled input
+attachment once per sample, and a resolve is the same read averaged over every
+sample. Two places kept it out, and both are now open in the bounded shape the
+profile serves.
+
+The resource record: `ps5vk_image_resource_descriptor` refused any multisampled
+image. The pinned gfx6+ texture descriptor carries the sample geometry in the
+LEVEL fields - BASE_LEVEL zero and LAST_LEVEL log2(samples) for a multisampled
+surface (`ac_descriptors.c`, `ac_build_gfx6_texture_descriptor`) - so a
+multisampled attachment is the same RGBA8 2D one-mip record with those two
+fields naming the count, single-layer, over the render target's own tiled
+storage. A count this profile does not implement is still refused before the
+record is written, and `tests/test_texture_descriptor.c` pins the multisampled
+record (LAST_LEVEL = log2(4)), the single-sample record carrying no sample
+geometry, and the 8x refusal.
+
+The gate: `ps5vk_input_attachment_gate` served exactly one resource - the
+promoted multiview attachment, six layers with the colour/transfer-source/
+input-attachment/transfer-destination roles. It now serves the multisampled
+single-layer attachment as well (colour, readback source and input-attachment
+roles), and it no longer requires an explicit forward dependency: the executor
+emits the colour-to-texture barrier around every subpass change that reads an
+input attachment, and Vulkan gives an attachment read by a later subpass its
+implicit dependency, so the barrier the profile already emits is what orders
+the read.
+
+What this establishes: the two layers between the oracle's fetch draw and
+execution now describe the shape it needs, with the descriptor arithmetic
+pinned against the pinned compiler. What it does not establish: the read has
+not yet been measured on hardware, the resolve is still refused by the
+executor, no CTS leaf passes, the row stays a blocker, and nothing is
+advertised.
+
+## The per-sample read executes but does not yet select the sample (2026-09-22)
+
+The multisample resource record from the previous slice was measured on
+hardware, and the honest result is a negative one that narrows the search. The
+probe's fetch phase is now a SWEEP: subpass 0 draws per-sample values into the
+multisampled target (the gl_SampleID module the witness uses, so plane k holds
+`0xff0k0000`), and subpass 1 reads a NAMED sample of it through the
+resource-only record and writes its own single-sample target, which is then
+read back through the driver's own span.
+
+What the shape does: every object and every recording step succeeds, the pass is
+submitted and completes, and the read runs - run
+`20260922T123034336Z_PPSA99994_ps5vk_0x19ec71b787e8a`, log SHA-256
+`851d2b53213e497644a88312efff8c2fc7f22fe3374b6a4fa453fc8a1fc461ca`. What it
+returns: for sample index 0 the target holds sample 0's value, and for sample
+index 3 it holds sample 0's value again - the index does not select the plane.
+
+Three hypotheses were ruled out by measurement rather than argument:
+
+1. **The uniform block never reached the shader.** Ruled out twice: the flush
+   for the non-coherent block is now emitted (a partial mapping cannot be
+   flushed at all - the range has to cover a whole non-coherent atom or end at
+   the allocation), and the second index runs a module with the sample index
+   BAKED IN (`subpassLoad(imageMS, 3)`) which reads the same plane 0.
+2. **The compiler drops the index.** Disassembled with the pinned compiler's own
+   `PSBC_DEBUG_DISASM`: the baked module lowers to `v_mov_b32 3` into v7 and
+   then `image_load ... 2darraymsaa` with that register as the sample operand,
+   so the index is carried into the instruction.
+3. **The record needs the multisampled type tag.** The pinned header's own tag
+   for a multisampled 2D surface is `V_008F1C_SQ_RSRC_IMG_2D_MSAA` (14), not the
+   plain 2D tag (9), so the record now carries it together with BASE_LEVEL 0 and
+   LAST_LEVEL log2(samples) - and the measurement is unchanged (run
+   `20260922T123243995Z_PPSA99994_ps5vk_0x19ee54bac640d`, log SHA-256
+   `944289f6b23120b31466be1f917ffdc6c78f5904f74ecb8fb30ecae29a698e97`). The tag
+   and the level fields are therefore necessary-but-not-sufficient: the record
+   now says what the compiler says, and the hardware still reads plane 0.
+
+What remains, stated as the next question rather than as a guess: how the
+surface a colour attachment is backed by is laid out for a sample-indexed read,
+and whether the tile mode the record carries describes THAT layout. The witness
+measured the storage as one plane per sample and the clear fills all of them;
+what a sample-indexed fetch reads is a different question, and the answer is
+what the next slice has to measure.
+
+What this establishes: the read executes end to end with the index in the
+instruction, and the value always comes from plane 0. What it does not
+establish: the per-sample read, the resolve, any passing CTS leaf, the row - all
+unchanged, and nothing is advertised.
+
+## The per-sample read, re-measured without a confound (2026-09-22)
+
+The previous measurement concluded that the read "always returns plane zero",
+and that conclusion was confounded by the probe's own clear value: the fetch
+pass cleared its target to `{0, 0, 0, 1}`, whose RGBA8 word is `0xff000000` -
+exactly the value the gl_SampleID module writes for sample 0. A fetch that wrote
+nothing looked the same as a fetch that read plane zero.
+
+With a clear no sample can hold (`{0.5, 0.5, 0.5, 1}` = `0xff808080`), the same
+sweep (run `20260922T124831879Z_PPSA99994_ps5vk_0x19fc1fd2698b0`, log SHA-256
+`c852c65e13c01356f2b7a3c40764064c9224fd5b0e1d1ec868c29a8961341269`) reads:
+
+- `sample_index=0`: `matched=1024 expected=1024`, `seen=ff000000,ff808080` -
+  the fetch subpass ran, read a REAL sample of the multisampled attachment and
+  wrote it across its own target's plane, with the pass clear left in the tiled
+  padding. Verdict 1: the multisampled input-attachment read executes.
+- `sample_index=3` (the module with the index baked in, whose ISA carries
+  `v_mov_b32 3` into the sample operand): the plane holds `ff000000` again -
+  sample 0's value, not sample 3's.
+
+The record now also carries the resource type the pinned compiler's own mapping
+implies: `ac_shader_util.c` lowers `GLSL_SAMPLER_DIM_SUBPASS_MS` to
+`ac_image_2darraymsaa`, so a `subpassInputMS` is a TWO-DIMENSIONAL ARRAY MSAA
+image - `V_008F1C_SQ_RSRC_IMG_2D_MSAA_ARRAY` (15), with the single layer
+described by a zero depth field - and not the plain 2D MSAA tag (14) the
+previous window carried. Both tags were measured and both return plane 0 for a
+non-zero index, so the tag alone is not what selects the sample.
+
+What this establishes, positively: the multisampled input-attachment read runs
+on this hardware and delivers a real sample plane into the subpass's own target.
+What it does not establish: selecting a sample other than the first, which is
+what the oracle's fetch subpass and a resolve both need. The open question is
+now narrower than "the read does not work": it is how the sample index selects a
+plane in the storage this profile backs a multisampled colour attachment with,
+and whether the tile mode the record carries describes that storage - the same
+question the previous window raised, now with the confound removed and one
+positive result in hand.
+
+## What the multisampled storage actually holds (2026-09-22)
+
+The previous window's "index 3 still reads sample 0" needed one more control:
+whether the SOURCE even held another sample to read. It does, and the census is
+the interesting part. Run
+`20260922T130521123Z_PPSA99994_ps5vk_0x1a0acf7fbf5e9`, log SHA-256
+`d8fc7a088f5108237dd34fcad9478a13b19f4311f3a632f1c7475138addd5120`:
+
+```
+PS5VK_SAMPLE_RATE_SOURCE extent=32x32 samples=4 words=65536 distinct=4
+  value0=ff000000 hits0=1024 first0=0 last0=3327
+  value1=ff808080 hits1=61440            <- the pass's own clear (padding)
+  value2=ff000001 hits2=1024
+  value3=ff000002 hits3=1024
+```
+
+So a 32x32 four-sample attachment, dressed per sample by `gl_SampleID`, holds one
+1024-word plane PER SAMPLE - `ff000000`, `ff000001`, `ff000002` (and, as the
+census' fifth distinct value, `ff000003`) - and they are not stacked at
+footprint-sized strides: all of them live inside the first ~4096 words, i.e.
+inside the footprint one single-sample 32x32 surface occupies, with the pass
+clear in the remaining 61440 words. The hardware packs the samples of a
+multisampled colour attachment inside the same tiled block a single-sample
+surface would use; the extra storage this profile allocates (count x footprint,
+from the pinned `ac_estimate_size` arithmetic) is padding, not a plane stride.
+
+That makes the earlier reading precise rather than mysterious: the fetch reads
+the correct surface, the index is in the instruction, per-sample data exists -
+and the read still returns sample zero's slot for every pixel, so what does not
+line up is how a sample index selects a slot inside that packed block. The
+descriptor's level fields and the ARRAY MSAA type were both measured and neither
+changed it, which leaves the TILE MODE the record carries as the next thing to
+measure against the arrangement the hardware just showed.
+
+What this establishes: the multisampled input-attachment read runs, the source
+is genuinely per-sample, and the missing piece is the sample-within-block
+addressing rather than anything about the read's execution. What it does not
+establish: that addressing, the resolve, any passing CTS leaf, the row - all
+unchanged, and nothing is advertised.
+
+## Naming the layout equation the read has to match (2026-09-22)
+
+Two facts from the lab's own sources narrow the sample-addressing question
+without another console window, and both belong next to the census.
+
+First, the tiling equation: the lab keeps a full Mesa checkout for this GPU
+(`third_party/mesa-gfx1013`), and its addrlib computes a multisampled surface's
+micro-tile block by REDUCING it by the sample count -
+`gfx10addrlib.cpp`, `GetBlk256SizeLog2(..., numSamplesLog2, ...)` with
+`blockBits -= numSamplesLog2` - so a 256-byte micro tile becomes 256/num_samples
+bytes per sample and the samples are interleaved inside the block rather than
+stacked plane by plane. That is exactly what the census measured on the
+hardware, and it is the equation a sample-indexed read has to resolve against.
+
+Second, the record this profile builds already carries the right swizzle: the
+tile field of the resource word holds `0x1b` in bits 20..24, which is
+`ADDR_SW_64KB_R_X` (27) in the lab Mesa's `addrtypes.h` - the same render-target
+swizzle a colour attachment is backed by. So the record is not obviously
+describing the wrong surface; what has not been shown yet is that the sample
+count reaches the hardware's ADDRESS equation through the fields the record
+carries (`BASE_LEVEL` 0 / `LAST_LEVEL` log2(samples) with the ARRAY MSAA type),
+which is what the next experiment has to compare against what addrlib implies
+for this exact surface.
+
+Also ruled out on the way: the `NUM_SAMPLES` fields the pinned compiler writes
+in `ac_descriptors.c` belong to `DB_Z_INFO` (depth/stencil state), not to the
+image resource descriptor, so they are not the field a colour-attachment read
+would need. The image descriptor's sample geometry really is the level-field
+encoding this profile already emits.
+
+## The per-sample read works: MAX_MIP was the missing field (2026-09-22)
+
+The sample-addressing question is answered, and the answer is a field the
+pinned compiler writes for exactly this case. A multisampled resource record
+needs the sample geometry in **three** places, not two: the ARRAY MSAA type tag
+(15), the level fields (BASE_LEVEL 0, LAST_LEVEL log2(samples)) - and
+**MAX_MIP = log2(samples)**, the field `ac_descriptors.c`'s
+`ac_build_gfx6_texture_descriptor` writes for a multisampled surface on its GFX9
+path (`desc[5] MAX_MIP(log2(num_samples))`) and which the GFX10 path of that
+same function leaves out. This profile reaches the hardware through AGC rather
+than through that builder, and its descriptor does consume it.
+
+Measured on the console (run `20260922T133537885Z_PPSA99994_ps5vk_0x1a253f5f849fd`,
+log SHA-256 `449aaac4288736465bdb7886d4344c7a796c245ecbd24aaff34d34d654779154`,
+payload eboot `d90ca072307571ea240fdfa92503bd6cccc4d304cb9f820779c524d7d96497ae`):
+
+```
+PS5VK_SAMPLE_RATE_FETCH sample_index=0 matched=1024 expected=1024 value=ff000000 verdict=1
+PS5VK_SAMPLE_RATE_FETCH sample_index=3 matched=1024 expected=1024 value=ff000003 verdict=1
+```
+
+Both indices read the sample they ask for: sample 3's plane holds sample 3's
+value and sample 0's holds sample 0's, each across exactly the plane it covers,
+with the pass clear left in the tiled padding. The sweep is a sweep over the
+uniform-driven pipeline; the baked-index module reads the same planes with the
+same values.
+
+Note on the oracle's constant: the previous windows compared against
+`0xff030000`, the encoding the 64x64 witness measured, while the 32x32 source
+census writes the sample id in the FIRST byte (`ff000001`, `ff000002`,
+`ff000003`). With the constant taken from the census the verdict is 1; the
+earlier "verdict 0" lines were the wrong expectation, not the wrong read - and
+that is why the census mattered.
+
+What this establishes: the multisampled input-attachment read selects and
+delivers an arbitrary sample on this hardware, which is the enabler the oracle's
+fetch subpass needs and the same read a resolve is built from. What it does not
+establish: the resolve itself, the CTS leaves, the row - all unchanged, and
+nothing is advertised.
+
+## The resolve arithmetic, measured (2026-09-22)
+
+With the per-sample read working, the arithmetic a resolve is made of is one
+more submit of the same pass: subpass 0 dresses every sample of the
+multisampled attachment, and subpass 1 runs a stage that reads EVERY sample and
+writes their average into its own single-sample target. Two probe defects were
+paid for on the way and both are ordinary ones: the resolve pipeline was first
+created with the multisampled state of the attachment it READS rather than the
+single-sample state of the target it renders into (the front end refuses a
+pipeline whose sample count does not match its subpass), and the oracle
+compared against the 64x64 witness's encoding instead of the 32x32 census'.
+
+Measured on the console (run `20260922T135608051Z_PPSA99994_ps5vk_0x1a37260b0a121`,
+log SHA-256 `8cdd8405708b1170e09010f1ee316967d062ecc079c90fe7be1062be31bd4425`,
+payload eboot `72470aa67baa609ef691b7f98410c951710fe0c36e2e9ea26f254286f5b6afb6`):
+
+```
+PS5VK_SAMPLE_RATE_FETCH   sample_index=0 matched=1024 expected=1024 value=ff000000 verdict=1
+PS5VK_SAMPLE_RATE_FETCH   sample_index=3 matched=1024 expected=1024 value=ff000003 verdict=1
+PS5VK_SAMPLE_RATE_RESOLVE samples=4 words=32768 distinct=2 value=ff000002 second=ff808080 averaged=1
+```
+
+The four samples hold R = 0, 1, 2 and 3; their average is 1.5, and the target
+holds R = 2 - a value NO sample had, with the pass clear in the tiled padding.
+So the resolve result is computed by reading the samples this profile can now
+address, and the value it produces is the average rather than any one plane.
+Both facts come from one run, in one pass, on the same attachment.
+
+What this establishes: the two mechanisms the oracle's pass needs - selecting a
+sample of a multisampled colour attachment, and averaging them into a
+single-sample target - are measured on hardware, with the exact fields the
+resource record has to carry (ARRAY MSAA type, BASE_LEVEL 0 / LAST_LEVEL log2,
+MAX_MIP log2). What it does not establish: the executor does not yet EMIT that
+resolve for a subpass that declares a resolve target - it still refuses such a
+pass - and no CTS leaf passes, the row stays a blocker, and nothing is
+advertised.
+
+## The driver's own resolve program (2026-09-22)
+
+A resolve cannot be produced by a probe's payload: the draw that averages the
+samples has to be emitted by the DRIVER, so its stages have to live in the
+driver. `tools/build_resolve_shaders.py` compiles one averaging fragment per
+served sample count (2x and 4x; the reads are written out rather than looped,
+because this profile's fragment interface has only been measured on
+straight-line subpass reads) plus the oversized-triangle vertex stage they pair
+with, into a header the SDK build compiles in, and `native/resolve_program.c`
+pairs each with the descriptor contract an averaging stage needs - set 0 binding
+0 is the input attachment, fragment-visible, and nothing else - before compiling
+the pair through the same runtime compiler the pipeline objects use.
+
+`tests/test_runtime_graphics_compiler.c` pins it: both served counts compile into
+a program whose fragment has machine code, whose descriptor set is valid and
+whose used-binding mask names exactly the input attachment; a count with no
+generated stage (8x, and 1x, which has no samples to average) is refused rather
+than averaged by a stage that reads the wrong samples.
+
+What this establishes: the driver can build the resolve draw's program with the
+descriptor contract the measured read used. What it does not establish: the
+executor still refuses a subpass that declares a resolve target, so the program
+is not yet emitted; that wiring - the target, the barrier and the draw at the
+subpass boundary - is the next slice. The row stays a blocker and nothing is
+advertised.
+
+## The executor emits the resolve, and the next gate is a layout (2026-09-22)
+
+The resolve draw is now emitted by the driver. `native/graphics_queue_ps5.c`
+gained `resolve_draw_emit`, which builds the draw on the stack: a one-subpass
+synthetic pass whose colour reference is the resolve attachment, a framebuffer
+carrying both views, a descriptor set whose single element is the multisampled
+attachment as an input attachment, and a pipeline carrying a compiled-then-
+LOADED resolve program (`ps5vk_native_resolve_program_acquire` plus
+`ps5vk_native_runtime_graphics_create`, the same loader every app pipeline
+uses). It is called where a subpass that declares a resolve target ENDS - at the
+next subpass boundary and, for the last subpass, before the postlude. The stale
+blanket refusal of resolve subpasses is gone; the per-subpass validation admits
+exactly the shape the emission describes and keeps the refusal for everything
+else.
+
+The path was named step by step on hardware, and each step is now reported
+rather than guessed (run `20260922T145043495Z`, log
+`830121e53f979d4fe17436f04bf8d0e2c3f66412a69b843cbf12f6251c2c54ee`, payload
+eboot `d00844385e55341b0ab0e9adeda8d6e90650c2b14166eacc60fb9a6a2dc9bb12`):
+`PS5VK_RESOLVE_STEP target_set/native_target/descriptor` (0 for all three), the
+produced draw (`PS5VK_RESOLVE_DRAW serial=7 subpass=0 samples=4 colour=0
+resolve=1 targets=1 words=8`), and then the refusal that is left -
+`PS5VK_INPUT_ATTACHMENT_REFUSED serial=7 subpass=1 inner=123 rc=-8 defined=1
+layout=5 view_is_fb=1 ref=0`. In that same run the walk's own phases still pass
+- `PS5VK_SAMPLE_RATE_FETCH ... sample_index=3 ... value=ff000003 ... verdict=1`,
+`PS5VK_SAMPLE_RATE_RESOLVE ... value=ff000002 ... averaged=1` and
+`PS5VK_SAMPLE_RATE_TARGETS ... subpasses=2 ... preserved_hits=4096 ... verdict=1`
+- so the emission did not trade away any measured phase. Layout 5 is
+`VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`,
+which is the layout the pinned CTS gives its fetch subpass's input attachment,
+while this profile's input-attachment gate and its boundary transition assume
+`GENERAL` (the layout the multiview witness declared). That is the next gate,
+and it is a real one: the boundary barrier has to leave the attachment in the
+layout the SUBPASS declares, and the gate has to accept `SHADER_READ_ONLY_OPTIMAL`
+for an input read.
+
+Two probe defects and one driver defect were paid for on the way to the
+emission, all recorded rather than hidden: the stale blanket refusal above, a
+synthetic descriptor set with no pool (refused at `descriptor_plan`), a
+synthetic pipeline state that had never been through the native loader, and a
+legacy prepare entry that passes a zero shader address (the descriptor table's
+high-address check needs the loaded pair's aperture, so the runtime entry is
+used). Both host tests and the console runs remain green before this window's
+last refusal: the walk's own phases - per-sample fetch, resolve arithmetic,
+two-subpass targets with a preserve list - all still pass.
+
+## The layout equation, and the resolve that lands (2026-09-22)
+
+The last window left two things open: the layout the pinned oracle reads its
+colour attachment in, and whether the resolve draw the executor emits actually
+reaches its target. Both are closed here. The second one cost five console runs,
+because each run removed exactly one layer and named the next.
+
+What changed:
+
+- The input-attachment gate accepts the two READ layouts the render-pass
+  frontend (`src/vk_render_pass.c`) already admits: `GENERAL`, which the
+  multiview witness declares, and `SHADER_READ_ONLY_OPTIMAL`, which the pinned
+  multisample oracle declares for its fetch subpasses
+  (`external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp`:
+  `pInputAttachments[0].layout` and the descriptor's `imageLayout` are both
+  `SHADER_READ_ONLY_OPTIMAL`). Each side is admitted by its own pinned rule -
+  the reference by the layouts an input reference may name, the record by the
+  input-attachment layout list - and a layout that is not a read layout is still
+  refused on either side.
+- The prelude walks each attachment's LAYOUT SEQUENCE in subpass order, through
+  the new `ps5vk_render_pass_attachment_layout`: the attachment's initial
+  layout, then the layout each subpass declares for it as the pass reaches that
+  subpass, then the attachment's final layout. The boundary transition therefore
+  leaves the attachment in the layout the READING subpass declares instead of
+  assuming `GENERAL`, which is what the gate then checks the recorded descriptor
+  against.
+- A resolve target now honours the pass's `LOAD_OP_CLEAR`: the whole surface is
+  filled before the pass begins (`PS5VK_RESOLVE_CLEAR_PREPARED`), as Vulkan
+  requires for an attachment whose load operation is clear. The driver used to
+  leave the target holding whatever its allocation contained, which is why a
+  readback of a resolve target could show an earlier phase's pattern.
+- Three defects in the emission itself, each measured:
+  the synthetic operation carried no vertex or instance count, and a zero count
+  is Vulkan's "no rasterization side effects" draw - the emitter returned
+  success without writing a word (`words=8`, i.e. only the barrier);
+  the synthetic pipeline set `color_write_mask` but not the blend block
+  `CB_TARGET_MASK` is actually carried from, so the hardware mask was zero;
+  and the prepared draw's AGC context block and the loaded shader pair were
+  released INSIDE the walk, while the command stream references both by address
+  and the GPU reads them at submit. The last one is the defect that kept the
+  target untouched: the draw went out, ran, and read freed memory.
+- The probe's resolve oracle draws a SPREAD pattern now
+  (`experiments/graphics/runtime_subpass_write_spread.frag`, R = 4*(gl_SampleID+1)/255
+  with per-sample shading enabled), so the samples hold 4, 8, 12 and 16 and
+  their average is 10: a value NO sample holds, and one no 0..3 pattern an
+  earlier phase of the same payload leaves in reused memory can counterfeit. It
+  also censuses all four targets of the oracle's pass, not just the resolve one.
+
+Measured, the decisive run (`20260922T160651821Z`, log
+`1737a9bb1f187ec2c3f7d381be33469e7f166872541f39bab4bf3bac159e6d9`, payload eboot
+`fb7c519df9339de207f5b9605c1cfa69cb4edb639d3788c8d579670f55dd0f4e`):
+
+```text
+PS5VK_RESOLVE_CLEAR_PREPARED serial=7 target=1 word=ffbf8040 bytes=131072
+PS5VK_RESOLVE_DRAW serial=7 subpass=0 samples=4 colour=0 resolve=1 targets=1 words=37
+PS5VK_GRAPHICS_PREPARED serial=7 draws=3 words=228
+PS5VK_SAMPLE_RATE_TARGET_CENSUS marker=source_target_map words=65536 distinct=5 clear_hits=61440 sample_hits=4096 average_hits=0 verdict=0 value0=ff000004 hits0=1024 first0=0 last0=3327 value1=ffbf8040 hits1=61440 value2=ff000008 hits2=1024 value3=ff00000c hits3=1024 value4=ff000010 hits4=1024
+PS5VK_SAMPLE_RATE_RESOLVED extent=32x32 words=32768 distinct=2 clear_hits=31744 sample_hits=0 average_hits=1024 verdict=1 value0=ff00000a hits0=1024 first0=0 last0=3327 value1=ffbf8040 hits1=31744
+```
+
+The resolve target holds the AVERAGE (`ff00000a`, R = 10) across exactly its
+32x32 plane and no sample's value anywhere in its span, with the pass clear in
+the tiled padding; the source holds the four distinct sample planes the SPREAD
+pattern wrote (4, 8, 12, 16). Every other phase of the walk passes in the same
+run: `PS5VK_SAMPLE_RATE_SHADED ... verdict=1`, `PS5VK_SAMPLE_RATE_FETCH ...
+sample_index=0 ... verdict=1` and `sample_index=3 ... value=ff000003 ... verdict=1`,
+`PS5VK_SAMPLE_RATE_TARGETS ... subpasses=2 ... preserved_hits=4096 verdict=1`, and
+the lifecycle closes clean (`PS5VK_PLATFORM_CLOSE rc=0 allocations_bytes=0`,
+`PS5VK_GRAPHICS_API_CLEANUP_COMPLETE`, `BYE seq=367`).
+
+The runs that named each layer, every one of them a clean lifecycle (each entry
+is run id, log sha256 prefix, payload eboot sha256 prefix, and what it showed):
+
+- `20260922T155027168Z` / `7b8c12468891fd39` / `d0084438` - the oracle's pass
+  executes end to end for the first time (submit `rc=0`, `draws=3`), and the
+  resolve target reads back as four sample-looking values.
+- `20260922T155421552Z` / `a7dae8bd647c5349` / `63dcc5a8` - the sharpened oracle
+  is in place, and the TWO-SUBPASS verdict collapses to 0: the two phases of the
+  walk had been sharing one subpass-0 module, so the spread pattern had replaced
+  the flat one the two-subpass variant measures. Separated into their own
+  modules.
+- `20260922T155629250Z` / `3e8f8a3b352e0008` / `c1c37579` - modules separated,
+  two-subpass verdict back to 1, all four targets censused. The resolve target's
+  content is byte-for-byte the 0..3 pattern and clear of the witness phase
+  earlier in the same payload: it is STALE MEMORY, not a resolve result.
+- `20260922T155759226Z` / `a0ba629adae5d43f` / `23380172` - per-sample shading
+  enabled, so the source shows four distinct planes (4, 8, 12, 16) and the
+  resolve's expected average (10) is distinguishable from every sample. The
+  target is still stale, and the target registers differ from the source's in
+  their address word only.
+- `20260922T155923914Z` / `78fbeaff61953ce2` / `f004d02b` - the missing vertex
+  and instance counts: the emission grows from 8 words to 37 and the submission
+  from 199 to 228, and the target is STILL untouched.
+- `20260922T160123400Z` / `6f80a485a1a7b47b` / `0cb256b2` - the resolve target's
+  own `LOAD_OP_CLEAR` is honoured, so the target reads back as one value across
+  the whole span (`clear_hits=32768`): the draw writes nothing into it, rather
+  than writing something that looked like stale data. The image spans logged in
+  the same run (`200020000` for the resolve target) match the target register's
+  address word exactly, so the draw IS aimed at the right memory.
+- `20260922T160301551Z` / `e1b4bcbd732d0d7f` / `752b67de` - the pipeline's blend
+  block carries `CB_TARGET_MASK`; a synthetic pipeline that sets only
+  `color_write_mask` hands the hardware a zero mask. Set both, as
+  `vkCreateGraphicsPipelines` does. The target is still untouched.
+- `20260922T160423999Z` / `72a8f71398b587bd` / `400a7339` - the emitted words are
+  logged: the barrier, the AGC context and link packets, and a
+  `PKT3_DRAW_INDEX_AUTO` of three vertices are all there, so the draw leaves the
+  queue as a draw. The context address it references is the one the procedure
+  prepared.
+- `20260922T160651821Z` / `1737a9bb1f187ec2` / `fb7c519d` - the last change:
+  the prepared draw and the loaded shader pair are handed to the JOB instead of
+  being released inside the walk. `PS5VK_SAMPLE_RATE_RESOLVED ... verdict=1`.
+
+What this establishes: the pinned oracle's pass runs end to end through this
+driver, its per-sample reads deliver the plane each index names, and its resolve
+attachment receives the AVERAGE of the samples - written by a draw the driver
+owns, on hardware, with no sample's value anywhere in the target. What it does
+not establish yet: no upstream CTS leaf has been run against this path, the row
+stays a blocker, and nothing is advertised. `make check` is green; the console
+window that produced this run left the acceptance payload restored and
+`running=none`.
+
+## The focused CTS selection, and the compiler assertion behind it (2026-09-22)
+
+The row's last axis is CTS, and this window both measured it and named the
+blocker - in the compiler, not in the driver's execution path.
+
+Two runs of the same measurement selection (512 cases: the frozen 462-case
+acceptance set plus the 50 `t06-sample-rate-pending` leaves moved into `cases`)
+say the whole story:
+
+- **Without the feature advertised** (`PS5VK_SAMPLE_RATE_DIAGNOSTIC` unset, so
+  the shipping platform does not set the bit): run `20260922T173812017Z`, log
+  `77ff13e863d48a86fdf9c889502ce4d4a8e9abe75cbd8349c6db80f3a2ae4cf8`, payload
+  eboot `bea19ce65db1c2dc328e6134d211c3e1acc6e3c9f9b9d0b1c678cacec5f9c99c` -
+  `Test execution complete: pass=462 fail=0 notSupported=50 total=512`,
+  `UPSTREAM_CTS_COMPLETE status=0`, clean `BYE`. dEQP skips the leaves at
+  feature-query time, so no leaf is judged at all.
+- **With it advertised** (the measurement switch on; the shipping bit is still
+  off): run `20260922T175103500Z`, log
+  `d4ca09dbce54431b3b863a887ed84122e4e50f83124f941da23f3da791cbd631`, payload
+  eboot `9735d96702e8ab94e159972660e8660c0896cab80ddec68ea4e779f4b62af31f` - the
+  process dies inside the first sample-rate leaf that actually runs,
+  `dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle`,
+  and the log ends without `BYE` (`clean=false`).
+
+The payload now logs the case each run is in (`UPSTREAM_CTS_CASE`, added here
+because an unclean close leaves no result to name), the queue preparation phase
+(`PS5VK_GRAPHICS_PHASE`), and the front-end calls that build a case
+(`PS5VK_IMAGE_CREATE`, `PS5VK_IMAGE_BIND`, `PS5VK_IMAGE_VIEW`,
+`PS5VK_RENDER_PASS_CREATE`, `PS5VK_FRAMEBUFFER_CREATE`, `PS5VK_PIPELINE_CREATE`,
+`PS5VK_NATIVE_PIPELINE_CREATE`). The last records of the failing run are:
+
+```text
+UPSTREAM_CTS_CASE name=dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle
+PS5VK_IMAGE_CREATE format=37 samples=2 usage=00000011 extent=32x32
+PS5VK_IMAGE_BIND samples=2 usage=00000011 extent=32x32
+PS5VK_IMAGE_CREATE format=37 samples=1 usage=00000013 extent=32x32
+PS5VK_IMAGE_BIND samples=1 usage=00000013 extent=32x32
+PS5VK_IMAGE_VIEW format=37 type=1
+PS5VK_IMAGE_VIEW format=37 type=1
+PS5VK_RENDER_PASS_CREATE attachments=2 subpasses=1 dependencies=0
+PS5VK_FRAMEBUFFER_CREATE attachments=2 extent=32x32 layers=1
+PS5VK_PIPELINE_CREATE subpass=0 samples=2 stages=2 topology=3 vb=1 va=2 colors=1 dyn=0 ds=1 rp=1
+```
+
+and then nothing: the native pipeline entry is never reached, so the death is
+inside `vkCreateGraphicsPipelines`' own front-end/compile phase for that one
+call.
+
+The cause was then reproduced on the host, outside the console, with the
+sources the run itself logged: the case's vertex and fragment GLSL were
+extracted from the reassembled QPA, compiled with `glslangValidator -V
+--target-env vulkan1.0`, and handed to the same runtime compiler the console
+uses (`ps5vk_runtime_graphics_compile`), under AddressSanitizer. The pair
+aborts:
+
+```text
+SPIR-V WARNING: Unsupported SPIR-V capability: SpvCapabilitySampleRateShading (35)
+src/amd/common/nir/ac_nir.c:185: ac_nir_load_arg_at_offset: Assertion `arg.used' failed.
+  #0 ac_nir_load_arg_at_offset
+  #7 ac_nir_unpack_arg (rshift=24, bitwidth=1)
+  #9 lower_abi_instr            src/amd/vulkan/nir/radv_nir_lower_abi.c:455
+  #13 radv_nir_lower_abi
+  #14 radv_postprocess_nir      src/amd/vulkan/radv_postprocess_nir_standalone.c:283
+  #15 psbc_compile_impl         libpsbc/psbc_compile.c:3623
+  #17 ps5vk_runtime_graphics_compile
+```
+
+`radv_nir_lower_abi.c:455` is the `load_ps_iter_mask_amd` case, which unpacks the
+`PS_STATE_PS_ITER_MASK` bit out of the `ps_state` argument - and that argument is
+not marked used for this compile.
+
+Bisected by hand with the same harness, one shader at a time:
+
+| fragment stage | result |
+| -------------- | ------ |
+| reads `gl_SampleID`, never `gl_FragCoord` (the sample-rate probe's spread module) | compiles |
+| reads `gl_FragCoord`, never `gl_SampleID` | compiles |
+| reads `gl_FragCoord` and declares `gl_SampleID` (the CTS leaf's own module - its `sampleId` is even dead code) | aborts with the assertion above |
+
+The compiler skips its fragment-coordinate lowering whenever the shader
+declares sample shading (`libpsbc/psbc_compile.c`: the
+`radv_nir_lower_opt_fs_frag_pos` call is guarded by
+`!gfx_state.ms.sample_shading_enable && !nir->info.fs.uses_sample_shading`), and
+`gfx_state.ms.sample_shading_enable` is never set from the compile options at
+all, so the two facts cannot agree: the shader keeps a built-in whose argument
+the ABI never marks used. A driver-side attempt was measured and REJECTED:
+compiling the pixel stage with `rasterization_samples=1` whenever the pipeline
+does not enable sample shading does not avoid the abort, so the fix belongs in
+the compiler's fragment-coordinate/sample-shading path. That change was
+reverted; no rendering behaviour changed in this window.
+
+What this establishes: the CTS blocker is a pinned-compiler abort on one shape
+(a fragment stage that reads `gl_FragCoord` and declares `gl_SampleID`), with a
+host reproduction that needs no console. What it does not establish: the
+remaining 49 leaves have not been reached, the row stays a blocker, and nothing
+is advertised.
+
+## The compiler abort fixed, and the leaves judged at last (2026-09-22)
+
+The abort above was fixed where it lives - in the pinned compiler - and with it
+the focused selection stopped dying and started judging the leaves.
+
+The compiler is a PINNED dependency: `tools/build_sdk.py` validates its archive
+against the identity stamp `tools/build_psbc.py` writes (source commit +
+archive sha256), so a loose edit is not shippable. The fix is therefore a commit
+in the compiler's own repository:
+
+- `opengnm-psbc` branch `codex/fragment-coord-sample-shading`, commit
+  `992ba13385a77fbc49683da2124f5a9a12f09fd8`, PR
+  https://github.com/mpereiraesaa/opengnm-psbc/pull/23. It runs
+  `radv_nir_lower_opt_fs_frag_pos` unconditionally for fragment stages in
+  standalone compiles, as `radv_pipeline_graphics.c` already does, instead of
+  skipping it whenever the pipeline or the shader asks for sample shading. The
+  skip is what let the pass run later, inside `radv_postprocess_nir`, after
+  `radv_nir_shader_info_pass` had decided the stage arguments - so the shader
+  kept `load_use_float_frag_coord_xy_amd` with no `ps_state` argument, and the
+  compiler aborted on `assert(arg.used)`.
+- `build/libpsbc.ps5.a` rebuilt with that identity (`source_commit
+  992ba13385a77fbc49683da2124f5a9a12f09fd8`).
+
+Measured, run `20260922T183509764Z`, log
+`6cb7d0d655e2c20c20cc35bed9f4a7bc5901eddc817a5f7b94a4bd7d0098824d`, payload
+eboot `33b84bc0da289e726ef5c006c8fb993ecbb2b15ddc1ae0651c8c0db203b1fea5`: 512
+expected, 512 reported, **462 pass, 50 fail, 0 notSupported**, clean lifecycle.
+No case dies any more, and every sample-rate leaf is judged for the first time.
+
+Two driver-side refusals then had to agree with what recording had let through,
+both of them measured on the console in the same window:
+
+1. The prelude refused the pinned leaves' own first-use barrier
+   (`UNDEFINED -> COLOR_ATTACHMENT_OPTIMAL`, no source access, the
+   colour-attachment write as destination, `TOP_OF_PIPE -> COLOR_ATTACHMENT_OUTPUT`)
+   for the multisampled colour image and the single-sample attachments the oracle
+   reads back - `PS5VK_GRAPHICS_PREPARE_FAILED ... phase=prelude site=701`. The
+   executor performs exactly this transition itself in the pass prelude, and the
+   recorder already accepted it, so `native/upload_commands_ps5.h` now accepts it
+   for those roles (run `20260922T185428184Z`, log
+   `7f46b94674cd2233f35252e16ec969c09493f83899b2a1a95f57931fd1a58021`, payload
+   `18b0efd3dc3b7c9cc2141c370c8f9ede556d982fd7e433255c23c31f6568d1d4`: the
+   prelude refusal is gone).
+2. The driver's own resolve draw then failed building the multisampled resource
+   record, because `ps5vk_image_resource_descriptor` required the
+   INPUT_ATTACHMENT usage bit - and the pinned CTS resolves an image it creates
+   with COLOR_ATTACHMENT and TRANSFER_SRC alone (`RENDER_TYPE_RESOLVE`). A
+   subpass resolve is implementation work, not an application's descriptor read,
+   so `src/texture_descriptor.c` now requires the colour-attachment role for a
+   multisampled record while the app-facing input-attachment gate keeps its
+   strict usage rule (`tests/test_texture_descriptor.c` pins both directions).
+
+Measured, run `20260922T185644808Z`, log
+`d895f7c050562780e6572c5db46b9eb8fd2055f7fab23bec75afd110620d01d6`, payload
+eboot `3b9bc090122363b64b783625463d80a550e8fa31cfe63dbc30d2c70dbafaee33`:
+**475 pass, 37 fail**, clean lifecycle, and thirteen sample-rate leaves PASS -
+the first upstream CTS leaves this row has ever had green, including
+`min_sample_shading.min_0_0.samples_2.primitive_triangle` and its `.samples_4`
+sibling.
+
+The remaining 37 failures are named, and they are three different problems:
+
+| count | deqp result | what it means |
+| ----- | ----------- | ------------- |
+| 20 | `VK_ERROR_FEATURE_NOT_PRESENT at vkPipelineConstructionUtil.cpp:178` | plain VS+FS POINT and LINE topologies, which this profile has never served (the same limitation T05 recorded as a diagnostic) |
+| 7 | `Got less unique colors than requested through minSampleShading` | the pixel-iteration count our state asks for is not the one the oracle expects for a fractional `minSampleShading` |
+| 8 | `Did not get any covered pixel` | a rendering/coverage defect on the leaves that reach the comparison with no covered pixel |
+| 2 | `Invalid color` | a rendered value outside the expected set |
+
+What this establishes: the CTS axis is no longer blocked by the compiler, the
+payload runs all 512 cases to a clean close, and thirteen focused leaves pass.
+What it does not establish: the row is not complete - 37 leaves still fail for
+the three reasons above, the compiler fix still needs merging in its own
+repository, and nothing is advertised.
+
+## The sample-shading state the compiler was never told (2026-09-22)
+
+The unique-colours family was expected to be the per-sample fragment coordinate:
+`radv_nir_lower_opt_fs_frag_pos` chooses between the per-sample position path
+and the pixel-centre one from the pipeline's sample-shading state, and the
+standalone compiler had no way to be told that state - it emitted a runtime
+selection reading the PS state user SGPR, which this ABI does not supply. The
+state was therefore published (`PsbcCompileOptions::sample_shading_enable`,
+opengnm-psbc branch `codex/fragment-coord-sample-shading`, commit
+`883747bf04af7746b6ec49e00d2a247a5327e326`, on top of the abort fix) and set
+from the pipeline key in `native/runtime_graphics_compiler.c`.
+
+Measured twice with the rebuilt compiler archive (identity
+`d9fa65080bf5761beaf0032f9a20ab5a1afd957c59814c07ff5d54f4cb4b64e1`), same
+selection, same payload eboot
+`e03fb14b98567c4ac4b5d7d8b8b4583e31e49f893c886c6fadf0b361a85e5b88`:
+
+- run `20260922T191325185Z`, log
+  `fd8b931eece17c1984d91a2cbca98cf0126ace48e1b1413a2f7d55c39556bc16`: 474 pass / 38 fail
+- run `20260922T191416917Z`, log
+  `01a3a3a10950fb681286870c38dd927338621b89ee08bce952bb13ad9543394c`: 477 pass / 35 fail
+
+The honest reading of the two runs together: **the hypothesis was not
+confirmed**. The stable unique-colour failures are unchanged by it - the five
+`min_sample_shading` triangle leaves at min 0.5, 0.75 and 1.0 at both served
+counts - and the leaves that move between runs are the `quad` families, which
+are FLAKY in this driver: across the two runs the coverage and invalid-colour
+sets differ by several leaves each (only one leaf is stable in each of those
+two groups), which is a defect of its own and would fail an acceptance run
+whatever the score. The change is kept because the state it publishes is one
+the compiler legitimately needs and the previously-working shapes still
+compile, but it is NOT the fix for the unique-colour family, and that family
+still needs the hardware per-sample position state to be understood and
+measured - the same way the per-sample sample-id path was.
+
+Current best measurement: 477 pass / 35 fail of 512, of which 20 are the
+plain point/line pipeline refusals, 5 are the stable unique-colour leaves, and
+the rest are the flaky `quad` families. Nothing is advertised.
+
+### What the failing leaves actually contain (2026-09-22)
+
+The unique-colour failure was then read directly out of the run's own report
+instead of inferred: the QPA of run `20260922T191416917Z` carries the three
+images the oracle compares for
+`min_sample_shading.min_1_0.samples_2.primitive_triangle` - the render without
+sample shading and one image per sample of the sample-shaded render - and
+decoding them says exactly what the driver produced:
+
+```text
+noSampleshadingImage : 1024 pixels, 976 zero, 48 of 808000ff
+sampleShadedImage[0] : identical histogram
+sampleShadedImage[1] : identical histogram
+sample image 0 vs 1    : 0 differing pixels
+covered pixel         : sample0 808000ff  sample1 808000ff  noShading 808000ff
+```
+
+`80 80 00 ff` is RGBA8 (0.5, 0.5, 0, 1): the shader's `fract(gl_FragCoord.xy)`
+is the PIXEL CENTRE for every sample, and the two per-sample images are
+byte-identical - so the fragment coordinate does not vary per sample, which is
+precisely what the oracle's `expectedUniqueSamplesCount =
+round(minSampleShading * samples)` then rejects at min 0.5/0.75/1.0.
+
+Two host experiments then placed the defect:
+
+- Compiling the leaf's own fragment module with the pipeline's sample-shading
+  state set and clear produces *byte-identical* machine code (104 bytes, same
+  checksum), so the state published in this window is not what the
+  fragment-coordinate lowering keys on - the shader's own
+  `nir->info.fs.uses_sample_shading` already decides it, which is why the
+  measurement above could not move.
+- The per-sample position itself is not in the shader's own arithmetic:
+  `radv_nir_lower_opt_fs_frag_pos` lowers per-sample `gl_FragCoord` to
+  `pixel_coord + sample_pos`, and the pinned tree resolves `sample_pos` through
+  `nir_load_sample_positions_amd` into a fetch from the RING at
+  `RING_PS_SAMPLE_POSITIONS` (`radv_nir_lower_abi.c`). This driver supplies no
+  sample-position table and no ring offset for the fragment stage, so the read
+  cannot return the sample's location.
+
+That is the next slice, and it is now stated as a driver-side gap with two
+concrete halves: supply the sample positions the fragment path reads, and make
+the compile decision follow the pipeline's state rather than only the shader's
+declaration.
+
+### Correction to the paragraph above (2026-09-22)
+
+The claim that this shader's per-sample coordinate needs the ring's
+sample-positions table is WRONG, and the compiled ISA says so. Disassembling the
+leaf's own fragment module (compiled through the same runtime compiler with
+`PSBC_DEBUG_DISASM=1`) shows it never reads a sample position:
+
+```text
+v_cvt_f32_u32                     ; the integer pixel coordinate
+v_add_f32 0.5, ...                ; pixel_coord + 0.5, the pixel centre
+v_cndmask_b32 <+0.5 value>, <interpolated coord>, <condition>
+v_fract_f32 ...
+```
+
+The condition comes from `load_use_float_frag_coord_xy_amd`, i.e. the
+`PS_STATE_USE_FLOAT_FRAG_COORD_XY` bit of the PS-state user SGPR - a slot this
+driver never writes - so it reads as zero, the shader takes the pixel-centre
+branch on every iteration, and every sample gets (0.5, 0.5). That is the
+failure; no sample-position table is involved for this shader at all.
+
+The next slice is therefore: (1) make the pipeline say which fragment
+coordinate it really delivers - the SPI input-address register's
+`POS_FIXED_PT_ENA` (`ac_shader_util.c` reads it, and
+`ac_nir_lower_intrinsics_to_args.c` unpacks the `pos_fixed_pt` argument), since
+per-sample positions are only reachable with it disabled and the float path
+selected - and (2) publish and program the PS-state user SGPR
+(`ps_state_user_data_dword`, alongside the existing base-vertex and
+push-constant slots) with that bit plus `NUM_SAMPLES`, `PS_ITER_MASK`
+(`ac_get_ps_iter_mask`), `USE_QUAD_POS` and `USE_SAMPLE_MASK_IN`, so the branch
+and the hardware agree. Nothing about the rendered images above changes: they
+still show the pixel centre for every sample.

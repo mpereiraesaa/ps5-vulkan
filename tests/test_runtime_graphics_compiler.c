@@ -1,6 +1,7 @@
 #include "runtime_graphics_compiler.h"
 #include "compilation_cache.h"
 #include "spirv_graphics_interface.h"
+#include "resolve_program.h"
 #include "vertex_format_probe.h"
 #include "descriptor_table_layout.h"
 #include <assert.h>
@@ -82,6 +83,53 @@ static uint32_t compiled_ps_input_ena(const char *fragment_path)
     ps5vk_runtime_graphics_free(NULL,pair);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
     return ena;
+}
+
+/* The sample-rate contract the compiler adapter repeats (DXVK262-T06): a count
+ * this profile implements compiles, per-sample shading additionally needs the
+ * feature the logical device enabled, and a count outside the envelope is
+ * refused before any compiler work. The count reaches PSBC as
+ * rasterization_samples, which is the option the pinned compiler turns into
+ * its per-sample pixel ABI; the fragment metadata below is what proves the
+ * option was accepted rather than ignored. */
+static void check_sample_rate_compilation(void)
+{
+    struct ps5vk_graphics_key key={
+        /* The witness pair: an oversized triangle that covers the whole target
+         * and a fragment module that reads gl_SampleID, which is what makes the
+         * compiled program a per-sample one - the interface has to accept the
+         * built-in and the compiler has to accept the count together. */
+        .vertex=read_module("build/runtime-graphics/sample_id.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/sample_id.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    /* 4x without per-sample shading: the multisample state the front end
+     * accepts compiles, and it is a different program from the 1x one. */
+    key.samples=VK_SAMPLE_COUNT_4_BIT;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *quad=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&quad)==VK_SUCCESS && quad);
+    ps5vk_runtime_graphics_free(NULL,quad);
+    /* Per-sample shading needs sampleRateShading on the logical device, and
+     * the fraction the front end accepted. */
+    key.sample_shading_enable=VK_TRUE;
+    key.min_sample_shading=0.5f;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    key.feature_mask|=PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *shaded=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&shaded)==VK_SUCCESS && shaded);
+    ps5vk_runtime_graphics_free(NULL,shaded);
+    /* A fraction outside [0,1] is not a state this contract carries, and a
+     * count outside the envelope is refused by the adapter itself. */
+    key.min_sample_shading=1.5f;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    key.min_sample_shading=1.0f;
+    key.samples=VK_SAMPLE_COUNT_8_BIT;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
 static void check_fragment_position(void)
@@ -933,6 +981,96 @@ static void check_geometry_output_components(void)
  * The same binding on a pipeline without a geometry stage is still refused,
  * because the stage projection would drop it and the draw would read a table the
  * caller never bound. */
+/* The per-sample fetch stage the pinned multisample oracle compiles
+ * (DXVK262-T06): a multisampled subpass input read whose sample index comes
+ * from the uniform block, exactly as upstream declares it. Measured with the
+ * real adapter and the pinned compiler: the interface accepts the module, the
+ * descriptor table layout carries the two bindings the stage reads - the input
+ * attachment at set 0 binding 0 and the uniform buffer at binding 1 - the
+ * compiler compiles it, and the compiled metadata names both bindings as used.
+ * An earlier hand probe of this stage refused, and that was the probe carrying
+ * no descriptor signature at all: this case is what keeps that reading from
+ * coming back as a "the compiler cannot do it" claim. */
+static void check_subpass_fetch_compilation(void)
+{
+    struct ps5vk_set_signature sets[1]={0};
+    sets[0].count=2;
+    sets[0].binding[0].count=1;sets[0].binding[0].first=0;
+    sets[0].binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sets[0].type[0]=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    sets[0].binding[1].count=1;sets[0].binding[1].first=1;
+    sets[0].binding[1].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sets[0].type[1]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    /* Empty slots keep the canonical prefix, exactly as above. */
+    for(unsigned b=2;b<PS5VK_MAX_BINDINGS;++b)sets[0].binding[b].first=2;
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/runtime_subpass_fetch.frag.spv"),
+        .descriptor_set_count=1,.descriptor_sets=sets,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_4_BIT,.color_write_mask={15},
+        .feature_mask=PS5VK_FEATURE_SAMPLE_RATE_SHADING};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *out=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->fragment.machine_code_size);
+    /* Both descriptors the stage names reach the compiled program: without the
+     * input attachment the read would have no source, and without the uniform
+     * buffer it would have no sample index. */
+    assert(p->fragment.metadata.descriptor_set_valid[0]);
+    assert(p->fragment.metadata.descriptor_used_binding_mask[0]==UINT64_C(0x3));
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    /* The same module without the layout's signature is refused, which is the
+     * shape that produced the wrong reading: the refusal is the missing
+     * declaration, not the shader. */
+    struct ps5vk_graphics_key undeclared={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/runtime_subpass_fetch.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_4_BIT,.color_write_mask={15},
+        .feature_mask=PS5VK_FEATURE_SAMPLE_RATE_SHADING};
+    assert(ps5vk_spirv_graphics_interface(&undeclared));
+    const void *refused=(void *)1;
+    assert(ps5vk_runtime_graphics_compile(NULL,&undeclared,&refused)!=VK_SUCCESS && !refused);
+    free((void *)undeclared.vertex.words);free((void *)undeclared.fragment.words);
+}
+
+/* The driver's OWN resolve stages (DXVK262-T06): one averaging fragment per
+ * served sample count, paired with the oversized-triangle vertex stage and
+ * compiled through the same runtime compiler the pipeline objects use. The
+ * count the driver has no stage for stays refused rather than being resolved
+ * with a stage that reads the wrong number of samples. */
+static void check_resolve_program(void)
+{
+    for (unsigned index = 0; index < 2; ++index) {
+        const VkSampleCountFlagBits samples = index ? VK_SAMPLE_COUNT_4_BIT :
+            VK_SAMPLE_COUNT_2_BIT;
+        struct ps5vk_resolve_program program = {0};
+        assert(ps5vk_resolve_program_acquire(NULL, samples, &program) == VK_SUCCESS &&
+               program.pair);
+        const struct ps5vk_runtime_graphics_program *pair = program.pair;
+        /* The averaging stage reads the input attachment and exports one colour
+         * target: that is the whole shape a resolve draw needs. */
+        assert(pair->fragment.machine_code_size);
+        assert(pair->fragment.metadata.descriptor_set_valid[0]);
+        assert(pair->fragment.metadata.descriptor_used_binding_mask[0] == UINT64_C(0x1));
+        ps5vk_resolve_program_release(NULL, &program);
+        assert(!program.pair);
+    }
+    /* 8x has no generated stage, and a count without a stage is refused rather
+     * than averaged by a stage that reads the wrong samples. */
+    struct ps5vk_resolve_program eight = {0};
+    assert(ps5vk_resolve_program_acquire(NULL, VK_SAMPLE_COUNT_8_BIT, &eight) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !eight.pair);
+    assert(ps5vk_resolve_program_acquire(NULL, VK_SAMPLE_COUNT_1_BIT, &eight) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !eight.pair);
+}
+
 static void check_geometry_stage_descriptor_visibility(void)
 {
     struct ps5vk_set_signature sets[1]={0};
@@ -2039,6 +2177,9 @@ int main(void)
     check_depth_only_target();
     check_fragment_distance_read();
     check_fragment_position();
+    check_sample_rate_compilation();
+    check_subpass_fetch_compilation();
+    check_resolve_program();
     check_dual_source_exports();
     check_dual_source_blend_contract();
     check_two_mrt_exports();

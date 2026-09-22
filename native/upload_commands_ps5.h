@@ -8,6 +8,7 @@
 #include "graphics_sync.h"
 #include "color_barrier.h"
 #include "vk_image.h"
+#include "sample_rate_contract.h"
 
 /* Shared by a render prelude and an independent transfer submission. Prepare
  * only emits commands and records tentative layouts: it never copies pixels
@@ -197,6 +198,26 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
                 ((!color || b->image==color) && ps5vk_color_discard_barrier(b)) ||
                 ((!color || b->image==color) && ps5vk_color_readback_reuse_barrier(b)) ||
+                /* The pinned multisample leaves' own first-use transition: the
+                 * multisampled colour image and the single-sample attachments
+                 * the oracle reads back each go from UNDEFINED to
+                 * COLOR_ATTACHMENT_OPTIMAL for the colour-attachment write, from
+                 * TOP_OF_PIPE to COLOR_ATTACHMENT_OUTPUT. That is the ordinary
+                 * "first use as a render target" barrier, and the executor
+                 * performs exactly this transition itself in the pass prelude;
+                 * the recorder already accepts it for these roles, so refusing
+                 * it here refused a submission the front end had let through
+                 * (measured: min_sample_shading.min_0_0.samples_2.primitive_triangle
+                 * -> vkQueueSubmit VK_ERROR_FEATURE_NOT_PRESENT, prelude site 701). */
+                (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+                 b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                 !b->srcAccessMask &&
+                 b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                 op->src_stage==VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT &&
+                 op->dst_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+                 (ps5vk_colour_readback_image(b->image) ||
+                  (b->image->info.samples!=VK_SAMPLE_COUNT_1_BIT &&
+                   ps5vk_multisampled_color_usage(b->image->info.usage)))) ||
                 ps5vk_array_color_barrier(b)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);

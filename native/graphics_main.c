@@ -13,6 +13,7 @@
 #include "fragment_store_probe.h"
 #include "dual_source_probe.h"
 #include "two_mrt_probe.h"
+#include "sample_rate_probe.h"
 #include "input_attachment_gate.h"
 #include "multiview_witness.h"
 #include "clip_cull_witness.h"
@@ -89,6 +90,9 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #endif
 #ifndef PS5VK_DUAL_SOURCE_PROBE
 #define PS5VK_DUAL_SOURCE_PROBE 0
+#endif
+#ifndef PS5VK_SAMPLE_RATE_PROBE
+#define PS5VK_SAMPLE_RATE_PROBE 0
 #endif
 #ifndef PS5VK_TWO_MRT_PROBE
 #define PS5VK_TWO_MRT_PROBE 0
@@ -4389,6 +4393,13 @@ int main(void)
      * otherwise. A report of one without the feature is the shipping state;
      * either value with the other feature state is a profile inconsistency. */
     VkPhysicalDeviceFeatures device_features;vkGetPhysicalDeviceFeatures(physical,&device_features);
+#if PS5VK_SAMPLE_RATE_PROBE
+    /* The measurement reports the surface count the query path answers with
+     * before the scene runs; the scene itself is dispatched after the device
+     * exists, like every other probe. */
+    if(!device_features.sampleRateShading)
+        fail("sample-rate-diagnostic-feature",-1);
+#endif
 #if PS5VK_FRAGMENT_STORE_PROBE
     if(!device_features.fragmentStoresAndAtomics)
         fail("fragment-store-diagnostic-feature",-1);
@@ -4428,7 +4439,7 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
-#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE || PS5VK_SAMPLE_RATE_PROBE
     VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
     requested_features.drawIndirectFirstInstance=VK_TRUE;
@@ -4452,6 +4463,14 @@ int main(void)
      * which is the fail-closed evidence for every build that is not the
      * measurement one. */
     requested_features.independentBlend=VK_TRUE;
+#endif
+#if PS5VK_SAMPLE_RATE_PROBE
+    /* The measurement scene exists to exercise the multisample path a device
+     * reports, so it enables sampleRateShading on the logical device: the
+     * platform bit is what makes the query report it, this is what makes
+     * vkCreateDevice accept a request for it, and the front end refuses the
+     * state on a build whose platform reports no such capability. */
+    requested_features.sampleRateShading=VK_TRUE;
 #endif
     di.pEnabledFeatures=&requested_features;
 #endif
@@ -4507,6 +4526,79 @@ int main(void)
         .two_mrt_fragment = ps5vk_runtime_two_mrt_fragment,
         .two_mrt_fragment_words = sizeof(ps5vk_runtime_two_mrt_fragment) / 4};
     CHECK(ps5vk_two_mrt_probe(device, &two_mrt_modules));
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_SAMPLE_RATE_PROBE
+    /* The measurement is the whole run: a multisampled colour target is
+     * created, cleared through the native path, submitted, and read back from
+     * its own storage. The oracle - one distinct 32-bit value across a span
+     * that is the sample count times the single-sample footprint - cannot pass
+     * on a surface sized for one sample. */
+    {
+        struct ps5vk_sample_rate_probe_params sample_rate_params = {
+            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 64u,
+            .clear = {0.25f, 0.5f, 0.75f, 1.0f},
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .fragment = ps5vk_runtime_sample_id_fragment,
+            .fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4};
+        CHECK(ps5vk_sample_rate_probe(device, &sample_rate_params));
+    }
+#if PS5VK_SAMPLE_RATE_PROBE == 2
+    /* The same run then walks the CTS oracle's render pass one step at a time:
+     * the multisampled attachment with the usage that oracle builds, the
+     * resolve and per-sample targets, the input-attachment descriptor set, the
+     * pass with its resolve and preserve lists, the two pipelines and the
+     * submission. The last step in the log is the step that did not return. */
+    {
+        struct ps5vk_sample_rate_shape_params shape_params = {
+            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 32u, .sample_shading_min = 1.0f,
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .write_fragment = ps5vk_runtime_subpass_write_fragment,
+            .write_fragment_words = sizeof(ps5vk_runtime_subpass_write_fragment) / 4,
+            .spread_fragment = ps5vk_runtime_subpass_write_spread_fragment,
+            .spread_fragment_words = sizeof(ps5vk_runtime_subpass_write_spread_fragment) / 4,
+            .fetch_fragment = ps5vk_runtime_subpass_fetch_fragment,
+            .fetch_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_fragment) / 4,
+            .sample_fragment = ps5vk_runtime_sample_id_fragment,
+            .sample_fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4,
+            .fetch_const_fragment = ps5vk_runtime_subpass_fetch_const_fragment,
+            .fetch_const_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_const_fragment) / 4,
+            .resolve_fragment = ps5vk_runtime_subpass_resolve_fragment,
+            .resolve_fragment_words = sizeof(ps5vk_runtime_subpass_resolve_fragment) / 4};
+        CHECK(ps5vk_sample_rate_shape_probe(device, &shape_params));
+    }
+    /* The same walk at the OTHER served count. The focused CTS selection's
+     * first sample-rate leaf that reaches execution is
+     * min_sample_shading.min_0_0.samples_2.primitive_triangle, and the payload
+     * process dies inside it - so the 2x shape is the one this run has to walk,
+     * step by step, for the failure to name itself the way the 4x walk did. */
+    {
+        struct ps5vk_sample_rate_shape_params shape_params = {
+            /* min_sample_shading 0.0 is the state the crashing leaf asks for. */
+            .samples = VK_SAMPLE_COUNT_2_BIT, .extent = 32u, .sample_shading_min = 0.0f,
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .write_fragment = ps5vk_runtime_subpass_write_fragment,
+            .write_fragment_words = sizeof(ps5vk_runtime_subpass_write_fragment) / 4,
+            .spread_fragment = ps5vk_runtime_subpass_write_spread_fragment,
+            .spread_fragment_words = sizeof(ps5vk_runtime_subpass_write_spread_fragment) / 4,
+            .fetch_fragment = ps5vk_runtime_subpass_fetch_fragment,
+            .fetch_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_fragment) / 4,
+            .sample_fragment = ps5vk_runtime_sample_id_fragment,
+            .sample_fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4,
+            .fetch_const_fragment = ps5vk_runtime_subpass_fetch_const_fragment,
+            .fetch_const_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_const_fragment) / 4,
+            .resolve_fragment = ps5vk_runtime_subpass_resolve_fragment,
+            .resolve_fragment_words = sizeof(ps5vk_runtime_subpass_resolve_fragment) / 4};
+        CHECK(ps5vk_sample_rate_shape_probe(device, &shape_params));
+    }
+#endif
     vkDestroyDevice(device,NULL);
     vkDestroyInstance(instance,NULL);
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");

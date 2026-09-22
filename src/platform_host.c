@@ -51,6 +51,14 @@ __attribute__((weak)) VkResult ps5vk_platform_query(struct ps5vk_platform *p)
      * It is an internal bit: nothing here enumerates VK_KHR_multiview or
      * answers a public query from it. */
     p->supported_features |= PS5VK_FEATURE_MULTIVIEW;
+    /* The host platform also carries the internal sample-rate capability, so
+     * host tests exercise the multisample state contract the console path will
+     * consume (DXVK262-T06): the render pass, framebuffer and pipeline
+     * frontends accept 2x/4x and per-sample shading from this mask, exactly as
+     * they will once a measured console platform sets the same bit. It is an
+     * internal bit on a test platform; the console platform sets it only after
+     * its native multisample path is measured. */
+    p->supported_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
     const struct ps5vk_physical_profile_info profile = {
         .name = "ps5vk host platform",
         .heap_size = p->max_allocation,

@@ -1,4 +1,9 @@
 #include "draw_prepare_ps5.h"
+
+/* Which refusal inside prepare_draw fired (diagnostic only, like the runtime
+ * graphics adapter's site word): a submission that a native shape gate rejects
+ * otherwise leaves no trace beyond the Vulkan result. */
+unsigned ps5vk_draw_prepare_site;
 #include "vertex_fetch.h"
 #include "vertex_descriptor.h"
 #include "texture_descriptor.h"
@@ -122,42 +127,49 @@ void ps5vk_native_release_draw(struct ps5vk_prepared_draw *draw)
 }
 static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const VkRect2D *area,
     const ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT],const struct ps5vk_vertex_fetch_table *vertices,
-    uint64_t shader_address,struct ps5vk_prepared_draw *out)
+    uint64_t shader_address,const struct ps5vk_target_set *targets,struct ps5vk_prepared_draw *out)
 {
-    if (!out || out->backing || out->state) return VK_ERROR_UNKNOWN;
+    if (!out || out->backing || out->state) { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
     if (!d || !op || (op->type != PS5VK_DRAW && op->type != PS5VK_DRAW_INDEXED) || !op->pipeline || op->pipeline->device != d ||
         !op->framebuffer || op->framebuffer->device != d || !op->render_pass || op->render_pass->device != d ||
-        !d->memory.allocate || !d->memory.release || !d->memory.flush) return VK_ERROR_UNKNOWN;
+        !d->memory.allocate || !d->memory.release || !d->memory.flush) { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
     VkFramebuffer fb = op->framebuffer;
-    /* One prepared target per colour attachment the framebuffer carries: the
+    /* One prepared target per colour attachment THIS SUBPASS renders into: the
      * draw state programmes attachment zero's block and appends the others. A
-     * framebuffer with no colour role at all is the DEPTH-ONLY shape, and then
-     * the depth target is the one the pass renders into. */
+     * subpass that names no colour role at all is the DEPTH-ONLY shape, and then
+     * the depth target is the one it renders into. Without an explicit target
+     * set the framebuffer's own roles are used, which are subpass 0's - the
+     * meaning every caller before the pinned multisample oracle's pass had. */
+    struct ps5vk_target_set derived;
+    if (!targets) {
+        if (ps5vk_target_set_from_subpass(op->render_pass, fb, 0, &derived) != VK_SUCCESS)
+            { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
+        targets = &derived;
+    }
     if (fb->attachment_count > PS5VK_MAX_ATTACHMENTS ||
-        fb->color_count > PS5VK_MAX_COLOR_ATTACHMENTS ||
-        (fb->color_count && fb->color_attachments[0] >= fb->attachment_count) ||
-        (fb->depth_attachment != VK_ATTACHMENT_UNUSED && fb->depth_attachment >= fb->attachment_count))
-        return VK_ERROR_UNKNOWN;
+        targets->color_count > PS5VK_MAX_COLOR_ATTACHMENTS ||
+        (targets->depth != VK_ATTACHMENT_UNUSED && targets->depth >= fb->attachment_count))
+        { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
     /* Zeroed, so a DEPTH-ONLY draw's unused colour slots never carry a
      * previous call's registers into the draw state. */
     struct ps5vk_target_registers colors[PS5VK_MAX_COLOR_ATTACHMENTS];
     struct ps5vk_target_registers depth;
     memset(colors, 0, sizeof(colors));
     VkResult rc = VK_SUCCESS;
-    for (uint32_t attachment = 0; attachment < fb->color_count; ++attachment) {
-        if (fb->color_attachments[attachment] >= fb->attachment_count)
-            return VK_ERROR_UNKNOWN;
-        rc = ps5vk_native_target(d, fb->attachments[fb->color_attachments[attachment]],
+    for (uint32_t attachment = 0; attachment < targets->color_count; ++attachment) {
+        if (targets->color[attachment] >= fb->attachment_count)
+            { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
+        rc = ps5vk_native_target(d, fb->attachments[targets->color[attachment]],
                                  defaults, &colors[attachment]);
-        if (rc != VK_SUCCESS) return rc;
+        if (rc != VK_SUCCESS) { ps5vk_draw_prepare_site = __LINE__; return rc; }
     }
-    int has_depth = fb->depth_attachment != VK_ATTACHMENT_UNUSED;
-    /* A framebuffer that names neither has no target at all; the render pass
+    int has_depth = targets->depth != VK_ATTACHMENT_UNUSED;
+    /* A subpass that names neither has no target at all; the render pass
      * refuses that shape, and this is the native half of the same rule. */
-    if (!fb->color_count && !has_depth) return VK_ERROR_UNKNOWN;
+    if (!targets->color_count && !has_depth) { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
     if (has_depth) {
-        rc = ps5vk_native_target(d, fb->attachments[fb->depth_attachment], NULL, &depth);
-        if (rc != VK_SUCCESS) return rc;
+        rc = ps5vk_native_target(d, fb->attachments[targets->depth], NULL, &depth);
+        if (rc != VK_SUCCESS) { ps5vk_draw_prepare_site = __LINE__; return rc; }
     }
     struct ps5vk_draw_state plan;
     /* The index width the draw's bound index buffer declares, or zero for a
@@ -168,16 +180,16 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         (op->type == PS5VK_DRAW_INDEXED || op->type == PS5VK_DRAW_INDEXED_INDIRECT) ?
         (op->indices.type == VK_INDEX_TYPE_UINT16 ? 2u : 4u) : 0u;
     rc = ps5vk_native_draw_state(op->pipeline, op->viewports, op->scissors, op->viewport_count,
-        &op->raster, colors, fb->color_count, has_depth ? &depth : NULL, area,
+        &op->raster, colors, targets->color_count, has_depth ? &depth : NULL, area,
         fb->width, fb->height, index_width, &plan);
-    if (rc != VK_SUCCESS) return rc;
+    if (rc != VK_SUCCESS) { ps5vk_draw_prepare_site = __LINE__; return rc; }
     struct ps5vk_descriptor_table_layout tables;
     uint32_t set_mask=0;
     rc=descriptor_plan(d,op,&plan.runtime,&plan.hull_runtime,&tables,&set_mask);
-    if(rc!=VK_SUCCESS)return rc;
+    if(rc!=VK_SUCCESS){ ps5vk_draw_prepare_site = __LINE__; return rc; }
     struct ps5vk_prepared_draw result = {.memory = d->memory, .bytes = sizeof(plan)};
     size_t table_offset=(sizeof(plan)+15u)&~(size_t)15u;
-    if(vertices && (!vertices->count || vertices->count>PS5VK_MAX_VERTEX_BINDINGS))return VK_ERROR_UNKNOWN;
+    if(vertices && (!vertices->count || vertices->count>PS5VK_MAX_VERTEX_BINDINGS)){ ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
     if(vertices)result.bytes=table_offset+16u*vertices->count;
     size_t descriptor_offsets[PS5VK_MAX_SETS]={0};
     for(unsigned s=0;s<PS5VK_MAX_SETS;++s)if(set_mask&(1u<<s)) {
@@ -189,30 +201,30 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
     size_t push_offset=result.bytes;
     uint32_t push_bytes=0;
     if(ps5vk_runtime_push_bytes(&plan.runtime,&plan.hull_runtime,
-            op->push_constant_size,&push_bytes))return VK_ERROR_UNKNOWN;
+            op->push_constant_size,&push_bytes)){ ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
     result.bytes+=push_bytes;
     size_t bounce_offsets[PS5VK_MAX_VERTEX_BINDINGS]={0};
     for(uint32_t i=0;vertices && i<vertices->count;++i) {
         const struct ps5vk_vertex_fetch *vertex=&vertices->bindings[i];
         if(!vertex->address || !((uintptr_t)vertex->address%4))continue;
-        if(result.bytes>SIZE_MAX-3u)return VK_ERROR_OUT_OF_HOST_MEMORY;
+        if(result.bytes>SIZE_MAX-3u){ ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_OUT_OF_HOST_MEMORY; }
         bounce_offsets[i]=(result.bytes+3u)&~(size_t)3u;
-        if(vertex->bytes>SIZE_MAX-bounce_offsets[i])return VK_ERROR_OUT_OF_HOST_MEMORY;
+        if(vertex->bytes>SIZE_MAX-bounce_offsets[i]){ ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_OUT_OF_HOST_MEMORY; }
         result.bytes=bounce_offsets[i]+(size_t)vertex->bytes;
     }
     void *address = NULL;
     rc = result.memory.allocate(result.memory.context, result.bytes, &address, &result.backing);
-    if (rc != VK_SUCCESS) return rc;
+    if (rc != VK_SUCCESS) { ps5vk_draw_prepare_site = __LINE__; return rc; }
     if (!address || !result.backing || (uintptr_t)address % 8 ||
         (uintptr_t)address >= (UINT64_C(1) << 48) ||
         result.bytes > (UINT64_C(1) << 48) - (uintptr_t)address) {
-        ps5vk_native_release_draw(&result); return VK_ERROR_MEMORY_MAP_FAILED;
+        ps5vk_native_release_draw(&result); { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_MEMORY_MAP_FAILED; }
     }
     result.state = address; memcpy(result.state, &plan, sizeof(plan));
     if(push_bytes) {
         void *push=(unsigned char *)address+push_offset;
         if(((uintptr_t)push>>32)!=2) {
-            ps5vk_native_release_draw(&result);return VK_ERROR_MEMORY_MAP_FAILED;
+            ps5vk_native_release_draw(&result);{ ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_MEMORY_MAP_FAILED; }
         }
         memcpy(push,op->push_constants,push_bytes);
         result.state->push_constant_low=(uint32_t)(uintptr_t)push;
@@ -220,7 +232,7 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
     if(vertices) {
         uint32_t *table=(uint32_t *)((unsigned char *)address+table_offset);
         if(!ps5vk_vertex_table_address(shader_address,(uintptr_t)table,16u*vertices->count)) {
-            ps5vk_native_release_draw(&result);return VK_ERROR_MEMORY_MAP_FAILED;
+            ps5vk_native_release_draw(&result);{ ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_MEMORY_MAP_FAILED; }
         }
         for(uint32_t i=0;i<vertices->count;++i) {
         const struct ps5vk_vertex_fetch *vertex=&vertices->bindings[i];
@@ -235,7 +247,7 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
             }
             if(ps5vk_vertex_descriptor(vertex_words,(uintptr_t)source,vertex->bytes,
                 vertex->stride,vertex->attribute_extent)) {
-                ps5vk_native_release_draw(&result);return VK_ERROR_MEMORY_MAP_FAILED;
+                ps5vk_native_release_draw(&result);{ ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_MEMORY_MAP_FAILED; }
             }
         }
         memcpy(table+4u*i,vertex_words,16);
@@ -245,7 +257,7 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
     for(unsigned s=0;s<PS5VK_MAX_SETS;++s)if(set_mask&(1u<<s)) {
         uint32_t *table=(uint32_t *)((unsigned char *)address+descriptor_offsets[s]);
         if(!ps5vk_vertex_table_address(shader_address,(uintptr_t)table,tables.set_bytes[s])) {
-            ps5vk_native_release_draw(&result);return VK_ERROR_MEMORY_MAP_FAILED;
+            ps5vk_native_release_draw(&result);{ ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_MEMORY_MAP_FAILED; }
         }
         memset(table,0,tables.set_bytes[s]);
         VkDescriptorSet set=op->sets[s];
@@ -276,40 +288,65 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
                     const VkDescriptorImageInfo *image=&set->images[index];
                     rc=ps5vk_texture_descriptor(d,image->imageView,image->sampler,words);
                 }
-                if(rc!=VK_SUCCESS){ps5vk_native_release_draw(&result);return rc;}
+                if(rc!=VK_SUCCESS){ps5vk_native_release_draw(&result);{ ps5vk_draw_prepare_site = __LINE__; return rc; }}
             }
         }
         result.descriptor_tables[s]=table;
     }
     result.texture_table=result.descriptor_tables[0]; /* precompiled single-table ABI */
     rc = result.memory.flush(result.memory.context, result.backing, 0, result.bytes);
-    if (rc != VK_SUCCESS) { ps5vk_native_release_draw(&result); return rc; }
+    if (rc != VK_SUCCESS) { ps5vk_native_release_draw(&result); { ps5vk_draw_prepare_site = __LINE__; return rc; } }
     *out = result; return VK_SUCCESS;
 }
+VkResult ps5vk_target_set_from_subpass(VkRenderPass pass, VkFramebuffer fb, uint32_t subpass,
+    struct ps5vk_target_set *out)
+{
+    if (!pass || !fb || !out || subpass >= pass->subpass_count)
+        { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_UNKNOWN; }
+    memset(out, 0, sizeof(*out));
+    out->depth = VK_ATTACHMENT_UNUSED;
+    const struct ps5vk_subpass *s = ps5vk_render_pass_subpass(pass, subpass);
+    if (s->color_count > PS5VK_MAX_COLOR_ATTACHMENTS)
+        { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
+    for (uint32_t c = 0; c < s->color_count; ++c) {
+        if (s->color[c].attachment == VK_ATTACHMENT_UNUSED ||
+            s->color[c].attachment >= fb->attachment_count)
+            { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
+        out->color[out->color_count++] = s->color[c].attachment;
+    }
+    if (s->depth.attachment != VK_ATTACHMENT_UNUSED) {
+        if (s->depth.attachment >= fb->attachment_count)
+            { ps5vk_draw_prepare_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
+        out->depth = s->depth.attachment;
+    }
+    return VK_SUCCESS;
+}
+
 VkResult ps5vk_native_prepare_draw(VkDevice d,const struct ps5vk_operation *op,const VkRect2D *area,
     const ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT],struct ps5vk_prepared_draw *out)
-{ return prepare_draw(d,op,area,defaults,NULL,0,out); }
+{ return prepare_draw(d,op,area,defaults,NULL,0,NULL,out); }
 
 VkResult ps5vk_native_prepare_resource_draw(VkDevice d,const struct ps5vk_operation *op,const VkRect2D *area,
     const ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT],uint64_t shader_address,
-    struct ps5vk_prepared_draw *out)
-{ return prepare_draw(d,op,area,defaults,NULL,shader_address,out); }
+    const struct ps5vk_target_set *targets,struct ps5vk_prepared_draw *out)
+{ return prepare_draw(d,op,area,defaults,NULL,shader_address,targets,out); }
 
 VkResult ps5vk_native_prepare_vertex_draw(VkDevice d,const struct ps5vk_operation *op,const VkRect2D *area,
     const ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT],const struct ps5vk_graphics_key *key,
-    uint64_t shader_address,struct ps5vk_prepared_draw *out)
+    uint64_t shader_address,const struct ps5vk_target_set *targets,struct ps5vk_prepared_draw *out)
 {
     if(key && (key->vertex_binding_count!=1 || !key->vertex_bindings ||
                key->vertex_bindings[0].binding!=0))return VK_ERROR_FEATURE_NOT_PRESENT;
-    return ps5vk_native_prepare_vertex_draw_masked(d,op,area,defaults,key,shader_address,1,out);
+    return ps5vk_native_prepare_vertex_draw_masked(d,op,area,defaults,key,shader_address,1,targets,out);
 }
 VkResult ps5vk_native_prepare_vertex_draw_masked(VkDevice d,const struct ps5vk_operation *op,const VkRect2D *area,
     const ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT],const struct ps5vk_graphics_key *key,
-    uint64_t shader_address,uint32_t usage_mask,struct ps5vk_prepared_draw *out)
+    uint64_t shader_address,uint32_t usage_mask,const struct ps5vk_target_set *targets,
+    struct ps5vk_prepared_draw *out)
 {
     if(!out || out->backing || out->state)return VK_ERROR_UNKNOWN;
     struct ps5vk_vertex_fetch_table sparse,fetch;
     VkResult rc=ps5vk_vertex_fetch_used_spans(d,key,op,usage_mask,&sparse);if(rc!=VK_SUCCESS)return rc;
     rc=ps5vk_vertex_fetch_compact(&sparse,usage_mask,&fetch);if(rc!=VK_SUCCESS)return rc;
-    return prepare_draw(d,op,area,defaults,&fetch,shader_address,out);
+    return prepare_draw(d,op,area,defaults,&fetch,shader_address,targets,out);
 }

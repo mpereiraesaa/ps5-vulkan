@@ -53,6 +53,17 @@ struct ps5vk_graphics_key {
     uint32_t color_attachment_count;
     VkFormat color_format[PS5VK_MAX_COLOR_ATTACHMENTS];
     VkSampleCountFlagBits samples;
+    /* Multisample state that changes what the pixel stage does and what the
+     * native draw emits: per-sample shading (sampleShadingEnable plus the
+     * minSampleShading fraction the loader turns into the pixel iteration
+     * count) and the sample mask the pipeline carries. They are part of the
+     * program identity - two pipelines that differ only here must never share
+     * a cached pair - and canonicalized when the state is disabled, so a
+     * pipeline that never asked for sample shading keys exactly as it did
+     * before the fields existed. */
+    VkBool32 sample_shading_enable;
+    float min_sample_shading;
+    uint32_t sample_mask;
     VkColorComponentFlags color_write_mask[PS5VK_MAX_COLOR_ATTACHMENTS];
     /* Fixed attachment state; ignored/canonicalized to zero when disabled. */
     VkBool32 blend_enable[PS5VK_MAX_COLOR_ATTACHMENTS];

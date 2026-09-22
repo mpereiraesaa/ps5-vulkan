@@ -19,6 +19,14 @@
 VkResult ps5vk_native_layered_storage(VkFormat format, uint32_t width, uint32_t height,
     uint64_t layers, VkDeviceSize *stride, VkDeviceSize *alignment, VkDeviceSize *bytes)
 {
+    return ps5vk_native_layered_storage_samples(format, width, height, layers,
+        VK_SAMPLE_COUNT_1_BIT, stride, alignment, bytes);
+}
+
+VkResult ps5vk_native_layered_storage_samples(VkFormat format, uint32_t width, uint32_t height,
+    uint64_t layers, VkSampleCountFlagBits samples, VkDeviceSize *stride,
+    VkDeviceSize *alignment, VkDeviceSize *bytes)
+{
     if (!stride || !alignment || !bytes || !layers) return VK_ERROR_UNKNOWN;
     /* The layer count is 64-bit so the multiplication below is the only thing
      * standing between a caller and a wrapped size. */
@@ -29,6 +37,13 @@ VkResult ps5vk_native_layered_storage(VkFormat format, uint32_t width, uint32_t 
     const int color = ps5vk_color_target_format_supported(format);
     const int depth = format == VK_FORMAT_D32_SFLOAT;
     if ((!color && !depth) || !width || !height) return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    /* A multisampled surface stores one plane per sample, so the layer's bytes
+     * scale with the count (pinned: ac_estimate_size multiplies each level's
+     * bytes by num_samples). Only the colour role carries more than one sample
+     * on this path; the depth role has no multisampled target yet, and a count
+     * this profile does not implement is refused here as everywhere else. */
+    const uint32_t sample_count = ps5vk_sample_count_number(samples);
+    if (!sample_count || (sample_count > 1 && !color)) return VK_ERROR_FORMAT_NOT_SUPPORTED;
     if (color && (width > PS5VK_MAX_COLOR_DIMENSION || height > PS5VK_MAX_COLOR_DIMENSION))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     struct ps5vk_depth_layout layout;
@@ -40,7 +55,9 @@ VkResult ps5vk_native_layered_storage(VkFormat format, uint32_t width, uint32_t 
     if (!base_alignment || (base_alignment & (base_alignment - 1u)) ||
         layout.bytes > UINT64_MAX - (base_alignment - 1u))
         return VK_ERROR_UNKNOWN;
-    const uint64_t layer_bytes = (layout.bytes + base_alignment - 1u) & ~(base_alignment - 1u);
+    if (layout.bytes > UINT64_MAX / sample_count) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    const uint64_t sampled_bytes = layout.bytes * sample_count;
+    const uint64_t layer_bytes = (sampled_bytes + base_alignment - 1u) & ~(base_alignment - 1u);
     if (!layer_bytes || layer_bytes > UINT64_MAX / layers) return VK_ERROR_OUT_OF_HOST_MEMORY;
     *stride = layer_bytes;
     *alignment = base_alignment;
@@ -51,7 +68,6 @@ VkResult ps5vk_native_layered_storage(VkFormat format, uint32_t width, uint32_t 
 VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *info,
                                         VkMemoryRequirements *out)
 {
-    (void)d;
     if (!info || !out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
     /* The pinned upstream draw module's host-readback staging image is the one
@@ -74,17 +90,36 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         *out = (VkMemoryRequirements){layout.bytes, layout.alignment, 1};
         return VK_SUCCESS;
     }
-    if(!ps5vk_graphics_image_usage(info->format,info->usage))
-        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     int depth = info->format == VK_FORMAT_D32_SFLOAT;
     int sampled = ps5vk_texture_format_sampled_image(info->format);
     /* The colour-target footprint (one 64KB_R_X surface, 128 KiB-aligned) is
      * shared by every format this build renders into, including the integer
      * target the independentBlend measurement serves. */
     int color = ps5vk_color_target_format_supported(info->format);
+    /* The sample counts follow the platform mask and the colour contract
+     * (DXVK262-T06): every other role this profile backs is single-sample, and
+     * the colour attachment takes the served 2x/4x counts only on a platform
+     * that carries the feature bit, as a 2D one-mip image created with exactly
+     * the role combinations the pinned multisample oracle builds. That one
+     * shape's usage set is not in the format table's combinations, because
+     * those describe single-sample images, so the role is checked here and the
+     * generic combination check is skipped for it. A count whose multisampled
+     * storage nothing backs is refused here as well as in vkCreateImage. */
+    const uint32_t sample_count = ps5vk_sample_count_number(info->samples);
+    const int multisampled_color =
+        sample_count > 1 && color && !depth &&
+        (info->format == VK_FORMAT_B8G8R8A8_UNORM ||
+         info->format == VK_FORMAT_R8G8B8A8_UNORM) &&
+        d && info->imageType == VK_IMAGE_TYPE_2D && info->mipLevels == 1 &&
+        !info->flags && ps5vk_multisampled_color_usage(info->usage) &&
+        (ps5vk_platform_sample_counts(d->platform_features) & info->samples) != 0;
+    if (!multisampled_color && !ps5vk_graphics_image_usage(info->format,info->usage))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    if (!sample_count || (sample_count > 1 && !multisampled_color))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     if ((!depth && !color && !sampled) ||
         info->mipLevels > PS5VK_MAX_TEXTURE_MIP_LEVELS ||
-        info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL)
+        info->tiling != VK_IMAGE_TILING_OPTIMAL)
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     /* A D32 image is the tiled depth surface whether it is used as an
      * attachment, as the destination of a whole-subresource depth clear, or
@@ -135,8 +170,8 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
      * model slice A measured now describes an array target. arrayLayers == 1
      * reproduces the previous requirements byte for byte. */
     VkDeviceSize stride = 0, alignment = 0, size = 0;
-    VkResult layered = ps5vk_native_layered_storage(info->format, info->extent.width,
-        info->extent.height, info->arrayLayers, &stride, &alignment, &size);
+    VkResult layered = ps5vk_native_layered_storage_samples(info->format, info->extent.width,
+        info->extent.height, info->arrayLayers, info->samples, &stride, &alignment, &size);
     if (layered != VK_SUCCESS) return layered;
     *out = (VkMemoryRequirements){size, alignment, 1};
     return VK_SUCCESS;

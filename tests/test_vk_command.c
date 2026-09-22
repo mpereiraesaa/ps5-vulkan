@@ -847,7 +847,64 @@ static void graphics_recording(void)
     vkCmdDrawIndexed(c,2,1,UINT32_MAX,0,0);
     assert(c->state==PS5VK_INVALID && c->operation_count==1);
     vkDestroyBuffer(&d,indices[1],NULL);vkFreeMemory(&d,memory,NULL);
+
+    /* The pinned multisample oracle clears the whole pass in one begin: one
+     * clear value per attachment, four of them (DXVK262-T06). The record
+     * carries every value, and a begin that clears an attachment it handed no
+     * value for still poisons the recording. */
+    {
+        VkAttachmentDescription oracle_attachments[4] = {
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_4_BIT,
+             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR},
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR},
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR},
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR}};
+        struct ps5vk_subpass oracle_subpasses[1] = {
+            {.color[0] = {.attachment = 0}, .color_count = 1,
+             .resolve_count = 1, .resolve[0] = {.attachment = 1},
+             .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        struct VkRenderPass_T oracle_pass = {.device = &d, .attachment_count = 4,
+            .subpass_count = 1, .attachments = oracle_attachments,
+            .subpasses = oracle_subpasses};
+        struct VkFramebuffer_T oracle_fb = {.device = &d, .width = 100, .height = 100,
+            .attachment_count = 4, .color_attachments = {0}, .color_count = 1,
+            .resolve_count = 1, .resolve_attachments = {1},
+            .attachments = {&view, &view, &view, &view},
+            .formats = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
+                        VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM},
+            .samples = {VK_SAMPLE_COUNT_4_BIT, VK_SAMPLE_COUNT_1_BIT,
+                        VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_1_BIT},
+            .depth_attachment = VK_ATTACHMENT_UNUSED};
+        VkClearValue oracle_values[4];
+        for (unsigned i = 0; i < 4; ++i)
+            oracle_values[i] = (VkClearValue){.color = {.float32 = {0.25f * (float)i, 0, 0, 1}}};
+        VkRenderPassBeginInfo oracle_begin = ri;
+        oracle_begin.renderPass = &oracle_pass;
+        oracle_begin.framebuffer = &oracle_fb;
+        oracle_begin.clearValueCount = 4;
+        oracle_begin.pClearValues = oracle_values;
+        vkResetCommandBuffer(c, 0);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        vkCmdBeginRenderPass(c, &oracle_begin, VK_SUBPASS_CONTENTS_INLINE);
+        assert(c->state == PS5VK_RECORDING);
+        assert(c->operations[0].clear_count == 4 &&
+               c->operations[0].clears[3].color.float32[0] == 0.75f);
+        vkCmdEndRenderPass(c);
+        assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+        /* One value short of what the pass clears is a malformed begin. */
+        vkResetCommandBuffer(c, 0);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        oracle_begin.clearValueCount = 2;
+        vkCmdBeginRenderPass(c, &oracle_begin, VK_SUBPASS_CONTENTS_INLINE);
+        assert(c->state == PS5VK_INVALID);
+        oracle_begin.clearValueCount = 4;
+    }
+
     vkDestroyCommandPool(&d, p, NULL);
+
 }
 static void dynamic_descriptor_recording(void)
 {

@@ -212,6 +212,65 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
 
+    def test_sample_rate_diagnostic_is_graphics_only(self):
+        """The sampleRateShading measurement build is a private diagnostic.
+
+        It exists so a witness payload and the focused CTS selection can
+        negotiate a multisample path the shipping console platform does not
+        advertise yet, so it is meaningless without the graphics profile API and
+        cannot carry an unknown value. The console mask stays clear otherwise;
+        the promotion is a separate, evidence-backed change."""
+        self.rejected({"PS5VK_SAMPLE_RATE_DIAGNOSTIC": "1"},
+                      "requires the graphics profile API")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_SAMPLE_RATE_DIAGNOSTIC": "2"},
+                      "must be 0 or 1")
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("PS5VK_FEATURE_SAMPLE_RATE_SHADING", platform)
+        self.assertIn("PS5VK_SAMPLE_RATE_DIAGNOSTIC", platform)
+        # The switch only decides whether the private measurement build sets the
+        # internal bit; no public query is answered from the define itself.
+        self.assertNotIn("PS5VK_FEATURE_SAMPLE_RATE_SHADING",
+                         (ROOT / "tools/build_native.py").read_text())
+
+    def test_sample_rate_probe_is_bounded_private_and_diagnostic_only(self):
+        """The sample-rate measurement scene cannot ship or run half-built.
+
+        It clears a multisampled colour target and reads the surface's own
+        storage back, which is only ever true in the build whose platform
+        carries the sample-rate bit; without that switch there is no count the
+        front end would accept, so the scene refuses to be built at all."""
+        self.rejected({"PS5VK_SAMPLE_RATE_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_SAMPLE_RATE_PROBE": "3"},
+                      "must be 0, 1 or 2")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1",
+                       "PS5VK_SAMPLE_RATE_PROBE": "1"},
+                      "requires PS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
+        builder = (ROOT / "tools/build_native.py").read_text()
+        source = (ROOT / "native/sample_rate_probe.c").read_text()
+        # The measurement is bounded to one multisampled colour target whose
+        # storage is read back and judged; it is a standalone scene, so no
+        # other diagnostic may be selected with it.
+        self.assertIn("PS5VK_SAMPLE_RATE_PROBE is a bounded standalone scene", builder)
+        self.assertIn("distinct == 1u && correct == words && first == expected", source)
+        self.assertIn("PS5VK_SAMPLE_RATE_CLEAR extent=", source)
+        # Value 2 is the same witness followed by the step walk through the CTS
+        # oracle's render pass: every step is announced before it runs, so the
+        # last step in the log names the call that did not return, and a
+        # refusal names the step and the Vulkan result instead of dying.
+        self.assertIn('"PS5VK_SAMPLE_RATE_PROBE must be 0, 1 or 2"', builder)
+        self.assertIn("PS5VK_SAMPLE_RATE_SHAPE step=%s rc=%d ok=%u", source)
+        self.assertIn("step=create_pipeline subpass=%u", source)
+        header = (ROOT / "native/sample_rate_probe.h").read_text()
+        self.assertIn("ps5vk_sample_rate_shape_probe", header)
+        main = (ROOT / "native/graphics_main.c").read_text()
+        self.assertIn("#if PS5VK_SAMPLE_RATE_PROBE == 2", main)
+        self.assertIn("ps5vk_runtime_subpass_fetch_fragment", main)
+
     def test_promoted_dual_source_has_no_measurement_switch(self):
         """dualSrcBlend is advertised by the shipping platform now.
 

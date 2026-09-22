@@ -1,9 +1,21 @@
 #include "vk_image.h"
 #include <string.h>
 
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define VIEW_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define VIEW_MARK(...) ((void)0)
+#endif
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkImageView *out)
 {
+    /* The image is NOT dereferenced here: this marker runs before the call's
+     * own validation, so it may only read the create-info the caller supplied. */
+    VIEW_MARK("PS5VK_IMAGE_VIEW format=%u type=%u",
+        info ? (unsigned)info->format : 0u,
+        info ? (unsigned)info->viewType : 0u);
     if (!out) return VK_ERROR_UNKNOWN;
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO)

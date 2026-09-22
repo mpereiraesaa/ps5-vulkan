@@ -12,7 +12,9 @@ enum { MODEL_VERTEX=0, MODEL_TESS_CTRL=1, MODEL_TESS_EVAL=2, MODEL_GEOMETRY=3,
 enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
        BUILTIN_CULL_DISTANCE=4, BUILTIN_VERTEX_INDEX=42, BUILTIN_INSTANCE_INDEX=43,
        BUILTIN_BASE_VERTEX=4424, BUILTIN_BASE_INSTANCE=4425, BUILTIN_DRAW_INDEX=4426,
-       BUILTIN_VIEW_INDEX=4440, BUILTIN_VIEWPORT_INDEX=10, BUILTIN_FRAG_COORD=15 };
+       BUILTIN_VIEW_INDEX=4440, BUILTIN_VIEWPORT_INDEX=10, BUILTIN_FRAG_COORD=15,
+       /* The sample index a per-sample shaded invocation was launched for. */
+       BUILTIN_SAMPLE_ID=18 };
 /* The tessellation built-ins the two stages exchange with the tessellator, and
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
@@ -516,6 +518,19 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                    !type->type || type->type>=bound)goto done;
                 const struct id_info *component=&ids[type->type];
                 if(component->op!=22 || component->count!=32)goto done;
+                continue;
+            }
+            /* gl_SampleID is the index of the sample this pixel invocation was
+             * launched for (DXVK262-T06). The hardware supplies it when the
+             * pipeline shades per sample; a fragment shader that reads it is
+             * what the sample-rate witnesses write to their target, so the
+             * interface accepts it in its one shape - a fragment Input scalar
+             * 32-bit integer, never a patch and never at a location - and
+             * leaves every other sample built-in (gl_SamplePosition,
+             * gl_SampleMaskIn) outside this profile until their own slice. */
+            if(d->builtin==BUILTIN_SAMPLE_ID) {
+                if(model!=MODEL_FRAGMENT || d->storage!=1u || d->patch ||
+                   d->location!=~0u || type->op!=21 || type->count!=32)goto done;
                 continue;
             }
             /* Any other built-in a tessellation stage declares is outside this

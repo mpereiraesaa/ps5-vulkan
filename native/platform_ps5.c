@@ -260,6 +260,24 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                     PS5VK_FEATURE_DEPTH_CLAMP |
                                     PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                                     PS5VK_FEATURE_MULTI_VIEWPORT;
+    /* DXVK262-T06 sampleRateShading MEASUREMENT switch
+     * (PS5VK_SAMPLE_RATE_DIAGNOSTIC=1, honoured by tools/build_sdk.py,
+     * tools/build_native.py and therefore by tools/build_upstream_cts.py, which
+     * restages the SDK from source). The native side of this row is measured
+     * and green (a 4x colour target shaded per sample, a named sample read
+     * through the resource-only record, and the resolve target receiving the
+     * AVERAGE from a draw the driver emits); what is NOT green yet is the CTS
+     * axis, and the reason is named precisely in the 2026-09-22 measurement:
+     * with this bit advertised, the first sample-rate leaf that executes -
+     * dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle
+     * - kills the payload during its setup, after two image bindings and two
+     * view creations, so the promotion stays here until that case is fixed and
+     * passing. The switch is off by default and never set in the shipping
+     * build, so the console keeps reporting false and refusing the request
+     * until the promotion change carries its own hardware evidence. */
+#if defined(PS5VK_SAMPLE_RATE_DIAGNOSTIC) && PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    platform->supported_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+#endif
     /* DXVK262-T06 fragment storage side effects.  The public-SDK witness
      * distinguishes a zero-write control from exactly 4096 fragment writes,
      * preserves 30 guard words and completes its fence.  The two unchanged

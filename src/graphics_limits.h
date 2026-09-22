@@ -86,6 +86,11 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxFramebufferWidth=PS5VK_MAX_COLOR_DIMENSION;
     limits->maxFramebufferHeight=PS5VK_MAX_COLOR_DIMENSION;
     limits->maxFramebufferLayers=1;
+    /* The single-sample baseline every frontend honours. A platform that
+     * carries PS5VK_FEATURE_SAMPLE_RATE_SHADING reports the multisample
+     * envelope instead; src/device_profile_report.h derives the reported set
+     * from the platform mask, so the reported limit and the accepted pipeline
+     * state cannot disagree (DXVK262-T06). */
     limits->framebufferColorSampleCounts=VK_SAMPLE_COUNT_1_BIT;
     limits->framebufferDepthSampleCounts=VK_SAMPLE_COUNT_1_BIT;
     limits->sampledImageColorSampleCounts=VK_SAMPLE_COUNT_1_BIT;

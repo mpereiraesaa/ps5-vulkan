@@ -197,6 +197,35 @@ static int emit_chunk(const uint8_t *data, size_t size)
     return 0;
 }
 
+/* The case the payload is running, logged as it starts.
+ *
+ * An unclean close leaves no result for the case in flight, and the QPA stream
+ * alone cannot say which one that was: the run's own log did not name cases at
+ * all, so "the payload died after 452 of 512" could not be turned into a
+ * defect. deqp writes this marker as one line through the intercepted stream,
+ * and it is the only per-case hook the payload has. */
+static void log_case_begin(const char *data, size_t size)
+{
+    static const char marker[] = "#beginTestCaseResult ";
+    const size_t marker_len = sizeof(marker) - 1;
+    if (!data || size < marker_len) return;
+    for (size_t i = 0; i + marker_len <= size; ++i)
+    {
+        if (memcmp(data + i, marker, marker_len) != 0) continue;
+        const size_t start = i + marker_len;
+        size_t end = start;
+        while (end < size && data[end] != '\n' && data[end] != '\r') ++end;
+        if (end == start) return;
+        char name[256];
+        size_t copy = end - start;
+        if (copy > sizeof(name) - 1) copy = sizeof(name) - 1;
+        memcpy(name, data + start, copy);
+        name[copy] = '\0';
+        ps5log_printf("MARK", "UPSTREAM_CTS_CASE name=%s", name);
+        return;
+    }
+}
+
 static ssize_t qpa_sink_write(const char *data, size_t size)
 {
     QpaSink *sink = &s_sink;
@@ -207,6 +236,8 @@ static ssize_t qpa_sink_write(const char *data, size_t size)
         errno = EIO;
         return -1;
     }
+
+    log_case_begin(data, size);
 
     while (consumed < size)
     {

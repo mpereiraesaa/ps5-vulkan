@@ -158,6 +158,40 @@ twice, once with blending disabled and once with the accepted equation, copies
 the colour target back through the transfer path and judges both reads on exact
 bytes, so a blender that ignored the secondary export could not pass.
 
+The other half of the T06 fragment-output tranche, `sampleRateShading`, is
+**not advertised**: the shipping platform mask does not set
+`PS5VK_FEATURE_SAMPLE_RATE_SHADING`, `vkGetPhysicalDeviceFeatures` reports it
+false, and `vkCreateDevice` rejects a request for it. What exists today is the
+state contract behind a private measurement build
+(`PS5VK_SAMPLE_RATE_DIAGNOSTIC=1`): `src/sample_rate_contract.h` is the one
+definition of the counts this profile is built for (1x, 2x and 4x - `8x` and
+above are not claimed) and of the CB_COLOR0_ATTRIB sample field they encode;
+the reported `framebufferColorSampleCounts` follows the platform mask rather
+than the envelope, so a device that never measured a multisample path still
+reports 1x; the render pass and framebuffer object model accept a count only
+when the device serves it, and require every attachment of a pass to agree on
+it (a multisampled depth attachment stays unserved); and the graphics pipeline
+accepts `rasterizationSamples` from that same set together with
+`sampleShadingEnable` only when the application enabled `sampleRateShading` on
+the logical device, with `minSampleShading` bounded to `[0,1]` and
+`pSampleMask` restricted to the count's own full mask. The compiled program
+identity and the compile cache both carry the flag, the fraction and the
+canonical mask. A multisampled colour image and its target now exist as well:
+the image shares the one multisampled role (2D, one mip, the colour attachment
+and nothing else) on a platform that serves the counts, its storage is one
+sample plane per sample, and the target states log2 of the count in
+CB_COLOR0_ATTRIB's NUM_SAMPLES/NUM_FRAGMENTS fields, which the pinned
+register table and the field positions in `src/sample_rate_contract.h` are
+checked against. A render pass may also name the single-sample attachment that
+receives a colour attachment's resolved result: the resolve role is parsed,
+owned and validated by the render pass and framebuffer front ends, and it is
+the shape the pinned multisample family builds, but the native queue refuses to
+execute a pass that names one until the resolve itself exists. The native
+clear, draw, resolve and the multisampled input attachment a per-sample read
+needs are the remaining work, so the native attachment plan still refuses a
+pass that names a multisampled attachment: nothing here should be read as
+multisample rendering being usable by an application today.
+
 ## Images and sampling
 
 The GFX1013 texture-format table records exact descriptor encodings, Vulkan

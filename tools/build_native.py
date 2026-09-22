@@ -79,6 +79,14 @@ def main():
     multiview_diagnostic = os.environ.get("PS5VK_MULTIVIEW_DIAGNOSTIC", "0")
     if multiview_diagnostic not in ("0", "1") or (multiview_diagnostic == "1" and not graphics_api):
         raise SystemExit("PS5VK_MULTIVIEW_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
+    # Private measurement build for DXVK262-T06 sampleRateShading: the platform
+    # mask then carries the feature and the 2x/4x framebuffer sample limits, so a
+    # witness payload and the focused CTS selection can negotiate the
+    # multisample state the frontends accept. Off by default; a shipping
+    # platform advertises the feature only through the promotion change.
+    sample_rate_diagnostic = os.environ.get("PS5VK_SAMPLE_RATE_DIAGNOSTIC", "0")
+    if sample_rate_diagnostic not in ("0", "1") or (sample_rate_diagnostic == "1" and not graphics_api):
+        raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
     clip_cull_probe = os.environ.get("PS5VK_CLIP_CULL_PROBE", "0")
     if clip_cull_probe not in ("0", "1") or (clip_cull_probe == "1" and not graphics_api):
         raise SystemExit("PS5VK_CLIP_CULL_PROBE requires the graphics profile API and must be 0 or 1")
@@ -191,6 +199,29 @@ def main():
     two_mrt_probe = os.environ.get("PS5VK_TWO_MRT_PROBE", "0")
     if two_mrt_probe not in ("0", "1"):
         raise SystemExit("PS5VK_TWO_MRT_PROBE must be 0 or 1")
+    # Private measurement scene for DXVK262-T06 sampleRateShading: it clears a
+    # multisampled colour target through the native path and reads the
+    # surface's own storage back. It is a standalone scene and only exists in
+    # the same diagnostic build whose platform carries the sample-rate bit, so
+    # no shipping payload can contain it.
+    sample_rate_probe = os.environ.get("PS5VK_SAMPLE_RATE_PROBE", "0")
+    # 1 is the witness scene (clear plus per-sample shaded draw), 2 is the same
+    # scene followed by the step walk through the CTS oracle's render pass.
+    if sample_rate_probe not in ("0", "1", "2"):
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE must be 0, 1 or 2")
+    if sample_rate_probe != "0" and (not graphics_api or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE requires graphics API, runtime graphics and draw")
+    if sample_rate_probe != "0" and sample_rate_diagnostic != "1":
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE requires PS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
+    if sample_rate_probe != "0" and (multiview_view_probe == "1" or
+            input_attachment_probe == "1" or fragment_store_probe == "1" or
+            dual_source_probe == "1" or two_mrt_probe == "1" or
+            clip_cull_probe == "1" or geometry_probe == "1" or tess_probe == "1" or
+            scissor_probe != "0" or witnesses != "0" or continuous == "1" or
+            observe_scene != "0" or scene_split == "1" or layer_probe == "1"):
+        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE is a bounded standalone scene")
     if two_mrt_probe == "1" and (not graphics_api or
             os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
             os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
@@ -415,12 +446,14 @@ def main():
             common += ["-DPS5VK_GRAPHICS_SCENE_SPLIT=" + scene_split]
             common += ["-DPS5VK_LAYER_PROBE=" + layer_probe]
             common += ["-DPS5VK_MULTIVIEW_DIAGNOSTIC=" + multiview_diagnostic]
+            common += ["-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=" + sample_rate_diagnostic]
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
             common += ["-DPS5VK_FRAGMENT_STORE_PROBE=" + fragment_store_probe]
             common += ["-DPS5VK_DUAL_SOURCE_PROBE=" + dual_source_probe]
             common += ["-DPS5VK_TWO_MRT_PROBE=" + two_mrt_probe]
+            common += ["-DPS5VK_SAMPLE_RATE_PROBE=" + sample_rate_probe]
             common += ["-DPS5VK_CLIP_CULL_PROBE=" + clip_cull_probe]
             common += ["-DPS5VK_GEOMETRY_PROBE=" + geometry_probe]
             common += ["-DPS5VK_GEOMETRY_ORDER_PROBE=" + geometry_order_probe]
@@ -727,6 +760,7 @@ def main():
                 ROOT / "native/fragment_store_probe.c",
                 ROOT / "native/dual_source_probe.c",
                 ROOT / "native/two_mrt_probe.c",
+                ROOT / "native/sample_rate_probe.c",
                 ROOT / "src/two_mrt_oracle.c",
                 ROOT / "native/command_arena_ps5.c", ROOT / "native/draw_batch_ps5.c", ROOT / "src/graphics_sync.c",
                 ROOT / "src/vertex_descriptor.c", ROOT / "src/vertex_fetch.c", ROOT / "src/index_fetch.c",
@@ -757,6 +791,7 @@ def main():
                                "triangle_readback", "fragment_store_probe"}
         application_sources.add("dual_source_probe")
         application_sources.add("two_mrt_probe")
+        application_sources.add("sample_rate_probe")
         sources = [item for item in sources if item[0] in application_sources]
     source_names = [name for name, _, _ in sources]
     if len(source_names) != len(set(source_names)):
@@ -992,6 +1027,18 @@ def main():
                 "tolerance_lsb": 1, "strict_readback": True}
             runtime_inputs = (("vertex", "runtime_triangle.vert"),
                               ("two_mrt", "runtime_two_mrt.frag"))
+        if sample_rate_probe == "1":
+            manifest["graphics_shader_source"] = "owned-runtime-sample-id"
+            manifest["sample_rate_probe"] = 1
+            manifest["sample_rate_measurement"] = True
+            manifest["sample_rate_witness"] = {
+                "extent": [64, 64], "samples": 4,
+                "clear_rgba": [0.25, 0.5, 0.75, 1.0],
+                "clear_word": "ff4080bf",
+                "shaded_values": ["ff000000", "ff010000", "ff020000", "ff030000"],
+                "phases": ["clear", "shaded"], "strict_readback": True}
+            runtime_inputs = (("vertex", "runtime_sample_id.vert"),
+                              ("fragment", "runtime_sample_id.frag"))
         if scissor_probe == "13":
             manifest["graphics_shader_source"] = "owned-runtime-vertex-bindings"
             manifest["geometry_fixture"] = "sixteen-and-sparse-vertex-bindings"

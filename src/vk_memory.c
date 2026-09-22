@@ -8,6 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define IMAGE_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define IMAGE_MARK(...) ((void)0)
+#endif
+
 /* Exactly the descriptor the pinned upstream draw module's host readback
  * creates: RGBA8, 2D, one mip, one layer, one sample, LINEAR tiling, usage
  * TRANSFER_DST alone, exclusive sharing and an UNDEFINED initial layout. Every
@@ -349,6 +356,12 @@ VkResult ps5vk_buffer_cache(VkDevice d, VkBuffer b, VkDeviceSize offset,
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkImage *out)
 {
+    IMAGE_MARK("PS5VK_IMAGE_CREATE format=%u samples=%u usage=%08x extent=%ux%u",
+        info ? (unsigned)info->format : 0u,
+        info ? (unsigned)info->samples : 0u,
+        info ? (unsigned)info->usage : 0u,
+        info ? info->extent.width : 0u,
+        info ? info->extent.height : 0u);
     if (!out) return INVALID;
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO) return INVALID;
@@ -362,11 +375,26 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
      * initial layout stays refused instead of being stored as tiled and read
      * back as if it were linear. */
     const int linear_staging = ps5vk_linear_staging_descriptor(info);
+    /* The sample counts this device's platform serves (DXVK262-T06). 1x is
+     * always accepted; a multisampled count is accepted only for the one role
+     * that has a multisampled target - a 2D one-mip colour image in one of the
+     * profile's colour formats, created with exactly the role combinations the
+     * pinned multisample oracle builds (colour attachment, its readback pair,
+     * and the per-sample input-attachment form). The backing requirements apply
+     * the same bound, so a shape this predicate let through cannot be refused
+     * later for its size. */
+    int samples_supported = info->samples == VK_SAMPLE_COUNT_1_BIT;
+    if (!samples_supported &&
+        ps5vk_multisampled_color_usage(info->usage) &&
+        (info->format == VK_FORMAT_B8G8R8A8_UNORM || info->format == VK_FORMAT_R8G8B8A8_UNORM) &&
+        info->imageType == VK_IMAGE_TYPE_2D && info->mipLevels == 1 &&
+        (ps5vk_platform_sample_counts(d->platform_features) & info->samples))
+        samples_supported = 1;
     if (info->pNext ||
         (info->flags && info->flags != VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
         (info->imageType != VK_IMAGE_TYPE_1D && info->imageType != VK_IMAGE_TYPE_2D &&
          info->imageType != VK_IMAGE_TYPE_3D) ||
-        !info->arrayLayers || info->samples != VK_SAMPLE_COUNT_1_BIT ||
+        !info->arrayLayers || !samples_supported ||
         info->sharingMode != VK_SHARING_MODE_EXCLUSIVE ||
         info->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED) return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Only the one linear descriptor above is backed; any other linear request
@@ -470,6 +498,11 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(VkDevice d, VkImage image
 
 VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(VkDevice d, VkImage image, VkDeviceMemory m, VkDeviceSize offset)
 {
+    IMAGE_MARK("PS5VK_IMAGE_BIND samples=%u usage=%08x extent=%ux%u",
+        image && image->device == d ? (unsigned)image->info.samples : 0u,
+        image && image->device == d ? (unsigned)image->info.usage : 0u,
+        image && image->device == d ? image->info.extent.width : 0u,
+        image && image->device == d ? image->info.extent.height : 0u);
     if (!d || !image || image->device != d || !m || m->device != d || image->ever_bound ||
         offset % image->requirements.alignment || offset > m->size ||
         image->requirements.size > m->size - offset) return INVALID;

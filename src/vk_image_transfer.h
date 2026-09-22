@@ -125,7 +125,7 @@ static inline VkBool32 ps5vk_clear_attachment_valid(const struct ps5vk_operation
         return VK_FALSE;
     const VkImageCreateInfo *image=&view->image->info;
     if((image->format!=VK_FORMAT_R8G8B8A8_UNORM && image->format!=VK_FORMAT_B8G8R8A8_UNORM) ||
-       image->samples!=VK_SAMPLE_COUNT_1_BIT || image->mipLevels!=1 ||
+       !ps5vk_sample_count_implemented(image->samples) || image->mipLevels!=1 ||
        image->imageType!=VK_IMAGE_TYPE_2D || image->tiling!=VK_IMAGE_TILING_OPTIMAL ||
        !(image->usage&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))return VK_FALSE;
     const VkClearRect *r=&op->clear_rect;
@@ -137,6 +137,17 @@ static inline VkBool32 ps5vk_clear_attachment_valid(const struct ps5vk_operation
     uint32_t y=(uint32_t)(r->rect.offset.y-area->offset.y);
     if(x>area->extent.width || r->rect.extent.width>area->extent.width-x ||
        y>area->extent.height || r->rect.extent.height>area->extent.height-y)return VK_FALSE;
+    /* A multisampled attachment is cleared by one whole-surface fill, which
+     * covers every sample of every texel whatever order the hardware stores
+     * them in. The rect equation addresses a single sample plane, so it is
+     * only honest when the clear IS the whole surface: the rect has to cover
+     * the render area and the render area the whole image (DXVK262-T06). */
+    if(image->samples!=VK_SAMPLE_COUNT_1_BIT &&
+       (x || y || r->rect.extent.width!=area->extent.width ||
+        r->rect.extent.height!=area->extent.height ||
+        area->offset.x || area->offset.y ||
+        area->extent.width!=image->extent.width ||
+        area->extent.height!=image->extent.height))return VK_FALSE;
     uint32_t mask=op->render_pass->multiview.present?
         op->render_pass->multiview.view_masks[op->subpass]:0;
     return view->range.layerCount==32 || !(mask>>view->range.layerCount);

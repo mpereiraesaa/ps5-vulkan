@@ -13,6 +13,16 @@
 #define TESS_CREATE_FAIL(stage) ((void)0)
 #endif
 
+/* Console-only marker: the front end hands every accepted pipeline to this
+ * entry, so "the case died with the create logged and no link line after it"
+ * separates a front-end acceptance from the native link that follows. */
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define CREATE_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define CREATE_MARK(...) ((void)0)
+#endif
+
 /* The tessellation ring sizing, from the pinned radv device-topology formula
  * (ac_gpu_info.c) with the GFX1013 console's measured engine topology: two
  * shader engines, one shader array each, eighteen good compute units per
@@ -122,6 +132,7 @@ static uint32_t tess_tf_param_value(const PsbcShaderMetadata *m)
 VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
     uint32_t primitive_type,void **out)
 {
+    CREATE_MARK("PS5VK_NATIVE_PIPELINE_CREATE primitive=%u", primitive_type);
     if(!out)return VK_ERROR_UNKNOWN;
     *out=NULL;
     const struct ps5vk_runtime_graphics_program *input=data;

@@ -22,11 +22,16 @@ enum { PS5VK_INPUT_ATTACHMENT_LAYER_COUNT = 6 };
  * through one layer-0 2D colour view on the same device; the descriptor is the
  * one-element resource-only image record (32 bytes, no sampler words); its
  * recorded view IS the framebuffer view of the subpass's own input reference at
- * index 0, both the descriptor and that reference name GENERAL, and a single
- * forward BY_REGION dependency carries the colour write of subpass 0 to the
- * fragment input-attachment read of the later subpass. Every other shape fails
- * closed here, before any packet is emitted, and this is the only place native
- * execution learns what an input attachment may be.
+ * index 0, and both the descriptor and that reference name a READ layout - the
+ * two the render-pass frontend admits and this executor can leave the
+ * attachment in: GENERAL, which the multiview witness declares, and
+ * SHADER_READ_ONLY_OPTIMAL, which the pinned multisample oracle declares for the
+ * colour attachment its fetch subpasses read. A forward dependency - BY_REGION
+ * or not - still carries the colour write of subpass 0 to the fragment
+ * input-attachment read of the later subpass, and the executor's own boundary
+ * barrier orders the read whether or not the pass declares one. Every other
+ * shape fails closed here, before any packet is emitted, and this is the only
+ * place native execution learns what an input attachment may be.
  *
  * The function takes the real objects rather than a summary of them so the
  * same rule the driver executes is the rule the host tests exercise. It never

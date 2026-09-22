@@ -16,6 +16,8 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_dual_source.frag -o build/runtime-graphics/dual_source.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_two_mrt.frag -o build/runtime-graphics/two_mrt.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_second_mrt_only.frag -o build/runtime-graphics/second_mrt_only.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_sample_id.vert -o build/runtime-graphics/sample_id.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_sample_id.frag -o build/runtime-graphics/sample_id.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.1 experiments/graphics/runtime_view_index.vert -o build/runtime-graphics/view_index.vert.spv
 	$(GLSLANG) -V -S vert -DTEST_VERTEX=1 experiments/graphics/runtime_flat.glsl -o build/runtime-graphics/flat.vert.spv
 	$(GLSLANG) -V -S frag experiments/graphics/runtime_flat.glsl -o build/runtime-graphics/flat.frag.spv
@@ -81,6 +83,10 @@ native-compute:
 native-dual-source:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
 	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_DUAL_SOURCE_PROBE=1 $(PYTHON) tools/build_native.py
+.PHONY: native-sample-rate
+native-sample-rate:
+	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
+	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_SAMPLE_RATE_DIAGNOSTIC=1 PS5VK_SAMPLE_RATE_PROBE=1 $(PYTHON) tools/build_native.py
 .PHONY: native-two-mrt
 native-two-mrt:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
@@ -397,6 +403,10 @@ check:
 	./build/tests/test_two_mrt_oracle
 	$(CC) -std=c11 -Wall -Wextra -Werror -Ithird_party/vulkan-headers/include -Isrc src/color_attachment_contract.c tests/test_color_attachment_contract.c -o build/tests/test_color_attachment_contract
 	./build/tests/test_color_attachment_contract
+	$(CC) -std=c11 -Wall -Wextra -Werror -Ithird_party/vulkan-headers/include -Isrc tests/test_sample_rate_contract.c -o build/tests/test_sample_rate_contract
+	./build/tests/test_sample_rate_contract
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/sample_rate_oracle.c tests/test_sample_rate_oracle.c -o build/tests/test_sample_rate_oracle
+	./build/tests/test_sample_rate_oracle
 	$(PYTHON) tools/build_sdk.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host
@@ -421,7 +431,8 @@ test-tessellation-compiler: build/libpsbc.host.a graphics-stage-shaders
 .PHONY: test-runtime-graphics-compiler
 test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c src/color_attachment_contract.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
+	$(PYTHON) tools/build_resolve_shaders.py --out build/resolve/resolve_spirv.h
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -Ibuild/resolve -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c native/resolve_program.c src/color_attachment_contract.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
 	./build/tests/test_runtime_graphics_compiler
 .PHONY: test-runtime-graphics-native
 test-runtime-graphics-native:
@@ -463,6 +474,11 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_distance.vert -o build/runtime-graphics/clip_cull_distance.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_distance_read.frag -o build/runtime-graphics/clip_distance_read.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_frag_coord.frag -o build/runtime-graphics/frag_coord.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_write.frag -o build/runtime-graphics/runtime_subpass_write.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_write_spread.frag -o build/runtime-graphics/runtime_subpass_write_spread.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_fetch.frag -o build/runtime-graphics/runtime_subpass_fetch.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_fetch_const.frag -o build/runtime-graphics/runtime_subpass_fetch_const.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_resolve.frag -o build/runtime-graphics/runtime_subpass_resolve.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_depth_only.frag -o build/runtime-graphics/depth_only.frag.spv
 	$(GLSLANG) -V -DWITH_DISTANCES=1 experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_control.vert.spv

@@ -269,6 +269,58 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     uint32_t depth_control = depth && p->depth_test ?
         2u | (p->depth_write ? 4u : 0u) | ((uint32_t)p->depth_compare << 4) : 0u;
     result.cx[result.cx_count++] = (ps5_agc_register){0x200, depth_control};
+    /* Multisample raster state (DXVK262-T06). The colour target already states
+     * its sample geometry in CB_COLOR0_ATTRIB; these are the raster half the
+     * same draw needs, and they are written only when the pipeline carries more
+     * than one sample so every single-sample draw emits exactly the words it
+     * always did.
+     *
+     * The values are the first bounded attempt, read off the pinned gfx103
+     * field layout and Mesa's own MSAA shape for this family:
+     *   PA_SC_AA_CONFIG  (0x2f8) MSAA_NUM_SAMPLES[0:2] and
+     *                            MSAA_EXPOSED_SAMPLES[20:22] = log2(count),
+     *                            MAX_SAMPLE_DIST[13:16] = 1
+     *   DB_EQAA          (0x201) MAX_ANCHOR_SAMPLES[0:2],
+     *                            PS_ITER_SAMPLES[4:6],
+     *                            MASK_EXPORT_NUM_SAMPLES[8:10] and
+     *                            ALPHA_TO_MASK_NUM_SAMPLES[12:14] =
+     *                            log2 of the count, PS_ITER_SAMPLES being the
+     *                            number of pixel iterations the shader runs
+     *   PA_SC_MODE_CNTL_1 (0x293) PS_ITER_SAMPLE[16] when per-sample shading is
+     *                            on, which forces the pixel wave to iterate per
+     *                            sample instead of once per pixel
+     * The probe measures whether that shape makes the hardware iterate per
+     * sample, so these are the values to correct if it does not. */
+    {
+        const uint32_t sample_count = ps5vk_sample_count_number(p->samples);
+        if (sample_count > 1) {
+            const uint32_t log_samples = ps5vk_sample_count_log2(p->samples);
+            /* The fraction decides how many samples each fragment invocation
+             * covers: minSampleShading 1.0 asks for one invocation per sample,
+             * which is the shape the witness measures. */
+            uint32_t iterations = sample_count;
+            if (p->sample_shading_enable && p->min_sample_shading < 1.0f) {
+                const float wanted = (float)sample_count * p->min_sample_shading;
+                iterations = 1u;
+                while ((float)iterations < wanted) iterations <<= 1u;
+                if (iterations > sample_count) iterations = sample_count;
+            }
+            if (!p->sample_shading_enable) iterations = 0u;
+            uint32_t iterations_log = 0u;
+            while ((1u << iterations_log) < iterations) ++iterations_log;
+            const uint32_t aa_config = (log_samples & 0x7u) |
+                ((uint32_t)1u << 13u) | ((log_samples & 0x7u) << 20u);
+            const uint32_t db_eqaa = (log_samples & 0x7u) |
+                ((iterations_log & 0x7u) << 4u) |
+                ((log_samples & 0x7u) << 8u) |
+                ((log_samples & 0x7u) << 12u);
+            const uint32_t mode_cntl_1 =
+                p->sample_shading_enable ? (UINT32_C(1) << 16u) : 0u;
+            result.cx[result.cx_count++] = (ps5_agc_register){0x2f8, aa_config};
+            result.cx[result.cx_count++] = (ps5_agc_register){0x201, db_eqaa};
+            result.cx[result.cx_count++] = (ps5_agc_register){0x293, mode_cntl_1};
+        }
+    }
     /* Public Mesa gfx10/RADV PA_SU_SC_MODE_CNTL: cull mode, front face,
      * first provoking vertex, the three POLY_OFFSET_*_ENABLE bits (11..13)
      * exactly when the draw's depth bias is enabled, and the polygon mode:

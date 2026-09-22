@@ -115,6 +115,11 @@ VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
         const struct ps5vk_graphics_key *p = &program->key;
         if (!program->backend_data || !valid_sets(p) || !equal_sets(p,key) || !valid_vertex_layout(p) || !equal_vertex_layout(p,key) ||
             p->topology != key->topology || p->samples != key->samples ||
+            /* Sample shading changes the compiled pixel program, so a library
+             * record may only satisfy a key that asked for the same state. */
+            p->sample_shading_enable != key->sample_shading_enable ||
+            p->min_sample_shading != key->min_sample_shading ||
+            p->sample_mask != key->sample_mask ||
             p->color_attachment_count != key->color_attachment_count ||
             !equal_color_state(p, key) ||
             p->push_constant_size!=key->push_constant_size ||
