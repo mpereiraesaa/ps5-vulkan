@@ -462,7 +462,9 @@
       "dEQP-VK.synchronization.basic.fence.multi_waitall_false",
       "dEQP-VK.synchronization.basic.fence.multiple_signaled",
       "dEQP-VK.synchronization.basic.fence.one",
-      "dEQP-VK.synchronization.basic.fence.one_signaled"
+      "dEQP-VK.synchronization.basic.fence.one_signaled",
+      "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+      "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1"
     ],
     "diagnostics": [
       "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_3_extra_bytes_offset_12",
@@ -510,8 +512,6 @@
       "dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_0",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_1",
-      "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
-      "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1",
       "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test"
     ],
     "manifest": "cts/upstream/manifest.json",
@@ -864,15 +864,18 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "one color attachment per pipeline (native/runtime_graphics_compiler.c)",
+      "detail": "the render pass, the framebuffer, the pipeline key and the native per-target programming each carry one colour target per attachment with its own CB_COLORn block, its own blend control and its own CB_TARGET_MASK nibble, and the readback copies every attachment into its own buffer; the runtime compiler admits a two-target pipeline only when the device carries the capability, and the private two-MRT witness recorded one draw writing two attachments with different values before the upstream leaves were selected. Both attachment_write_mask attachment_count_2 suballocation leaves passed in the 464-case hardware run",
       "feature": "independentBlend",
       "kind": "feature",
       "profile": "graphics",
-      "reported": false,
+      "reported": true,
       "verdict": "satisfied"
     },
     {
@@ -1940,11 +1943,14 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "one color attachment per pipeline (native/runtime_graphics_compiler.c)",
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "independentBlend",
       "kind": "feature",
       "profile": "compute",
@@ -4760,7 +4766,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8B8A8_UINT lacks mandatory VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8B8A8_UINT reports VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT",
       "format": "VK_FORMAT_R8G8B8A8_UINT",
       "kind": "format-cell",
@@ -4768,7 +4774,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -16490,11 +16496,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
+      "detail": "core: reported 2 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
       "kind": "limit",
       "limit": "maxColorAttachments",
       "profile": "graphics",
-      "reported": 1,
+      "reported": 2,
       "verdict": "blocker"
     },
     {
@@ -18306,11 +18312,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 4; blocker: one color attachment plus the single sampled descriptor",
+      "detail": "core: reported 2 must be >= 4; blocker: one color attachment plus the single sampled descriptor",
       "kind": "limit",
       "limit": "maxFragmentCombinedOutputResources",
       "profile": "graphics",
-      "reported": 1,
+      "reported": 2,
       "verdict": "blocker"
     },
     {
@@ -18456,11 +18462,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 1 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
+      "detail": "untagged-core: reported 2 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
       "kind": "limit",
       "limit": "maxFragmentOutputAttachments",
       "profile": "graphics",
-      "reported": 1,
+      "reported": 2,
       "verdict": "blocker"
     },
     {
@@ -27105,9 +27111,9 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 523,
+      "blocker": 522,
       "not-applicable": 2,
-      "satisfied": 139
+      "satisfied": 140
     },
     "limits": {
       "blocker": 59,

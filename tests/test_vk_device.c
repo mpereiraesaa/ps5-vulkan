@@ -139,11 +139,14 @@ static void lifecycle(void)
     assert(gl.maxDescriptorSetSamplers==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS &&
         gl.maxDescriptorSetSampledImages==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS);
     assert(gl.maxSamplerAllocationCount==PS5VK_MAX_SAMPLERS && PS5VK_MAX_SAMPLERS==4096);
-    /* DXVK262-T06 independentBlend carries two colour attachments through the
-     * ABI and the native path, but the profile does not SERVE the second one
-     * until a native witness writes it, so the advertised bound is still one. */
-    assert(gl.maxColorAttachments==1 && gl.maxFragmentOutputAttachments==1 &&
-           gl.maxFragmentCombinedOutputResources==1);
+    /* DXVK262-T06 independentBlend is promoted: the ABI, the render pass, the
+     * framebuffer, the pipeline key and the native per-target programming carry
+     * two colour attachments, both upstream leaves that require the feature
+     * pass on hardware, and the advertised bound is the served one. */
+    assert(gl.maxColorAttachments==PS5VK_MAX_COLOR_ATTACHMENTS &&
+           gl.maxFragmentOutputAttachments==PS5VK_MAX_COLOR_ATTACHMENTS &&
+           gl.maxFragmentCombinedOutputResources==PS5VK_MAX_COLOR_ATTACHMENTS &&
+           PS5VK_MAX_COLOR_ATTACHMENTS==2);
     const VkFormat guarantee_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_D32_SFLOAT};
     const VkImageUsageFlags guarantee_usages[]={VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
     for(unsigned f=0;f<3;++f) {
@@ -348,6 +351,13 @@ static void lifecycle(void)
               * exists; nothing else does. */
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                      VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             /* The pinned render-pass module derives its attachment usage from
+              * the format's reported features, so its colour target - the one
+              * the two independentBlend leaves render into - adds the sampled
+              * role to that same readback shape. Served since the promotion,
+              * and nothing else gains it. */
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT) ||
              /* The pinned multiview helper's attachment: that same readback
               * shape plus an input-attachment role, and nothing else. */
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
@@ -423,7 +433,12 @@ static void lifecycle(void)
             const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 ||
                 image_formats[f]==VK_FORMAT_D32_SFLOAT;
-            const VkBool32 transfer_only=image_formats[f]==VK_FORMAT_R8G8B8A8_UNORM && usage &&
+            /* The query takes the padded-linear transfer branch for any row
+             * that carries the transfer-source role, which now includes the
+             * integer colour target the promotion serves; the model mirrors
+             * that predicate instead of naming one format. */
+            const VkBool32 transfer_only=ps5vk_texture_format_has(image_formats[f],
+                PS5VK_FORMAT_CAP_TRANSFER_SRC) && usage &&
                 !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                                              VK_IMAGE_USAGE_TRANSFER_DST_BIT));
             const uint32_t expected_mips=!attachment &&
@@ -544,6 +559,14 @@ static void lifecycle(void)
              * had since its pixel addressing was implemented. */
             optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+        else if(formats[n]==VK_FORMAT_R8G8B8A8_UINT)
+            /* DXVK262-T06 independentBlend is promoted, so the integer colour
+             * target the two upstream leaves draw into reports its colour
+             * attachment role (and the transfer source its readback needs)
+             * beside the sampled and transfer-destination bits above. It has no
+             * blend bit: an integer target is never blended into. */
+            optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         /* One format publishes a linear-tiling role: RGBA8 carries the transfer
          * destination of the pinned host-readback staging image. */

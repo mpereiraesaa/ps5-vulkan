@@ -1908,8 +1908,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 139 mandatory format-feature cells satisfied
-with 523 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 140 mandatory format-feature cells satisfied
+with 522 documented per-format blockers, 60 format-query consistency
 checks, and twelve shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -2983,3 +2983,64 @@ tree, and `make check` is green on it.
 `independentBlend` and `sampleRateShading` remain blockers: the MRT path is
 described but not served (the advertised `maxColorAttachments` is still one)
 and the multisample contract is still empty.
+
+## independentBlend promotion (2026-09-22)
+
+The two upstream leaves that REQUIRE `independentBlend` pass on hardware, so the
+feature is advertised: `native/platform_ps5.c` reports the bit in every build,
+`src/graphics_limits.h` advertises `maxColorAttachments` 2 (and the two
+four-output fragment limits with it), and the two private measurement switches
+are retired - `VK_FORMAT_R8G8B8A8_UINT` is a served colour target now.
+
+Both leaves render two colour attachments in one pass - R8G8B8A8_UINT and
+R8G8B8A8_UNORM - clear both through the pass, draw once with a fragment stage
+that exports the two attachments' values, copy each attachment into its own
+buffer and compare the result with the upstream oracle. The second leaf writes
+only the second target; its fragment stage declares Location 1 alone and the
+pinned compiler publishes the export enable in the mask's second nibble, so the
+driver programmes the attachment it really writes as hardware target zero.
+
+Two strict measurement runs carried the integer colour target, both with the
+same payload SELF SHA-256
+`a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4` (eboot
+`a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4`):
+
+- `20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1`, log SHA-256
+  `9ae18272031fbe09877e223853d081d5cdb4740e8147ac8e522162ce7c84c34b` -
+  **464 Pass, 0 Fail, 2 NotSupported**: both
+  `dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2`
+  leaves pass, and the two `dedicated_allocation` siblings stay NotSupported
+  because `VK_KHR_dedicated_allocation` is not advertised. Title closed and
+  confirmed stopped.
+- `20260922T083110494Z_PPSA99994_upstream-cts_0x191b6cf7742e3`, log SHA-256
+  `34784cf89af8940a917cad59d5f23e328db67ad4b3dbe3c58f6f86f1a3bde8a3` - the
+  earlier run of the same pair where `start_index_0` already passed.
+
+Host tests prove the render-target word, the integer export classification, the
+renumbering the second-target-only shape needs, the readback plan and the
+fail-closed gates around them; only the hardware writes and reads the integer
+surface. This is focused validation of one requirement, not Vulkan conformance,
+and `sampleRateShading` remains a blocker on the same row set.
+
+**Canonical acceptance on the promoted candidate.** The shipping payload (no
+measurement switch; the two switches are gone), eboot sha256
+`713150da90f4a30b6f407aba1083958e0783f4cd3781e9f215088b5cb7c1bd03`, ran the
+frozen selection - now **464 acceptance cases** (the 462 of the main integration
+plus the two `suballocation.attachment_write_mask` leaves the feature owns) and
+46 diagnostics - in
+`20260922T103049552Z_PPSA99994_upstream-cts_0x1983e4b36fa05` (selection SHA-256
+`91c37ed06f78d1048b8fa1e693986ab047a749dd55e9585e2e8565a421603d2a`) and reported
+**UPSTREAM ACCEPTANCE PASSED: every selected case matched its upstream oracle
+and the title was closed**, with the two `dedicated_allocation` siblings
+reported `NotSupported` because `VK_KHR_dedicated_allocation` is not advertised.
+
+**Public-ABI capability probe on the same candidate.** eboot sha256
+`c438a98123c86925d62b6627b7b640734930dbcae5b8af6f88a4ed0dc61e8201`, run
+`20260922T103414212Z_PPSA99994_ps5vk_0x1986df1aeed66` (log SHA-256
+`3fa5f0c0049890f2c2679889616f2d0ccaa303d36a9f62ac9a19e0ba0aba6c62`), strictly
+verified by `tools/verify_dxvk_probe.py`: the device itself reports
+`independentBlend=1` and the probe ends `valid=1 total=62 satisfied=18
+blockers=44`, one requirement more than the merged tip's 17/45. With that
+receipt the DXVK matrix row for `feature:VkPhysicalDeviceFeatures:independentBlend`
+is **satisfied on all four axes** (api, implementation, cts, native) and the
+profile reads **16 of 62 requirements ready with 46 blockers**.

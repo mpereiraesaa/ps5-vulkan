@@ -81,10 +81,12 @@ uint32_t ps5vk_color_export_format_option(const unsigned char *blend_enable,
 static inline int ps5vk_color_target_format_supported(VkFormat format)
 {
     if (format == VK_FORMAT_B8G8R8A8_UNORM ||
-        format == VK_FORMAT_R8G8B8A8_UNORM) return 1;
-#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
-    if (format == VK_FORMAT_R8G8B8A8_UINT) return 1;
-#endif
+        format == VK_FORMAT_R8G8B8A8_UNORM ||
+        /* The integer colour target the independentBlend oracle draws into,
+         * promoted with the feature: the two upstream leaves that require it
+         * render into R8G8B8A8_UINT plus R8G8B8A8_UNORM and now pass on
+         * hardware (measured 2026-09-22). */
+        format == VK_FORMAT_R8G8B8A8_UINT) return 1;
     return 0;
 }
 
@@ -96,32 +98,23 @@ static inline int ps5vk_color_target_format_is_integer(VkFormat format)
     return format == VK_FORMAT_R8G8B8A8_UINT;
 }
 
-/* Whether this build actually SERVES an integer colour target. The
- * classification above is a property of the format; this one is the private
- * measurement switch, so every path that would execute or read back an integer
- * target asks this and a shipping build answers false. */
+/* Whether this build actually SERVES an integer colour target. It is a
+ * property of the format now that the promotion landed: the integer target is
+ * part of the served capability set, and every path that executes or reads one
+ * back asks this one question. */
 static inline int ps5vk_color_target_integer_served(VkFormat format)
 {
-#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
     return ps5vk_color_target_format_is_integer(format);
-#else
-    (void)format;
-    return 0;
-#endif
 }
 
 /* The upstream render-pass module derives an attachment's usage from the
  * format's reported features, so its colour attachments are created with the
  * sampled role on top of the readback one whenever the format publishes it.
- * That combination exists only in the build that serves the integer target
- * this oracle needs; a shipping build keeps the three-role readback shape. */
+ * That combination is served now that the feature and the integer target it
+ * needs are promoted. */
 static inline int ps5vk_color_sampled_readback_served(void)
 {
-#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
     return 1;
-#else
-    return 0;
-#endif
 }
 
 /* A pipeline that declares a count the profile cannot render, or an operation

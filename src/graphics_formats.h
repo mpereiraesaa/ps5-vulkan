@@ -170,6 +170,7 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
      * multiview view-count floor, and every other attachment stays
      * single-layer. */
     const VkBool32 input_attachment_shape =
+        format == VK_FORMAT_R8G8B8A8_UNORM &&
         ps5vk_texture_format_witnessed(format, PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
         usage == (VkImageUsageFlags)(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |

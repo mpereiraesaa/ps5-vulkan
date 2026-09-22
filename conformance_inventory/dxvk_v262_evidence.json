@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
+    "artifact_sha256": "c438a98123c86925d62b6627b7b640734930dbcae5b8af6f88a4ed0dc61e8201",
     "device_api": "1.0.0",
     "device_extensions": 5,
     "requirements": 62,
@@ -15,6 +15,7 @@
       "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
       "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
       "feature:VkPhysicalDeviceFeatures:geometryShader",
+      "feature:VkPhysicalDeviceFeatures:independentBlend",
       "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "feature:VkPhysicalDeviceFeatures:multiViewport",
       "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
@@ -27,8 +28,8 @@
     ],
     "runs": [
       {
-        "id": "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c",
-        "log_sha256": "86e945042300b4acdf78c141af6ff0a78f122c496d640faa4ceb3035151e2225"
+        "id": "20260922T103414212Z_PPSA99994_ps5vk_0x1986df1aeed66",
+        "log_sha256": "3fa5f0c0049890f2c2679889616f2d0ccaa303d36a9f62ac9a19e0ba0aba6c62"
       }
     ],
     "transport": "ps5log/1",
@@ -41,11 +42,55 @@
         "maxMultiviewInstanceIndex": "134217727"
       }
     ],
-    "source_matrix_sha256": "406be4ddc26df256dfebf1ed822ad1c8a6d70e1d83b28bccfbbdbf20854c5e04",
-    "satisfied": 17,
-    "blockers": 45
+    "source_matrix_sha256": "fe47a07725b126ac55e29cb178c1176696de8d59098de969789fce85978bbe12",
+    "satisfied": 18,
+    "blockers": 44
   },
   "historical_capability_probes": [
+    {
+      "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
+      "device_api": "1.0.0",
+      "device_extensions": 5,
+      "requirements": 62,
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c",
+          "log_sha256": "86e945042300b4acdf78c141af6ff0a78f122c496d640faa4ceb3035151e2225"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "406be4ddc26df256dfebf1ed822ad1c8a6d70e1d83b28bccfbbdbf20854c5e04",
+      "satisfied": 17,
+      "blockers": 45
+    },
     {
       "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
       "device_api": "1.0.0",
@@ -1084,6 +1129,32 @@
           "20260921T130803120Z_PPSA99994_upstream-cts_0x1523e64ca76d3"
         ],
         "state": "native-evidence"
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:independentBlend": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1"
+        ],
+        "refs": [
+          "cts/upstream/manifest.json",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "Both leaves in the pinned tree that REQUIRE independentBlend pass. They are the attachment_write_mask attachment_count_2 pair of the render-pass module (vktRenderPassTests.cpp:6504), which draws into two colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - with their own write masks and reads each attachment back. The promoted candidate passed the frozen 464-case acceptance run 20260922T103049552Z_PPSA99994_upstream-cts_0x1983e4b36fa05 (payload 713150da, selection 91c37ed0), and the two dedicated_allocation siblings of the same factory stay diagnostics with a measured NotSupported: they need VK_KHR_dedicated_allocation, which this profile does not advertise."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260922T083110494Z_PPSA99994_upstream-cts_0x191b6cf7742e3",
+          "20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1"
+        ],
+        "artifact_sha256": "a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4",
+        "refs": [
+          "VALIDATION.md#independentblend-promotion-2026-09-22"
+        ],
+        "note": "Two colour targets in one pass with their own clear, their own CB_TARGET_MASK nibble and their own readback into separate buffers, and a fragment stage that exports both (start_index_0) or only the second target (start_index_1, which the driver programmes by renumbering the written attachment to hardware target zero - measured: the pinned compiler's export instruction carries no target). The private two-MRT witness (src/two_mrt_oracle.c, native/two_mrt_probe.c) and its oracle recorded one draw writing two attachments with different values before the upstream leaves were selected."
       }
     }
   }

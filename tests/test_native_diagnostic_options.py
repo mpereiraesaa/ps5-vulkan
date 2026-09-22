@@ -61,12 +61,17 @@ class NativeDiagnosticOptions(unittest.TestCase):
         builder = (ROOT / "tools/build_native.py").read_text()
         sdk = (ROOT / "tools/build_sdk.py").read_text()
         platform = (ROOT / "native/platform_ps5.c").read_text()
-        # The measurement gate is private and reaches the platform through both
-        # build paths, so an SDK-linked payload carries the same capability the
-        # non-SDK build does.
+        # The two-MRT witness is still a private probe, but the capability it
+        # exercised is promoted: the platform reports independentBlend in every
+        # build, so no private gate has to reach it through either build path.
         self.assertIn("-DPS5VK_TWO_MRT_PROBE=", builder)
-        self.assertIn("-DPS5VK_INDEPENDENT_BLEND_DIAGNOSTIC=1", sdk)
-        self.assertIn("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC", platform)
+        self.assertNotIn("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC", sdk)
+        self.assertNotIn("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC", platform)
+        self.assertIn("PS5VK_FEATURE_INDEPENDENT_BLEND", platform)
+        self.assertNotIn("PS5VK_INTEGER_TARGET_DIAGNOSTIC", sdk)
+        limits = (ROOT / "src/graphics_limits.h").read_text()
+        self.assertIn("maxColorAttachments=PS5VK_MAX_COLOR_ATTACHMENTS", limits)
+        self.assertNotIn("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC", limits)
         self.assertIn("two_mrt_probe.c", builder)
         self.assertIn("two_mrt_oracle.c", builder)
         source = (ROOT / "native/two_mrt_probe.c").read_text()

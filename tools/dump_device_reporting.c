@@ -101,6 +101,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                          * dual_source leaves passed on the
                                          * promoted candidate. */
                                         PS5VK_FEATURE_DUAL_SRC_BLEND |
+                                        /* DXVK262-T06 independentBlend, promoted
+                                         * on 2026-09-22: the platform reports
+                                         * the bit, the profile advertises two
+                                         * colour attachments, and both upstream
+                                         * leaves that require the feature pass.
+                                         * This dump mirrors the console
+                                         * initializer. */
+                                        PS5VK_FEATURE_INDEPENDENT_BLEND |
                                         /* DXVK262-T05, promoted on
                                          * physical-console evidence: the four
                                          * rasterization and viewport features

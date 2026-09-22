@@ -8,11 +8,11 @@
   "console_used_by_this_task": true,
   "summary": {
     "mandatory_cells_in_scope": 287,
-    "satisfied_by_this_task": 23,
+    "satisfied_by_this_task": 24,
     "direct_texel_matrix_cells_in_scope": 10,
     "ready_pending_physical_validation": 0,
-    "blocked_without_backend": 264,
-    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated eight A8B8G8R8 sampled entries. The direct uniform-texel matrix of 2026-09-15 validates 41 formats across all owned format families and moves ten additional cells in this original two-table scope. The remaining 264 baseline cells require backend work; the count is not CTS coverage or conformance."
+    "blocked_without_backend": 263,
+    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated eight A8B8G8R8 sampled entries. The direct uniform-texel matrix of 2026-09-15 validates 41 formats across all owned format families and moves ten additional cells in this original two-table scope. The DXVK262-T06 independentBlend promotion of 2026-09-22 moves one more: the integer colour target R8G8B8A8_UINT now reports its colour-attachment feature and passes both upstream leaves that require the feature. The remaining 263 baseline cells require backend work; the count is not CTS coverage or conformance."
   },
   "qualification": {
     "status": "validated",
@@ -60,6 +60,13 @@
         "log_sha256": [
           "fa82a55bab8bd419e360ecaec5a3276a49d2eacf6aac89f07eca438c76883db1",
           "59673109cd1b1c3829a96ec90c3c5c0c55ef0113ca773230993b2009820bfa23"
+        ]
+      },
+      "t06-independent-blend": {
+        "self_sha256": "a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4",
+        "log_sha256": [
+          "9ae18272031fbe09877e223853d081d5cdb4740e8147ac8e522162ce7c84c34b",
+          "34784cf89af8940a917cad59d5f23e328db67ad4b3dbe3c58f6f86f1a3bde8a3"
         ]
       }
     }
@@ -359,6 +366,24 @@
         "20260921T131810348Z_PPSA99994_ps5vk_0x152cbc5ead555"
       ],
       "artifact_sha256": "aa1cfae7eaf6570f4bf6618d89f7cad1b532907a6a3c2a26691b66fae9aaa870"
+    },
+    {
+      "format": "VK_FORMAT_R8G8B8A8_UINT",
+      "feature": "VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT",
+      "evidence_group": "t06-independent-blend",
+      "capability": "PS5VK_FORMAT_CAP_COLOR_ATTACHMENT",
+      "enablement": "COLOR_ATTACHMENT in the witnessed mask for VK_FORMAT_R8G8B8A8_UINT, and the platform reports independentBlend",
+      "table": "formats-mandatory-features-4byte",
+      "profile": "graphics",
+      "shader_type": "fragment",
+      "minimal_gpu_operation": "Create two 64x64 colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - in one render pass, clear both through the pass, draw once with the fragment stage that exports a uvec4 at Location 0 and a vec4 at Location 1, and copy each attachment into its own buffer for the upstream oracle's comparison.",
+      "expected_result": "Both upstream attachment_write_mask leaves pass: the integer attachment takes the exported pattern while the normalized one takes its own, each read back into its own buffer, and the two dedicated_allocation siblings stay NotSupported because VK_KHR_dedicated_allocation is not advertised.",
+      "host_test_limit": "Host tests prove the render-target word, the integer export classification, the renumbering the second-target-only shape needs and the readback plan; only the hardware writes and reads the integer surface.",
+      "run_ids": [
+        "20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1",
+        "20260922T083110494Z_PPSA99994_upstream-cts_0x191b6cf7742e3"
+      ],
+      "artifact_sha256": "a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4"
     }
   ],
   "blocker_classification": [
@@ -391,8 +416,8 @@
       "profiles": [
         "graphics"
       ],
-      "cells": 22,
-      "detail": "Only B8G8R8A8_UNORM and R8G8B8A8_UNORM have a render-target encoding and a clear/draw/readback route; the native graphics compiler additionally requires colorWriteMask 15 with blendEnable false, so no blend bit is publishable either."
+      "cells": 21,
+      "detail": "Only B8G8R8A8_UNORM, R8G8B8A8_UNORM and - since the DXVK262-T06 independentBlend promotion of 2026-09-22 - R8G8B8A8_UINT have a render-target encoding and a clear/draw/readback route; the native graphics compiler additionally requires a write-mask shape the target register can express (the masked, unblended one the two upstream leaves that require the feature build), so no blend bit is publishable either."
     },
     {
       "reason": "no-storage-image-abi",
