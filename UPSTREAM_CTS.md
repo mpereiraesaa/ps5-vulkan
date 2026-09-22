@@ -31,6 +31,7 @@ selection is intentionally small and is frozen in a committed manifest.
 | `cts/upstream_runner.py` | Strict verifier: reassembles the QPA stream and enforces the acceptance policy |
 | `tools/build_upstream_cts.py` | Reproducible cross-build and packaging of the payload |
 | `tools/run_upstream_cts.py` | Launch, capture and verify one native acceptance run |
+| `tools/decode_run.py` | Decode a run: per-leaf status, first driver refusal, delta against another run |
 | `tools/check_upstream_selection.py` | Host-only check that every selected path traces back to upstream sources |
 
 The integration supplies platform adaptation (threading, time, assets, logging,
@@ -254,6 +255,26 @@ composes the names from the module's own sample-count array, minSampleShading
 value table and per-group constructor literals, and the `samples_<count>` group
 segment - which the factory prints rather than writes as a literal - comes from
 `_multisample_generated_segments` against the same table.
+
+To read a run, decode it rather than grepping the report:
+
+```sh
+python3 tools/decode_run.py <runs>/<run>.log --against <runs>/<previous>.log
+```
+
+`decode_run.py` accepts a run file, a reassembled `.qpa` or a receipt, and
+reports:
+
+- the status counts;
+- every leaf that did not pass, with its oracle detail and the first driver
+  refusal logged while it ran (or its last driver call, when the refusal left
+  no marker);
+- the refusal signatures (marker plus `site=`/`phase=`/`why=`) across the
+  failing leaves;
+- the fixed, broken, moved, added and removed leaves against an earlier run.
+
+A run that never finalized is decoded leniently. The tool is a reading aid;
+only the strict verifier decides acceptance.
 
 ## Host checks versus hardware evidence
 
