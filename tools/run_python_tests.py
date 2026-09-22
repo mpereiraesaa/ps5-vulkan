@@ -26,11 +26,17 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 TIMES = ROOT / "build/python-test-times.json"
 
-# Modules that invoke build tools writing fixed shared paths. They run one at a
-# time, in this order, in a single lane alongside the parallel ones.
+# Modules that build into, or link against, fixed shared paths (dist-sdk,
+# examples/native_consumer/build, build/graphics, dist-upstream-cts,
+# build/tests/test_cts_host). They run one at a time, in this order, in a
+# single lane alongside the parallel ones. A new module that touches any of
+# these trees, directly or through a tool it runs, belongs here.
 SERIAL = (
     "test_build_sdk_identity",
     "test_consumer_isolation",
+    "test_consumer_resource_abi",
+    "test_cts_runner",
+    "test_dxvk_probe",
     "test_sdk_archive",
     "test_tess_sdk_profile",
     "test_native_diagnostic_options",
@@ -52,8 +58,10 @@ def run_module(module: str, verbose: bool, tests: Path = TESTS) -> tuple[str, in
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(tests), env.get("PYTHONPATH")]))
     args = [sys.executable, "-m", "unittest"] + (["-v"] if verbose else []) + [module]
     started = time.monotonic()
-    proc = subprocess.run(args, cwd=ROOT, env=env, stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT, text=True)
+    # Tests never read stdin; a tool that would (llvm-mc -mcpu=help) must see
+    # EOF instead of blocking on whatever terminal or pipe launched the run.
+    proc = subprocess.run(args, cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     return module, proc.returncode, proc.stdout, time.monotonic() - started
 
 

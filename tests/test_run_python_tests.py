@@ -74,6 +74,15 @@ class RunPythonTestsTests(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertEqual({"test_a"}, set(times))
 
+    def test_modules_see_a_closed_stdin(self):
+        """A tool that reads stdin must get EOF, not block the whole run."""
+        code, out, _ = self.run_fixture({"test_a": """
+            import sys, unittest
+            class T(unittest.TestCase):
+                def test_stdin_is_at_eof(self): self.assertEqual("", sys.stdin.read())
+        """})
+        self.assertEqual(0, code, out)
+
     def test_every_serial_module_exists(self):
         """A renamed module would silently leave the serial lane and race."""
         missing = [name for name in self.runner.SERIAL
