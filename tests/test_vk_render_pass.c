@@ -241,9 +241,10 @@ static void resolve_attachments(struct VkDevice_T *d)
            ps5vk_render_pass_subpass(pass, 0)->color[0].attachment == 0 &&
            ps5vk_subpass_uses_resolve(ps5vk_render_pass_subpass(pass, 0)));
 
-    /* The framebuffer carries the role too: a framebuffer whose resolve slot
-     * names another attachment is not compatible with this pass, and one that
-     * leaves it unused is not either. */
+    /* Compatibility is checked per reference against the framebuffer's own
+     * attachment slots, not through the role fields: a framebuffer whose slot 1
+     * was created for a different format or sample count is not compatible with
+     * this pass, whatever its role slots say (DXVK262-T06). */
     {
         struct VkFramebuffer_T framebuffer = {.device=d, .attachment_count=2,
             .formats={VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM},
@@ -252,14 +253,19 @@ static void resolve_attachments(struct VkDevice_T *d)
             .resolve_count=1, .resolve_attachments={1},
             .depth_attachment=VK_ATTACHMENT_UNUSED};
         assert(ps5vk_framebuffer_compatible(&framebuffer, pass));
-        /* A framebuffer that declares no resolve array is not compatible with
-         * a pass that does. */
+        /* The role rule is index-independent by design - a conformant
+         * continuation may reach the same role through another slot - so what
+         * makes a framebuffer incompatible is a role it does not carry, a slot
+         * outside it, or a format/sample count that disagrees. */
         framebuffer.resolve_count = 0;
         assert(!ps5vk_framebuffer_compatible(&framebuffer, pass));
         framebuffer.resolve_count = 1;
         framebuffer.resolve_attachments[0] = VK_ATTACHMENT_UNUSED;
         assert(!ps5vk_framebuffer_compatible(&framebuffer, pass));
         framebuffer.resolve_attachments[0] = 1;
+        framebuffer.attachment_count = 1;
+        assert(!ps5vk_framebuffer_compatible(&framebuffer, pass));
+        framebuffer.attachment_count = 2;
         framebuffer.samples[1] = VK_SAMPLE_COUNT_4_BIT;
         assert(!ps5vk_framebuffer_compatible(&framebuffer, pass));
         framebuffer.samples[1] = VK_SAMPLE_COUNT_1_BIT;
@@ -301,12 +307,19 @@ static void resolve_attachments(struct VkDevice_T *d)
     resolve.attachment = 2;
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
     resolve.attachment = 1;
-    /* Every subpass names the same resolve reference, like every other role. */
+    /* Each subpass declares its own resolve array (DXVK262-T06): one declaring
+     * a resolve reference and the other declaring the array with an UNUSED
+     * entry is a shape the model describes, and both are accepted. */
     VkSubpassDescription two[2] = {subpass, subpass};
     info.subpassCount = 2; info.pSubpasses = two;
     VkAttachmentReference none = {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED};
     two[1].pResolveAttachments = &none;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS && pass);
+    assert(ps5vk_render_pass_subpass(pass, 0)->resolve_count == 1 &&
+           ps5vk_render_pass_subpass(pass, 0)->resolve[0].attachment == 1 &&
+           ps5vk_render_pass_subpass(pass, 1)->resolve_count == 1 &&
+           ps5vk_render_pass_subpass(pass, 1)->resolve[0].attachment == VK_ATTACHMENT_UNUSED);
+    vkDestroyRenderPass(d, pass, NULL);
     two[1].pResolveAttachments = &resolve;
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS && pass);
     vkDestroyRenderPass(d, pass, NULL);
@@ -363,18 +376,74 @@ static void multiple_subpasses(struct VkDevice_T *d)
     /* Refused shapes. Each leaves no object and no accounting behind. */
     const unsigned objects = d->graphics_objects;
 
-    /* A preserve list has no legal non-empty form in this profile: every
-     * subpass names the same attachments and every attachment must be named,
-     * so nothing can be preserved-but-unused. The list is refused rather than
-     * stored where it could never mean anything. */
-    uint32_t preserved = 1;
-    subpasses[0].preserveAttachmentCount = 1;
-    subpasses[0].pPreserveAttachments = &preserved;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT &&
-           !pass);
-    subpasses[0].preserveAttachmentCount = 0;
-    subpasses[0].pPreserveAttachments = NULL;
-
+    /* Each subpass may name its OWN attachments (DXVK262-T06): a framebuffer is
+     * an array of views indexed by attachment, and a subpass may preserve what
+     * it does not render into - which is how the pinned multisample family
+     * keeps its per-sample targets alive. */
+    {
+        VkAttachmentDescription two[2] = {
+            {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT,
+             .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+             .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+             .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+            {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT,
+             .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+             .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+             .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+        VkAttachmentReference first = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        VkAttachmentReference second = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        uint32_t preserved = 1;
+        VkSubpassDescription described[2] = {
+            {.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount=1,
+             .pColorAttachments=&first, .preserveAttachmentCount=1,
+             .pPreserveAttachments=&preserved},
+            {.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS, .colorAttachmentCount=1,
+             .pColorAttachments=&second}};
+        VkRenderPassCreateInfo two_info = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .attachmentCount=2, .pAttachments=two, .subpassCount=2, .pSubpasses=described};
+        VkRenderPass two_pass = VK_NULL_HANDLE;
+        {
+            VkResult rc = vkCreateRenderPass(d, &two_info, NULL, &two_pass);
+            if (rc != VK_SUCCESS) fprintf(stderr, "DEBUG heterogeneous rc=%d\n", (int)rc);
+            assert(rc == VK_SUCCESS && two_pass);
+        }
+        assert(ps5vk_render_pass_subpass(two_pass, 0)->color[0].attachment == 0 &&
+               ps5vk_render_pass_subpass(two_pass, 1)->color[0].attachment == 1);
+        assert(ps5vk_render_pass_subpass(two_pass, 0)->preserve_count == 1 &&
+               ps5vk_render_pass_preserves(two_pass, 0)[0] == 1 &&
+               ps5vk_render_pass_has_preserve_list(two_pass));
+        /* Owned: mutating the caller's array afterwards changes nothing. */
+        preserved = 0;
+        assert(ps5vk_render_pass_preserves(two_pass, 0)[0] == 1);
+        vkDestroyRenderPass(d, two_pass, NULL);
+        /* An attachment a subpass renders into may not also be preserved by
+         * that subpass, an entry may not be VK_ATTACHMENT_UNUSED or out of
+         * range, and one attachment may not appear twice. */
+        uint32_t used = 0;
+        described[0].pPreserveAttachments = &used;
+        assert(vkCreateRenderPass(d, &two_info, NULL, &two_pass) == VK_ERROR_UNKNOWN && !two_pass);
+        uint32_t unused_entry = VK_ATTACHMENT_UNUSED;
+        described[0].pPreserveAttachments = &unused_entry;
+        assert(vkCreateRenderPass(d, &two_info, NULL, &two_pass) == VK_ERROR_UNKNOWN && !two_pass);
+        uint32_t out_of_range = 2;
+        described[0].pPreserveAttachments = &out_of_range;
+        assert(vkCreateRenderPass(d, &two_info, NULL, &two_pass) == VK_ERROR_UNKNOWN && !two_pass);
+        uint32_t twice[2] = {1, 1};
+        described[0].pPreserveAttachments = twice;
+        described[0].preserveAttachmentCount = 2;
+        assert(vkCreateRenderPass(d, &two_info, NULL, &two_pass) == VK_ERROR_UNKNOWN && !two_pass);
+        /* A count without an array is malformed, not empty. */
+        described[0].pPreserveAttachments = NULL;
+        assert(vkCreateRenderPass(d, &two_info, NULL, &two_pass) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !two_pass);
+        described[0].preserveAttachmentCount = 0;
+        /* An attachment no reference of any subpass names has no role. */
+        VkAttachmentDescription unlisted[3] = {two[0], two[1], two[0]};
+        VkRenderPassCreateInfo unlisted_info = two_info;
+        unlisted_info.attachmentCount = 3; unlisted_info.pAttachments = unlisted;
+        assert(vkCreateRenderPass(d, &unlisted_info, NULL, &two_pass) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !two_pass);
+    }
     /* Vulkan IGNORES pInputAttachments when the count is zero, so a stale
      * pointer beside a zero count must NOT be refused. */
     VkAttachmentReference ignored = {0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -383,18 +452,20 @@ static void multiple_subpasses(struct VkDevice_T *d)
     vkDestroyRenderPass(d, pass, NULL);
     subpasses[0].pInputAttachments = NULL;
 
-    /* Subpasses must name the SAME attachments: a pass whose subpasses
-     * disagreed about which attachment is the colour one could be created and
-     * then served by no framebuffer at all. */
+    /* Subpasses may name DIFFERENT attachments (DXVK262-T06). What is still
+     * refused is a reference that does not fit the description it names: this
+     * fixture's attachment 1 is D32, so a subpass that renders into it as a
+     * colour attachment is refused by the format rule rather than by a
+     * shared-role rule. */
     VkAttachmentReference other_color = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
     subpasses[1].pColorAttachments = &other_color;
     subpasses[1].pDepthStencilAttachment = NULL;
     assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
     subpasses[1].pColorAttachments = &color;
-    subpasses[1].pDepthStencilAttachment = &depth;
-    /* Including the case where one subpass simply drops the depth role. */
+    /* Dropping a role in one subpass is legal now. */
     subpasses[1].pDepthStencilAttachment = NULL;
-    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS && pass);
+    vkDestroyRenderPass(d, pass, NULL);
     subpasses[1].pDepthStencilAttachment = &depth;
 
     /* more subpasses than the profile executes */

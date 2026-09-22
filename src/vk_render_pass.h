@@ -103,6 +103,12 @@ struct ps5vk_subpass {
      * keeps every element in the object's single allocation at 32-bit
      * alignment, which is the rule the suballocation below depends on. */
     uint32_t input_first, input_count;
+    /* Where this subpass's preserve list starts in the pass's one owned array,
+     * and how many entries it has. A preserved attachment is not rendered into
+     * by the subpass and must come out of it unchanged, which is how the pinned
+     * multisample family keeps the resolve target and its per-sample targets
+     * alive across the fetch subpasses (DXVK262-T06). */
+    uint32_t preserve_first, preserve_count;
 };
 
 struct VkRenderPass_T {
@@ -121,6 +127,10 @@ struct VkRenderPass_T {
      * same single allocation. Never a create-info pointer. */
     VkAttachmentReference *inputs;
     uint32_t input_count;
+    /* Every subpass's preserve list, concatenated in subpass order, in the same
+     * single allocation. Never a create-info pointer. */
+    uint32_t *preserves;
+    uint32_t preserve_count;
     struct ps5vk_render_pass_multiview multiview;
 };
 
@@ -141,6 +151,25 @@ static inline const VkAttachmentReference *ps5vk_render_pass_inputs(
     VkRenderPass pass, uint32_t index)
 {
     return &pass->inputs[pass->subpasses[index].input_first];
+}
+
+/* The owned preserve list of one subpass, in the order the caller declared it. */
+static inline const uint32_t *ps5vk_render_pass_preserves(
+    VkRenderPass pass, uint32_t index)
+{
+    return &pass->preserves[pass->subpasses[index].preserve_first];
+}
+
+/* True when any subpass of this pass preserves an attachment. The object model
+ * stores and validates the list; the native queue does not carry attachment
+ * contents across a subpass boundary implicitly, so its executor refuses a pass
+ * this returns true for rather than silently dropping the promise. */
+static inline int ps5vk_render_pass_has_preserve_list(VkRenderPass pass)
+{
+    if (!pass) return 0;
+    for (uint32_t i = 0; i < pass->subpass_count; ++i)
+        if (pass->subpasses[i].preserve_count) return 1;
+    return 0;
 }
 
 /* True when any colour reference of this subpass resolves into another

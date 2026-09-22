@@ -33,7 +33,7 @@ static int input_layout(VkImageLayout value)
  * reference it follows - and a non-empty preserve list is outside the bounded
  * profile. */
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
-    struct ps5vk_subpass *out, uint32_t *input_count)
+    struct ps5vk_subpass *out, uint32_t *input_count, uint32_t *preserve_count)
 {
     /* A subpass names the colour attachments this profile serves, or none at
      * all. Zero is how
@@ -54,9 +54,30 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
         (s->inputAttachmentCount && !s->pInputAttachments) ||
         s->inputAttachmentCount > PS5VK_MAX_INPUT_ATTACHMENTS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
-    /* Every attachment of this profile is used by every subpass, so nothing
-     * can be preserved-but-unused and a non-empty list has no legal form. */
-    if (s->preserveAttachmentCount) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* A preserve list is a real part of the shape now (DXVK262-T06): the pinned
+     * multisample family keeps the resolve target and its per-sample targets
+     * alive across the fetch subpasses this way. Vulkan's rules for it are the
+     * ones enforced here: every entry names an attachment of this pass, no entry
+     * is VK_ATTACHMENT_UNUSED, no attachment appears twice, and an attachment
+     * cannot be both preserved and used by the same subpass - preserving is the
+     * promise that its contents survive untouched, which a reference in the same
+     * subpass would contradict. */
+    if (s->preserveAttachmentCount && !s->pPreserveAttachments)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    for (uint32_t i = 0; i < s->preserveAttachmentCount; ++i) {
+        const uint32_t attachment = s->pPreserveAttachments[i];
+        if (attachment >= attachments || attachment == VK_ATTACHMENT_UNUSED)
+            return VK_ERROR_UNKNOWN;
+        for (uint32_t earlier = 0; earlier < i; ++earlier)
+            if (s->pPreserveAttachments[earlier] == attachment) return VK_ERROR_UNKNOWN;
+        if (s->pDepthStencilAttachment &&
+            s->pDepthStencilAttachment->attachment == attachment) return VK_ERROR_UNKNOWN;
+        for (uint32_t c = 0; c < s->colorAttachmentCount; ++c)
+            if (s->pColorAttachments[c].attachment == attachment) return VK_ERROR_UNKNOWN;
+        for (uint32_t c = 0; c < s->colorAttachmentCount && s->pResolveAttachments; ++c)
+            if (s->pResolveAttachments[c].attachment == attachment) return VK_ERROR_UNKNOWN;
+    }
+    *preserve_count = s->preserveAttachmentCount;
     for (uint32_t i = 0; i < s->inputAttachmentCount; ++i) {
         const VkAttachmentReference *reference = &s->pInputAttachments[i];
         /* VK_ATTACHMENT_UNUSED is a legal entry and Vulkan ignores its layout,
@@ -145,22 +166,27 @@ static VkResult owned_bytes(const VkRenderPassCreateInfo *info, size_t *total)
     /* Every subpass's input references are copied into the same block, so the
      * total has to include each one; a subpass count that overflows this sum
      * would otherwise leave the copy writing past the allocation. */
-    size_t inputs = 0;
+    size_t inputs = 0, preserves = 0;
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
         const size_t count = info->pSubpasses[i].inputAttachmentCount;
         if (count > (SIZE_MAX - inputs) / sizeof(VkAttachmentReference))
             return VK_ERROR_OUT_OF_HOST_MEMORY;
         inputs += count * sizeof(VkAttachmentReference);
+        const size_t kept = info->pSubpasses[i].preserveAttachmentCount;
+        if (kept > (SIZE_MAX - preserves) / sizeof(uint32_t))
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        preserves += kept * sizeof(uint32_t);
     }
     /* Same order as the suballocation below, so the total cannot drift from
      * the layout it is supposed to cover. */
-    const size_t parts[4] = {
+    const size_t parts[5] = {
         (size_t)info->subpassCount * sizeof(struct ps5vk_subpass),
         (size_t)info->attachmentCount * sizeof(VkAttachmentDescription),
         (size_t)info->dependencyCount * sizeof(VkSubpassDependency),
         inputs,
+        preserves,
     };
-    for (unsigned i = 0; i < 4; ++i) {
+    for (unsigned i = 0; i < 5; ++i) {
         /* The counts are already bounded by the profile limits checked above,
          * so these cannot overflow; the checks are kept so a later limit
          * change cannot turn into a silent wrap. */
@@ -198,26 +224,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     struct ps5vk_subpass colors[PS5VK_MAX_SUBPASSES];
     VkAttachmentReference depths[PS5VK_MAX_SUBPASSES];
     uint32_t input_counts[PS5VK_MAX_SUBPASSES];
+    uint32_t preserve_counts[PS5VK_MAX_SUBPASSES];
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
         VkResult rc = subpass_valid(&info->pSubpasses[i], info->attachmentCount,
-                                    &colors[i], &input_counts[i]);
+                                    &colors[i], &input_counts[i], &preserve_counts[i]);
         if (rc != VK_SUCCESS) return rc;
         depths[i] = colors[i].depth;
     }
-    /* EVERY SUBPASS MUST NAME THE SAME ATTACHMENTS. A framebuffer in this
-     * driver carries one colour role and one depth role, derived from the
-     * pass, so a pass whose subpasses disagreed about which attachment is the
-     * colour one could be created and then served by no framebuffer at all.
-     * The profile is constrained here, where the caller sees it, instead of
-     * being advertised and then failing later. Layouts may still differ per
-     * subpass; only the attachment each role names is fixed. */
-    for (uint32_t i = 1; i < info->subpassCount; ++i)
-        if (colors[i].color_count != colors[0].color_count ||
-            colors[i].color[0].attachment != colors[0].color[0].attachment ||
-            colors[i].resolve_count != colors[0].resolve_count ||
-            colors[i].resolve[0].attachment != colors[0].resolve[0].attachment ||
-            depths[i].attachment != depths[0].attachment)
-            return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Each subpass names the attachments it renders into, reads and preserves
+     * (DXVK262-T06). A framebuffer is an array of views indexed by attachment,
+     * so subpasses may differ: the pinned multisample family renders into the
+     * multisampled colour in subpass 0 and, in each following fetch subpass,
+     * reads it as an input attachment while writing one per-sample target and
+     * preserving the rest. Every reference is checked per subpass below and
+     * framebuffer compatibility is checked per reference rather than by role.
+     * The native queue still refuses a graph it cannot execute - it carries the
+     * shared-role shape only - so nothing here reaches hardware that way. */
     /* Every attachment must be reachable through a subpass reference: an
      * attachment this profile never uses has no role to play. An input
      * reference is a use, which is the whole point of the shape: a later
@@ -225,72 +247,81 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
      * A resolve target is a use too: it is named by the reference that resolves
      * into it. */
     for (uint32_t i = 0; i < info->attachmentCount; ++i) {
-        VkBool32 reachable = depths[0].attachment == i;
-        for (uint32_t c = 0; c < colors[0].color_count && !reachable; ++c)
-            reachable = colors[0].color[c].attachment == i;
-        for (uint32_t c = 0; c < colors[0].color_count && !reachable; ++c)
-            reachable = colors[0].resolve[c].attachment == i;
-        for (uint32_t s = 0; s < info->subpassCount && !reachable; ++s)
-            for (uint32_t r = 0; r < input_counts[s]; ++r)
-                if (info->pSubpasses[s].pInputAttachments[r].attachment == i) {
-                    reachable = VK_TRUE;
-                    break;
-                }
+        VkBool32 reachable = VK_FALSE;
+        for (uint32_t s = 0; s < info->subpassCount && !reachable; ++s) {
+            const struct ps5vk_subpass *sp = &colors[s];
+            if (depths[s].attachment == i) reachable = VK_TRUE;
+            for (uint32_t c = 0; c < sp->color_count && !reachable; ++c)
+                reachable = sp->color[c].attachment == i;
+            for (uint32_t c = 0; c < sp->resolve_count && !reachable; ++c)
+                reachable = sp->resolve[c].attachment == i;
+            for (uint32_t r = 0; r < preserve_counts[s] && !reachable; ++r)
+                reachable = info->pSubpasses[s].pPreserveAttachments[r] == i;
+            for (uint32_t r = 0; r < input_counts[s] && !reachable; ++r)
+                reachable = info->pSubpasses[s].pInputAttachments[r].attachment == i;
+        }
         if (!reachable) return VK_ERROR_FEATURE_NOT_PRESENT;
     }
-    VkSampleCountFlagBits attachment_samples = VK_SAMPLE_COUNT_1_BIT;
-    int attachment_samples_known = 0;
+    /* Per-attachment and per-subpass checks. An attachment may play different
+     * roles in different subpasses, so what it must satisfy is the union of the
+     * roles it is named in, and the sample-count agreement is a rule of each
+     * subpass rather than of the whole pass (DXVK262-T06). */
+    const VkSampleCountFlags served = ps5vk_platform_sample_counts(d->platform_features);
     for (uint32_t i = 0; i < info->attachmentCount; ++i) {
         const VkAttachmentDescription *a = &info->pAttachments[i];
-        /* The roles are shared, so subpass 0 decides which attachment is the
-         * depth one for the whole pass. */
-        int is_depth = depths[0].attachment == i;
-        /* A resolve target is the attachment a colour reference resolves into.
-         * It is a role of its own, not an attachment the subpass renders into:
-         * Vulkan gives it the colour attachment's format and exactly one
-         * sample, so it is exempt from the shared sample count the rendered
-         * attachments must agree on. */
-        uint32_t resolve_of = VK_ATTACHMENT_UNUSED;
-        for (uint32_t s = 0; s < info->subpassCount && resolve_of == VK_ATTACHMENT_UNUSED; ++s)
-            for (uint32_t c = 0; c < colors[s].resolve_count; ++c)
-                if (colors[s].resolve[c].attachment == i) {
-                    resolve_of = colors[s].color[c].attachment;
-                    break;
-                }
-        const int is_resolve = resolve_of != VK_ATTACHMENT_UNUSED;
-        /* The sample counts this device serves (DXVK262-T06). The colour role
-         * takes the counts the platform mask reports - 1x alone until a
-         * multisample path was measured, and then the envelope in
-         * src/sample_rate_contract.h - while the depth role stays 1x: no
-         * multisampled depth target exists on this path yet, and a resolve
-         * target is single-sample by definition. Every attachment the subpass
-         * RENDERS INTO has to agree on the count, because a framebuffer's
-         * attachments are required to share one, and passing a count the
-         * device does not serve is refused where the caller can see it rather
-         * than accepted and failed later. */
-        const VkSampleCountFlags served = is_depth ? VK_SAMPLE_COUNT_1_BIT :
-            ps5vk_platform_sample_counts(d->platform_features);
-        VkBool32 sample_count_ok = VK_TRUE;
-        if (is_resolve) {
-            sample_count_ok = a->samples == VK_SAMPLE_COUNT_1_BIT ? VK_TRUE : VK_FALSE;
-        } else if (!attachment_samples_known) {
-            attachment_samples = a->samples; attachment_samples_known = 1;
-        } else if (a->samples != attachment_samples) {
-            sample_count_ok = VK_FALSE;
+        int as_colour = 0, as_depth = 0, as_resolve = 0;
+        for (uint32_t s = 0; s < info->subpassCount; ++s) {
+            const struct ps5vk_subpass *sp = &colors[s];
+            if (depths[s].attachment == i) as_depth = 1;
+            for (uint32_t c = 0; c < sp->color_count; ++c)
+                if (sp->color[c].attachment == i) as_colour = 1;
+            for (uint32_t c = 0; c < sp->resolve_count; ++c)
+                if (sp->resolve[c].attachment == i) as_resolve = 1;
         }
-        if (is_depth && is_resolve) sample_count_ok = VK_FALSE;
-        if (a->flags || !(served & a->samples) || !sample_count_ok ||
-            (is_resolve && a->format != info->pAttachments[resolve_of].format) ||
-            (is_depth ? a->format != VK_FORMAT_D32_SFLOAT :
-             !ps5vk_color_target_format_supported(a->format)))
+        /* Flags, the load/store operation ranges and the layouts are properties
+         * of the attachment; the layout rules are the ones the roles it plays
+         * need. A colour, resolve or depth role each bounds the format: the two
+         * colour formats this profile renders into, and D32 for depth. */
+        if (a->flags ||
+            ((as_colour || as_resolve) && !ps5vk_color_target_format_supported(a->format)) ||
+            (as_depth && a->format != VK_FORMAT_D32_SFLOAT))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
             a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
             a->stencilLoadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->stencilLoadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
             a->stencilStoreOp < VK_ATTACHMENT_STORE_OP_STORE || a->stencilStoreOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
-            !layout(a->initialLayout, is_depth, 1) || !layout(a->finalLayout, is_depth, 0) ||
+            !layout(a->initialLayout, as_depth, 1) || !layout(a->finalLayout, as_depth, 0) ||
             (a->initialLayout == VK_IMAGE_LAYOUT_UNDEFINED && a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD))
             return VK_ERROR_UNKNOWN;
+    }
+    for (uint32_t s = 0; s < info->subpassCount; ++s) {
+        const struct ps5vk_subpass *sp = &colors[s];
+        VkSampleCountFlagBits subpass_samples = VK_SAMPLE_COUNT_1_BIT;
+        int rendered = 0;
+        /* The counts this device serves (DXVK262-T06): every attachment a
+         * subpass renders into agrees on one of them. The depth role stays 1x -
+         * no multisampled depth target exists on this path yet - and a resolve
+         * target is single-sample by definition. */
+        for (uint32_t c = 0; c < sp->color_count; ++c) {
+            const VkAttachmentDescription *a = &info->pAttachments[sp->color[c].attachment];
+            if (!(served & a->samples)) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (!rendered) { subpass_samples = a->samples; rendered = 1; }
+            else if (a->samples != subpass_samples) return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
+        if (sp->depth.attachment != VK_ATTACHMENT_UNUSED) {
+            const VkAttachmentDescription *a = &info->pAttachments[sp->depth.attachment];
+            if (a->samples != VK_SAMPLE_COUNT_1_BIT ||
+                (rendered && a->samples != subpass_samples))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
+        for (uint32_t c = 0; c < sp->resolve_count; ++c) {
+            const VkAttachmentReference *r = &sp->resolve[c];
+            if (r->attachment == VK_ATTACHMENT_UNUSED) continue;
+            const VkAttachmentDescription *target = &info->pAttachments[r->attachment];
+            const VkAttachmentDescription *source = &info->pAttachments[sp->color[c].attachment];
+            if (target->samples != VK_SAMPLE_COUNT_1_BIT || target->format != source->format)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
     }
     for (uint32_t i = 0; i < info->dependencyCount; ++i) {
         const VkSubpassDependency *dep = &info->pDependencies[i];
@@ -361,6 +392,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     VkSubpassDependency *dependencies = (VkSubpassDependency *)(void *)cursor;
     cursor += (size_t)info->dependencyCount * sizeof(*dependencies);
     VkAttachmentReference *inputs = (VkAttachmentReference *)(void *)cursor;
+    size_t input_elements = 0, preserve_elements = 0;
+    for (uint32_t i = 0; i < info->subpassCount; ++i) {
+        input_elements += input_counts[i];
+        preserve_elements += preserve_counts[i];
+    }
+    cursor += input_elements * sizeof(*inputs);
+    uint32_t *preserves = (uint32_t *)(void *)cursor;
+    cursor += preserve_elements * sizeof(*preserves);
     memcpy(attachments, info->pAttachments,
            (size_t)info->attachmentCount * sizeof(*attachments));
     if (info->dependencyCount)
@@ -369,7 +408,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     /* Each subpass's input references are copied into the pass's own block, in
      * subpass order, so no caller array is retained and a caller that mutates
      * its structs afterwards cannot change this pass. */
-    uint32_t input_total = 0;
+    uint32_t input_total = 0, preserve_total = 0;
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
         /* The validated subpass is copied whole: its colour-reference array,
          * the count that bounds it and the depth reference. */
@@ -382,12 +421,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
                    (size_t)input_counts[i] * sizeof(*inputs));
             input_total += input_counts[i];
         }
+        subpasses[i].preserve_first = preserve_total;
+        subpasses[i].preserve_count = preserve_counts[i];
+        if (preserve_counts[i]) {
+            memcpy(&preserves[preserve_total], info->pSubpasses[i].pPreserveAttachments,
+                   (size_t)preserve_counts[i] * sizeof(*preserves));
+            preserve_total += preserve_counts[i];
+        }
     }
     pass->attachments = attachments;
     pass->subpasses = subpasses;
     pass->dependencies = dependencies;
     pass->inputs = inputs;
     pass->input_count = input_total;
+    pass->preserves = preserves;
+    pass->preserve_count = preserve_total;
     pass->multiview = owned_multiview;
     ++d->graphics_objects; *out = pass; return VK_SUCCESS;
 }
