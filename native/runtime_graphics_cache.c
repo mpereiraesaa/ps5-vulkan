@@ -8,7 +8,7 @@
  * Revisit version/options whenever the pinned compiler or supported profile
  * changes. This is not an on-disk Vulkan pipeline cache format. */
 struct pair_payload {
-    uint32_t version, reserved, primitive_type;
+    uint32_t version, fragment_shape, primitive_type;
     uint64_t vertex_bytes, fragment_bytes;
     PsbcShaderMetadata vertex, fragment;
     uint64_t hull_bytes, domain_bytes;
@@ -206,7 +206,13 @@ static struct ps5vk_cache_entry *store_pair(struct ps5vk_compilation_cache *cach
     size_t bytes=sizeof(struct pair_payload)+vs+fs+hs+ds;
     struct pair_payload *payload=calloc(1,bytes);
     if(!payload)return NULL;
-    payload->version=2;payload->vertex_bytes=vs;payload->fragment_bytes=fs;
+    /* Version 3 carries the compiler's own fragment-export SHAPE. The
+     * registers alone cannot tell a dual-source pair (0x44/0xff on one target)
+     * from a two-colour-target pair (0x99/0xff on two), so the cached payload
+     * has to record which one the pipeline key asked for instead of letting the
+     * lease re-derive it from the register class. */
+    payload->version=3;payload->fragment_shape=p->fragment_shape;
+    payload->vertex_bytes=vs;payload->fragment_bytes=fs;
     payload->primitive_type=p->primitive_type;
     payload->vertex=p->vertex.metadata;payload->fragment=p->fragment.metadata;
     payload->hull_bytes=hs;payload->domain_bytes=ds;
@@ -264,7 +270,7 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     const struct pair_payload *payload=entry->payload_copy;
     uint32_t expected_primitive=0;
     const int tess=ps5vk_graphics_has_tessellation(key);
-    if(!payload || entry->payload_bytes<sizeof(*payload) || payload->version!=2 ||
+    if(!payload || entry->payload_bytes<sizeof(*payload) || payload->version!=3 ||
        ps5vk_agc_primitive_type(key->topology,&expected_primitive) ||
        payload->primitive_type!=expected_primitive ||
        !payload->fragment_bytes || (tess ?
@@ -291,9 +297,23 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     lease->program.fragment.machine_code_size=(size_t)payload->fragment_bytes;
     {
         const int fragment_export=ps5vk_runtime_fragment_export(&payload->fragment);
-        if(fragment_export<0){free(lease);goto failed;}
+        if(fragment_export<0 || payload->fragment_shape>PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT) {
+            free(lease);goto failed;
+        }
+        /* The shape and the registers must agree: an unblended single target
+         * exports the single pair (or nothing), and both multi-export shapes
+         * publish the same register class. */
+        const uint32_t shape=payload->fragment_shape;
+        if((shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE) ||
+           (shape!=PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL)) {
+            free(lease);goto failed;
+        }
+        lease->program.fragment_shape=shape;
         lease->program.dual_source_export=
-            fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL;
+            shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL;
     }
     struct ps5vk_runtime_shader header;
     if(tess) {

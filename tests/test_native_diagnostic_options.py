@@ -48,6 +48,37 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertIn("layout(location = 0, index = 0)", shader)
         self.assertIn("layout(location = 0, index = 1)", shader)
 
+    def test_two_mrt_probe_is_bounded_and_private(self):
+        self.rejected({"PS5VK_TWO_MRT_PROBE": "2"}, "must be 0 or 1")
+        self.rejected({"PS5VK_TWO_MRT_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_TWO_MRT_PROBE": "1",
+                       "PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1",
+                       "PS5VK_DUAL_SOURCE_PROBE": "1"},
+                      "bounded standalone scene")
+        builder = (ROOT / "tools/build_native.py").read_text()
+        sdk = (ROOT / "tools/build_sdk.py").read_text()
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        # The measurement gate is private and reaches the platform through both
+        # build paths, so an SDK-linked payload carries the same capability the
+        # non-SDK build does.
+        self.assertIn("-DPS5VK_TWO_MRT_PROBE=", builder)
+        self.assertIn("-DPS5VK_INDEPENDENT_BLEND_DIAGNOSTIC=1", sdk)
+        self.assertIn("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC", platform)
+        self.assertIn("two_mrt_probe.c", builder)
+        self.assertIn("two_mrt_oracle.c", builder)
+        source = (ROOT / "native/two_mrt_probe.c").read_text()
+        self.assertIn("PS5VK_TWO_MRT_READBACK", source)
+        self.assertIn("ps5vk_two_mrt_verdict", source)
+        generator = (ROOT / "tools/prepare_runtime_graphics.py").read_text()
+        self.assertIn('"experiments/graphics/runtime_two_mrt.frag"', generator)
+        self.assertIn('"two_mrt_fragment"', generator)
+        shader = (ROOT / "experiments/graphics/runtime_two_mrt.frag").read_text()
+        self.assertIn("layout(location = 0)", shader)
+        self.assertIn("layout(location = 1)", shader)
+
     def test_binding_diagnostic_uses_tested_workload_capacity_gate(self):
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("ps5vk_graphics_vertex_bindings_available(&device_props.limits,", source)

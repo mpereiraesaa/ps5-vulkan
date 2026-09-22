@@ -166,7 +166,8 @@ def main():
             "native/targets_ps5.c", "native/runtime_shader.c", "native/runtime_graphics_compiler.c",
             "native/runtime_graphics_cache.c", "native/runtime_graphics_ps5.c",
             "src/spirv_graphics_interface.c", "src/clip_cull_witness.c",
-            "src/geometry_witness.c", "src/dual_source_oracle.c", "src/color_attachment_contract.c")
+            "src/geometry_witness.c", "src/dual_source_oracle.c",
+            "src/two_mrt_oracle.c", "src/color_attachment_contract.c")
         native_sources += [(ROOT / source, []) for source in graphics_sources]
         native_sources += [(gears / "src" / source, []) for source in (
             "ps5_shader_header.c", "ps5_pipeline.c", "ps5_color_target.c", "ps5_depth_target.c")]
@@ -228,6 +229,13 @@ def main():
               if os.environ.get("PS5VK_TESS_HULL_TRACE") == "1" else []),
             *(["-DPS5VK_TESS_OFFCHIP_BIND=1"]
               if os.environ.get("PS5VK_TESS_OFFCHIP_BIND") == "1" else []),
+            # Private measurement build (DXVK262-T06 independentBlend): report
+            # the capability so the two-colour-target witness can negotiate it
+            # through the public API. Off by default, and the shipping platform
+            # never sets it; the promotion is a separate, evidence-backed
+            # change.
+            *(["-DPS5VK_INDEPENDENT_BLEND_DIAGNOSTIC=1"]
+              if os.environ.get("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC") == "1" else []),
         ]
         # The DXVK262-T05 measurement switch is gone: the four rasterization
         # and viewport features are advertised by the shipping platform on

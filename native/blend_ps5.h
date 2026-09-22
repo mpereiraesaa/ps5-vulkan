@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
+#include "color_attachment_contract.h"
 
 /* GFX1013 encoding from the pinned Mesa src/amd/registers/gfx103.json:
  * CB_BLEND0_CONTROL, BlendOp, CombFunc and SX_MRT0_BLEND_OPT. These are
@@ -15,14 +16,20 @@ struct ps5vk_blend_words {
 };
 /* Matching compiler export/target conversion, not an inherited init default.
  * Mesa ac_choose_spi_color_formats and ac_set_sx_downconvert_state_for_mrt.
- * This profile has one RGBA8/BGRA8 UNORM target. Reject unknown contracts. */
-static inline int ps5vk_color_export_state(VkFormat format,uint32_t spi_format,
-    uint32_t shader_mask,VkBool32 blending,VkBool32 dual_source,uint32_t words[3])
+ * This profile has up to two RGBA8/BGRA8 UNORM targets, so SPI_SHADER_COL_FORMAT
+ * and CB_SHADER_MASK are read one NIBBLE at a time: nibble `target` of each
+ * register describes that attachment, exactly as the pinned compiler publishes
+ * them (0x99/0xff for two plain targets, 0x44/0xff for dual source, 4/0xf or
+ * 9/0xf for one). Reject unknown contracts. */
+static inline int ps5vk_color_export_state(unsigned target,VkFormat format,
+    uint32_t spi_format,uint32_t shader_mask,VkBool32 blending,VkBool32 dual_source,
+    uint32_t words[3])
 {
     if(!words)return 0;
     words[0]=words[1]=words[2]=0;
     if((blending!=VK_FALSE && blending!=VK_TRUE) ||
-       (dual_source!=VK_FALSE && dual_source!=VK_TRUE))return 0;
+       (dual_source!=VK_FALSE && dual_source!=VK_TRUE) ||
+       target>=(unsigned)PS5VK_MAX_COLOR_ATTACHMENTS)return 0;
     /* A DEPTH-ONLY pass has no colour target and its fragment program exports
      * nothing, so SPI_SHADER_COL_FORMAT is zero. There is nothing to convert:
      * the three downconversion words stay zero, which is also what a colour
@@ -47,9 +54,15 @@ static inline int ps5vk_color_export_state(VkFormat format,uint32_t spi_format,
         if(spi_format!=0x44u || shader_mask!=0xffu)return 0;
         words[0]=5;words[1]=6;return 1;
     }
-    if(shader_mask!=15)return 0;
-    if(spi_format==4) {words[0]=5;words[1]=6;return 1;}
-    if(spi_format==9 && !blending) {words[0]=1;return 1;}
+    /* This attachment's own nibbles. A one-target pass publishes the same
+     * values through nibble zero, so the single-target contract is unchanged;
+     * a second target is read from its own nibble instead of inheriting the
+     * first target's. */
+    const uint32_t code=(spi_format>>(4u*target))&0xfu;
+    const uint32_t mask=(shader_mask>>(4u*target))&0xfu;
+    if(mask!=15)return 0;
+    if(code==4) {words[0]=5;words[1]=6;return 1;}
+    if(code==9 && !blending) {words[0]=1;return 1;}
     return 0;
 }
 /* The three SX words are GLOBAL registers whose fields are per-MRT, so a

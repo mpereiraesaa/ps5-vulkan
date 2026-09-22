@@ -161,9 +161,20 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
            &input->fragment.metadata,&arguments))
         {TESS_CREATE_FAIL("abi");return VK_ERROR_FEATURE_NOT_PRESENT;}
     const int fragment_export=ps5vk_runtime_fragment_export(&input->fragment.metadata);
+    /* The compiler's own shape and the register class must agree, and the
+     * dual-source flag is exactly the DUAL shape: a two-colour-target pair
+     * publishes the same register pair but is not dual source, so deriving the
+     * flag from the registers alone would mislabel it (and the draw state keys
+     * its conversion on that flag). */
     if(fragment_export<0 || input->dual_source_export>1u ||
+       input->fragment_shape>PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT ||
        input->dual_source_export!=(uint32_t)
-           (fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL))
+           (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL) ||
+       (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE) ||
+       (input->fragment_shape!=PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if(has_tessellation && ps5vk_runtime_hull_build(&hull,&input->hull))
         {TESS_CREATE_FAIL("hull");return VK_ERROR_FEATURE_NOT_PRESENT;}

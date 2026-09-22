@@ -12,6 +12,7 @@
 #include "input_attachment_probe.h"
 #include "fragment_store_probe.h"
 #include "dual_source_probe.h"
+#include "two_mrt_probe.h"
 #include "input_attachment_gate.h"
 #include "multiview_witness.h"
 #include "clip_cull_witness.h"
@@ -88,6 +89,9 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #endif
 #ifndef PS5VK_DUAL_SOURCE_PROBE
 #define PS5VK_DUAL_SOURCE_PROBE 0
+#endif
+#ifndef PS5VK_TWO_MRT_PROBE
+#define PS5VK_TWO_MRT_PROBE 0
 #endif
 #ifndef PS5VK_CLIP_CULL_PROBE
 #define PS5VK_CLIP_CULL_PROBE 0
@@ -4424,7 +4428,7 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
-#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE
     VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
     requested_features.drawIndirectFirstInstance=VK_TRUE;
@@ -4439,6 +4443,15 @@ int main(void)
      * the fail-closed evidence for every build that is not the measurement
      * one. */
     requested_features.dualSrcBlend=VK_TRUE;
+#endif
+#if PS5VK_TWO_MRT_PROBE
+    /* The witness exists to write two colour attachments, which this profile
+     * only serves when the independentBlend capability is enabled on the
+     * logical device: the front end and the runtime compiler keep refusing the
+     * two-target shape on a build whose platform does not report the feature,
+     * which is the fail-closed evidence for every build that is not the
+     * measurement one. */
+    requested_features.independentBlend=VK_TRUE;
 #endif
     di.pEnabledFeatures=&requested_features;
 #endif
@@ -4477,6 +4490,23 @@ int main(void)
         .transform_fragment = ps5vk_runtime_input_attachment_transform,
         .transform_fragment_words = sizeof(ps5vk_runtime_input_attachment_transform) / 4};
     CHECK(ps5vk_input_attachment_probe(device, &input_modules));
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_TWO_MRT_PROBE
+    /* The witness is the whole run: one fragment module that writes two colour
+     * attachments, drawn once into a two-target framebuffer, with BOTH targets
+     * read back from that single draw and judged by the pure oracle before
+     * anything is reported. */
+    const struct ps5vk_two_mrt_probe_modules two_mrt_modules = {
+        .vertex = ps5vk_runtime_vertex,
+        .vertex_words = sizeof(ps5vk_runtime_vertex) / 4,
+        .two_mrt_fragment = ps5vk_runtime_two_mrt_fragment,
+        .two_mrt_fragment_words = sizeof(ps5vk_runtime_two_mrt_fragment) / 4};
+    CHECK(ps5vk_two_mrt_probe(device, &two_mrt_modules));
     vkDestroyDevice(device,NULL);
     vkDestroyInstance(instance,NULL);
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
