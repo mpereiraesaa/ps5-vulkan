@@ -4232,3 +4232,61 @@ What still fails, in full:
   already measured as run-to-run flaky; they are a defect of their own and would
   fail an acceptance run whatever the score, so they are the next item, not part
   of this fix.
+
+### The remaining flakiness was the colour-to-texture barrier (2026-09-23)
+
+That last paragraph was a prediction, not a diagnosis, and the next two runs
+replaced it with one. A repeat of the SAME payload (run
+`20260922T230750349Z`, log
+`edc244cc866c4aa6e6474c46f12852b90c7626c7b01881af39f57c21d25ea08e`, 488 Pass /
+26 Fail) failed a different set:
+one `min_sample_shading_enabled` quad and two `samples_2` quads joined the
+failing five, so no property of the *disabled* group explains it.
+
+The run's own QPA images name the defect instead. In
+`min_sample_shading_disabled.min_0_0.samples_4.quad` the oracle compares the
+resolved image against the four per-sample images:
+
+* the four per-sample images held the correct uniform `808000ff` -
+  `fract(gl_FragCoord.xy)` at the pixel centre, the value a per-pixel
+  invocation writes - over the whole 32x32, so the multisampled attachment
+  really did hold what the draw wrote;
+* the RESOLVED image held the drawn value in only a few 8x8 tiles
+  (`20200040` in one tile and `40400080` in others: one and two of four samples
+  covered) and the clear word everywhere else, while the previous run of the
+  same case resolved almost the whole target. Different tiles, different runs.
+
+That is the signature of the colour-to-texture barrier being ASYNCHRONOUS. The
+driver's `ps5vk_graphics_color_to_texture` emits the reference RELEASE_MEM
+packet (event 0x2d `FLUSH_AND_INV_CB_DATA_TS` with the GCR writeback/
+invalidation bits, `DST_SEL=TC_L2`, no completion token), and a RELEASE_MEM
+retires when the event is accepted: the writeback it starts continues behind
+it, so a draw that reads the attachment through the texture path can see
+whatever the caches had not written back yet. The pinned RADV emitter
+(`gfx10_cs_emit_cache_flush` in the gfx10 Mesa tree) uses the same event with
+the write CONFIRMED - `DST_SEL=MEM`, `INT_SEL=SEND_DATA_AFTER_WR_CONFIRM`,
+`DATA_SEL=VALUE_32BIT` towards a token - and then a `WAIT_REG_MEM` for it.
+
+`ps5vk_graphics_color_to_texture_wait` (`src/graphics_sync.c`) is that packet:
+the same CB data-flush event with the token selected (word 2 becomes
+`0x23000000`), the 32-bit token stored at the address the caller names, and a
+`PKT3_WAIT_REG_MEM` equality wait for it. Both barrier sites use it - the
+resolve draw's own boundary and the subpass boundary that publishes colour to
+the texture path - with the private token word of the arena that executes the
+wait, zeroed before the release so the equality wait cannot pass on a value a
+previous submission left behind.
+
+Measured on the same 514-case selection, payload eboot
+`7eed073a5e49b52ed9df75932b3e3b22504106e1a5d5a824b99765f89d22f27d`, three
+consecutive runs, all with a clean lifecycle:
+
+| run | log sha256 | Pass | Fail | quad failures |
+| --- | --- | ---: | ---: | ---: |
+| `20260922T231948101Z` | `ce28818943d639bca3305f2703d0aae8c4e77deda85f0196eed0052c72930027` | 494 | 20 | 0 |
+| `20260922T232046070Z` | `b078a112854bf6af369a472e50b75e7ba7e0e5a5afa7a8120d8644fb5996127f` | 494 | 20 | 0 |
+| `20260922T232129201Z` | `5c9a5863317461d4d0de756ad1efb6f9ba0e65602922f7678e3f618c1123d81c` | 494 | 20 | 0 |
+
+The twenty are the POINT/LINE refusals alone, so the 30 applicable
+`min_sample_shading*` leaves - the five min-fractions at both served counts for
+the triangle and quad geometries - pass deterministically, which is what the row
+needs and what the frozen selection cannot carry as a flaky member.

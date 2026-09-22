@@ -93,6 +93,11 @@ struct graphics_job {
      * draw itself. */
     void *resolve_states[PS5VK_MAX_SUBPASSES];
     unsigned count, words, attempted, complete, slot_active, launched, resolve_count;
+    /* One token per colour-to-texture barrier this submission emits. The token
+     * names a private word of the arena that executes the wait, so the barrier
+     * can block until the colour block has CONFIRMED its writeback: see
+     * ps5vk_graphics_color_to_texture_wait in src/graphics_sync.c. */
+    unsigned barrier_tokens;
     uint64_t serial, start;
     VkImage color;
     /* The targets this submission reads back after exact completion: one for
@@ -363,24 +368,43 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
         tables[0] = (uint32_t)(uintptr_t)prepared->descriptor_tables[0];
         uint32_t *cursor = *cursor_io, *end = *end_io;
         /* The multisampled attachment has to be readable by the resolve draw,
-         * which is the same transition the fetch path's boundary emits. */
-        size_t barrier = ps5vk_graphics_color_to_texture(cursor, (size_t)(end - cursor));
-        if (!barrier) { rc = VK_ERROR_UNKNOWN; *site = 35u; }
-        else {
-            cursor += barrier;
-            /* Room for the emission, asked of the chain the way the draw loop
-             * asks for its own: the chain seals the open arena and opens the
-             * next one when a whole emission would not fit. */
+         * which is the same transition the fetch path's boundary emits - and it
+         * has to have ARRIVED, not merely been requested: the barrier writes a
+         * completion token and waits for it, because the colour block writes
+         * back asynchronously and a texture read issued behind the event saw
+         * tiles the block had not written yet (measured: only some 8x8 tiles of
+         * a resolved target carried the drawn value, different tiles per run). */
+        {
+            /* Room for the barrier, the boundary after it and the emission,
+             * asked of the chain the way the draw loop asks for its own: the
+             * chain seals the open arena and opens the next one when a whole
+             * emission would not fit. */
             j->chain.cursor = cursor;
-            rc = ps5vk_draw_batch_reserve(&j->chain, PS5VK_GRAPHICS_ACQUIRE_WORDS);
+            rc = ps5vk_draw_batch_reserve(&j->chain,
+                PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WAIT_WORDS + PS5VK_GRAPHICS_ACQUIRE_WORDS);
             if (rc != VK_SUCCESS) *site = 39u;
             else {
                 cursor = j->chain.cursor;
                 end = j->chain.end;
-                rc = ps5vk_native_emit_runtime_draw(&cursor, (uint32_t)(end - cursor),
-                    prepared->state, prepared->state, prepared->bytes, &op,
-                    (uint32_t)(uintptr_t)prepared->vertex_table, tables, NULL, NULL,
-                    sceAgcDcbDrawIndex);
+                volatile uint64_t *token_slot = ps5vk_draw_batch_open_label(&j->chain);
+                size_t barrier = 0;
+                if (!token_slot) { rc = VK_ERROR_UNKNOWN; *site = 35u; }
+                else {
+                    /* The wait compares for equality, so the word it polls must
+                     * not already hold this submission's value: the arena is
+                     * CPU-mapped and re-used, and the token starts at zero. */
+                    token_slot[7] = 0;
+                    barrier = ps5vk_graphics_color_to_texture_wait(cursor,
+                        (size_t)(end - cursor), (uintptr_t)(token_slot + 7),
+                        ++j->barrier_tokens);
+                    if (!barrier) { rc = VK_ERROR_UNKNOWN; *site = 35u; }
+                    else cursor += barrier;
+                }
+                if (rc == VK_SUCCESS)
+                    rc = ps5vk_native_emit_runtime_draw(&cursor, (uint32_t)(end - cursor),
+                        prepared->state, prepared->state, prepared->bytes, &op,
+                        (uint32_t)(uintptr_t)prepared->vertex_table, tables, NULL, NULL,
+                        sceAgcDcbDrawIndex);
                 if (rc != VK_SUCCESS) *site = 40u;
                 else
                     ps5log_printf(PS5LOG_MARK,
@@ -988,12 +1012,21 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=8;goto fail;
             }
             subpass_index=recorded->subpass;
-            BATCH_RESERVE(PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WORDS+PS5VK_GRAPHICS_ACQUIRE_WORDS);
+            BATCH_RESERVE(PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WAIT_WORDS+
+                PS5VK_GRAPHICS_ACQUIRE_WORDS);
             const struct ps5vk_subpass *next_subpass=
                 ps5vk_render_pass_subpass(pass,subpass_index);
             if(next_subpass->input_count || pass->dependency_count) {
-                size_t color_barrier=ps5vk_graphics_color_to_texture(
-                    cursor,(size_t)(end-cursor));
+                /* The transition that publishes colour to the texture path, and
+                 * the token it waits for: the writeback is asynchronous, so an
+                 * input-attachment read issued behind the bare event observed
+                 * whatever the caches had not written back yet. */
+                volatile uint64_t *token_slot=ps5vk_draw_batch_open_label(&j->chain);
+                if(!token_slot){rc=VK_ERROR_UNKNOWN;draw_site=9;goto fail;}
+                token_slot[7]=0;
+                size_t color_barrier=ps5vk_graphics_color_to_texture_wait(
+                    cursor,(size_t)(end-cursor),(uintptr_t)(token_slot+7),
+                    ++j->barrier_tokens);
                 if(!color_barrier){rc=VK_ERROR_UNKNOWN;draw_site=9;goto fail;}
                 cursor+=color_barrier;
                 ps5log_printf(PS5LOG_MARK,

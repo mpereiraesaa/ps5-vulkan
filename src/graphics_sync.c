@@ -67,6 +67,31 @@ size_t ps5vk_graphics_color_to_texture(uint32_t *out, size_t capacity)
     memcpy(out, words, sizeof(words));
     return PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WORDS;
 }
+size_t ps5vk_graphics_color_to_texture_wait(uint32_t *out, size_t capacity,
+    uint64_t address, uint32_t token)
+{
+    uint32_t words[PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WAIT_WORDS];
+    if (!out || capacity < PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WAIT_WORDS || !token || !address ||
+        (address & 7) || address > (UINT64_C(1)<<48)-8) return 0;
+    uintptr_t start=(uintptr_t)out;
+    if (start > UINTPTR_MAX-32 || (address < start+32 && address+8 > start)) return 0;
+    /* PKT3_RELEASE_MEM with six payload words: the CB data-flush event and the
+     * reference's GCR action bits, then DST_SEL=MEM(0) |
+     * INT_SEL=SEND_DATA_AFTER_WR_CONFIRM(3) << 24 | DATA_SEL=VALUE_32BIT(1) <<
+     * 29, the address the confirmation writes, and the token itself. The
+     * trailing word is the packet's unused one, kept exactly as the eight-word
+     * reference packet emits it. */
+    const uint32_t release[8] = {UINT32_C(0xc0064900), UINT32_C(0x0070f52d),
+        UINT32_C(0x23000000), (uint32_t)address, (uint32_t)(address>>32), token, 0, 0};
+    /* PKT3_WAIT_REG_MEM: equality, memory space, ME engine, like the release
+     * path's own wait. */
+    const uint32_t wait[7] = {UINT32_C(0xc0053c00), UINT32_C(0x13),
+        (uint32_t)address, (uint32_t)(address>>32), token, UINT32_C(0xffffffff), 4};
+    memcpy(words, release, sizeof(release));
+    memcpy(words+8, wait, sizeof(wait));
+    memcpy(out, words, sizeof(words));
+    return PS5VK_GRAPHICS_COLOR_TO_TEXTURE_WAIT_WORDS;
+}
 size_t ps5vk_graphics_release(uint32_t *out, size_t capacity, uint64_t address, uint64_t serial)
 {
     if (!out || capacity < PS5VK_GRAPHICS_RELEASE_WORDS || !serial || !address ||
