@@ -16486,7 +16486,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 4; blocker: one color attachment per render pass",
+      "detail": "core: reported 1 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
       "kind": "limit",
       "limit": "maxColorAttachments",
       "profile": "graphics",
@@ -16501,7 +16501,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 4; blocker: one color attachment per render pass",
+      "detail": "core: reported 0 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
       "kind": "limit",
       "limit": "maxColorAttachments",
       "profile": "compute",
@@ -18452,7 +18452,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 1 must be >= 4; blocker: one color attachment per render pass",
+      "detail": "untagged-core: reported 1 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
       "kind": "limit",
       "limit": "maxFragmentOutputAttachments",
       "profile": "graphics",
@@ -18467,7 +18467,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "untagged-core: reported 0 must be >= 4; blocker: one color attachment per render pass",
+      "detail": "untagged-core: reported 0 must be >= 4; blocker: one color attachment per render pass; a second needs the native witness",
       "kind": "limit",
       "limit": "maxFragmentOutputAttachments",
       "profile": "compute",

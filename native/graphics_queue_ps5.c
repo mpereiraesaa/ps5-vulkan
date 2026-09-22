@@ -263,21 +263,19 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             if(multiview->view_offsets[k])return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     struct ps5vk_attachment_plan color_plan[PS5VK_MAX_COLOR_ATTACHMENTS]={{0}},depth_plan={0};
-    uint32_t clear_word=0;
+    /* One clear word per colour target: the ordered clear before the pass is a
+     * whole-surface DMA fill per target, and two attachments may legitimately
+     * ask for different values. */
+    uint32_t clear_word[PS5VK_MAX_COLOR_ATTACHMENTS]={0};
     for(uint32_t c=0;c<color_count;++c) {
         if(ps5vk_attachment_plan(&pass->attachments[c],color_format[c],
             subpass->color[c].layout,VK_FALSE,&color_plan[c])!=VK_SUCCESS)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if(!color_plan[c].clear) continue;
-        /* The ordered clear before the pass is one whole-surface DMA fill, and
-         * this executor serves it for attachment zero only. A second target
-         * that asks to be cleared needs its own prepared fill, which is part of
-         * the slice that serves a second target at all. */
-        if(c) return VK_ERROR_FEATURE_NOT_PRESENT;
         VkImage image=begin->framebuffer->attachments[c]->image;
         int clear_ok=color_format[c]==VK_FORMAT_B8G8R8A8_UNORM ?
-            ps5vk_color_clear_bgra8(begin->clears[c].color.float32,&clear_word) :
-            ps5vk_color_clear_rgba8(begin->clears[c].color.float32,&clear_word);
+            ps5vk_color_clear_bgra8(begin->clears[c].color.float32,&clear_word[c]) :
+            ps5vk_color_clear_rgba8(begin->clears[c].color.float32,&clear_word[c]);
         if(image->info.format!=color_format[c] || begin->clear_count<=c || !clear_ok ||
            begin->render_area.offset.x || begin->render_area.offset.y ||
            begin->render_area.extent.width!=image->info.extent.width ||
@@ -397,9 +395,12 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     /* Record the scoped render-pass transitions transactionally. Resource
      * state becomes committed only after the exact GPU completion label. */
     phase="attachment-layout";
-    if(color_count) {
-        rc=ps5vk_layout_transition(&j->layouts,j->color,
-            pass->attachments[0].initialLayout,pass->attachments[0].finalLayout);
+    /* Every colour target the pass carries takes its own initial-to-final
+     * transition, in attachment order: a second target is a separate surface
+     * with its own tracked layout, not part of attachment zero's. */
+    for(uint32_t c=0;c<color_count;++c) {
+        rc=ps5vk_layout_transition(&j->layouts,begin->framebuffer->attachments[c]->image,
+            pass->attachments[c].initialLayout,pass->attachments[c].finalLayout);
         if(rc!=VK_SUCCESS)goto fail;
     }
     if(depth) {
@@ -409,17 +410,23 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
     ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT];
     if(ps5_color_select_runtime_defaults(defaults,sceAgcGetRegisterDefaults())) {rc=VK_ERROR_INITIALIZATION_FAILED;goto fail;}
-    if(color_plan[0].clear) {
+    /* One whole-surface fill per colour target that asked to be cleared, in
+     * attachment order, each followed by the acquire that publishes it. The
+     * targets are independent surfaces, so a second fill can neither observe
+     * nor disturb the first. */
+    for(uint32_t c=0;c<color_count;++c) {
+        if(!color_plan[c].clear)continue;
         void *address;VkDeviceSize bytes;
-        rc=ps5vk_image_span(d,j->color,&address,&bytes);
+        VkImage image=begin->framebuffer->attachments[c]->image;
+        rc=ps5vk_image_span(d,image,&address,&bytes);
         if(rc!=VK_SUCCESS)goto fail;
         cache(address,(size_t)bytes);
-        size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,bytes,clear_word);
+        size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,bytes,clear_word[c]);
         if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
         n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
         if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;
-        ps5log_printf(PS5LOG_MARK,"PS5VK_COLOR_CLEAR_PREPARED serial=%llu bgra=%08x bytes=%llu",
-            (unsigned long long)j->serial,clear_word,(unsigned long long)bytes);
+        ps5log_printf(PS5LOG_MARK,"PS5VK_COLOR_CLEAR_PREPARED serial=%llu target=%u bgra=%08x bytes=%llu",
+            (unsigned long long)j->serial,c,clear_word[c],(unsigned long long)bytes);
     }
     if(depth && depth_plan.clear) {
         void *address;VkDeviceSize bytes;
