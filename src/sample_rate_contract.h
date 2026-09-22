@@ -88,4 +88,34 @@ static inline uint32_t ps5vk_color_attrib_sample_fields(VkSampleCountFlagBits sa
            (log2 << PS5VK_COLOR_ATTRIB_NUM_FRAGMENTS_SHIFT);
 }
 
+/* The role combinations a multisampled colour attachment is created with.
+ *
+ * The pinned multisample module builds its multisampled colour image with
+ * COLOR_ATTACHMENT | TRANSFER_SRC and adds INPUT_ATTACHMENT only for the
+ * render type that reads that image back once per sample
+ * (external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:
+ * 3368-3371, `imageUsageFlags`). Those are the multisampled shapes this
+ * profile's CTS axis asks for, so they are the ones admitted: a multisampled
+ * image naming any other role stays refused rather than creating a resource no
+ * path serves. The bare colour-attachment form is what this line's own witness
+ * uses, so the earlier contract is unchanged.
+ *
+ * The per-format query is sample-agnostic (VkImageFormatProperties carries one
+ * sampleCounts set for a format/type/tiling/usage question), so it does not yet
+ * report the multisampled role at all: this helper is consumed only by the
+ * count-aware sites in vkCreateImage and ps5vk_native_image_requirements, both
+ * of which run behind the platform's served-count mask. Making the query
+ * answer for that role is a promotion-slice change, because it has to be
+ * measured through the public ABI before the row is advertised - the
+ * unadvertised measurement build is the only build that reaches these
+ * combinations today. */
+static inline VkBool32 ps5vk_multisampled_color_usage(VkImageUsageFlags usage)
+{
+    const VkImageUsageFlags attachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    return usage == attachment ||
+           usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+           usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+}
+
 #endif

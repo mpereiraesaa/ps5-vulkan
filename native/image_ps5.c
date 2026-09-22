@@ -90,8 +90,6 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         *out = (VkMemoryRequirements){layout.bytes, layout.alignment, 1};
         return VK_SUCCESS;
     }
-    if(!ps5vk_graphics_image_usage(info->format,info->usage))
-        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     int depth = info->format == VK_FORMAT_D32_SFLOAT;
     int sampled = ps5vk_texture_format_sampled_image(info->format);
     /* The colour-target footprint (one 64KB_R_X surface, 128 KiB-aligned) is
@@ -101,16 +99,23 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     /* The sample counts follow the platform mask and the colour contract
      * (DXVK262-T06): every other role this profile backs is single-sample, and
      * the colour attachment takes the served 2x/4x counts only on a platform
-     * that carries the feature bit, as a 2D one-mip image whose only role is
-     * the colour attachment. A count whose multisampled storage nothing backs
-     * is refused here as well as in vkCreateImage. */
+     * that carries the feature bit, as a 2D one-mip image created with exactly
+     * the role combinations the pinned multisample oracle builds. That one
+     * shape's usage set is not in the format table's combinations, because
+     * those describe single-sample images, so the role is checked here and the
+     * generic combination check is skipped for it. A count whose multisampled
+     * storage nothing backs is refused here as well as in vkCreateImage. */
     const uint32_t sample_count = ps5vk_sample_count_number(info->samples);
-    if (!sample_count ||
-        (sample_count > 1 &&
-         (!color || depth || !d || info->imageType != VK_IMAGE_TYPE_2D ||
-          info->mipLevels != 1 || info->flags ||
-          info->usage != VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
-          !(ps5vk_platform_sample_counts(d->platform_features) & info->samples))))
+    const int multisampled_color =
+        sample_count > 1 && color && !depth &&
+        (info->format == VK_FORMAT_B8G8R8A8_UNORM ||
+         info->format == VK_FORMAT_R8G8B8A8_UNORM) &&
+        d && info->imageType == VK_IMAGE_TYPE_2D && info->mipLevels == 1 &&
+        !info->flags && ps5vk_multisampled_color_usage(info->usage) &&
+        (ps5vk_platform_sample_counts(d->platform_features) & info->samples) != 0;
+    if (!multisampled_color && !ps5vk_graphics_image_usage(info->format,info->usage))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    if (!sample_count || (sample_count > 1 && !multisampled_color))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     if ((!depth && !color && !sampled) ||
         info->mipLevels > PS5VK_MAX_TEXTURE_MIP_LEVELS ||

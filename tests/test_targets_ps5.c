@@ -71,6 +71,25 @@ int main(void)
         assert(ps5vk_native_target(&device,&view,defaults,&target)==VK_SUCCESS);
         assert((target.registers[3].value & PS5VK_COLOR_ATTRIB_SAMPLE_FIELDS_MASK)==
                ps5vk_color_attrib_sample_fields(VK_SAMPLE_COUNT_2_BIT));
+        /* The role combinations the pinned multisample oracle builds are backed
+         * by the same storage equation: the colour attachment with its readback
+         * source, and the per-sample fetch form that adds the input role. A
+         * role the oracle never asks for keeps the refusal. */
+        image.info.samples = VK_SAMPLE_COUNT_4_BIT;
+        image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        assert(ps5vk_native_image_requirements(&device,&image.info,&sampled_requirements)==VK_SUCCESS);
+        assert(sampled_requirements.size==262144);
+        assert(ps5vk_native_target(&device,&view,defaults,&target)==VK_SUCCESS);
+        image.info.usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        assert(ps5vk_native_image_requirements(&device,&image.info,&sampled_requirements)==VK_SUCCESS);
+        assert(sampled_requirements.size==262144);
+        assert(ps5vk_native_target(&device,&view,defaults,&target)==VK_SUCCESS);
+        assert((target.registers[3].value & PS5VK_COLOR_ATTRIB_SAMPLE_FIELDS_MASK)==
+               ps5vk_color_attrib_sample_fields(VK_SAMPLE_COUNT_4_BIT));
+        image.info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        assert(ps5vk_native_image_requirements(&device,&image.info,&sampled_requirements)==
+            VK_ERROR_FORMAT_NOT_SUPPORTED);
+        image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         /* 8x is outside the envelope this profile is built for. */
         image.info.samples = VK_SAMPLE_COUNT_8_BIT;
         assert(ps5vk_native_target(&device,&view,defaults,&target)==VK_ERROR_FORMAT_NOT_SUPPORTED);

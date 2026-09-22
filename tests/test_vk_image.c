@@ -50,21 +50,49 @@ int main(void)
         assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) == VK_SUCCESS &&
                sampled_image && calls == before + 1);
         vkDestroyImage(&d, sampled_image, NULL);
+        /* The role combinations the pinned multisample oracle builds are the
+         * accepted multisampled shapes: the colour attachment with its readback
+         * source, and the per-sample fetch form that adds the input role. */
+        sampled.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) == VK_SUCCESS &&
+               sampled_image && calls == before + 2);
+        vkDestroyImage(&d, sampled_image, NULL);
+        sampled.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) == VK_SUCCESS &&
+               sampled_image && calls == before + 3);
+        vkDestroyImage(&d, sampled_image, NULL);
+        /* Neighbouring combinations stay refused: an input role without the
+         * readback source, the transfer-destination pair, and the sampled role
+         * all name a path no multisampled shape here serves. */
+        const VkImageUsageFlags refused_roles[] = {
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT,
+        };
+        for (unsigned role = 0; role < sizeof(refused_roles) / sizeof(refused_roles[0]); ++role) {
+            sampled.usage = refused_roles[role];
+            assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) ==
+                   VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 3);
+        }
+        sampled.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         /* Every other role stays single-sample: a sampled multisampled image
          * and a multisampled depth surface are both refused. */
         sampled.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
         assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) ==
-               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 1);
+               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 3);
         sampled.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         sampled.format = VK_FORMAT_D32_SFLOAT;
         assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) ==
-               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 1);
+               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 3);
         /* 8x is outside the envelope the platform may serve at all. */
         sampled.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         sampled.format = info.format;
         sampled.samples = VK_SAMPLE_COUNT_8_BIT;
         assert(vkCreateImage(&d, &sampled, NULL, &sampled_image) ==
-               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 1);
+               VK_ERROR_FEATURE_NOT_PRESENT && !sampled_image && calls == before + 3);
         d.platform_features &= ~(uint32_t)PS5VK_FEATURE_SAMPLE_RATE_SHADING;
         /* The one accepted creation above reached the backend; the counters the
          * rest of this test pins are restored to what they were before it. */

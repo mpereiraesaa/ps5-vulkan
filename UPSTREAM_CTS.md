@@ -210,6 +210,11 @@ that selection and copies the record into the build manifest, and
 the record into the receipt, so a measurement receipt can never be read as an
 acceptance run of the frozen selection:
 
+The build profile also records the non-secret measurement switches, including
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC`: a payload built for the sample-rate line and a
+shipping payload would otherwise be indistinguishable in the receipt, and a run
+that never reached the feature would read as a driver verdict.
+
 ```sh
 python3 tools/make_measurement_manifest.py \
   --category rasterization-culling --category t05-measurement-pending \

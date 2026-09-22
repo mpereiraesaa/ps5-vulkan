@@ -42,5 +42,23 @@ int main(void)
     assert(ps5vk_sample_count_full_mask(VK_SAMPLE_COUNT_2_BIT) == 3u);
     assert(ps5vk_sample_count_full_mask(VK_SAMPLE_COUNT_4_BIT) == 15u);
     assert(ps5vk_sample_count_full_mask(VK_SAMPLE_COUNT_8_BIT) == 0u);
+
+    /* The multisampled colour image's role set is exactly what the pinned
+     * multisample oracle creates: the bare attachment, the attachment with the
+     * readback source, and the per-sample fetch form that adds the input role.
+     * Every neighbouring combination stays out, so a multisampled image cannot
+     * name a role no path in this profile serves. */
+    const VkImageUsageFlags attachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    assert(ps5vk_multisampled_color_usage(attachment));
+    assert(ps5vk_multisampled_color_usage(attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(ps5vk_multisampled_color_usage(attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                          VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT));
+    assert(!ps5vk_multisampled_color_usage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(!ps5vk_multisampled_color_usage(attachment | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    assert(!ps5vk_multisampled_color_usage(attachment | VK_IMAGE_USAGE_SAMPLED_BIT));
+    assert(!ps5vk_multisampled_color_usage(attachment | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT));
+    assert(!ps5vk_multisampled_color_usage(attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                           VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    assert(!ps5vk_multisampled_color_usage(0));
     return 0;
 }

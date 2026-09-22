@@ -37,6 +37,14 @@ def tessellation_build_profile(environment):
             "PS5VK_TESS_HULL_TRACE",
             "PS5VK_TESS_OFFCHIP_BIND",
             "PS5VK_RASTER_DIAGNOSTIC",
+            # The sampleRateShading line's measurement builds carry this
+            # switch; without it in the record two payloads that differ only in
+            # the served sample counts would be indistinguishable in the
+            # receipt, and a run that never reached the feature would read as a
+            # driver verdict. That is not hypothetical: a payload built while a
+            # concurrent `make check` restaged the SDK without the switch
+            # reported every selected leaf NotSupported for sampleRateShading.
+            "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
         )
     }
     return {

@@ -3045,3 +3045,54 @@ the row has to open is the multisampled image's usage combination. What it does
 not establish: no leaf passes, the multisample render pass, the resolve and the
 per-sample input read are still unexecuted, the `sampleRateShading` row stays a
 blocker, and the shipping platform mask still advertises no sample-rate bit.
+
+## Multisampled colour image role (2026-09-22)
+
+The measurement above named the first gate precisely: the oracle's
+multisampled colour image carries `COLOR_ATTACHMENT | TRANSFER_SRC`
+(`vktPipelineMultisampleTests.cpp:3368-3371`) and adds `INPUT_ATTACHMENT` for
+the render type that reads that image back once per sample, while this profile
+admitted exactly one observed multisampled role. This change admits those
+combinations and nothing else: `ps5vk_multisampled_color_usage` in
+`src/sample_rate_contract.h` is consumed by the two count-aware sites,
+`vkCreateImage` and `ps5vk_native_image_requirements`, both of which still
+require a 2D one-mip `B8G8R8A8_UNORM`/`R8G8B8A8_UNORM` colour image, no create
+flags, and a platform whose served-count mask carries the requested count. A
+multisampled image naming the input role without the readback source, the
+transfer-destination pair, the sampled role or any other combination keeps the
+failure it had. The per-format query stays sample-agnostic and is left for the
+promotion slice, which is where it has to be measured through the public ABI;
+the shipping mask is untouched, so an unadvertised build still refuses every
+multisampled image.
+
+Measured on the console with the same 512-case measurement selection
+(`20260922T091910948Z_PPSA99994_upstream-cts_0x1945575a966d5`, log SHA-256
+`7cd77372601c2300846e4d092f51b196feb311c03ee16a522eec59f9ceded4c5`, payload
+eboot `e46e07c604531c6e29f5907da3c7052c96bfc98fc8785bfcac4706caf931db5a`):
+the image gate opened - none of the 50 leaves fails at `vkCreateImage` any
+more - and the payload then died without closing its log. The run file records
+`bye=false, clean=false, close_reason=eof` after 20.9 s, with no refusal and no
+`Fail` verdict anywhere; the last records are the per-sample fetch fragment
+shader (`subpassInputMS` + `subpassLoad(imageMS, sampleNdx)`) being assembled,
+then two 131072-byte allocations - the resolve and per-sample single-sample
+targets - and then EOF. This is a fail-closed defect, not a capability
+verdict: the title is not running (the close request found nothing to close),
+nothing is hung on the console, and the next slice is a bounded native probe
+that walks exactly this CTS shape step by step so the step that kills the
+process names itself before it is fixed.
+
+Two provenance notes from the same window, both measured rather than assumed.
+First, a payload built while a concurrent `make check` restaged the SDK without
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC` reported every selected leaf `NotSupported` for
+`sampleRateShading` - a run that would have read as a driver verdict. Second,
+`tools/build_upstream_cts.py` did not record that switch in its build profile,
+so the two payloads were indistinguishable in the receipt; the switch is now in
+the captured switch set and the measurement payload records
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC = 1`.
+
+What this establishes: the image-role gate the previous measurement named is
+open and bounded to the oracle's own combinations, with the platform mask as
+the only switch that reaches it. What it does not establish: no leaf passes,
+the render pass with its resolve and per-sample fetch is still unexecuted, the
+driver does not yet fail closed on that shape, the row stays a blocker, and
+nothing is advertised.
