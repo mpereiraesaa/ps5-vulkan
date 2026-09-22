@@ -90,7 +90,15 @@ void ps5vk_command_invalidate(VkCommandBuffer c)
 {
     if (c) { ++c->pool->device->lifetime_errors; if (c->state != PS5VK_PENDING) c->state = PS5VK_INVALID; }
 }
+/* TEMPORARY EXPERIMENT (not for commit): name the refusing line in the native
+ * log so the failing upstream leaf can be localised from its run. */
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define invalid(c) do { ps5log_printf(PS5LOG_MARK,"PS5VK_RECORD_REFUSAL site=%d",__LINE__); \
+    ps5vk_command_invalidate(c); } while (0)
+#else
 #define invalid ps5vk_command_invalidate
+#endif
 
 struct ps5vk_operation *ps5vk_command_reserve_operations(VkCommandBuffer c,
     enum ps5vk_operation_type type, enum ps5vk_operation_scope scope, uint32_t count)
@@ -718,13 +726,20 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;
+    /* Every colour role the subpass names must be the one the framebuffer
+     * carries, in order, and the depth role after them. A subpass that names
+     * no colour role at all - the DEPTH-ONLY shape - has an empty list on both
+     * sides, so the loop below simply does not run. */
+    const struct ps5vk_subpass *first=ps5vk_render_pass_subpass(pass, 0);
     if (fb->attachment_count != pass->attachment_count ||
-        fb->color_attachments[0] != ps5vk_render_pass_subpass(pass, 0)->color[0].attachment ||
-        fb->depth_attachment != ps5vk_render_pass_subpass(pass, 0)->depth.attachment ||
+        fb->color_count != first->color_count ||
+        fb->depth_attachment != first->depth.attachment ||
         area.offset.x < 0 || area.offset.y < 0 ||
         !area.extent.width || !area.extent.height || (uint32_t)area.offset.x > fb->width ||
         (uint32_t)area.offset.y > fb->height || area.extent.width > fb->width - (uint32_t)area.offset.x ||
         area.extent.height > fb->height - (uint32_t)area.offset.y) { invalid(c); return; }
+    for (uint32_t role = 0; role < first->color_count; ++role)
+        if (fb->color_attachments[role] != first->color[role].attachment) { invalid(c); return; }
     for (uint32_t j = 0; j < pass->attachment_count; ++j) {
         const VkAttachmentDescription *a = &pass->attachments[j];
         if (fb->formats[j] != a->format || fb->samples[j] != a->samples ||
@@ -953,6 +968,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, c->subpass);
     VkFormat depth = subpass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
         pass->attachments[subpass->depth.attachment].format;
+    /* A depth-only subpass has no colour reference at all, and its pipeline
+     * records a colour count of zero with an undefined colour format, so the
+     * two still have to agree exactly; the loop below then compares every
+     * colour format the subpass does name, one per attachment. */
     if (p->color_attachment_count != subpass->color_count ||
         p->depth_format != depth) {
         invalid(c); return;
@@ -1069,6 +1088,11 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+        /* ALL_GRAPHICS is the whole graphics pipeline, so it contains every
+         * graphics stage named above, including both fragment-test stages.
+         * The pinned upstream depth clamp module hands its cleared depth
+         * target to the draw with this mask. */
+        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     const VkAccessFlags supported=VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
         VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
@@ -1089,7 +1113,14 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         !(stages & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & (VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
-    if((access & VK_ACCESS_SHADER_READ_BIT) &&
+    /* A shader write is ordered by the same stages a shader read is. The
+     * pinned upstream clear helper names SHADER_WRITE as the destination
+     * access of its post-clear transition, against the fragment stage
+     * (vkImageUtil.cpp clearColorImage, the tcu::Vec4 overload), and the
+     * compute scope cannot carry it because the fragment stage is not a
+     * compute stage. The bit selects which writes become visible; it does not
+     * authorize a shader to write anything. */
+    if((access & (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & VK_ACCESS_SHADER_WRITE_BIT) &&
@@ -1103,6 +1134,7 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+                    VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     /* MEMORY_READ/WRITE select every read/write access available in the stage
      * mask and are valid with any non-empty supported stage mask. */
@@ -1155,15 +1187,44 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
      * vkCmdClearDepthStencilImage control a later depth-tested draw. Bounded to
      * exactly the write the clear performed and the access the fragment tests
      * perform; the image never becomes a transfer source or a sampled image. */
+    /* A depth attachment that also declares the transfer-source role is read
+     * back after rendering, so it takes the same two transitions the colour
+     * readback takes, in depth's own layouts. Bounded to the role predicate:
+     * a depth image without TRANSFER_SRC keeps only the clear transitions
+     * below. */
+    if(ps5vk_depth_readback_image(image)) {
+        if((b->oldLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+            b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+            b->srcAccessMask==VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT &&
+            b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT) ||
+           (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+            b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+            b->srcAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
+            b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)) ||
+           (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+            b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+            !b->srcAccessMask &&
+            !(b->dstAccessMask & ~(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT))))
+            return 1;
+    }
     if(ps5vk_depth_clear_image(image))return
         (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
          !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        /* Handing the cleared surface to the draw. The destination access is
+         * whatever depth-stencil access the caller declared: the pinned
+         * upstream depth clamp module names the write alone, an earlier
+         * measured case named both. Requiring the pair would be inventing a
+         * requirement; the write itself is not optional, so a read-only
+         * destination, an empty one, or a foreign access is still refused. */
         (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
          b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
          b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
-         b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
-                                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT));
+         (b->dstAccessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
+         !(b->dstAccessMask & ~(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
+                                               VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)));
     if(readback)return
         ps5vk_color_discard_barrier(b) ||
         ps5vk_color_readback_reuse_barrier(b) ||
@@ -1179,7 +1240,41 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
     if(ps5vk_colour_transfer_image(image))return
         (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
          b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
-         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT);
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        /* The same image is a readback target whenever it also declares
+         * TRANSFER_SRC. The readback role above is written for an image that
+         * is only a colour attachment and a transfer source, so it excludes
+         * TRANSFER_DST; an upstream case that clears or uploads through the
+         * same image and then reads it back declares all three and fell
+         * through to the initialise-only rule, which refused the readback
+         * transition and invalidated the command buffer
+         * (measured: dEQP-VK.draw.renderpass.scissor.* -> vkEndCommandBuffer
+         * VK_ERROR_UNKNOWN in the 2026-09-20 measurement run). The transfer
+         * destination does not change what the readback transition means, so
+         * the same three barriers are accepted here, and only when the image
+         * really declares the transfer-source role. */
+        ((usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+         (ps5vk_color_discard_barrier(b) ||
+          ps5vk_color_readback_reuse_barrier(b) ||
+          (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+           b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+           b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+           b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT))) ||
+        /* Clear through the transfer destination, then render into the same
+         * image. The pinned upstream helper clears a colour target outside the
+         * render pass and records exactly these two transitions around its
+         * vkCmdClearColorImage: the image is acquired as a transfer
+         * destination from UNDEFINED, and handed to the colour attachment
+         * stage afterwards with the helper's own destination access, which is
+         * SHADER_WRITE for the tcu::Vec4 overload the draw module calls. Both
+         * are accepted exactly as the helper writes them. */
+        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+         b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT);
     /* The linear staging image the pinned draw module reads back through gets
      * exactly the two transitions that module records
      * (vktDrawImageObjectUtil.cpp:415-443): UNDEFINED to GENERAL for the

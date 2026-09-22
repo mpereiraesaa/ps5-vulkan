@@ -83,6 +83,18 @@ int main(void) {
         assert(!ps5vk_color_export_state(formats[i],9,0,VK_FALSE,VK_FALSE,sx));
         assert(!ps5vk_color_export_state(formats[i],0,0,VK_TRUE,VK_FALSE,sx));
     }
+    /* A DEPTH-ONLY pass names no colour target at all: the pipeline records an
+     * undefined colour format and the fragment program exports nothing, so the
+     * three conversion words stay zero. Any half of that shape on its own - an
+     * export with no target, a target without an export, a blend state, or the
+     * secondary export - is refused. */
+    assert(ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,0,VK_FALSE,VK_FALSE,sx));
+    assert(!sx[0] && !sx[1] && !sx[2]);
+    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,0,VK_TRUE,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,0,VK_FALSE,VK_TRUE,sx));
+    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,4,15,VK_FALSE,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,15,VK_FALSE,VK_FALSE,sx));
+    assert(!ps5vk_color_export_state(VK_FORMAT_UNDEFINED,0,0,2,VK_FALSE,sx));
     assert(!ps5vk_color_export_state(VK_FORMAT_R32_UINT,4,15,VK_TRUE,VK_FALSE,sx));
     assert(!ps5vk_color_export_state(formats[0],4,15,2,VK_FALSE,sx));
     assert(!ps5vk_color_export_state(formats[0],4,15,VK_TRUE,2,sx));

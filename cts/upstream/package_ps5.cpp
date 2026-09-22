@@ -31,6 +31,7 @@
 #include "vktTessellationCommonEdgeTests.hpp"
 #include "vktRasterizationTests.hpp"
 #include "vktDrawScissorTests.hpp"
+#include "vktDrawDepthClampTests.hpp"
 #include "vktFragmentOperationsTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
@@ -194,6 +195,21 @@ void FocusedVkTestPackage::init(void)
         // diagnostic in cts/upstream/manifest.json until its acceptance run is
         // green, and the dynamic-rendering variants are not registered.
         renderPassGroup->addChild(vkt::Draw::createScissorTests(
+            m_testCtx,
+            vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
+                false, // useDynamicRendering
+                false, // useSecondaryCmdBuffer
+                false, // secondaryCmdBufferCompletelyContainsDynamicRenderpass
+                false, // nestedSecondaryCmdBuffer
+            })));
+        // draw.renderpass.depth_clamp: the original upstream depth-clamp module
+        // under the same render-pass group parameters. Its D32 leaves are the
+        // upstream oracles for depthClamp and depthBiasClamp, and they read the
+        // depth attachment back over the DEPTH aspect - the capability this
+        // tranche implemented (src/depth_detile.c carries the SW_64K_Z_X pixel
+        // addressing). cases.txt remains the leaf filter, so only the D32 leaves
+        // are selected and every other format stays out.
+        renderPassGroup->addChild(vkt::Draw::createDepthClampTests(
             m_testCtx,
             vkt::Draw::SharedGroupParams(new vkt::Draw::GroupParams{
                 false, // useDynamicRendering

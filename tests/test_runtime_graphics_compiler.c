@@ -86,6 +86,17 @@ static uint32_t compiled_ps_input_ena(const char *fragment_path)
 
 static void check_fragment_position(void)
 {
+    /* gl_FragCoord needs no export from the pre-raster stage and no feature:
+     * the pixel wave is launched with the position VGPRs when SPI_PS_INPUT_ENA
+     * asks for them, and the pinned compiler publishes that register with the
+     * rest of the pixel context. The profile refused the declaration outright
+     * until this slice, which is why the only applicable depthClamp leaves
+     * could not run - dEQP-VK.clipping.clip_volume.depth_clamp.* colours with
+     * gl_FragCoord.z and the pair was refused at pipeline creation (two rc=-8
+     * runtime-graphics cache entries in the 2026-09-20 run, eboot 749756aa).
+     * Reading gl_FragCoord.z moves the fixture's interpolation half to
+     * LINE_STIPPLE_TEX, the cheapest mandatory enable the compiler can pick
+     * when the stage interpolates nothing (radv_shader.c:3971-3984). */
     const uint32_t plain=compiled_ps_input_ena("build/runtime-graphics/triangle.frag.spv");
     assert(!(plain&PS5VK_TEST_POS_XYZW_FLOAT_ENA));
     assert(plain&PS5VK_TEST_LAUNCH_VGPR_ENA);
@@ -339,6 +350,47 @@ static PsbcRegisterWrite *context_register(PsbcShaderMetadata *m,unsigned offset
     for(unsigned i=0;i<m->context_register_count;++i)
         if(m->context_registers[i].offset==offset)return &m->context_registers[i];
     return NULL;
+}
+
+/* A DEPTH-ONLY pipeline: no colour attachment, so the key carries an undefined
+ * colour format, writes no channel, and the fragment stage exports nothing.
+ * Everything else is the ordinary triangle pair. */
+static void check_depth_only_target(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/depth_only.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        /* No colour attachment at all: the count is zero and the format the
+         * key carries for it is VK_FORMAT_UNDEFINED. */
+        .color_format={VK_FORMAT_UNDEFINED},.color_attachment_count=0,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={0}};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *program=out;
+    /* The pixel program really exports nothing: SPI_SHADER_COL_FORMAT and
+     * CB_SHADER_MASK both read zero, which is the NONE export class. */
+    PsbcShaderMetadata *m=(PsbcShaderMetadata *)&program->fragment.metadata;
+    const PsbcRegisterWrite *format=context_register(m,0x1c5);
+    const PsbcRegisterWrite *mask=context_register(m,0x08f);
+    assert(format && !format->value);
+    assert(mask && !mask->value);
+    ps5vk_runtime_graphics_free(NULL,out);
+
+    /* The three colour facts travel together. A colour format with no write
+     * mask, or a write mask with no format, is not a depth-only pass and stays
+     * refused; and an exporting fragment shader has nowhere to export. */
+    out=NULL;
+    key.color_write_mask[0]=15;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    key.color_write_mask[0]=0;
+    free((void *)key.fragment.words);
+    key.fragment=read_module("build/runtime-graphics/triangle.frag.spv");
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
 static void check_clip_cull_distances(void)
@@ -1350,6 +1402,7 @@ static void check_descriptor_options(void)
     key.vertex=read_module("build/runtime-graphics/triangle.vert.spv");
     key.fragment=read_module("build/runtime-graphics/descriptor_arrays.frag.spv");
     key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;key.color_format[0]=VK_FORMAT_B8G8R8A8_UNORM;
+    key.color_attachment_count=1;
     key.samples=VK_SAMPLE_COUNT_1_BIT;key.color_write_mask[0]=15;
     struct ps5vk_compilation_cache *cache=ps5vk_compilation_cache_create(4,1024*1024);
     assert(cache);
@@ -1895,6 +1948,7 @@ int main(void)
     check_sparse_layout_static_use();
     check_view_index_builtin();
     check_clip_cull_distances();
+    check_depth_only_target();
     check_fragment_distance_read();
     check_fragment_position();
     check_dual_source_exports();

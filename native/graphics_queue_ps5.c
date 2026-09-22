@@ -207,8 +207,13 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     const uint32_t color_count=subpass->color_count;
     /* The roles are positional in this profile: a subpass names its colour
      * attachments first, in order, and the optional depth attachment after
-     * them. Every colour target must be a format this profile renders into. */
-    if(!color_count || color_count>PS5VK_MAX_COLOR_ATTACHMENTS ||
+     * them. A DEPTH-ONLY pass names no colour role at all, so its single
+     * attachment IS the depth one and the colour half of this executor does
+     * nothing. Every colour target must be a format this profile renders into,
+     * and a pass that names no colour and no depth attachment has no target at
+     * all. */
+    if(color_count>PS5VK_MAX_COLOR_ATTACHMENTS ||
+       (!color_count && !depth) ||
        pass->attachment_count!=color_count+(depth?1u:0u))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkFormat color_format[PS5VK_MAX_COLOR_ATTACHMENTS];
@@ -353,7 +358,11 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
      * on the immutable record this backend is handed. */
     if(next_buffer!=s->count || !body_count)return VK_ERROR_FEATURE_NOT_PRESENT;
     struct graphics_job *j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
-    j->serial=s->serial; j->color=begin->framebuffer->attachments[0]->image;
+    j->serial=s->serial;
+    /* The image the prelude and postlude act on. A depth-only pass has no
+     * colour image, and the helpers below already treat a missing one as
+     * "no colour work in this range" rather than as an error. */
+    j->color=color_count?begin->framebuffer->attachments[0]->image:NULL;
     phase="command-arena";
     VkResult rc=ps5vk_draw_batch_open(&j->chain,j->serial);
     if(rc==VK_ERROR_DEVICE_LOST)retain("command-create");
@@ -388,12 +397,14 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     /* Record the scoped render-pass transitions transactionally. Resource
      * state becomes committed only after the exact GPU completion label. */
     phase="attachment-layout";
-    rc=ps5vk_layout_transition(&j->layouts,j->color,
-        pass->attachments[0].initialLayout,pass->attachments[0].finalLayout);
-    if(rc!=VK_SUCCESS)goto fail;
+    if(color_count) {
+        rc=ps5vk_layout_transition(&j->layouts,j->color,
+            pass->attachments[0].initialLayout,pass->attachments[0].finalLayout);
+        if(rc!=VK_SUCCESS)goto fail;
+    }
     if(depth) {
-        rc=ps5vk_layout_transition(&j->layouts,begin->framebuffer->attachments[1]->image,
-            pass->attachments[1].initialLayout,pass->attachments[1].finalLayout);
+        rc=ps5vk_layout_transition(&j->layouts,begin->framebuffer->attachments[color_count]->image,
+            pass->attachments[color_count].initialLayout,pass->attachments[color_count].finalLayout);
         if(rc!=VK_SUCCESS)goto fail;
     }
     ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT];
@@ -412,9 +423,10 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     }
     if(depth && depth_plan.clear) {
         void *address;VkDeviceSize bytes;
-        rc=ps5vk_image_span(d,begin->framebuffer->attachments[1]->image,&address,&bytes);
+        rc=ps5vk_image_span(d,begin->framebuffer->attachments[color_count]->image,&address,&bytes);
         if(rc!=VK_SUCCESS)goto fail;
-        uint32_t value;memcpy(&value,&begin->clears[1].depthStencil.depth,sizeof(value));
+        uint32_t value;
+        memcpy(&value,&begin->clears[color_count].depthStencil.depth,sizeof(value));
         cache(address,(size_t)bytes);
         size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,bytes,value);
         if(!n){rc=VK_ERROR_UNKNOWN;goto fail;}cursor+=n;

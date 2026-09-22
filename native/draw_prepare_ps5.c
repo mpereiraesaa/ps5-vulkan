@@ -129,15 +129,20 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         !op->framebuffer || op->framebuffer->device != d || !op->render_pass || op->render_pass->device != d ||
         !d->memory.allocate || !d->memory.release || !d->memory.flush) return VK_ERROR_UNKNOWN;
     VkFramebuffer fb = op->framebuffer;
-    if (fb->color_attachments[0] >= fb->attachment_count ||
-        fb->attachment_count > PS5VK_MAX_ATTACHMENTS ||
+    /* One prepared target per colour attachment the framebuffer carries: the
+     * draw state programmes attachment zero's block and appends the others. A
+     * framebuffer with no colour role at all is the DEPTH-ONLY shape, and then
+     * the depth target is the one the pass renders into. */
+    if (fb->attachment_count > PS5VK_MAX_ATTACHMENTS ||
+        fb->color_count > PS5VK_MAX_COLOR_ATTACHMENTS ||
+        (fb->color_count && fb->color_attachments[0] >= fb->attachment_count) ||
         (fb->depth_attachment != VK_ATTACHMENT_UNUSED && fb->depth_attachment >= fb->attachment_count))
         return VK_ERROR_UNKNOWN;
-    /* One prepared target per colour attachment the framebuffer carries: the
-     * draw state programmes attachment zero's block and appends the others. */
-    if (!fb->color_count || fb->color_count > PS5VK_MAX_COLOR_ATTACHMENTS)
-        return VK_ERROR_UNKNOWN;
-    struct ps5vk_target_registers colors[PS5VK_MAX_COLOR_ATTACHMENTS], depth;
+    /* Zeroed, so a DEPTH-ONLY draw's unused colour slots never carry a
+     * previous call's registers into the draw state. */
+    struct ps5vk_target_registers colors[PS5VK_MAX_COLOR_ATTACHMENTS];
+    struct ps5vk_target_registers depth;
+    memset(colors, 0, sizeof(colors));
     VkResult rc = VK_SUCCESS;
     for (uint32_t attachment = 0; attachment < fb->color_count; ++attachment) {
         if (fb->color_attachments[attachment] >= fb->attachment_count)
@@ -147,6 +152,9 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
         if (rc != VK_SUCCESS) return rc;
     }
     int has_depth = fb->depth_attachment != VK_ATTACHMENT_UNUSED;
+    /* A framebuffer that names neither has no target at all; the render pass
+     * refuses that shape, and this is the native half of the same rule. */
+    if (!fb->color_count && !has_depth) return VK_ERROR_UNKNOWN;
     if (has_depth) {
         rc = ps5vk_native_target(d, fb->attachments[fb->depth_attachment], NULL, &depth);
         if (rc != VK_SUCCESS) return rc;

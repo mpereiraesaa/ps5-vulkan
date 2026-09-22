@@ -406,7 +406,10 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
          * PSBC describes it with 0/0; the ordinary target is 4/0xf or 9/0xf,
          * and the two sources of MRT0 are exactly 0x44/0xff. Require each pair
          * atomically so neither a torn package nor an arbitrary extra MRT mask
-         * can ride on dual-source support. */
+         * can ride on dual-source support. A DEPTH-ONLY pass has no colour
+         * target at all and compiles to that same empty export, which is why
+         * PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE is a shape of its own rather than
+         * an error. */
         if(!z || z->value || ps5vk_runtime_fragment_export(m)<0)return -3;
     }
     memset(d,0,sizeof(*d));

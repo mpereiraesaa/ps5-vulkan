@@ -319,12 +319,20 @@ static void lifecycle(void)
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_B8G8R8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
         /* The depth target is an attachment, the destination of the whole-
-         * subresource vkCmdClearDepthStencilImage, or both. Every form is the
-         * tiled depth surface; no other combination exists. */
+         * subresource vkCmdClearDepthStencilImage, the source of the
+         * whole-surface readback, or a combination of those. Every form is the
+         * tiled depth surface; no other combination exists, and in particular
+         * the transfer source never appears without the attachment, because a
+         * standalone D32 transfer image has no role here. */
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_D32_SFLOAT,usage)==
             (usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT ||
              usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
              usage==(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+             usage==(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                      VK_IMAGE_USAGE_TRANSFER_DST_BIT)));
     assert(!!ps5vk_graphics_image_usage(VK_FORMAT_R8G8B8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_SAMPLED_BIT || usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
@@ -527,10 +535,12 @@ static void lifecycle(void)
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
         else if(formats[n]==VK_FORMAT_D32_SFLOAT)
-            /* TRANSFER_DST is the whole-subresource depth clear, which is the
-             * only transfer role 64KB_Z_X has; there is no TRANSFER_SRC. */
+            /* TRANSFER_DST is the whole-subresource depth clear and
+             * TRANSFER_SRC is the whole-surface readback, which 64KB_Z_X has
+             * had since its pixel addressing was implemented. */
             optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         /* One format publishes a linear-tiling role: RGBA8 carries the transfer
          * destination of the pinned host-readback staging image. */
         const VkFormatFeatureFlags linear_bits = formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?

@@ -664,6 +664,48 @@ int main(void)
         vkDestroyShaderModule(&d,tes_module,NULL);
     }
     created=1;released=0;
+    {
+        /* DEPTH-ONLY subpass: no colour attachment at all, and Vulkan lets the
+         * pipeline omit pColorBlendState entirely for it. The key then carries
+         * a colour count of zero and an undefined colour format, which is the
+         * shape the runtime compiler and the native path key on. A colour blend
+         * state with a non-zero count does not describe that subpass and is
+         * refused. */
+        VkAttachmentDescription depth_attachment[1]={{.format=VK_FORMAT_D32_SFLOAT}};
+        struct ps5vk_subpass depth_subpasses[1]={
+            {.color_count=0,.depth={0,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}}};
+        struct VkRenderPass_T depth_pass={.device=&d,.attachment_count=1,.subpass_count=1,
+            .attachments=depth_attachment,.subpasses=depth_subpasses};
+        VkGraphicsPipelineCreateInfo depth_info=info;
+        depth_info.renderPass=&depth_pass;
+        depth_info.pColorBlendState=NULL;
+        /* A depth-only subpass renders into the depth attachment, so the
+         * pipeline has to describe that state. */
+        VkPipelineDepthStencilStateCreateInfo depth_state={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthCompareOp=VK_COMPARE_OP_LESS_OR_EQUAL};
+        depth_info.pDepthStencilState=&depth_state;
+        /* Its own library entry: the key of a depth-only pipeline is a
+         * different identity from the ordinary colour one. */
+        struct ps5vk_graphics_program depth_program=program;
+        depth_program.key.color_attachment_count=0;
+        depth_program.key.color_format[0]=VK_FORMAT_UNDEFINED;
+        depth_program.key.color_write_mask[0]=0;
+        struct ps5vk_graphics_library depth_library={&depth_program,1};
+        d.graphics_library=&depth_library;
+        VkPipeline depth_pipeline;
+        created=0;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&depth_info,NULL,&depth_pipeline)==
+               VK_SUCCESS && depth_pipeline->color_attachment_count==0);
+        assert(depth_pipeline->color_format[0]==VK_FORMAT_UNDEFINED &&
+               !depth_pipeline->color_write_mask[0]);
+        vkDestroyPipeline(&d,depth_pipeline,NULL);
+        depth_info.pColorBlendState=&b;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&depth_info,NULL,&depth_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        d.graphics_library=&library;
+        created=1;released=0;
+    }
     vkDestroyShaderModule(&d,modules[0],NULL); vkDestroyShaderModule(&d,modules[1],NULL);
     p->pending=1; vkDestroyPipeline(&d,p,NULL); assert(!released);
     p->pending=0; vkDestroyPipeline(&d,p,NULL); assert(released==1 && !d.pipeline_objects);

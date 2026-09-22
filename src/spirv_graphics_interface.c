@@ -445,16 +445,6 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                 out->viewport_index=1;
                 continue;
             }
-            /* FragCoord is supplied by the rasterizer to the fragment stage,
-             * not linked as a varying.  Admit only its exact Vulkan shape:
-             * an undecorated float32 vec4 Input variable. */
-            if(d->builtin==BUILTIN_FRAG_COORD) {
-                if(model!=MODEL_FRAGMENT || d->location!=~0u || d->storage!=1u ||
-                   d->patch || type->op!=23 || type->count!=4 || !type->type ||
-                   type->type>=bound || ids[type->type].op!=22 ||
-                   ids[type->type].count!=32)goto done;
-                continue;
-            }
             if((model==MODEL_TESS_CTRL || model==MODEL_TESS_EVAL) &&
                (d->builtin==BUILTIN_TESS_LEVEL_OUTER || d->builtin==BUILTIN_TESS_LEVEL_INNER)) {
                 unsigned length=0,element=0;
@@ -501,6 +491,30 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                         &out->clip_distances:&out->cull_distances);
                 if(*total)goto done; /* one declaration per built-in per stage */
                 *total=length;
+                continue;
+            }
+            /* gl_FragCoord: the fragment's window position. Core Vulkan, so
+             * no feature gates it, and unlike every varying it needs no export
+             * from the pre-raster stage - the hardware launches the pixel wave
+             * with the position VGPRs and the pinned compiler asks for them
+             * through SPI_PS_INPUT_ENA, which it publishes with the rest of
+             * the pixel context registers. Nothing else in the pipeline has to
+             * change, so this is an interface rule only.
+             *
+             * It is accepted in the one shape the built-in has: a fragment
+             * Input pointing at a four-component 32-bit float vector, never a
+             * patch and never at a location. Refusing it is what kept the only
+             * applicable depthClamp leaves out of reach - the fragment shader
+             * of dEQP-VK.clipping.clip_volume.depth_clamp.* colours with
+             * gl_FragCoord.z, and the pair was refused at pipeline creation
+             * (measured as two rc=-8 runtime-graphics cache entries in the
+             * 2026-09-20 run, eboot 749756aa). */
+            if(d->builtin==BUILTIN_FRAG_COORD) {
+                if(model!=MODEL_FRAGMENT || d->storage!=1u || d->patch ||
+                   d->location!=~0u || type->op!=23 || type->count!=4 ||
+                   !type->type || type->type>=bound)goto done;
+                const struct id_info *component=&ids[type->type];
+                if(component->op!=22 || component->count!=32)goto done;
                 continue;
             }
             /* Any other built-in a tessellation stage declares is outside this
@@ -753,8 +767,18 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
         if(!input_vertices || !input_mode || gs.input_primitive!=input_mode ||
            (gs.input_vertices && gs.input_vertices!=input_vertices))return 0;
     }
-    if(fs.outputs[0].components!=4 ||
-       fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
+    /* What the fragment stage must export is decided by the attachment it
+     * would export into. A colour subpass wants the one four-component float
+     * output at location 0 this profile writes. A DEPTH-ONLY subpass has no
+     * colour attachment, so the stage must declare no output at all: the
+     * pinned upstream depth clamp module ships an empty fragment shader there,
+     * and its program exports nothing (SPI_SHADER_COL_FORMAT zero). Requiring
+     * an export that has nowhere to go, or accepting one that does, would both
+     * be wrong, so the two cases are exclusive. */
+    if(key->color_format[0]==VK_FORMAT_UNDEFINED) {
+        if(fs.outputs[0].components)return 0;
+    } else if(fs.outputs[0].components!=4 ||
+              fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
     if(fs.secondary_outputs[0].components &&
        (fs.secondary_outputs[0].components!=4 ||
         fs.secondary_outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT))return 0;

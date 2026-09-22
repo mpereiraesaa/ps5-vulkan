@@ -66,9 +66,17 @@ class MeasurementManifestTests(unittest.TestCase):
 
     def test_frozen_manifest_derives_the_t05_measurement_selection(self):
         frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
-        categories = {"rasterization-culling"}
-        if any(d.get("category") == "t05-measurement-pending" for d in frozen["diagnostics"]):
-            categories.add("t05-measurement-pending")
+        # The T05 categories are gone from the frozen manifest: those leaves
+        # were measured and promoted into the acceptance selection, so the
+        # derivation is exercised over whatever categories the manifest still
+        # holds. A manifest with nothing left to move has nothing to derive,
+        # and the tool says so rather than inventing a selection.
+        categories = {d["category"] for d in frozen["diagnostics"]
+                      if d.get("expected_status") == "Pass"}
+        if not categories:
+            with self.assertRaises(ValueError):
+                build_measurement_manifest(frozen, {"rasterization-culling"})
+            return
         derived = build_measurement_manifest(frozen, categories)
         self.assertEqual(len(frozen["cases"]) + derived["measurement"]["moved"],
                          len(derived["cases"]))

@@ -173,7 +173,7 @@ class TestFormatDocumentationFacts(unittest.TestCase):
     def test_d32_table_matches_the_documentation(self):
         """Both D32 rows must describe the roles the capability table enables."""
         self.assertEqual(
-            d32_capabilities(), {"DEPTH", "DST"},
+            d32_capabilities(), {"DEPTH", "DST", "SRC"},
             "the D32 row changed; reconcile API.md and "
             "PHYSICAL_DEVICE_REPORTING.md and this gate before promoting it")
         for name, prefix in (("API.md", "| `VK_FORMAT_D32_SFLOAT` |"),
@@ -182,7 +182,7 @@ class TestFormatDocumentationFacts(unittest.TestCase):
                     if line.startswith(prefix)]
             self.assertEqual(len(rows), 1, f"{name} has no single D32 row")
             lowered = rows[0].lower()
-            for token in ("depth", "clear", "transfer"):
+            for token in ("depth", "clear", "transfer", "readback"):
                 self.assertIn(
                     token, lowered,
                     f"{name} does not describe the merged D32 {token} role")

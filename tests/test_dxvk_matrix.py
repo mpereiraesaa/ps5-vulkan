@@ -74,11 +74,12 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertNotEqual(
             rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"]["native"],
             rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"]["native"])
-        # Three multiview rows, the three T03 draw rows, the clip/cull pair and
-        # the independently witnessed fragment-storage feature advance; API
-        # 1.3 remains a separate blocker.
-        self.assertEqual(11, document["summary"]["satisfied"])
-        self.assertEqual(51, document["summary"]["blocker"])
+        # Three multiview rows, the three T03 draw rows, the clip/cull pair, the
+        # independently witnessed fragment-storage and dual-source features, and
+        # the four T05 rasterization and viewport features advance; API 1.3
+        # remains a separate blocker.
+        self.assertEqual(15, document["summary"]["satisfied"])
+        self.assertEqual(47, document["summary"]["blocker"])
 
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
@@ -87,15 +88,19 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(11, document["summary"]["satisfied"])
-        self.assertEqual(51, document["summary"]["blocker"])
+        self.assertEqual(15, document["summary"]["satisfied"])
+        self.assertEqual(47, document["summary"]["blocker"])
         self.assertEqual(
             [
+                         "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+                         "feature:VkPhysicalDeviceFeatures:depthClamp",
                          "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
                          "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+                         "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
                          "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
                          "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
                          "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+                         "feature:VkPhysicalDeviceFeatures:multiViewport",
                          "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
                          "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
                          "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
@@ -145,8 +150,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(11, document["summary"]["satisfied"])
-                self.assertEqual(51, document["summary"]["blocker"])
+                self.assertEqual(15, document["summary"]["satisfied"])
+                self.assertEqual(47, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 

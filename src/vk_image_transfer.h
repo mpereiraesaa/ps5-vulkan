@@ -78,10 +78,20 @@ static inline VkBool32 ps5vk_array_color_barrier(const VkImageMemoryBarrier *b)
          b->dstAccessMask == VK_ACCESS_TRANSFER_READ_BIT);
 }
 
+/* The two colour images an explicit clear may fill: the layered one the array
+ * path owns, and the plain colour attachment that also declares a transfer
+ * destination, which the pinned upstream draw helper clears OUTSIDE the render
+ * pass instead of through a LOAD_OP_CLEAR attachment (vkImageUtil.cpp
+ * clearColorImage). Both are filled the same way, with one uniform DWORD over
+ * the whole allocation, so the tiling equations are neither needed nor claimed. */
+static inline VkBool32 ps5vk_explicit_color_clear_image(VkImage image)
+{
+    return image && (ps5vk_array_color_image(image) || ps5vk_colour_transfer_image(image));
+}
 static inline VkBool32 ps5vk_array_color_clear(const struct ps5vk_operation *op)
 {
     if (!op || op->type != PS5VK_CLEAR_COLOR_IMAGE ||
-        !ps5vk_array_color_image(op->image_destination) ||
+        !ps5vk_explicit_color_clear_image(op->image_destination) ||
         !(op->image_destination->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
         (op->image_destination_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
          op->image_destination_layout != VK_IMAGE_LAYOUT_GENERAL) ||

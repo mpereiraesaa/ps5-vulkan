@@ -362,6 +362,30 @@ static int color_write_mask_supported(const struct ps5vk_graphics_key *key)
     return 1;
 }
 static int blend_profile_supported_one(const struct ps5vk_graphics_key *);
+/* A DEPTH-ONLY pass names no colour attachment, so the pipeline records a
+ * colour count of zero with an undefined colour format, writes no channel and
+ * cannot blend. The four travel together: any other combination is a colour
+ * target this profile does not implement, and stays refused. */
+static int depth_only_target(const struct ps5vk_graphics_key *key)
+{
+    return !key->color_attachment_count &&
+        key->color_format[0]==VK_FORMAT_UNDEFINED &&
+        !key->color_write_mask[0] && !key->blend_enable[0];
+}
+/* The colour shapes this profile serves, one gate for both the colour and the
+ * depth-only case: every named attachment must be a format this profile can
+ * render into and carry a write-mask shape the render-target register can
+ * express, and a subpass that names none must be the complete depth-only
+ * shape. */
+static int color_target_supported(const struct ps5vk_graphics_key *key)
+{
+    if (!key->color_attachment_count) return depth_only_target(key);
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment)
+        if (key->color_format[attachment] != VK_FORMAT_B8G8R8A8_UNORM &&
+            key->color_format[attachment] != VK_FORMAT_R8G8B8A8_UNORM)
+            return 0;
+    return color_write_mask_supported(key);
+}
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)
 {
     /* Every attachment's own equation must be one the register contract can
@@ -421,9 +445,8 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,5);
         uint32_t patch_type=0;
         if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
-        if(key->color_format[0]!=VK_FORMAT_B8G8R8A8_UNORM &&
-           key->color_format[0]!=VK_FORMAT_R8G8B8A8_UNORM)return ps5vk_reject(key,7);
-        if(key->samples!=VK_SAMPLE_COUNT_1_BIT || !color_write_mask_supported(key) ||
+        if(key->samples!=VK_SAMPLE_COUNT_1_BIT ||
+           !color_target_supported(key) ||
            !blend_profile_supported(key))return ps5vk_reject(key,8);
         if(!descriptor_profile_supported(key))return ps5vk_reject(key,9);
         return 1;
@@ -488,9 +511,8 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
          * measures, and a plain point/line pipeline stays fail-closed. */
     if(!ps5vk_graphics_has_geometry(key) && ps5vk_agc_primitive_needs_geometry(primitive_type))
         return ps5vk_reject(key,22);
-    if((key->color_format[0]!=VK_FORMAT_B8G8R8A8_UNORM &&
-        key->color_format[0]!=VK_FORMAT_R8G8B8A8_UNORM) ||
-       key->samples!=VK_SAMPLE_COUNT_1_BIT || !color_write_mask_supported(key) ||
+    if(!color_target_supported(key) ||
+       key->samples!=VK_SAMPLE_COUNT_1_BIT ||
        !blend_profile_supported(key))return ps5vk_reject(key,23);
     /* Binding counts/pointers were checked above. Keep every remaining
      * refusal observable, including the non-tessellated CTS reference path. */
@@ -746,7 +768,18 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
             goto failed;
         p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE;
         p->dual_source_export=0;
-        if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) {
+        if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE) {
+            /* A stage that reaches no colour store exports nothing. Two legal
+             * shapes: the DEPTH-ONLY pass, whose stage declares no output at
+             * all, and the ordinary colour pass whose only reachable side
+             * effect is an SSBO store - the pinned frag_side_effects kill
+             * leaves, where glslang keeps the Output in the entry point but
+             * removes the unreachable store. The interface policy already ties
+             * the declaration to the key, so the export has to agree with it
+             * and carry no secondary. */
+            const unsigned expected=key->color_attachment_count?1u:0u;
+            if(secondary || primary_mask!=expected)goto failed;
+        } else if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) {
             /* The pinned compiler publishes 0x44/0xff for both shapes. The
              * interface decides which one this is; a package whose registers
              * and interface disagree is torn and fails. */

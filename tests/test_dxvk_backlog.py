@@ -26,16 +26,17 @@ class DxvkBacklogTests(unittest.TestCase):
         self.matrix = json.loads(backlog.MATRIX.read_text())
 
     def test_original_61_blockers_keep_membership_after_multiview_promotion(self):
-        # The counts move with each promotion: T03's three draw features and the
-        # clip/cull pair and T06 fragment stores/atomics are implementation-ready
-        # now, and the backlog keeps the original membership (61 requirements)
-        # it started with.
+        # The counts move with each promotion: T03's three draw features, the
+        # clip/cull pair, T06's fragment stores/atomics and dual-source blend, and
+        # the four DXVK262-T05 rasterization and viewport features are
+        # implementation-ready now, and the backlog keeps the original membership
+        # (61 requirements) it started with.
         summary = backlog.validate(self.document, self.matrix)
         self.assertEqual(15, summary["tranches"])
         self.assertEqual(61, summary["requirements"])
-        self.assertEqual(10, summary["implementation_ready"])
-        self.assertEqual(10, summary["profile_satisfied"])
-        self.assertEqual(51, summary["remaining_profile_blockers"])
+        self.assertEqual(14, summary["implementation_ready"])
+        self.assertEqual(14, summary["profile_satisfied"])
+        self.assertEqual(47, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,
