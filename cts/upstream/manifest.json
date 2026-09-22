@@ -4604,9 +4604,9 @@
       "features_required": [
         "VK_KHR_dedicated_allocation"
       ],
-      "path": "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.update_buffer_second_part",
-      "rationale": "Measured unchanged upstream result: the dedicated allocator requires VK_KHR_dedicated_allocation, which the Vulkan 1.0 profile does not advertise. The equivalent suballocation update oracle is strict acceptance; this leaf remains an explicit diagnostic rather than being silently dropped.",
-      "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:682"
+      "path": "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_3_extra_bytes_offset_12",
+      "rationale": "Measured unchanged upstream result: the dedicated allocator requires VK_KHR_dedicated_allocation, which the Vulkan 1.0 profile does not advertise. VK_WHOLE_SIZE tail rounding is independently covered by the native public consumer and remains diagnostic here until that extension is implemented.",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:752"
     },
     {
       "category": "buffer-transfer-dedicated-allocation-gap",
@@ -4614,35 +4614,93 @@
       "features_required": [
         "VK_KHR_dedicated_allocation"
       ],
-      "path": "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_3_extra_bytes_offset_12",
-      "rationale": "Measured unchanged upstream result: the dedicated allocator requires VK_KHR_dedicated_allocation, which the Vulkan 1.0 profile does not advertise. VK_WHOLE_SIZE tail rounding is independently covered by the native public consumer and remains diagnostic here until that extension is implemented.",
-      "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:752"
+      "path": "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.update_buffer_second_part",
+      "rationale": "Measured unchanged upstream result: the dedicated allocator requires VK_KHR_dedicated_allocation, which the Vulkan 1.0 profile does not advertise. The equivalent suballocation update oracle is strict acceptance; this leaf remains an explicit diagnostic rather than being silently dropped.",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp:682"
     },
     {
-      "category": "physical-device-reporting-gap",
+      "category": "plain-point-line-pipeline-refused",
       "expected_status": "Fail",
-      "features_required": [],
-      "path": "dEQP-VK.info.device_properties",
-      "rationale": "Original upstream Vulkan 1.0 limit and complete-initialization oracle remains diagnostic because the truthful bounded profile does not yet satisfy the complete graphics minima. The remaining gaps are enumerated as documented blockers in conformance_inventory/reporting_matrix.json (mandatory image types and array layers, attachment and descriptor counts, multisampling sample counts, format families) after the seven unset precision/interface floors were corrected.",
-      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3147"
-    },
-    {
-      "category": "physical-device-reporting-gap",
-      "expected_status": "Fail",
-      "features_required": [],
-      "path": "dEQP-VK.info.device_memory_properties",
-      "rationale": "Original upstream memory oracle remains diagnostic: the one direct-memory type is DEVICE_LOCAL and HOST_VISIBLE, but HOST_COHERENT is not advertised or established.",
-      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3233"
-    },
-    {
-      "category": "storage-8bit-memory-precondition",
-      "expected_status": "NotSupported",
       "features_required": [
-        "storageBuffer8BitAccess"
+        "core:depthClamp"
       ],
-      "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
-      "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles.",
-      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:1898"
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_list",
+      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible.",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+    },
+    {
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_list_with_adjacency",
+      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap.",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+    },
+    {
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_strip",
+      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible.",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+    },
+    {
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_strip_with_adjacency",
+      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap.",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+    },
+    {
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.point_list",
+      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible.",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+    },
+    {
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp"
+      ],
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_fan",
+      "rationale": "Same depthClamp oracle over TRIANGLE_FAN, which the resolver refuses (src/graphics_program.h:96-97); the leaf fails at pipeline creation. Not a T05 gap.",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+    },
+    {
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_list_with_adjacency",
+      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap.",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+    },
+    {
+      "category": "primitive-topology-refused",
+      "expected_status": "Fail",
+      "features_required": [
+        "core:depthClamp",
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_strip_with_adjacency",
+      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap.",
+      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
     },
     {
       "category": "clip-distance-complementarity-not-enumerated",
@@ -4735,44 +4793,14 @@
       "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1950"
     },
     {
-      "category": "geometry-stage-not-runnable",
+      "category": "depth-stencil-format-gap",
       "expected_status": "NotSupported",
       "features_required": [
-        "core:geometryShader"
+        "core:depthBiasClamp"
       ],
-      "path": "dEQP-VK.geometry.input.basic_primitive.triangle_fan",
-      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3).",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:273"
-    },
-    {
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.geometry.input.basic_primitive.lines_adjacency",
-      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3).",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:274"
-    },
-    {
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.geometry.input.basic_primitive.line_strip_adjacency",
-      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3).",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:275"
-    },
-    {
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.geometry.input.basic_primitive.triangles_adjacency",
-      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3).",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:276"
+      "path": "dEQP-VK.dynamic_state.monolithic.rs_state.depth_bias_clamp",
+      "rationale": "BLOCKED by a format, not by T05: DepthBiasBaseCase::initialize needs VK_FORMAT_D24_UNORM_S8_UINT or VK_FORMAT_D32_SFLOAT_S8_UINT as a depth-stencil attachment and throws NotSupported otherwise (vktDynamicStateRSTests.cpp:133-150); this profile offers only VK_FORMAT_D32_SFLOAT (src/texture_format.c:183). The oracle itself is a colour comparison and requires depthBiasClamp (:1224), so a D32_SFLOAT_S8_UINT attachment would make it the upstream depthBiasClamp oracle. The rs_state group is not registered in the package (only the module's compute subgroup is).",
+      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateRSTests.cpp:1299"
     },
     {
       "category": "geometry-stage-not-runnable",
@@ -4800,9 +4828,39 @@
       "features_required": [
         "core:geometryShader"
       ],
-      "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_0",
-      "rationale": "A geometry stage that drops what the stage before it exported is refused: the policy requires its per-vertex inputs to be exactly that stage's outputs, component for component.",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:283"
+      "path": "dEQP-VK.geometry.input.basic_primitive.line_strip_adjacency",
+      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3).",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:275"
+    },
+    {
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.geometry.input.basic_primitive.lines_adjacency",
+      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3).",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:274"
+    },
+    {
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangle_fan",
+      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3).",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:273"
+    },
+    {
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.geometry.input.basic_primitive.triangles_adjacency",
+      "rationale": "The geometry stage this profile compiles takes exactly the three vertices of a triangle, so this input primitive is refused before a pipeline exists (src/spirv_graphics_interface.c requires gs.input_vertices == 3).",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:276"
     },
     {
       "category": "geometry-stage-not-runnable",
@@ -4821,6 +4879,36 @@
         "core:geometryShader"
       ],
       "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_1",
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile.",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288"
+    },
+    {
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_10",
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile.",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288"
+    },
+    {
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_11",
+      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile.",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288"
+    },
+    {
+      "category": "geometry-stage-not-runnable",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "core:geometryShader"
+      ],
+      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_12",
       "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile.",
       "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288"
     },
@@ -4910,113 +4998,25 @@
       "features_required": [
         "core:geometryShader"
       ],
-      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_10",
-      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile.",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288"
+      "path": "dEQP-VK.geometry.varying.vertex_out_1_geometry_out_0",
+      "rationale": "A geometry stage that drops what the stage before it exported is refused: the policy requires its per-vertex inputs to be exactly that stage's outputs, component for component.",
+      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryVaryingGeometryShaderTests.cpp:283"
     },
     {
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_11",
-      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile.",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288"
-    },
-    {
-      "category": "geometry-stage-not-runnable",
-      "expected_status": "NotSupported",
-      "features_required": [
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.geometry.input.triangle_strip_adjacency.vertex_count_12",
-      "rationale": "Triangle-strip adjacency needs a geometry stage whose per-vertex input array is the six vertices of an adjacency primitive, which this profile does not compile.",
-      "source": "external/vulkancts/modules/vulkan/geometry/vktGeometryInputGeometryShaderTests.cpp:288"
-    },
-    {
-      "category": "plain-point-line-pipeline-refused",
+      "category": "physical-device-reporting-gap",
       "expected_status": "Fail",
-      "features_required": [
-        "core:depthClamp"
-      ],
-      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.point_list",
-      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible.",
-      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+      "features_required": [],
+      "path": "dEQP-VK.info.device_memory_properties",
+      "rationale": "Original upstream memory oracle remains diagnostic: the one direct-memory type is DEVICE_LOCAL and HOST_VISIBLE, but HOST_COHERENT is not advertised or established.",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3233"
     },
     {
-      "category": "plain-point-line-pipeline-refused",
+      "category": "physical-device-reporting-gap",
       "expected_status": "Fail",
-      "features_required": [
-        "core:depthClamp"
-      ],
-      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_list",
-      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible.",
-      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
-    },
-    {
-      "category": "plain-point-line-pipeline-refused",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:depthClamp"
-      ],
-      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_strip",
-      "rationale": "Same depthClamp oracle, but a VS+FS pipeline with a point or line topology is refused before it exists: this profile resolves POINT_LIST, LINE_LIST and LINE_STRIP only as the input of a geometry stage (src/vk_graphics_pipeline.c:181-185, src/graphics_program.h:96-133), so vkCreateGraphicsPipelines returns VK_ERROR_FEATURE_NOT_PRESENT and the leaf fails at creation rather than on its image. Not a T05 gap; recorded so the family's shape stays visible.",
-      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
-    },
-    {
-      "category": "primitive-topology-refused",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:depthClamp",
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_list_with_adjacency",
-      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap.",
-      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
-    },
-    {
-      "category": "primitive-topology-refused",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:depthClamp",
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.line_strip_with_adjacency",
-      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap.",
-      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
-    },
-    {
-      "category": "primitive-topology-refused",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:depthClamp",
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_list_with_adjacency",
-      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap.",
-      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
-    },
-    {
-      "category": "primitive-topology-refused",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:depthClamp",
-        "core:geometryShader"
-      ],
-      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_strip_with_adjacency",
-      "rationale": "Same depthClamp oracle over an adjacency topology: requireFeatures(FEATURE_GEOMETRY_SHADER) passes on this profile, then the topology is refused at the resolver (src/graphics_program.h:96-97: adjacency stays fail-closed), so the leaf fails at pipeline creation. Not a T05 gap.",
-      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
-    },
-    {
-      "category": "primitive-topology-refused",
-      "expected_status": "Fail",
-      "features_required": [
-        "core:depthClamp"
-      ],
-      "path": "dEQP-VK.clipping.clip_volume.depth_clamp.triangle_fan",
-      "rationale": "Same depthClamp oracle over TRIANGLE_FAN, which the resolver refuses (src/graphics_program.h:96-97); the leaf fails at pipeline creation. Not a T05 gap.",
-      "source": "external/vulkancts/modules/vulkan/clipping/vktClippingTests.cpp:1812"
+      "features_required": [],
+      "path": "dEQP-VK.info.device_properties",
+      "rationale": "Original upstream Vulkan 1.0 limit and complete-initialization oracle remains diagnostic because the truthful bounded profile does not yet satisfy the complete graphics minima. The remaining gaps are enumerated as documented blockers in conformance_inventory/reporting_matrix.json (mandatory image types and array layers, attachment and descriptor counts, multisampling sample counts, format families) after the seven unset precision/interface floors were corrected.",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3147"
     },
     {
       "category": "host-coherent-memory-gap",
@@ -5029,14 +5029,54 @@
       "source": "external/vulkancts/modules/vulkan/rasterization/vktRasterizationTests.cpp:9274"
     },
     {
-      "category": "depth-stencil-format-gap",
+      "path": "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_0",
+      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
+      "category": "t06-independent-blend-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:independentBlend"
+      ],
+      "rationale": "UNMEASURED, applicable: addAttachmentWriteMaskTests is the only factory in the pinned tree whose leaves declare DEVICE_CORE_FEATURE_INDEPENDENT_BLEND (vktRenderPassTests.cpp:6504). The two-attachment pair draws into exactly two colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - with a different write mask each and start_index 0/1, which is the per-attachment state this profile now programs. It is held here until a measurement window reports Pass on a build that serves the capability."
+    },
+    {
+      "path": "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_1",
+      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
+      "category": "t06-independent-blend-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:independentBlend"
+      ],
+      "rationale": "UNMEASURED, applicable: addAttachmentWriteMaskTests is the only factory in the pinned tree whose leaves declare DEVICE_CORE_FEATURE_INDEPENDENT_BLEND (vktRenderPassTests.cpp:6504). The two-attachment pair draws into exactly two colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - with a different write mask each and start_index 0/1, which is the per-attachment state this profile now programs. It is held here until a measurement window reports Pass on a build that serves the capability."
+    },
+    {
+      "path": "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
+      "category": "t06-independent-blend-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:independentBlend"
+      ],
+      "rationale": "UNMEASURED, applicable: addAttachmentWriteMaskTests is the only factory in the pinned tree whose leaves declare DEVICE_CORE_FEATURE_INDEPENDENT_BLEND (vktRenderPassTests.cpp:6504). The two-attachment pair draws into exactly two colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - with a different write mask each and start_index 0/1, which is the per-attachment state this profile now programs. It is held here until a measurement window reports Pass on a build that serves the capability."
+    },
+    {
+      "path": "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1",
+      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
+      "category": "t06-independent-blend-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:independentBlend"
+      ],
+      "rationale": "UNMEASURED, applicable: addAttachmentWriteMaskTests is the only factory in the pinned tree whose leaves declare DEVICE_CORE_FEATURE_INDEPENDENT_BLEND (vktRenderPassTests.cpp:6504). The two-attachment pair draws into exactly two colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - with a different write mask each and start_index 0/1, which is the per-attachment state this profile now programs. It is held here until a measurement window reports Pass on a build that serves the capability."
+    },
+    {
+      "category": "storage-8bit-memory-precondition",
       "expected_status": "NotSupported",
       "features_required": [
-        "core:depthBiasClamp"
+        "storageBuffer8BitAccess"
       ],
-      "path": "dEQP-VK.dynamic_state.monolithic.rs_state.depth_bias_clamp",
-      "rationale": "BLOCKED by a format, not by T05: DepthBiasBaseCase::initialize needs VK_FORMAT_D24_UNORM_S8_UINT or VK_FORMAT_D32_SFLOAT_S8_UINT as a depth-stencil attachment and throws NotSupported otherwise (vktDynamicStateRSTests.cpp:133-150); this profile offers only VK_FORMAT_D32_SFLOAT (src/texture_format.c:183). The oracle itself is a colour comparison and requires depthBiasClamp (:1224), so a D32_SFLOAT_S8_UINT attachment would make it the upstream depthBiasClamp oracle. The rs_state group is not registered in the package (only the module's compute subgroup is).",
-      "source": "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateRSTests.cpp:1299"
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
+      "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles.",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:1898"
     }
   ]
 }

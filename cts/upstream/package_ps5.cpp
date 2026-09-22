@@ -33,6 +33,7 @@
 #include "vktDrawScissorTests.hpp"
 #include "vktDrawDepthClampTests.hpp"
 #include "vktFragmentOperationsTests.hpp"
+#include "vktRenderPassTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -85,6 +86,17 @@ void FocusedVkTestPackage::init(void)
     // releases the module's singleton device helpers at the upstream lifetime.
     addChild(vkt::createTestGroup(m_testCtx, "dynamic_state", initDynamicStateGroup,
                                   cleanupDynamicStateGroup));
+
+    // renderpass: the original upstream render-pass module, registered for the
+    // DXVK262-T06 independentBlend oracles. Its attachment_write_mask family is
+    // the only upstream coverage in the pinned tree that REQUIRES
+    // VkPhysicalDeviceFeatures.independentBlend (vktRenderPassTests.cpp:6504),
+    // and the two-attachment variants draw into two colour attachments with a
+    // different write mask each - the shape the served profile now carries.
+    // cases.txt remains the leaf filter: the registerpass2 and dynamic-rendering
+    // variants live in other modules and stay out, and only the selected leaves
+    // below execute.
+    addChild(vkt::createRenderPassTests(m_testCtx, "renderpass"));
 
     // info group: original upstream enumeration and physical-device query
     // bodies. cases.txt remains the execution filter; registering these

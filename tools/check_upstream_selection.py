@@ -175,6 +175,32 @@ def _dual_source_blend_leaf_names(text: str, leaf: str) -> set[str]:
     return {leaf}
 
 
+def _two_attachment_write_mask_leaf_names(text: str, leaf: str) -> set[str]:
+    """Leaves of the render-pass module's two-attachment write-mask family.
+
+    `addAttachmentWriteMaskTests` is the only factory in the pinned tree whose
+    leaves declare DEVICE_CORE_FEATURE_INDEPENDENT_BLEND, and the DXVK262-T06
+    oracle is the pair that draws into exactly two colour attachments with a
+    different write mask each. Bounded to that factory's exact construction
+    expressions: the attachment counts it iterates, the "attachment_count_" and
+    "start_index_" naming, and the requirement entry. A rewritten factory stops
+    matching instead of yielding invented names.
+    """
+    factory = _attachment_write_mask_factory(text)
+    if "DEVICE_CORE_FEATURE_INDEPENDENT_BLEND" not in factory:
+        return set()
+    counts = re.search(r"attachmentCounts\[\]\s*=\s*\{([^}]*)\}", factory)
+    if not counts or "2" not in [part.strip() for part in counts.group(1).split(",")]:
+        return set()
+    if not re.search(r'"attachment_count_"\s*\+\s*de::toString\(attachmentCount\)', factory):
+        return set()
+    if not re.search(r'"start_index_"\s*\+\s*de::toString\(drawStartNdx\)', factory):
+        return set()
+    # `leaf` is this case's last path segment; the recognizer accepts exactly
+    # the two-attachment, two-start-index leaves of the two allocation groups.
+    return {leaf} if re.fullmatch(r"start_index_[01]", leaf) else set()
+
+
 def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]:
     """Leaves of the rasterization module's culling family.
 
@@ -678,6 +704,42 @@ def _dynamic_state_compute_generated_segments(text: str) -> set[str]:
         token.removeprefix("VK_DYNAMIC_STATE_").lower()
         for token in re.findall(r"\bVK_DYNAMIC_STATE_[A-Z0-9_]+\b", state_list.group(1))
     }
+
+
+def _attachment_write_mask_factory(text: str) -> str:
+    """The body of the pinned write-mask factory, and nothing else.
+
+    The module is a template-heavy file whose enclosing-function extractor
+    cannot recover this factory, so the recognizers below slice it by its own
+    definition: from the function signature to the next top-level definition.
+    """
+    start = text.find("void addAttachmentWriteMaskTests(")
+    if start < 0:
+        return ""
+    end = text.find("\nvoid ", start + 1)
+    return text[start:end if end > 0 else len(text)]
+
+
+def _attachment_write_mask_generated_segments(text: str) -> set[str]:
+    """Derive the write-mask factory's "attachment_count_<n>" group names.
+
+    `addAttachmentWriteMaskTests` composes one group per entry of its own
+    attachmentCounts[] table with `"attachment_count_" + de::toString(...)`, so
+    the segment is not a literal anywhere in the module. Accept the names only
+    while that exact construction and table are present.
+    """
+    factory = _attachment_write_mask_factory(text)
+    if not re.search(r'"attachment_count_"\s*\+\s*de::toString\(attachmentCount\)', factory):
+        return set()
+    counts = re.search(r"attachmentCounts\[\]\s*=\s*\{([^}]*)\}", factory)
+    if not counts:
+        return set()
+    names = set()
+    for part in counts.group(1).split(","):
+        part = part.strip()
+        if part.isdigit():
+            names.add(f"attachment_count_{part}")
+    return names
 
 
 def _indirect_draw_generated_segments(text: str) -> set[str]:
@@ -1359,6 +1421,8 @@ def main() -> int:
             _clip_distance_generated_segments(text)
             if source_path.name == "vktClippingTests.cpp" else set()
         )
+        if source_path.name == "vktRenderPassTests.cpp":
+            generated_segments |= _attachment_write_mask_generated_segments(text)
         for segment in segments[1:-1]:
             if (not re.search(r'"' + re.escape(segment) + r'"', searchable) and
                     segment not in generated_segments and
@@ -1459,6 +1523,12 @@ def main() -> int:
             continue
         if (source_path.name == "vktDrawDepthClampTests.cpp" and
                 leaf in _draw_depth_clamp_leaf_names(text)):
+            continue
+        # The render-pass module's write-mask family: the only upstream leaves
+        # that REQUIRE independentBlend, and the two-attachment pair is the
+        # DXVK262-T06 oracle for it.
+        if (source_path.name == "vktRenderPassTests.cpp" and
+                leaf in _two_attachment_write_mask_leaf_names(text, leaf)):
             continue
         # The geometry input factory names its triangle-strip-adjacency leaves
         # after the vertex count it iterates, so only the prefix is a literal.
