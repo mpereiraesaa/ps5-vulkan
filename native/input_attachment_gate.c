@@ -5,6 +5,10 @@
  * objects the driver already holds. See input_attachment_gate.h for the shape
  * and for why the real objects are the input. */
 #include "input_attachment_gate.h"
+
+/* Which refusal inside the gate fired (diagnostic only): the queue reports it
+ * with the draw site so a refused read names its own condition. */
+unsigned ps5vk_input_attachment_gate_site;
 #include "descriptor_table_layout.h"
 
 /* The one forward dependency this profile accepts: subpass 0's colour write
@@ -78,26 +82,26 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
      * than an unsupported shape. */
     if (!device || !pass || !framebuffer || !set || !binding || !abi ||
         set_index >= PS5VK_MAX_SETS || binding_index >= PS5VK_MAX_BINDINGS ||
-        element_index >= PS5VK_MAX_DESCRIPTORS) return VK_ERROR_UNKNOWN;
-    if (type != VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) return VK_ERROR_UNKNOWN;
+        element_index >= PS5VK_MAX_DESCRIPTORS) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_UNKNOWN; }
+    if (type != VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_UNKNOWN; }
     /* The role is fragment-visible resource-only image data and the compiled
      * fragment stage has to be the one that names it. A vertex-visible
      * declaration, a set only the vertex stage was given, or a binding no
      * compiled fragment stage dereferences is not this profile. */
-    if (binding->stages != VK_SHADER_STAGE_FRAGMENT_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (binding->stages != VK_SHADER_STAGE_FRAGMENT_BIT) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* One element, not an array: the measured profile reads one attachment, and
      * a second element would be a second descriptor this gate never sized. */
-    if (binding->count != 1) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (binding->count != 1) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     if (!abi->enabled || !abi->fragment_descriptor_valid[set_index] ||
         abi->vertex_descriptor_valid[set_index] ||
         !(abi->fragment_used_bindings[set_index] & (UINT64_C(1) << binding_index)))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* Exactly one input binding in the whole table: this profile has measured
      * one attachment read, not an array of them. */
-    if (input_binding_count != 1) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (input_binding_count != 1) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* An input attachment is read by a LATER subpass; the subpass that produced
      * the pixels has nothing to read yet. */
-    if (subpass == 0 || subpass >= pass->subpass_count) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (subpass == 0 || subpass >= pass->subpass_count) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     const struct ps5vk_subpass *stage = &pass->subpasses[subpass];
     /* Missing, UNUSED or multiplied input references are all refused: the read
      * this profile serves is pInputAttachments[0] of that subpass and nothing
@@ -105,19 +109,19 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
      * before it is indexed, so a malformed pass cannot be read at all. */
     if (stage->input_count != 1 || stage->input_first >= pass->input_count ||
         pass->input_count - stage->input_first < stage->input_count)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     const VkAttachmentReference *reference = &pass->inputs[stage->input_first];
-    if (reference->attachment == VK_ATTACHMENT_UNUSED) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (reference->attachment == VK_ATTACHMENT_UNUSED) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     if (reference->attachment >= pass->attachment_count ||
         reference->attachment >= framebuffer->attachment_count ||
         !framebuffer->attachments[reference->attachment])
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* A subpass input reference is a read layout; the colour- and
      * depth-attachment layouts are refused at pass creation for the same
      * reason, and GENERAL is what this profile's boundary transition leaves the
      * attachment in. */
-    if (reference->layout != VK_IMAGE_LAYOUT_GENERAL) return VK_ERROR_FEATURE_NOT_PRESENT;
-    if (!set->defined[element_index]) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (reference->layout != VK_IMAGE_LAYOUT_GENERAL) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
+    if (!set->defined[element_index]) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* The descriptor must BE the framebuffer view of that reference - not
      * another view of the same image, not another layer - and it must be
      * recorded in GENERAL, the layout the acquire at the subpass boundary
@@ -126,16 +130,16 @@ VkResult ps5vk_input_attachment_gate(VkDevice device, VkRenderPass pass, uint32_
         set->images[element_index].imageView != framebuffer->attachments[reference->attachment] ||
         set->image_resources[element_index] !=
             framebuffer->attachments[reference->attachment]->image)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     if (!promoted_resource(device, set->image_resources[element_index],
             set->images[element_index].imageView))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     if (set->images[element_index].imageLayout != VK_IMAGE_LAYOUT_GENERAL)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* No sampler words: the record this role occupies is the eight DWORD
      * resource-only image record, so a table that sized it as a combined pair
      * can never reach execution through here. */
-    if (ps5vk_descriptor_record_bytes(type) != 32) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (ps5vk_descriptor_record_bytes(type) != 32) { ps5vk_input_attachment_gate_site = __LINE__; return VK_ERROR_FEATURE_NOT_PRESENT; }
     /* The transition that makes the pixels visible is the boundary barrier
      * this executor emits for every subpass that reads an input attachment
      * (PS5VK_COLOR_TO_TEXTURE_BARRIER around the subpass change). An explicit

@@ -1267,6 +1267,39 @@ two_cleanup:
         SHAPE_TRY(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000)));
         SHAPE_TRY(vkDeviceWaitIdle(device));
         shape_step("submitted", VK_SUCCESS);
+        /* The oracle's own pass now runs end to end, so its resolve target is
+         * read back: the resolved result has to LAND in the attachment the pass
+         * declares, whatever value the samples happen to hold. */
+        {
+            void *resolved = NULL;
+            VkDeviceSize resolved_bytes = 0;
+            VkResult map_rc = ps5vk_image_span(device, images[1], &resolved, &resolved_bytes);
+            if (shape_step("resolve_target_map", map_rc) && map_rc == VK_SUCCESS) {
+                const uint32_t words = (uint32_t)(resolved_bytes / 4u);
+                uint32_t census[4] = {0}, hits[4] = {0};
+                unsigned distinct = 0;
+                for (uint32_t i = 0; i < words; ++i) {
+                    uint32_t word = 0;
+                    memcpy(&word, (const unsigned char *)resolved + (size_t)i * 4u, sizeof(word));
+                    unsigned slot = distinct;
+                    for (unsigned k = 0; k < distinct; ++k)
+                        if (census[k] == word) { slot = k; break; }
+                    if (slot == distinct) {
+                        if (distinct == 4u) continue;
+                        census[distinct] = word;
+                        ++distinct;
+                    }
+                    ++hits[slot];
+                }
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_SAMPLE_RATE_RESOLVED extent=%ux%u words=%u distinct=%u "
+                    "value0=%08x hits0=%u value1=%08x hits1=%u value2=%08x hits2=%u "
+                    "value3=%08x hits3=%u",
+                    params->extent, params->extent, words, distinct,
+                    census[0], hits[0], census[1], hits[1], census[2], hits[2],
+                    census[3], hits[3]);
+            }
+        }
     }
 
 cleanup:

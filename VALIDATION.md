@@ -3626,3 +3626,49 @@ executor still refuses a subpass that declares a resolve target, so the program
 is not yet emitted; that wiring - the target, the barrier and the draw at the
 subpass boundary - is the next slice. The row stays a blocker and nothing is
 advertised.
+
+## The executor emits the resolve, and the next gate is a layout (2026-09-22)
+
+The resolve draw is now emitted by the driver. `native/graphics_queue_ps5.c`
+gained `resolve_draw_emit`, which builds the draw on the stack: a one-subpass
+synthetic pass whose colour reference is the resolve attachment, a framebuffer
+carrying both views, a descriptor set whose single element is the multisampled
+attachment as an input attachment, and a pipeline carrying a compiled-then-
+LOADED resolve program (`ps5vk_native_resolve_program_acquire` plus
+`ps5vk_native_runtime_graphics_create`, the same loader every app pipeline
+uses). It is called where a subpass that declares a resolve target ENDS - at the
+next subpass boundary and, for the last subpass, before the postlude. The stale
+blanket refusal of resolve subpasses is gone; the per-subpass validation admits
+exactly the shape the emission describes and keeps the refusal for everything
+else.
+
+The path was named step by step on hardware, and each step is now reported
+rather than guessed (run `20260922T145043495Z`, log
+`830121e53f979d4fe17436f04bf8d0e2c3f66412a69b843cbf12f6251c2c54ee`, payload
+eboot `d00844385e55341b0ab0e9adeda8d6e90650c2b14166eacc60fb9a6a2dc9bb12`):
+`PS5VK_RESOLVE_STEP target_set/native_target/descriptor` (0 for all three), the
+produced draw (`PS5VK_RESOLVE_DRAW serial=7 subpass=0 samples=4 colour=0
+resolve=1 targets=1 words=8`), and then the refusal that is left -
+`PS5VK_INPUT_ATTACHMENT_REFUSED serial=7 subpass=1 inner=123 rc=-8 defined=1
+layout=5 view_is_fb=1 ref=0`. In that same run the walk's own phases still pass
+- `PS5VK_SAMPLE_RATE_FETCH ... sample_index=3 ... value=ff000003 ... verdict=1`,
+`PS5VK_SAMPLE_RATE_RESOLVE ... value=ff000002 ... averaged=1` and
+`PS5VK_SAMPLE_RATE_TARGETS ... subpasses=2 ... preserved_hits=4096 ... verdict=1`
+- so the emission did not trade away any measured phase. Layout 5 is
+`VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`,
+which is the layout the pinned CTS gives its fetch subpass's input attachment,
+while this profile's input-attachment gate and its boundary transition assume
+`GENERAL` (the layout the multiview witness declared). That is the next gate,
+and it is a real one: the boundary barrier has to leave the attachment in the
+layout the SUBPASS declares, and the gate has to accept `SHADER_READ_ONLY_OPTIMAL`
+for an input read.
+
+Two probe defects and one driver defect were paid for on the way to the
+emission, all recorded rather than hidden: the stale blanket refusal above, a
+synthetic descriptor set with no pool (refused at `descriptor_plan`), a
+synthetic pipeline state that had never been through the native loader, and a
+legacy prepare entry that passes a zero shader address (the descriptor table's
+high-address check needs the loaded pair's aperture, so the runtime entry is
+used). Both host tests and the console runs remain green before this window's
+last refusal: the walk's own phases - per-sample fetch, resolve arithmetic,
+two-subpass targets with a preserve list - all still pass.
