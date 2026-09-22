@@ -3,6 +3,7 @@
 #include "sample_rate_probe.h"
 #include "color_clear.h"
 #include "sample_rate_contract.h"
+#include "vk_image.h"
 #include "ps5log.h"
 #include <string.h>
 
@@ -558,6 +559,162 @@ VkResult ps5vk_sample_rate_shape_probe(VkDevice device,
         SHAPE_TRY(vkAllocateCommandBuffers(device, &allocate, &command));
         const VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
         SHAPE_TRY(vkCreateFence(device, &fence_info, NULL, &fence));
+        /* Before the oracle's pass, the shape the executor can already be
+         * taught to run: two subpasses, EACH with its own colour target, no
+         * resolve, no input attachment and no preserve list. It is measured on
+         * its own so that "a later subpass renders elsewhere" is a capability
+         * with evidence rather than a side effect of the oracle's gate. */
+        {
+            VkRenderPass two_pass = VK_NULL_HANDLE;
+            VkFramebuffer two_fb = VK_NULL_HANDLE;
+            VkPipeline two_pipelines[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+            const VkAttachmentDescription two_attachments[2] = {
+                {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = params->samples,
+                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                 .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                 .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+            const VkAttachmentReference two_color0 = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+            const VkAttachmentReference two_color1 = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+            const VkSubpassDescription two_subpasses[2] = {
+                {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+                 .colorAttachmentCount = 1, .pColorAttachments = &two_color0},
+                {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+                 .colorAttachmentCount = 1, .pColorAttachments = &two_color1}};
+            const VkRenderPassCreateInfo two_pass_info = {
+                .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                .attachmentCount = 2, .pAttachments = two_attachments,
+                .subpassCount = 2, .pSubpasses = two_subpasses};
+            ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_TARGETS step=pass");
+            rc = vkCreateRenderPass(device, &two_pass_info, NULL, &two_pass);
+            if (!shape_step("create_two_subpass_pass", rc) || rc != VK_SUCCESS) goto two_cleanup;
+            const VkImageView two_views[2] = {views[0], views[2]};
+            const VkFramebufferCreateInfo two_fb_info = {
+                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, .renderPass = two_pass,
+                .attachmentCount = 2, .pAttachments = two_views,
+                .width = params->extent, .height = params->extent, .layers = 1};
+            rc = vkCreateFramebuffer(device, &two_fb_info, NULL, &two_fb);
+            if (!shape_step("create_two_subpass_framebuffer", rc) || rc != VK_SUCCESS) goto two_cleanup;
+            for (unsigned subpass = 0; subpass < 2; ++subpass) {
+                VkSampleMask two_mask = ps5vk_sample_count_full_mask(params->samples);
+                const VkPipelineShaderStageCreateInfo two_stages[2] = {
+                    {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+                     VK_SHADER_STAGE_VERTEX_BIT, modules[0], "main", NULL},
+                    {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, NULL, 0,
+                     VK_SHADER_STAGE_FRAGMENT_BIT, modules[1], "main", NULL}};
+                const VkPipelineVertexInputStateCreateInfo two_vertex_input = {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+                const VkPipelineInputAssemblyStateCreateInfo two_assembly = {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                    .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+                const VkPipelineRasterizationStateCreateInfo two_raster = {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                    .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = VK_CULL_MODE_NONE,
+                    .frontFace = VK_FRONT_FACE_CLOCKWISE, .lineWidth = 1.0f};
+                const VkViewport two_viewport = {0.0f, 0.0f, (float)params->extent,
+                    (float)params->extent, 0.0f, 1.0f};
+                const VkRect2D two_scissor = {{0, 0}, {params->extent, params->extent}};
+                const VkPipelineViewportStateCreateInfo two_viewport_state = {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                    .viewportCount = 1, .pViewports = &two_viewport,
+                    .scissorCount = 1, .pScissors = &two_scissor};
+                const VkPipelineColorBlendAttachmentState two_blend_attachment = {.colorWriteMask = 0xfu};
+                const VkPipelineColorBlendStateCreateInfo two_blend = {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                    .attachmentCount = 1, .pAttachments = &two_blend_attachment};
+                const VkPipelineMultisampleStateCreateInfo two_multisample = {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                    .rasterizationSamples = subpass ? VK_SAMPLE_COUNT_1_BIT : params->samples,
+                    .pSampleMask = subpass ? NULL : &two_mask};
+                const VkGraphicsPipelineCreateInfo two_pipeline_info = {
+                    .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                    .layout = layout, .renderPass = two_pass, .subpass = subpass, .stageCount = 2,
+                    .pStages = two_stages, .pVertexInputState = &two_vertex_input,
+                    .pInputAssemblyState = &two_assembly, .pRasterizationState = &two_raster,
+                    .pMultisampleState = &two_multisample, .pViewportState = &two_viewport_state,
+                    .pColorBlendState = &two_blend};
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_SAMPLE_RATE_TARGETS step=pipeline subpass=%u", subpass);
+                rc = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &two_pipeline_info,
+                    NULL, &two_pipelines[subpass]);
+                if (!shape_step("create_two_subpass_pipeline", rc) || rc != VK_SUCCESS) goto two_cleanup;
+            }
+            {
+                const VkCommandBufferBeginInfo two_begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+                VkClearValue two_clears[2] = {
+                    {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
+                    {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}}};
+                const VkRenderPassBeginInfo two_pass_begin = {
+                    .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = two_pass,
+                    .framebuffer = two_fb, .renderArea = {{0, 0}, {params->extent, params->extent}},
+                    .clearValueCount = 2, .pClearValues = two_clears};
+                rc = vkBeginCommandBuffer(command, &two_begin);
+                if (!shape_step("two_subpass_begin_command", rc) || rc != VK_SUCCESS) goto two_cleanup;
+                ps5log_line(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_TARGETS step=record");
+                vkCmdBeginRenderPass(command, &two_pass_begin, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, two_pipelines[0]);
+                vkCmdDraw(command, 3, 1, 0, 0);
+                vkCmdNextSubpass(command, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, two_pipelines[1]);
+                vkCmdDraw(command, 3, 1, 0, 0);
+                vkCmdEndRenderPass(command);
+                rc = vkEndCommandBuffer(command);
+                if (!shape_step("two_subpass_end_command", rc) || rc != VK_SUCCESS) goto two_cleanup;
+                VkQueue two_queue = VK_NULL_HANDLE;
+                vkGetDeviceQueue(device, 0, 0, &two_queue);
+                const VkSubmitInfo two_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                    .commandBufferCount = 1, .pCommandBuffers = &command};
+                rc = vkQueueSubmit(two_queue, 1, &two_submit, fence);
+                if (!shape_step("two_subpass_submit", rc) || rc != VK_SUCCESS) goto two_cleanup;
+                rc = vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(5000000000));
+                if (!shape_step("two_subpass_wait", rc) || rc != VK_SUCCESS) goto two_cleanup;
+                rc = vkResetFences(device, 1, &fence);
+                /* The oracle: the SECOND subpass's target holds the fragment's
+                 * colour across the plane it covers, so a subpass that renders
+                 * into its own attachment really rendered. The plane is
+                 * extent*extent RGBA8 words; the tiled padding around it keeps
+                 * the clear. */
+                {
+                    void *target = NULL;
+                    VkDeviceSize target_bytes = 0;
+                    VkResult map_rc = ps5vk_image_span(device, images[2], &target, &target_bytes);
+                    if (!shape_step("two_subpass_readback_map", map_rc) || map_rc != VK_SUCCESS)
+                        goto two_cleanup;
+                    uint32_t expected_word = 0;
+                    if (!ps5vk_color_clear_rgba8((const float[]){0.25f, 0.5f, 0.75f, 1.0f},
+                            &expected_word))
+                        goto two_cleanup;
+                    const uint32_t words = (uint32_t)(target_bytes / 4u);
+                    uint32_t shaded = 0;
+                    for (uint32_t i = 0; i < words; ++i) {
+                        uint32_t word = 0;
+                        memcpy(&word, (const unsigned char *)target + (size_t)i * 4u, sizeof(word));
+                        if (word == expected_word) ++shaded;
+                    }
+                    const uint32_t plane_words = params->extent * params->extent;
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_SAMPLE_RATE_TARGETS extent=%ux%u samples=%u subpasses=2 "
+                        "target_words=%u shaded=%u expected=%u word=%08x verdict=%u",
+                        params->extent, params->extent, (unsigned)params->samples,
+                        words, shaded, plane_words, expected_word,
+                        (unsigned)(shaded == plane_words));
+                    rc = (shaded == plane_words) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
+                    if (rc != VK_SUCCESS) { goto two_cleanup; }
+                }
+            }
+two_cleanup:
+            for (unsigned i = 0; i < 2; ++i)
+                if (two_pipelines[i]) vkDestroyPipeline(device, two_pipelines[i], NULL);
+            if (two_fb) vkDestroyFramebuffer(device, two_fb, NULL);
+            if (two_pass) vkDestroyRenderPass(device, two_pass, NULL);
+        }
         const VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         SHAPE_TRY(vkBeginCommandBuffer(command, &begin));
         /* One clear value per attachment, as the oracle passes: the pass

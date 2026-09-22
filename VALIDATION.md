@@ -3261,3 +3261,41 @@ clear set, and the gate is now the executor at submission, named by its own
 return code. What it does not establish: no leaf passes, the resolve, the
 per-sample read and the preserve list are still unexecuted, the row stays a
 blocker, and nothing is advertised.
+
+## Executing a subpass that renders elsewhere (2026-09-22)
+
+The executor prepared every draw from the framebuffer's colour and depth role
+lists, and those lists are subpass 0's roles, so a pass whose later subpasses
+render targets of their own was refused three times over: a resolve target, a
+preserve list, and subpasses that do not name the same attachments. This change
+lifts the third one. What a draw renders into is its OWN subpass's set - the
+seam the draw preparation now takes as `struct ps5vk_target_set` - and the pass
+carries the union of the references its subpasses name, with the depth role
+single and shared, an attachment that is named twice required to agree with
+itself on format and layout, and the resolve and preserve refusals untouched.
+The prelude now derives one plan, one clear word and one layout transition per
+ATTACHMENT rather than per subpass-0 colour slot.
+
+Measured on the console (run `20260922T113731886Z_PPSA99994_ps5vk_0x19be2253813fd`,
+log SHA-256 `d5d48c50ccae7a03f34687e13c4690b63ce43bc338ebb5d81a7f619818d9e16c`,
+payload eboot `6ede50ef50cb46838175453dfa4ddad5cbab22ebef259f22cefface956dd4a49`):
+
+- a two-subpass pass, each subpass rendering its own colour attachment, is
+  created, recorded (`vkEndCommandBuffer` rc=0), submitted (`vkQueueSubmit`
+  rc=0) and completed (`vkWaitForFences` rc=0);
+- the SECOND subpass's target is read back through the driver's own span and
+  holds the fragment's colour across exactly the plane it covers:
+  `PS5VK_SAMPLE_RATE_TARGETS extent=32x32 samples=4 subpasses=2
+  target_words=32768 shaded=1024 expected=1024 word=ffbf8040 verdict=1` - 1024
+  words is the 32x32 RGBA8 plane, and the tiled padding around it keeps the
+  clear, so the draw really landed in that subpass's own attachment;
+- the oracle's own pass still refuses at `vkQueueSubmit` rc=-8, because it also
+  carries a resolve target, an input attachment and a preserve list, and those
+  three are the next refusals to lift;
+- the title closed cleanly (`PS5VK_PLATFORM_CLOSE rc=0`, `BYE`).
+
+What this establishes: the executor runs a multi-subpass pass whose subpasses
+render their own targets, with hardware-comparable output, which is the
+structural half of the oracle's pass. What it does not establish: the resolve,
+the per-sample input read and the preserve list are still unexecuted, no CTS
+leaf passes, the row stays a blocker, and nothing is advertised.
