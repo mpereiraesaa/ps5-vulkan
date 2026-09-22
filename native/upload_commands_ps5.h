@@ -169,7 +169,20 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                    b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
                    b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
                    b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT &&
-                   op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT))) ||
+                   op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                  /* The pinned render-pass module's own initialization pair:
+                   * the acquire that discards each attachment into its
+                   * transfer destination and the handover that gives the
+                   * cleared attachment to its attachment layout, both recorded
+                   * from the transfer stage to the whole engine, host
+                   * included. The recorder accepts exactly these two shapes
+                   * (src/color_barrier.h), so the executor has to agree with
+                   * them or a submission refuses what recording let through. */
+                  ((ps5vk_attachment_initialization_acquire_barrier(b) ||
+                    ps5vk_attachment_initialization_handover_barrier(b)) &&
+                   op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                   op->dst_stage==(VkPipelineStageFlags)(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|
+                                                         VK_PIPELINE_STAGE_HOST_BIT)))) ||
                 /* The rendered colour surface handed to its readback. When the
                  * copy shares the submission this is part of the four-operation
                  * readback shape; when the readback is submitted separately the
