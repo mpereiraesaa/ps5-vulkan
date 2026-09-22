@@ -78,11 +78,16 @@ class UpstreamSelectionTests(unittest.TestCase):
         # promoted on 2026-09-21 (28 rasterization culling, 16 fragment_ops
         # multi_viewport, 6 draw.renderpass.scissor, 2 clip_volume.depth_clamp,
         # 6 draw.renderpass.depth_clamp), plus the four render-pass
-        # attachment-write-mask leaves the T06 independentBlend line holds as
-        # t06-independent-blend-pending until a measurement window reports on
-        # them. The 44 diagnostics that remain document refusals and capability
-        # gaps.
-        self.assertEqual((462, 48, 48),
+        # attachment-write-mask leaves the T06 independentBlend line held as
+        # t06-independent-blend-pending: two of them (suballocation) are
+        # acceptance now that the promotion advertised the feature and served
+        # the integer colour target, and the two dedicated_allocation leaves
+        # stay diagnostics because they need VK_KHR_dedicated_allocation. The
+        # 46 diagnostics that remain document refusals and capability gaps.
+        # `leaves` counts every attachment_write_mask leaf the pinned factory
+        # generates, wherever the manifest now keeps it: the two suballocation
+        # ones in acceptance and the two dedicated_allocation diagnostics.
+        self.assertEqual((464, 46, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
