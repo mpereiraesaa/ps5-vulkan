@@ -4360,3 +4360,15 @@ scope. This driver reports 0 for all three: no path lowers an interpolation
 offset, so they are documented as blockers in the reporting matrix
 (`tools/check_reporting_matrix.py`, `KNOWN_BLOCKERS`) instead of being raised to
 values nothing measured.
+
+The compiler half of this window is `mpereiraesaa/opengnm-psbc` PR #23
+(`codex/fragment-coord-sample-shading`, head
+`a33305201385947cb49d74b68f6311a0c2f4add7`): the unconditional fragment-coordinate
+lowering that stops the standalone compile from aborting in
+`ac_nir.c` (`assert(arg.used)`), the pipeline sample-shading state the
+standalone compile needs, and the single compile-time decision about which
+fragment coordinate the shader reads. Every payload above was built and run
+with that revision - the driver passes `sample_shading_enable` into
+`PsbcCompileOptions`, which does not exist before it - so
+`tools/prepare_compiler_deps.py` has to pin the merged commit before this
+promotion reproduces from a fresh clone. The pin still names `be4d043`.
