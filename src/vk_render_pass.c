@@ -206,7 +206,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
         int is_depth = depths[0].attachment == i;
         if (a->flags || a->samples != VK_SAMPLE_COUNT_1_BIT ||
             (is_depth ? a->format != VK_FORMAT_D32_SFLOAT :
-             (a->format != VK_FORMAT_B8G8R8A8_UNORM && a->format != VK_FORMAT_R8G8B8A8_UNORM)))
+             !ps5vk_color_target_format_supported(a->format)))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
             a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||

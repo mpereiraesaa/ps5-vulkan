@@ -298,7 +298,10 @@ static void primary_only_commands_poison_a_secondary(void)
                            &scoped) == VK_SUCCESS);
     assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->state == PS5VK_EXECUTABLE);
     assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
-    /* The level is what forbids it: a PRIMARY may not claim continuation. */
+    /* VUID-vkBeginCommandBuffer-flags-09123 IGNORES the continuation flag on a
+     * primary - the inherited-scope members are not read for one - and the
+     * pinned upstream render-pass module does set it on its primary buffers, so
+     * the call is accepted and the buffer records as an ordinary primary. */
     {
         VkCommandBuffer parent;
         assert(allocate_level(&d, p, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1,
@@ -306,8 +309,9 @@ static void primary_only_commands_poison_a_secondary(void)
         VkCommandBufferBeginInfo pb = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT};
-        assert(vkBeginCommandBuffer(parent, &pb) != VK_SUCCESS);
-        assert(parent->state == PS5VK_INITIAL);
+        assert(vkBeginCommandBuffer(parent, &pb) == VK_SUCCESS);
+        assert(parent->state == PS5VK_RECORDING && !parent->render_pass_inherited);
+        assert(vkEndCommandBuffer(parent) == VK_SUCCESS);
         vkFreeCommandBuffers(&d, p, 1, &parent);
     }
 

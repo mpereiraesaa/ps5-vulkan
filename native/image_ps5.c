@@ -5,6 +5,7 @@
 #include "texture_layout.h"
 #include "texture_format.h"
 #include "graphics_formats.h"
+#include "color_attachment_contract.h"
 #include <string.h>
 
 /* Storage of one array layer of an attachment surface, and of a whole layered
@@ -22,7 +23,10 @@ VkResult ps5vk_native_layered_storage(VkFormat format, uint32_t width, uint32_t 
     /* The layer count is 64-bit so the multiplication below is the only thing
      * standing between a caller and a wrapped size. */
     *stride = 0; *alignment = 0; *bytes = 0;
-    const int color = format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_R8G8B8A8_UNORM;
+    /* The colour-target storage equation is shared by every format this build
+     * renders into, including the integer target the independentBlend
+     * measurement serves. */
+    const int color = ps5vk_color_target_format_supported(format);
     const int depth = format == VK_FORMAT_D32_SFLOAT;
     if ((!color && !depth) || !width || !height) return VK_ERROR_FORMAT_NOT_SUPPORTED;
     if (color && (width > PS5VK_MAX_COLOR_DIMENSION || height > PS5VK_MAX_COLOR_DIMENSION))
@@ -74,7 +78,10 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     int depth = info->format == VK_FORMAT_D32_SFLOAT;
     int sampled = ps5vk_texture_format_sampled_image(info->format);
-    int color = info->format == VK_FORMAT_B8G8R8A8_UNORM || info->format == VK_FORMAT_R8G8B8A8_UNORM;
+    /* The colour-target footprint (one 64KB_R_X surface, 128 KiB-aligned) is
+     * shared by every format this build renders into, including the integer
+     * target the independentBlend measurement serves. */
+    int color = ps5vk_color_target_format_supported(info->format);
     if ((!depth && !color && !sampled) ||
         info->mipLevels > PS5VK_MAX_TEXTURE_MIP_LEVELS ||
         info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL)

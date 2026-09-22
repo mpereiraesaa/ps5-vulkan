@@ -1,4 +1,7 @@
 #include "vk_command.h"
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#endif
 #include "vk_indirect.h"
 #include "vk_query_pool.h"
 #include "vk_image.h"
@@ -402,14 +405,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
     if (!c || !info || info->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO || info->pNext ||
         c->state == PS5VK_PENDING || c->state == PS5VK_RECORDING ||
         /* VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT is meaningful only
-         * for a secondary; VUID-vkBeginCommandBuffer-flags-09123 ignores it
-         * for a primary, but this driver refuses it there rather than
-         * accepting a flag that would describe a scope a primary cannot be
-         * executed in. */
+         * for a secondary. For a primary VUID-vkBeginCommandBuffer-flags-09123
+         * makes it IGNORED - and the pinned upstream render-pass module does
+         * set it on its primary buffers - so it is accepted there and never
+         * consulted: the inheritance info is not read for a primary either. */
         (info->flags & ~(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
                          VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
-                         (c->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY ?
-                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : 0u))) ||
+                         VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)) ||
         /* VUID-vkBeginCommandBuffer-commandBuffer-02840 makes the two usage
          * flags mutually exclusive for a PRIMARY only. A secondary may set
          * both, so refusing the pair there would reject a conformant call. */

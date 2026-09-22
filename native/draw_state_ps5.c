@@ -77,8 +77,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
          * the count is read. */
         (p->color_attachment_count ?
             (!colors || colors[0].count != 16 ||
-             (p->color_format[0] != VK_FORMAT_B8G8R8A8_UNORM &&
-              p->color_format[0] != VK_FORMAT_R8G8B8A8_UNORM)) :
+             !ps5vk_color_target_format_supported(p->color_format[0])) :
             (color_count || !depth || p->color_format[0] != VK_FORMAT_UNDEFINED)) ||
         (p->cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||

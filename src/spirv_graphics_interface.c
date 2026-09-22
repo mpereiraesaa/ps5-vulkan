@@ -1,5 +1,6 @@
 #include "spirv_graphics_interface.h"
 #include "graphics_formats.h"
+#include "color_attachment_contract.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -775,10 +776,20 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
      * and its program exports nothing (SPI_SHADER_COL_FORMAT zero). Requiring
      * an export that has nowhere to go, or accepting one that does, would both
      * be wrong, so the two cases are exclusive. */
+    /* The export's numeric type follows the attachment it writes into: a
+     * normalized colour target takes the float32 vec4 the profile has always
+     * required, and an integer one - served only by the build whose
+     * independentBlend oracle needs it - takes the same four-lane unsigned
+     * vector (the pinned compiler publishes 32_ABGR for it either way). */
+    const unsigned colour_numeric[PS5VK_MAX_COLOR_ATTACHMENTS] = {
+        (unsigned)(ps5vk_color_target_integer_served(key->color_format[0]) ?
+            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT),
+        (unsigned)(ps5vk_color_target_integer_served(key->color_format[1]) ?
+            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT)};
     if(key->color_format[0]==VK_FORMAT_UNDEFINED) {
         if(fs.outputs[0].components)return 0;
     } else if(fs.outputs[0].components!=4 ||
-              fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
+              fs.outputs[0].numeric!=colour_numeric[0])return 0;
     if(fs.secondary_outputs[0].components &&
        (fs.secondary_outputs[0].components!=4 ||
         fs.secondary_outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT))return 0;
@@ -827,7 +838,7 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
         if(i>1 && (fs.outputs[i].components || fs.secondary_outputs[i].components))return 0;
         if(i==1 && fs.outputs[i].components &&
            (fs.outputs[i].components!=4 ||
-            fs.outputs[i].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT))return 0;
+            fs.outputs[i].numeric!=colour_numeric[1]))return 0;
         if(i && fs.secondary_outputs[i].components)return 0;
         if(fs.inputs[i].components &&
            (fs.inputs[i].components!=previous->outputs[i].components ||

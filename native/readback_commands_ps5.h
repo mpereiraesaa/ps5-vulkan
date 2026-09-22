@@ -5,6 +5,7 @@
 #include "color_detile.h"
 #include "depth_detile.h"
 #include "vk_image.h"
+#include "color_attachment_contract.h"
 #include "vk_image_transfer.h"
 
 struct ps5vk_readback_plan { VkImage image; VkBuffer buffer; VkDeviceSize layer_stride; };
@@ -118,7 +119,13 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
     uint64_t plane=(uint64_t)i->extent.width*i->extent.height;
     if(!i->arrayLayers || plane>SIZE_MAX/4/i->arrayLayers)return VK_ERROR_FEATURE_NOT_PRESENT;
     uint64_t pixels=plane*i->arrayLayers;
-    if(i->format!=(depth_source?VK_FORMAT_D32_SFLOAT:VK_FORMAT_R8G8B8A8_UNORM) ||
+    /* A colour readback reads a 32-bit-per-texel surface: the normalized
+     * attachment this profile has always read back, and - only in the build
+     * that serves it - the integer one its independentBlend oracle uses. The
+     * bytes are tiled by the same 64KB_R_X equation either way. */
+    if(!(depth_source ? i->format==VK_FORMAT_D32_SFLOAT :
+          (i->format==VK_FORMAT_R8G8B8A8_UNORM ||
+           ps5vk_color_target_integer_served(i->format))) ||
        i->samples!=VK_SAMPLE_COUNT_1_BIT ||
        i->mipLevels!=1 || (i->arrayLayers!=1 && !ps5vk_array_color_image(image)) || i->extent.depth!=1 ||
        (i->usage&required)!=required || !pixels || pixels>SIZE_MAX/4 ||

@@ -2,6 +2,7 @@
 #define PS5VK_ATTACHMENT_OPS_H
 
 #include <vulkan/vulkan.h>
+#include "color_attachment_contract.h"
 
 struct ps5vk_attachment_plan {
     VkBool32 clear;
@@ -21,8 +22,7 @@ static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     if (!a || !out || a->format != format || a->samples != VK_SAMPLE_COUNT_1_BIT ||
         (depth ? format != VK_FORMAT_D32_SFLOAT :
-         (format != VK_FORMAT_B8G8R8A8_UNORM &&
-          format != VK_FORMAT_R8G8B8A8_UNORM)) ||
+         !ps5vk_color_target_format_supported(format)) ||
         (reference != attachment && reference != VK_IMAGE_LAYOUT_GENERAL) ||
         (a->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
          a->initialLayout != attachment && a->initialLayout != VK_IMAGE_LAYOUT_GENERAL) ||
