@@ -708,10 +708,18 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
         const struct ps5vk_graphics_key key={.vertex_binding_count=op->pipeline->vertex_binding_count,
             .vertex_attribute_count=op->pipeline->vertex_attribute_count,
             .vertex_bindings=op->pipeline->vertex_bindings,.vertex_attributes=op->pipeline->vertex_attributes};
+        /* The targets are the CURRENT SUBPASS's own references, not the
+         * framebuffer's role lists: those are subpass 0's roles, and a pass
+         * whose later subpass renders elsewhere would otherwise program the
+         * wrong surface. For every pass this executor served before the pinned
+         * multisample oracle the two are the same list. */
+        struct ps5vk_target_set targets;
+        rc=ps5vk_target_set_from_subpass(pass,op->framebuffer,subpass_index,&targets);
+        if(rc!=VK_SUCCESS){draw_site=32;goto fail;}
         if(vertex_usage) {
             rc=ps5vk_native_prepare_vertex_draw_masked(d,op,&begin->render_area,defaults,&key,
-                (uintptr_t)p->pair,vertex_usage,draw);
-        } else rc=ps5vk_native_prepare_resource_draw(d,op,&begin->render_area,defaults,(uintptr_t)p->pair,draw);
+                (uintptr_t)p->pair,vertex_usage,&targets,draw);
+        } else rc=ps5vk_native_prepare_resource_draw(d,op,&begin->render_area,defaults,(uintptr_t)p->pair,&targets,draw);
         if(rc!=VK_SUCCESS) {
             ps5log_printf(PS5LOG_ERR,"PS5VK_DRAW_RESOURCE_PREPARE_FAILED serial=%llu vertex_mask=%x bindings=%u attributes=%u rc=%d",
                 (unsigned long long)j->serial,vertex_usage,key.vertex_binding_count,
