@@ -337,6 +337,44 @@ static void check_two_mrt_exports(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+/* The per-target write mask is CB_TARGET_MASK, one four-bit field per colour
+ * target, so a target whose mask is zero is a shape this profile programmes:
+ * the fragment export writes none of its channels and the render pass's own
+ * load or clear is what puts pixels there. That is exactly how the pinned
+ * render-pass module builds its attachment_write_mask leaves
+ * (vktRenderPassTests.cpp:2912: start_index_1 zeroes the first target's mask
+ * and leaves the second at fifteen), and it is the shape a two-target
+ * pipeline has to reach the native path with. */
+static void check_two_target_write_masks(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/two_mrt.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM},
+        .color_attachment_count=2,
+        .feature_mask=PS5VK_FEATURE_INDEPENDENT_BLEND,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={0,15}};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *runtime=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_SUCCESS && runtime);
+    const struct ps5vk_runtime_graphics_program *program=runtime;
+    assert(program->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT);
+    ps5vk_runtime_graphics_free(NULL,runtime);
+
+    /* The capability is still what authorises the shape, and a mask wider than
+     * the register field stays refused. */
+    runtime=NULL;
+    key.feature_mask=0;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
+    key.feature_mask=PS5VK_FEATURE_INDEPENDENT_BLEND;
+    key.color_write_mask[1]=0x10;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 /* ViewIndex is delivered to both stages through independently declared slots.
  * It is not a vertex attribute and does not admit other unsupported built-ins. */
 /* Clip and cull distances leave the pre-raster stage through the packed
@@ -1954,6 +1992,7 @@ int main(void)
     check_dual_source_exports();
     check_dual_source_blend_contract();
     check_two_mrt_exports();
+    check_two_target_write_masks();
     check_geometry_stage();
     check_viewport_index_routing();
     check_geometry_output_components();
