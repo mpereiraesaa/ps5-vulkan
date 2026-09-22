@@ -6,14 +6,23 @@ The exact baseline membership lives in
 `conformance_inventory/dxvk_v262_backlog.json`; this document explains how to
 execute it.
 
-Current checkpoint: multiview (T02) has all three requirements satisfied by
-public KHR queries, dedicated floor witnesses and 48 passing original CTS
-leaves within a 165/165 regression, and the indirect and indexed draws (T03)
-have all three requirements satisfied by core feature reports, the
-per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
-leaves within a 211/211 regression and the public-SDK indirect witness. The
-The four DXVK262-T05 rasterization and viewport features were promoted on 2026-09-21: the shipping profile advertises them and the frozen acceptance selection, now 362 cases, passes 362/362 with them reported. The live matrix is 13/62 ready with 49 blockers. The ordered table preserves the
-original tranche membership.
+Current checkpoint: T02 multiview and T03 indirect/indexed draws are
+promoted. **T04 is implemented, hardware-validated and merged into `main`**
+(PR #158): the default graphics profile exposes geometry, tessellation and
+clip/cull distances; its integrated native run passed 403/403 focused upstream
+cases, including 99 tessellation-related cases. T05's four rasterization and
+viewport features are also promoted. The ordered table preserves the original
+tranche membership.
+
+Tranche delivery and DXVK profile scoring are different gates. The current
+matrix still leaves `geometryShader` and `tessellationShader` as blockers:
+their native witness receipts have not been admitted to the DXVK evidence
+ledger, and the 99 passing tessellation cases are outside its frozen CTS
+selection. This is **evidence reconciliation**, not unfinished T04 rendering
+work. Promote the exact cases and receipts, then regenerate the matrix and
+rerun its gates before changing its count. T07 may proceed using the merged
+T04 implementation; it need not wait for that accounting change. The current
+score is derived from `conformance_inventory/dxvk_v262_matrix.json`.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
 11_0 baseline. Reaching 62/62 means that this profile has complete API,

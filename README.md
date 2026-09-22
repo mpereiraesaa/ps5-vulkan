@@ -89,7 +89,15 @@ DXVK support is tracked against the immutable DXVK **v2.6.2** profile
 into a checked-in machine-readable profile and joined independently to the
 current public API, reviewed implementation, CTS and native evidence.
 
-The fail-closed matrix currently proves **13/62** requirements completely: `robustBufferAccess`, multiview and its two required limits, the three indirect/indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and `fullDrawIndexUint32`, the user-defined `shaderClipDistance`/`shaderCullDistance` pair, and the four rasterization and viewport features `depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`. Multiview is queried through its explicit KHR route; the other 49 requirements, including the API-version requirement, remain blockers. This is an implementation roadmap, not a DXVK compatibility claim.
+T04 (geometry, tessellation and clip/cull distances) is implemented,
+hardware-validated and merged. The default graphics build passed a focused
+403/403 upstream run, including 99 tessellation-related cases. The separate
+fail-closed DXVK matrix has not yet admitted the geometry/tessellation native
+receipts or those 99 cases into its frozen selection, so it still scores the
+two rows as blockers. See the [backlog](docs/DXVK_V262_BACKLOG.md) for this
+accounting distinction and the machine-readable matrix for the current score.
+Multiview is queried through its explicit KHR route; the API-version
+requirement remains blocked. This is not a DXVK compatibility claim.
 The public-SDK-only capability probe can be built with
 `python3 tools/build_consumer.py --dxvk-v262-probe`; see
 [the inventory](conformance_inventory/README.md#dxvk-262-profile) and
