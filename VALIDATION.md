@@ -4004,3 +4004,47 @@ measured - the same way the per-sample sample-id path was.
 Current best measurement: 477 pass / 35 fail of 512, of which 20 are the
 plain point/line pipeline refusals, 5 are the stable unique-colour leaves, and
 the rest are the flaky `quad` families. Nothing is advertised.
+
+### What the failing leaves actually contain (2026-09-22)
+
+The unique-colour failure was then read directly out of the run's own report
+instead of inferred: the QPA of run `20260922T191416917Z` carries the three
+images the oracle compares for
+`min_sample_shading.min_1_0.samples_2.primitive_triangle` - the render without
+sample shading and one image per sample of the sample-shaded render - and
+decoding them says exactly what the driver produced:
+
+```text
+noSampleshadingImage : 1024 pixels, 976 zero, 48 of 808000ff
+sampleShadedImage[0] : identical histogram
+sampleShadedImage[1] : identical histogram
+sample image 0 vs 1    : 0 differing pixels
+covered pixel         : sample0 808000ff  sample1 808000ff  noShading 808000ff
+```
+
+`80 80 00 ff` is RGBA8 (0.5, 0.5, 0, 1): the shader's `fract(gl_FragCoord.xy)`
+is the PIXEL CENTRE for every sample, and the two per-sample images are
+byte-identical - so the fragment coordinate does not vary per sample, which is
+precisely what the oracle's `expectedUniqueSamplesCount =
+round(minSampleShading * samples)` then rejects at min 0.5/0.75/1.0.
+
+Two host experiments then placed the defect:
+
+- Compiling the leaf's own fragment module with the pipeline's sample-shading
+  state set and clear produces *byte-identical* machine code (104 bytes, same
+  checksum), so the state published in this window is not what the
+  fragment-coordinate lowering keys on - the shader's own
+  `nir->info.fs.uses_sample_shading` already decides it, which is why the
+  measurement above could not move.
+- The per-sample position itself is not in the shader's own arithmetic:
+  `radv_nir_lower_opt_fs_frag_pos` lowers per-sample `gl_FragCoord` to
+  `pixel_coord + sample_pos`, and the pinned tree resolves `sample_pos` through
+  `nir_load_sample_positions_amd` into a fetch from the RING at
+  `RING_PS_SAMPLE_POSITIONS` (`radv_nir_lower_abi.c`). This driver supplies no
+  sample-position table and no ring offset for the fragment stage, so the read
+  cannot return the sample's location.
+
+That is the next slice, and it is now stated as a driver-side gap with two
+concrete halves: supply the sample positions the fragment path reads, and make
+the compile decision follow the pipeline's state rather than only the shader's
+declaration.
