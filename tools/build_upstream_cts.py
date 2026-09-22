@@ -946,6 +946,13 @@ def main(argv=None):
         # aspect, which this tranche implemented; its helpers (create-info,
         # image and buffer object utilities) are already compiled above.
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp",
+        # Render-pass module: the only upstream family in the pinned tree whose
+        # leaves REQUIRE independentBlend (vktRenderPassTests.cpp:6504), under
+        # the legacy render-pass construction the profile serves. The module's
+        # factory composes all of its sibling TUs, so the whole directory is
+        # compiled; cases.txt remains the leaf filter, which keeps the
+        # extension-gated variants of those siblings out of every selection.
+        *sorted((cts_root / "external/vulkancts/modules/vulkan/renderpass").glob("vkt*.cpp")),
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBaseClass.cpp",
         # The base class builds its buffers, images and render pass through the
         # module's own create-info and object helpers.

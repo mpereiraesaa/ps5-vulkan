@@ -77,10 +77,12 @@ class UpstreamSelectionTests(unittest.TestCase):
         # fragment side-effect leaves) plus the 58 T05 leaves measured and
         # promoted on 2026-09-21 (28 rasterization culling, 16 fragment_ops
         # multi_viewport, 6 draw.renderpass.scissor, 2 clip_volume.depth_clamp,
-        # 6 draw.renderpass.depth_clamp). The 44 diagnostics that remain
-        # document refusals and capability gaps, and nothing is left pending a
-        # measurement window.
-        self.assertEqual((462, 44, 48),
+        # 6 draw.renderpass.depth_clamp), plus the four render-pass
+        # attachment-write-mask leaves the T06 independentBlend line holds as
+        # t06-independent-blend-pending until a measurement window reports on
+        # them. The 44 diagnostics that remain document refusals and capability
+        # gaps.
+        self.assertEqual((462, 48, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
