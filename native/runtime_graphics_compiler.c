@@ -752,7 +752,13 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
          * (DXVK262-T06). A single-sample pipeline passes 1, exactly as every
          * earlier build did. */
         .primitive_type=0,
-        .rasterization_samples=ps5vk_sample_count_number(key->samples)};
+        .rasterization_samples=ps5vk_sample_count_number(key->samples),
+        /* The pipeline's sample-shading state reaches the compiler: the
+         * fragment-coordinate lowering decides between the per-sample position
+         * path and the pixel-centre one from it, and the runtime selection it
+         * would otherwise emit reads a PS state user SGPR this driver does not
+         * supply (DXVK262-T06). */
+        .sample_shading_enable=key->sample_shading_enable!=0};
     /* Mesa ac_choose_spi_color_formats: RGBA8 UNORM blending uses FP16_ABGR,
      * paired with matching SX conversion at draw time; unblended keeps 32_ABGR.
      * The option is one nibble per colour attachment, so it is derived from the

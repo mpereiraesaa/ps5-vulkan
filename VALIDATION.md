@@ -3965,3 +3965,42 @@ payload runs all 512 cases to a clean close, and thirteen focused leaves pass.
 What it does not establish: the row is not complete - 37 leaves still fail for
 the three reasons above, the compiler fix still needs merging in its own
 repository, and nothing is advertised.
+
+## The sample-shading state the compiler was never told (2026-09-22)
+
+The unique-colours family was expected to be the per-sample fragment coordinate:
+`radv_nir_lower_opt_fs_frag_pos` chooses between the per-sample position path
+and the pixel-centre one from the pipeline's sample-shading state, and the
+standalone compiler had no way to be told that state - it emitted a runtime
+selection reading the PS state user SGPR, which this ABI does not supply. The
+state was therefore published (`PsbcCompileOptions::sample_shading_enable`,
+opengnm-psbc branch `codex/fragment-coord-sample-shading`, commit
+`883747bf04af7746b6ec49e00d2a247a5327e326`, on top of the abort fix) and set
+from the pipeline key in `native/runtime_graphics_compiler.c`.
+
+Measured twice with the rebuilt compiler archive (identity
+`d9fa65080bf5761beaf0032f9a20ab5a1afd957c59814c07ff5d54f4cb4b64e1`), same
+selection, same payload eboot
+`e03fb14b98567c4ac4b5d7d8b8b4583e31e49f893c886c6fadf0b361a85e5b88`:
+
+- run `20260922T191325185Z`, log
+  `fd8b931eece17c1984d91a2cbca98cf0126ace48e1b1413a2f7d55c39556bc16`: 474 pass / 38 fail
+- run `20260922T191416917Z`, log
+  `01a3a3a10950fb681286870c38dd927338621b89ee08bce952bb13ad9543394c`: 477 pass / 35 fail
+
+The honest reading of the two runs together: **the hypothesis was not
+confirmed**. The stable unique-colour failures are unchanged by it - the five
+`min_sample_shading` triangle leaves at min 0.5, 0.75 and 1.0 at both served
+counts - and the leaves that move between runs are the `quad` families, which
+are FLAKY in this driver: across the two runs the coverage and invalid-colour
+sets differ by several leaves each (only one leaf is stable in each of those
+two groups), which is a defect of its own and would fail an acceptance run
+whatever the score. The change is kept because the state it publishes is one
+the compiler legitimately needs and the previously-working shapes still
+compile, but it is NOT the fix for the unique-colour family, and that family
+still needs the hardware per-sample position state to be understood and
+measured - the same way the per-sample sample-id path was.
+
+Current best measurement: 477 pass / 35 fail of 512, of which 20 are the
+plain point/line pipeline refusals, 5 are the stable unique-colour leaves, and
+the rest are the flaky `quad` families. Nothing is advertised.
