@@ -213,11 +213,19 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
         /* A transfer destination does not stop a colour attachment being read
          * back: the pinned upstream draw helper clears such a target outside
          * the render pass and then reads the rendered result from the same
-         * image (vkImageUtil.cpp clearColorImage, Image::read). Sampled and
-         * depth-stencil roles stay out, and the transfer destination is
-         * admitted only for the colour-attachment shape that declares it. */
-        (!array_color && (image->info.usage&(VK_IMAGE_USAGE_SAMPLED_BIT|
-                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) ||
+         * image (vkImageUtil.cpp clearColorImage, Image::read). The depth
+         * stencil role stays out. A sampled role is admitted only for the
+         * colour attachment whose format publishes it, which is the pinned
+         * render-pass module's own readback target
+         * (vktRenderPassTests.cpp:5307): the copy reads the attachment's
+         * bytes, never through the sampled view, and a build that does not
+         * serve that role keeps refusing the combination. The transfer
+         * destination is admitted only for the colour-attachment shape that
+         * declares it. */
+        (!array_color &&
+         (image->info.usage&VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) ||
+        (!array_color && (image->info.usage&VK_IMAGE_USAGE_SAMPLED_BIT) &&
+         !ps5vk_colour_transfer_image(image)) ||
         (!array_color && (image->info.usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
          !ps5vk_colour_transfer_image(image))) {invalid(c);return;}
     const VkBufferImageCopy *r=&regions[0];

@@ -129,6 +129,24 @@ static VkImage make_image(VkFormat format, VkImageUsageFlags usage, VkDeviceMemo
     assert(create_image(format, usage, &image, memory_out) == VK_SUCCESS);
     return image;
 }
+static VkBuffer make_buffer(VkDeviceSize size, VkDeviceMemory *memory_out)
+{
+    VkBufferCreateInfo info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size,
+                               .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                               .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer buffer = VK_NULL_HANDLE;
+    assert(vkCreateBuffer(device, &info, NULL, &buffer) == VK_SUCCESS);
+    VkMemoryRequirements requirements;
+    vkGetBufferMemoryRequirements(device, buffer, &requirements);
+    VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                                       .allocationSize = requirements.size,
+                                       .memoryTypeIndex = 0u};
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    assert(vkAllocateMemory(device, &allocation, NULL, &memory) == VK_SUCCESS);
+    assert(vkBindBufferMemory(device, buffer, memory, 0) == VK_SUCCESS);
+    *memory_out = memory;
+    return buffer;
+}
 static VkCommandBuffer begin(void)
 {
     VkCommandBufferAllocateInfo info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -166,6 +184,31 @@ static VkImageMemoryBarrier handover_barrier(VkImage image, VkAccessFlags destin
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     return barrier;
 }
+
+/* The module's readback barrier (pushReadImagesToBuffers,
+ * vktRenderPassTests.cpp:3582): the attachment is already in its final
+ * layout, so the transition is the identity, and the scope names every memory
+ * write plus the copy's own read. */
+static VkImageMemoryBarrier readback_barrier(VkImage image, VkAccessFlags source,
+                                             VkAccessFlags destination)
+{
+    VkImageMemoryBarrier barrier = acquire_barrier(image, destination);
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.srcAccessMask = source;
+    return barrier;
+}
+
+/* getAllPipelineStageFlags() (vktRenderPassTests.cpp:494): the stage pair the
+ * module records both its readback barriers with. */
+static const VkPipelineStageFlags pinned_readback_stage =
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT |
+    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+    VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT;
 
 /* One image barrier in its own command buffer: the profile refuses by
  * invalidating the command buffer where the call was made, so this asserts the
@@ -269,6 +312,59 @@ static void exercise_device(void)
     assert(initialization->state == PS5VK_RECORDING);
     assert(vkEndCommandBuffer(initialization) == VK_SUCCESS);
 
+    /* The readback the module records next: one identity handover per
+     * attachment, the copy of each attachment into its own buffer, and the
+     * buffer scope that makes the copies visible to the host read. */
+    const VkAccessFlags writes = ps5vk_attachment_initialization_write_mask();
+    VkDeviceMemory first_buffer_memory = VK_NULL_HANDLE, second_buffer_memory = VK_NULL_HANDLE;
+    VkBuffer first_buffer = make_buffer((VkDeviceSize)WIDTH * HEIGHT * 4u, &first_buffer_memory);
+    VkBuffer second_buffer = make_buffer((VkDeviceSize)WIDTH * HEIGHT * 4u, &second_buffer_memory);
+    VkImageMemoryBarrier readback[2] = {
+        readback_barrier(first, writes | VK_ACCESS_TRANSFER_READ_BIT, reads),
+        readback_barrier(second, writes | VK_ACCESS_TRANSFER_READ_BIT, reads)};
+    const VkBufferImageCopy whole_surface = {
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .imageExtent = {WIDTH, HEIGHT, 1}};
+    const VkBufferMemoryBarrier buffered[2] = {
+        {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, .srcAccessMask = writes,
+         .dstAccessMask = reads, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .buffer = first_buffer,
+         .offset = 0, .size = VK_WHOLE_SIZE},
+        {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, .srcAccessMask = writes,
+         .dstAccessMask = reads, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .buffer = second_buffer,
+         .offset = 0, .size = VK_WHOLE_SIZE}};
+    VkCommandBuffer readback_commands = begin();
+    vkCmdPipelineBarrier(readback_commands, pinned_readback_stage, pinned_readback_stage, 0,
+                         0, NULL, 0, NULL, 2, readback);
+    assert(readback_commands->state == PS5VK_RECORDING);
+    vkCmdCopyImageToBuffer(readback_commands, first, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           first_buffer, 1, &whole_surface);
+    assert(readback_commands->state == PS5VK_RECORDING);
+    vkCmdCopyImageToBuffer(readback_commands, second, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           second_buffer, 1, &whole_surface);
+    assert(readback_commands->state == PS5VK_RECORDING);
+    vkCmdPipelineBarrier(readback_commands, pinned_readback_stage, pinned_readback_stage, 0,
+                         0, NULL, 2, buffered, 0, NULL);
+    assert(readback_commands->state == PS5VK_RECORDING);
+    assert(vkEndCommandBuffer(readback_commands) == VK_SUCCESS);
+
+    /* The identity is not a wildcard: it needs the copy's own read and the
+     * write the pass performed, and it lands in the attachment's final layout
+     * or nowhere. */
+    VkImageMemoryBarrier boundary = readback_barrier(first, writes | VK_ACCESS_TRANSFER_READ_BIT, reads);
+    boundary.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    assert_barrier_refused(pinned_readback_stage, pinned_readback_stage, &boundary);
+    boundary = readback_barrier(first, writes | VK_ACCESS_TRANSFER_READ_BIT, reads);
+    boundary.srcAccessMask = writes | VK_ACCESS_MEMORY_WRITE_BIT;
+    assert_barrier_refused(pinned_readback_stage, pinned_readback_stage, &boundary);
+    boundary = readback_barrier(first, writes | VK_ACCESS_TRANSFER_READ_BIT,
+                                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
+    assert_barrier_refused(pinned_readback_stage, pinned_readback_stage, &boundary);
+    boundary = readback_barrier(first, writes | VK_ACCESS_TRANSFER_READ_BIT, reads);
+    boundary.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    assert_barrier_refused(pinned_readback_stage, pinned_readback_stage, &boundary);
+
     /* The two destination scopes the profile accepted before this slice stay
      * accepted, and the rest of the boundary holds. */
     VkImageMemoryBarrier exact_acquire = acquire_barrier(first, VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -283,7 +379,7 @@ static void exercise_device(void)
     assert(vkEndCommandBuffer(exact) == VK_SUCCESS);
 
     /* No write in the destination scope. */
-    VkImageMemoryBarrier boundary = acquire_barrier(first, reads);
+    boundary = acquire_barrier(first, reads);
     assert_barrier_refused(pinned_source_stage, pinned_destination_stage, &boundary);
     boundary = handover_barrier(first, reads | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
     assert_barrier_refused(pinned_source_stage, pinned_destination_stage, &boundary);
@@ -335,7 +431,28 @@ static void exercise_device(void)
                          0, NULL, 0, NULL, 2, pinned_handover);
     assert(measured->state == PS5VK_RECORDING);
     assert(vkEndCommandBuffer(measured) == VK_SUCCESS);
+    /* The readback the module records for the same two attachments. */
+    VkDeviceMemory pinned_buffer_memory[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkBuffer pinned_buffer[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkImageMemoryBarrier pinned_readback[2];
     for (unsigned i = 0; i < 2; ++i) {
+        pinned_buffer[i] = make_buffer((VkDeviceSize)WIDTH * HEIGHT * 4u, &pinned_buffer_memory[i]);
+        pinned_readback[i] = readback_barrier(pinned[i], writes | VK_ACCESS_TRANSFER_READ_BIT, reads);
+    }
+    VkCommandBuffer measured_readback = begin();
+    vkCmdPipelineBarrier(measured_readback, pinned_readback_stage, pinned_readback_stage, 0,
+                         0, NULL, 0, NULL, 2, pinned_readback);
+    assert(measured_readback->state == PS5VK_RECORDING);
+    for (unsigned i = 0; i < 2; ++i) {
+        vkCmdCopyImageToBuffer(measured_readback, pinned[i],
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, pinned_buffer[i], 1,
+                               &whole_surface);
+        assert(measured_readback->state == PS5VK_RECORDING);
+    }
+    assert(vkEndCommandBuffer(measured_readback) == VK_SUCCESS);
+    for (unsigned i = 0; i < 2; ++i) {
+        vkDestroyBuffer(device, pinned_buffer[i], NULL);
+        vkFreeMemory(device, pinned_buffer_memory[i], NULL);
         vkDestroyImage(device, pinned[i], NULL);
         vkFreeMemory(device, pinned_memory[i], NULL);
     }
@@ -357,6 +474,10 @@ static void exercise_device(void)
     vkFreeMemory(device, first_memory, NULL);
     vkDestroyImage(device, second, NULL);
     vkFreeMemory(device, second_memory, NULL);
+    vkDestroyBuffer(device, first_buffer, NULL);
+    vkFreeMemory(device, first_buffer_memory, NULL);
+    vkDestroyBuffer(device, second_buffer, NULL);
+    vkFreeMemory(device, second_buffer_memory, NULL);
 }
 
 int main(void)

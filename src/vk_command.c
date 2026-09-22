@@ -1087,6 +1087,15 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
          * The pinned upstream depth clamp module hands its cleared depth
          * target to the draw with this mask. */
         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
+        /* The profile serves compute as well - the packaged compute selections
+         * run on it - and the pinned render-pass module's common stage pair
+         * (getAllPipelineStageFlags, vktRenderPassTests.cpp:494) names every
+         * stage it can run, starting with the compute shader, when it orders
+         * an attachment against the engine that reads it back. Naming the
+         * stage does not make this a compute dependency: the per-access rules
+         * below still decide which accesses this scope can order, and a
+         * dependency the compute scope alone can carry is left to it. */
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     /* INDEX_READ, UNIFORM_READ and INPUT_ATTACHMENT_READ are accesses this
      * profile really serves in a graphics command: the promoted index path
@@ -1321,7 +1330,27 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
            ~(ps5vk_attachment_initialization_read_mask() |
              (VkAccessFlags)(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                              VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                             VK_ACCESS_SHADER_WRITE_BIT))));
+                             VK_ACCESS_SHADER_WRITE_BIT)))) ||
+        /* Handing a rendered attachment to its readback. The render-pass
+         * module's own pass already leaves the attachment in its final layout,
+         * the transfer-source one, so this barrier is the identity and all it
+         * does is order the writes the pass performed against the copy's read
+         * (pushReadImagesToBuffers, vktRenderPassTests.cpp:3582: the source is
+         * every memory write plus the layout's own access - the same write
+         * scope above - and the destination is every memory read). The
+         * identity is admitted only for the readback role, the source must
+         * name a write, and the copy's own read is still required; every other
+         * layout, an empty or foreign source scope and a destination that
+         * cannot read stay refused. */
+        ((usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+         b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+         (b->srcAccessMask & ps5vk_attachment_initialization_write_mask()) &&
+         !(b->srcAccessMask &
+           ~(ps5vk_attachment_initialization_write_mask() |
+             (VkAccessFlags)VK_ACCESS_TRANSFER_READ_BIT)) &&
+         (b->dstAccessMask & VK_ACCESS_TRANSFER_READ_BIT) &&
+         !(b->dstAccessMask & ~ps5vk_attachment_initialization_read_mask()));
     /* The linear staging image the pinned draw module reads back through gets
      * exactly the two transitions that module records
      * (vktDrawImageObjectUtil.cpp:415-443): UNDEFINED to GENERAL for the

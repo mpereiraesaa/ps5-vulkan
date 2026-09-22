@@ -26,6 +26,17 @@ static inline VkAccessFlags ps5vk_attachment_initialization_read_mask(void)
         VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_HOST_READ_BIT;
 }
 
+/* The companion write scope, getAllMemoryWriteFlags() in the same module
+ * (vktRenderPassTests.cpp:466). It is what the module names as the source of
+ * the barrier that hands a finished attachment to its readback, after its own
+ * render pass has already left that attachment in its final layout. */
+static inline VkAccessFlags ps5vk_attachment_initialization_write_mask(void)
+{
+    return VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT |
+        VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+}
+
 /* Initial discard transition. Access masks select a scope, not a prescribed
  * READ|WRITE pair. The frontend separately checks stage/access compatibility,
  * ownership and the complete subresource range. */
