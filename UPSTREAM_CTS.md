@@ -31,6 +31,7 @@ selection is intentionally small and is frozen in a committed manifest.
 | `cts/upstream_runner.py` | Strict verifier: reassembles the QPA stream and enforces the acceptance policy |
 | `tools/build_upstream_cts.py` | Reproducible cross-build and packaging of the payload |
 | `tools/run_upstream_cts.py` | Launch, capture and verify one native acceptance run |
+| `tools/move_leaves.py` | Promote measured diagnostics into the frozen selection, or demote cases |
 | `tools/decode_run.py` | Decode a run: per-leaf status, first driver refusal, delta against another run |
 | `tools/check_upstream_selection.py` | Host-only check that every selected path traces back to upstream sources |
 
@@ -213,7 +214,22 @@ python3 tools/run_upstream_cts.py --host <console> --runs-dir <runs> \
 ```
 
 Promotion still edits the frozen manifest in its own change; the measurement
-receipt is the evidence that change cites.
+receipt is the evidence that change cites. `tools/move_leaves.py` makes that
+edit:
+
+```sh
+python3 tools/move_leaves.py promote --category <diagnostic category> \
+  --to-category <acceptance category> --receipt <measurement receipt> --check
+python3 tools/move_leaves.py demote --path <leaf> --to-category <gap> \
+  --status Fail --reason "<why it leaves acceptance>"
+```
+
+`promote` refuses unless the receipt reports every moved leaf as Pass. It then
+records the run and the payload in each rationale, keeps `cases` sorted, and
+prints the counts and the selection hash before and after. It also lists the
+tests that pin the old counts, which the same change updates. `--dry-run`
+writes nothing; `--check` runs the selection gate and the tests that read the
+manifest.
 
 To read a run, decode it rather than grepping the report:
 
