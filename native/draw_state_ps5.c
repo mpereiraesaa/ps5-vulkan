@@ -1,6 +1,7 @@
 #include "draw_state_ps5.h"
 #include "viewport_ps5.h"
 #include "blend_ps5.h"
+#include "runtime_fragment_shape.h"
 #include <string.h>
 #if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
 #include "ps5log.h"
@@ -90,6 +91,22 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (native->device != p->device || !native->pair || !native->pair->ready) return VK_ERROR_UNKNOWN;
     struct ps5vk_graphics_pair *pair = native->pair;
     int runtime=pair->runtime_arguments.enabled!=0;
+    /* Which attachment each hardware colour target programmes. The pinned
+     * render-pass module's second-target-only shape EXPORTS INTO MRT0 while the
+     * pipeline writes only its second attachment: compiling a Location-0-only
+     * and a Location-1-only module with the pinned PSBC produces identical
+     * machine code (same exp target), and only the register pair differs
+     * (CB_SHADER_MASK 0xf0 instead of 0xf). The export instruction therefore
+     * carries no target, and the coherent programming is to renumber: the
+     * attachment the pipeline really writes takes hardware target zero with its
+     * own target block, blend control, write-mask nibble and conversion, and
+     * the slot nothing writes stays masked. Every other shape programmes the
+     * attachments positionally. */
+    uint32_t slot[PS5VK_MAX_COLOR_ATTACHMENTS];
+    for(unsigned i=0;i<PS5VK_MAX_COLOR_ATTACHMENTS;++i)slot[i]=(uint32_t)i;
+    if(runtime && pair->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT) {
+        slot[0]=1; slot[1]=0;
+    }
     if(pair->dual_source_export>1u || (pair->dual_source_export && !runtime))
         return VK_ERROR_UNKNOWN;
     /* A tessellation pipeline's pre-raster bank is the domain half's, and its
@@ -121,7 +138,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * colour count of zero - the DEPTH-ONLY shape - there is no such target
      * and the caller's prepared array is not initialised, so the builder is
      * handed nothing and emits the zeroed block itself. */
-    if (ps5_pipeline_build(&base, color_count ? colors[0].registers : NULL, &pair->cx, &pair->uc,
+    if (ps5_pipeline_build(&base, color_count ? colors[slot[0]].registers : NULL, &pair->cx, &pair->uc,
         runtime?vs->context:pair->gs.cx, runtime?fs->context:pair->ps.cx,
         runtime?vs->shader:pair->gs.sh,runtime?fs->shader:pair->ps.sh,width,height)) return VK_ERROR_UNKNOWN;
     for (unsigned j = 0; j < PS5VK_VIEWPORT_REGISTERS; ++j) {
@@ -146,7 +163,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
          * target, the next attachment's in bits [7:4]. */
         uint32_t target_mask = 0;
         for (uint32_t attachment = 0; attachment < p->color_attachment_count; ++attachment)
-            target_mask |= (p->color_blend[attachment].colorWriteMask & 0xfu) << (4u * attachment);
+            target_mask |= (p->color_blend[slot[attachment]].colorWriteMask & 0xfu) << (4u * attachment);
         unsigned carried = 0;
         for (unsigned k = 16; k < 31; ++k) if (base.cx[k].offset == 0x08e) {
             base.cx[k].value = target_mask; ++carried;
@@ -428,6 +445,22 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         result.sh_count=vs->header.num_sh_registers+fs->header.num_sh_registers;
         memcpy(result.sh,vs->shader,vs->header.num_sh_registers*sizeof(*result.sh));
         memcpy(result.sh+vs->header.num_sh_registers,fs->shader,fs->header.num_sh_registers*sizeof(*result.sh));
+        /* The second-target-only shape is programmed as ONE target, because its
+         * export instruction writes MRT0 (measured: the Location-1-only module
+         * compiles to the same code as the Location-0-only one, and only the
+         * register pair differs). The compiler put the export's code in the
+         * format's nibble zero and its enable in the mask's nibble ONE, because
+         * it numbers the format list by declaration order and the mask by the
+         * attachment each export targets; with the written attachment renumbered
+         * to target zero, the driver takes that code and moves the enable down
+         * beside it. Every other package is programmed exactly as the compiler
+         * published it. */
+        if(pair->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT)
+            for(unsigned i=0;i<result.cx_count;++i) {
+                if(result.cx[i].offset==0x1c5u)result.cx[i].value&=0xfu;
+                else if(result.cx[i].offset==0x08fu)
+                    result.cx[i].value=(result.cx[i].value>>4)&0xfu;
+            }
         /* The merged hull program's one shader block follows the runtime
          * pair's: its address register at the LS block and its resource pair
          * at the HS block, with the create-path address. Its VGT_TF_PARAM
@@ -493,7 +526,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     const VkBool32 dual_source=runtime && pair->dual_source_export?
         VK_TRUE:VK_FALSE;
     for(uint32_t attachment=0;attachment<color_count;++attachment)
-        if(!ps5vk_blend_encode(&p->color_blend[attachment],p->blend_constants,
+        if(!ps5vk_blend_encode(&p->color_blend[slot[attachment]],p->blend_constants,
                                dual_source,&blend[attachment]))
             return VK_ERROR_FEATURE_NOT_PRESENT;
     /* A DEPTH-ONLY draw programmes no colour target at all, so the blend word
@@ -516,7 +549,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         for(unsigned i=0;i<PS5VK_COLOR_TARGET_REGISTERS;++i)
             result.cx[result.cx_count++]=(ps5_agc_register){
                 ps5vk_color_attachment_offsets[attachment][i],
-                colors[attachment].registers[i].value};
+                colors[slot[attachment]].registers[i].value};
         result.cx[result.cx_count++]=(ps5_agc_register){
             PS5VK_AGC_CB_BLEND_CONTROL(attachment),blend[attachment].control};
         result.cx[result.cx_count++]=(ps5_agc_register){
@@ -529,15 +562,37 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if(runtime) {
         uint32_t spi_format=UINT32_MAX,shader_mask=UINT32_MAX;
         uint32_t per_target[PS5VK_MAX_COLOR_ATTACHMENTS][3],conversion[3];
-        for(unsigned i=0;i<fs->header.num_cx_registers;++i) {
-            if(fs->context[i].offset==0x1c5)spi_format=fs->context[i].value;
-            if(fs->context[i].offset==0x08f)shader_mask=fs->context[i].value;
+        /* Read the pair from the bank this draw programmes, after the shape's
+         * own normalisation above: what is checked here is what the hardware
+         * receives. */
+        for(unsigned i=0;i<result.cx_count;++i) {
+            if(result.cx[i].offset==0x1c5)spi_format=result.cx[i].value;
+            if(result.cx[i].offset==0x08f)shader_mask=result.cx[i].value;
         }
-        for(uint32_t attachment=0;attachment<color_count;++attachment)
-            if(!ps5vk_color_export_state(attachment,p->color_format[attachment],
-                spi_format,shader_mask,p->color_blend[attachment].blendEnable,
+        for(uint32_t attachment=0;attachment<color_count;++attachment) {
+            if(pair->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT &&
+               !p->color_write_mask[slot[attachment]]) {
+                /* This shape's first target is the one whose export the
+                 * compiler dropped: the pinned render-pass module's
+                 * attachment_write_mask leaf writes only the second target. The
+                 * normalised pair must therefore say nothing about the target
+                 * nothing writes - that is what makes the tear a provable
+                 * absence rather than a dropped value - and it converts
+                 * nothing. Every other shape keeps its own contract, where a
+                 * zero write mask simply programmes CB_TARGET_MASK. */
+                if(((spi_format>>(4u*attachment))&0xfu) ||
+                   ((shader_mask>>(4u*attachment))&0xfu))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                per_target[attachment][0]=0;
+                per_target[attachment][1]=0;
+                per_target[attachment][2]=0;
+                continue;
+            }
+            if(!ps5vk_color_export_state(attachment,p->color_format[slot[attachment]],
+                spi_format,shader_mask,p->color_blend[slot[attachment]].blendEnable,
                 dual_source,per_target[attachment]))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
         ps5vk_color_export_compose(per_target,color_count,conversion);
         if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
         /* Emit for unblended draws too: a previous FP16 blended draw must not

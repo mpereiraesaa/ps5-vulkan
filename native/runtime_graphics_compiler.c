@@ -813,6 +813,21 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
                 if(!(key->feature_mask & PS5VK_FEATURE_INDEPENDENT_BLEND) ||
                    key->color_attachment_count!=PS5VK_MAX_COLOR_ATTACHMENTS)goto failed;
             } else goto failed;
+        } else if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND) {
+            /* One export that this profile programmes into the second colour
+             * target: the pinned render-pass module's attachment_write_mask
+             * leaf whose first target is unwritten. The pipeline carries the
+             * shape only when the interface says exactly that (the only
+             * declared output is at Location 1), the subpass names the two
+             * colour attachments the target words describe, and the first one
+             * is not written at all - so the export the compiler dropped is
+             * the one nothing writes. */
+            if(secondary || primary_mask!=2u)goto failed;
+            p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT;
+            if(!(key->feature_mask & PS5VK_FEATURE_INDEPENDENT_BLEND) ||
+               key->color_attachment_count!=PS5VK_MAX_COLOR_ATTACHMENTS ||
+               key->color_write_mask[0] ||
+               !key->color_write_mask[1])goto failed;
         } else if(secondary || primary_mask!=1u) {
             /* A secondary or a second location without its register pair is a
              * torn package. */
