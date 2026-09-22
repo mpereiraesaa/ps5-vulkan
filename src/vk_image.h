@@ -1,6 +1,7 @@
 #ifndef PS5VK_IMAGE_H
 #define PS5VK_IMAGE_H
 #include "vk_internal.h"
+#include "color_attachment_contract.h"
 struct VkImage_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
@@ -78,7 +79,15 @@ static inline VkBool32 ps5vk_linear_staging_image(VkImage image)
 static inline VkBool32 ps5vk_colour_transfer_image(VkImage image)
 {
     if (!image) return VK_FALSE;
-    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+    /* The normalized readback target this profile has always carried, and -
+     * only in the build that serves it - the integer target its
+     * independentBlend oracle reads back. The upstream render-pass module adds
+     * the sampled role to that same image because the format publishes it, so
+     * the extra bit is tolerated exactly where that combination is served. */
+    const VkImageUsageFlags extra = ps5vk_color_sampled_readback_served() ?
+        (VkImageUsageFlags)VK_IMAGE_USAGE_SAMPLED_BIT : 0u;
+    return (image->info.format == VK_FORMAT_R8G8B8A8_UNORM ||
+            ps5vk_color_target_integer_served(image->info.format)) &&
         image->info.imageType == VK_IMAGE_TYPE_2D &&
         image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
         image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
@@ -88,7 +97,7 @@ static inline VkBool32 ps5vk_colour_transfer_image(VkImage image)
         !(image->info.usage &
           ~(VkImageUsageFlags)(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                               VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+                               VK_IMAGE_USAGE_TRANSFER_DST_BIT | extra));
 }
 
 /* The only layered colour source the linear readback path accepts.  It is the

@@ -68,6 +68,62 @@ uint32_t ps5vk_color_export_format_code(int blending);
 uint32_t ps5vk_color_export_format_option(const unsigned char *blend_enable,
                                           uint32_t count);
 
+/* The colour formats this profile renders into, and whether a target's
+ * fragment export is an integer vector rather than a normalized one.
+ *
+ * The normalized pair is the shipping set. R8G8B8A8_UINT exists for the
+ * DXVK262-T06 independentBlend measurement: the only upstream leaves in the
+ * pinned tree that REQUIRE the feature draw into R8G8B8A8_UINT plus
+ * R8G8B8A8_UNORM (vktRenderPassTests.cpp:6444), so the measurement build has to
+ * serve an integer target before that oracle can run at all. It is behind the
+ * private switch, and the shipped capability set is unchanged until the leaves
+ * pass and the promotion lands. */
+static inline int ps5vk_color_target_format_supported(VkFormat format)
+{
+    if (format == VK_FORMAT_B8G8R8A8_UNORM ||
+        format == VK_FORMAT_R8G8B8A8_UNORM) return 1;
+#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
+    if (format == VK_FORMAT_R8G8B8A8_UINT) return 1;
+#endif
+    return 0;
+}
+
+/* An integer colour target's fragment export is a 32-bit unsigned vector: its
+ * lanes are not converted, so the pipeline may not blend into it and the
+ * fragment interface must see an integer output. */
+static inline int ps5vk_color_target_format_is_integer(VkFormat format)
+{
+    return format == VK_FORMAT_R8G8B8A8_UINT;
+}
+
+/* Whether this build actually SERVES an integer colour target. The
+ * classification above is a property of the format; this one is the private
+ * measurement switch, so every path that would execute or read back an integer
+ * target asks this and a shipping build answers false. */
+static inline int ps5vk_color_target_integer_served(VkFormat format)
+{
+#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
+    return ps5vk_color_target_format_is_integer(format);
+#else
+    (void)format;
+    return 0;
+#endif
+}
+
+/* The upstream render-pass module derives an attachment's usage from the
+ * format's reported features, so its colour attachments are created with the
+ * sampled role on top of the readback one whenever the format publishes it.
+ * That combination exists only in the build that serves the integer target
+ * this oracle needs; a shipping build keeps the three-role readback shape. */
+static inline int ps5vk_color_sampled_readback_served(void)
+{
+#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 /* A pipeline that declares a count the profile cannot render, or an operation
  * the backend does not programme, is refused where the application can see it
  * rather than accepted and failed later. */

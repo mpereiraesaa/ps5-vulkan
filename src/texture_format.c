@@ -13,6 +13,7 @@
  * that qualify a capability for publication.
  */
 #include "texture_format.h"
+#include "color_attachment_contract.h"
 
 /* Column aliases for the table below. */
 #define GPL PS5VK_FORMAT_PROVENANCE_GPL_REFERENCE
@@ -30,6 +31,16 @@
 
 /* Sampled row: the GFX1013 word/selectors/texel size are the pinned GPL
  * encoding. ENABLED carries additional directly qualified roles. */
+/* The DXVK262-T06 independentBlend measurement serves one integer colour
+ * target: the only upstream leaves that require the feature draw into
+ * R8G8B8A8_UINT plus R8G8B8A8_UNORM, so the measurement build has to render
+ * into it and read it back. Behind the private switch, so the shipped
+ * capability set is unchanged until that oracle passes. */
+#if defined(PS5VK_INTEGER_TARGET_DIAGNOSTIC) && PS5VK_INTEGER_TARGET_DIAGNOSTIC
+#define CAP_INTEGER_TARGET (CAP_COLOR | CAP_COLOR_READBACK | CAP_SRC)
+#else
+#define CAP_INTEGER_TARGET 0
+#endif
 #define SAMPLED(f, bpt, word, s0, s1, s2, s3, EXTRA, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), \
@@ -126,7 +137,7 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R8G8_SINT, 2, UINT32_C(0x01300000), 4, 5, 0, 1,
             CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R8G8B8A8_UINT, 4, UINT32_C(0x03c00000), 4, 5, 6, 7,
-            CAP_VERTEX | CAP_UTEXEL, 0),
+            CAP_VERTEX | CAP_UTEXEL | CAP_INTEGER_TARGET, CAP_INTEGER_TARGET),
     SAMPLED(VK_FORMAT_R8G8B8A8_SINT, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
             CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R16_UINT, 2, UINT32_C(0x00b00000), 4, 0, 0, 1,
@@ -377,6 +388,20 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
                   VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
         usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return VK_TRUE;
+    /* The upstream render-pass module derives an attachment's usage from the
+     * format's own reported features, so a format that also publishes a
+     * sampled role is asked for
+     * COLOR_ATTACHMENT|TRANSFER_SRC|TRANSFER_DST|SAMPLED. The readback colour
+     * row is the one that carries all four roles (its format is sampled, it is
+     * rendered into and it is read back), so the combination is admitted for
+     * that row and for nothing else; the leaf that asks for it renders into the
+     * target and reads it back, and a sample of a tiled attachment is refused
+     * where it is actually described. */
+    if (ps5vk_color_sampled_readback_served() &&
+        (w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
+        usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT))
+        return VK_TRUE;
     /* The pinned multiview helper's attachment adds the input-attachment role
      * to that same readback colour shape. Only a row that can already be a
      * readback colour target has it, and only for this exact usage set, so no

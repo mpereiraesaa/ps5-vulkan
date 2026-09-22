@@ -205,7 +205,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
     }
     const int array_color=ps5vk_array_color_image(image);
     if(!d->graphics_enabled || !ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
-        image->info.format!=VK_FORMAT_R8G8B8A8_UNORM || image->info.mipLevels!=1 ||
+        (image->info.format!=VK_FORMAT_R8G8B8A8_UNORM &&
+         !ps5vk_color_target_integer_served(image->info.format)) || image->info.mipLevels!=1 ||
         (!array_color && image->info.arrayLayers!=1) || image->info.extent.depth!=1 ||
         (image->info.usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT))!=
             (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||

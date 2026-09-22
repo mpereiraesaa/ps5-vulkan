@@ -741,13 +741,17 @@ int main(void)
     }
 
     /* --- refused, each leaving the recording poisoned with no operation --- */
-    /* a PRIMARY may never claim render-pass continuation */
+    /* A PRIMARY that claims render-pass continuation is accepted: the flag is
+     * ignored there (VUID-vkBeginCommandBuffer-flags-09123) and the pinned
+     * upstream render-pass module sets it on its primary buffers. The scope
+     * members are not read, so this is an ordinary primary. */
     {
         VkCommandBuffer p2 = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
         VkCommandBufferBeginInfo bad_begin = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT};
-        assert(vkBeginCommandBuffer(p2, &bad_begin) != VK_SUCCESS);
+        assert(vkBeginCommandBuffer(p2, &bad_begin) == VK_SUCCESS);
+        assert(vkEndCommandBuffer(p2) == VK_SUCCESS);
     }
     /* a continuation child OUTSIDE a render pass: its draws have no scope */
     probe = begun_primary(&d, pool);

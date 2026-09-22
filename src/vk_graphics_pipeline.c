@@ -340,6 +340,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             &b->pAttachments[independent_blend ? attachment : 0];
         key.color_format[attachment] =
             pass->attachments[subpass->color[attachment].attachment].format;
+        /* An integer colour target is not blended into and its lanes are not
+         * converted, so a blend state on it describes a shape this profile
+         * cannot program. */
+        if(ps5vk_color_target_format_is_integer(key.color_format[attachment]) &&
+           b->pAttachments[attachment].blendEnable) return refuse(15);
         key.color_write_mask[attachment] = b->pAttachments[attachment].colorWriteMask;
         key.blend_enable[attachment] = a->blendEnable;
         if (!a->blendEnable) continue;

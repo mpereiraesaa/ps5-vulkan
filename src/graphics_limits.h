@@ -59,13 +59,21 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxImageArrayLayers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
     /* DXVK262-T06 independentBlend: the ABI, the render pass, the framebuffer,
      * the pipeline key and the native per-target programming all carry two
-     * colour attachments, but the profile does not SERVE a second target until
-     * a native witness has written and read back two of them, so the advertised
-     * bound stays at one. A subpass that names no colour target at all (the
-     * DEPTH-ONLY shape) still renders. */
+     * colour attachments, and the private measurement build advertises that
+     * bound because the feature's only upstream oracle refuses a subpass whose
+     * colour count exceeds maxColorAttachments (vktRenderPassTests.cpp:5796).
+     * The shipping profile keeps the bound at one until the run that serves it
+     * is green; a subpass that names no colour target at all (the DEPTH-ONLY
+     * shape) renders either way. */
+#if defined(PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC) && PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC
+    limits->maxColorAttachments=PS5VK_MAX_COLOR_ATTACHMENTS;
+    limits->maxFragmentOutputAttachments=PS5VK_MAX_COLOR_ATTACHMENTS;
+    limits->maxFragmentCombinedOutputResources=PS5VK_MAX_COLOR_ATTACHMENTS;
+#else
     limits->maxColorAttachments=1;
     limits->maxFragmentOutputAttachments=1;
     limits->maxFragmentCombinedOutputResources=1;
+#endif
     /* DXVK262-T06: the secondary source of attachment zero is the one extra
      * fragment output the promoted dualSrcBlend path consumes, and no more;
      * the value is only meaningful on a platform that advertises the feature,

@@ -38,7 +38,14 @@ static inline int ps5vk_color_export_state(unsigned target,VkFormat format,
      * without an export, is still refused. */
     if(format==VK_FORMAT_UNDEFINED)
         return !spi_format && !shader_mask && !blending && !dual_source;
-    if(format!=VK_FORMAT_R8G8B8A8_UNORM && format!=VK_FORMAT_B8G8R8A8_UNORM)return 0;
+    if(!ps5vk_color_target_format_supported(format))return 0;
+    /* An integer target is never blended into (the pipeline gate refuses a
+     * blend state on it), so it takes the plain 32-bit export the normalized
+     * targets take when they do not blend: the pinned compiler publishes
+     * 32_ABGR for a uvec4 export the same way it does for a vec4 one
+     * (measured: option 0x99 -> 0x99/CB_SHADER_MASK 0xff for a module whose
+     * Location 0 is a uvec4 and Location 1 a vec4). */
+    if(ps5vk_color_target_format_is_integer(format) && blending)return 0;
     /* A pixel shader whose only reachable side effect is an SSBO store may
      * legally export no colour (for example, a colour store after OpKill is
      * unreachable).  PSBC reports that exact shape as both

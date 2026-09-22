@@ -380,10 +380,16 @@ static int depth_only_target(const struct ps5vk_graphics_key *key)
 static int color_target_supported(const struct ps5vk_graphics_key *key)
 {
     if (!key->color_attachment_count) return depth_only_target(key);
-    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment)
-        if (key->color_format[attachment] != VK_FORMAT_B8G8R8A8_UNORM &&
-            key->color_format[attachment] != VK_FORMAT_R8G8B8A8_UNORM)
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment) {
+        if (!ps5vk_color_target_format_supported(key->color_format[attachment]))
             return 0;
+        /* An integer target is not blended into and its export is not
+         * converted, so a blend state on it is not a shape this profile can
+         * program. */
+        if (ps5vk_color_target_format_is_integer(key->color_format[attachment]) &&
+            key->blend_enable[attachment])
+            return 0;
+    }
     return color_write_mask_supported(key);
 }
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)

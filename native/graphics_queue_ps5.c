@@ -1,4 +1,5 @@
 #include "vk_queue.h"
+#include "color_attachment_contract.h"
 #include "vk_indirect.h"
 #include "draw_prepare_ps5.h"
 #include "runtime_resource_use.h"
@@ -220,8 +221,7 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
     for(uint32_t c=0;c<color_count;++c) {
         color_format[c]=begin->framebuffer->attachments[c]->image->info.format;
         if(subpass->color[c].attachment!=c ||
-           (color_format[c]!=VK_FORMAT_B8G8R8A8_UNORM &&
-            color_format[c]!=VK_FORMAT_R8G8B8A8_UNORM))
+           !ps5vk_color_target_format_supported(color_format[c]))
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     if(depth && subpass->depth.attachment!=color_count)
@@ -273,9 +273,13 @@ static VkResult prepare(VkDevice d,const struct ps5vk_submission *s,void **out)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if(!color_plan[c].clear) continue;
         VkImage image=begin->framebuffer->attachments[c]->image;
-        int clear_ok=color_format[c]==VK_FORMAT_B8G8R8A8_UNORM ?
-            ps5vk_color_clear_bgra8(begin->clears[c].color.float32,&clear_word[c]) :
-            ps5vk_color_clear_rgba8(begin->clears[c].color.float32,&clear_word[c]);
+        /* An integer target's clear is the raw 32-bit word its components
+         * pack into, not a UNORM conversion. */
+        int clear_ok=ps5vk_color_target_integer_served(color_format[c]) ?
+            ps5vk_color_clear_rgba8_uint(begin->clears[c].color.uint32,&clear_word[c]) :
+            (color_format[c]==VK_FORMAT_B8G8R8A8_UNORM ?
+                ps5vk_color_clear_bgra8(begin->clears[c].color.float32,&clear_word[c]) :
+                ps5vk_color_clear_rgba8(begin->clears[c].color.float32,&clear_word[c]));
         if(image->info.format!=color_format[c] || begin->clear_count<=c || !clear_ok ||
            begin->render_area.offset.x || begin->render_area.offset.y ||
            begin->render_area.extent.width!=image->info.extent.width ||
