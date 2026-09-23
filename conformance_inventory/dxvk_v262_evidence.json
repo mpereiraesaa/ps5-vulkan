@@ -1344,12 +1344,15 @@
       "cts": {
         "state": "cts-pass",
         "cases": [
-          "dEQP-VK.ubo.single_basic_array.std430.uint.vertex"
+          "dEQP-VK.ubo.single_basic_array.std430.uint.vertex",
+          "dEQP-VK.ubo.2_level_struct_array.per_block_buffer.std430_vertex",
+          "dEQP-VK.ubo.single_basic_array.std430.mat2.vertex",
+          "dEQP-VK.ubo.single_struct.per_block_buffer.std430_vertex"
         ],
         "refs": [
           "VALIDATION.md#standard-uniform-buffer-layout"
         ],
-        "note": "Unchanged original upstream leaf and all 494 prior acceptance cases passed twice on the same measured eboot."
+        "note": "Four unchanged original std430 UBO leaves passed: the first leaf twice in the 495-case measurement selection, and three additional leaves twice in the 498-case measurement selection. The promoted frozen 498-case selection passed 498/498 on the shipping profile and again with the merged compiler pin, with zero missing, foreign, or duplicate cases and clean lifecycle."
       }
     }
   }

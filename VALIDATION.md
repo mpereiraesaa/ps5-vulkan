@@ -4389,8 +4389,8 @@ operation/type coverage, while the latter has no Vulkan 1.0 extension alias.
 
 The subgroup boundary is explicit. The shipping Vulkan 1.0 device exposes no
 subgroup stage or operation properties and rejects subgroup SPIR-V at shader
-module creation. A separate, default-off diagnostic build used Vulkan 1.2
-SPIR-V and the local PSBC candidate `bf2e00b` to measure compute behavior.
+module creation. Separate, default-off diagnostic builds used Vulkan 1.2
+SPIR-V and the merged PSBC revision `47ae2a3` to measure compute behavior.
 It selected each broadcast source ID from GPU memory, used two workgroups and
 even-lane activity, checked exact outputs and untouched inactive slots, and
 completed a bounded fence with zero guard mismatches. This is compiler/GPU
@@ -4401,8 +4401,9 @@ evidence, not a legal public feature or original CTS result.
 | 32-bit unsigned `subgroupBroadcast` with a runtime buffer source ID | Compute | Diagnostic GPU readback: 64/64 active values, 64 inactive slots untouched, guards zero; repeated | False |
 | Unsigned 8-bit, signed 16-bit, unsigned 64-bit and 16-bit float scalar `subgroupBroadcast` | Compute | Each diagnostic GPU readback: 64/64 active values, 64 inactive untouched, guards zero | False |
 | The same four operand types as two-component vectors | Compute | Both components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
-| Unsigned 8-bit three-component vector | Compute | All three components checked on GPU: 64/64 active values, 64 inactive untouched, guards zero | False |
-| Other three-component and all four-component vectors | Compute | PSBC host compile and wave32 NIR only; no GPU result | False |
+| All four extended operand types as three-component vectors | Compute | All three components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| All four extended operand types as four-component vectors | Compute | All four components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| 32-bit unsigned `subgroupBroadcast` with all runtime source IDs 0–31 | Compute | 4,096 GPU values checked across four wave32 groups; zero mismatches and intact guards | False |
 | Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4412,15 +4413,24 @@ The vec2 run IDs are `20260923T114013349Z`, `20260923T114102324Z`,
 64-bit, and 16-bit float respectively; their signed eboot SHA-256 values are
 recorded with the private strict receipts. The pinned original dynamic
 broadcast CTS factory requires Vulkan 1.2, so no original subgroup leaf is
-eligible on this Vulkan 1.0 profile. The isolated Int8 vec3 run
-`20260923T123142059Z` checked all three components, active and inactive slots,
-source IDs and guard bytes with zero mismatches and clean lifecycle. Its signed
-eboot SHA-256 is
-`77d348113b56ed23a89c04316438263bd9a17297bc09ddbcf994a1555bc7cbf1`;
-the shader SPIR-V SHA-256 is
-`8876db26030b3d9316d8498d4d20cf6bd26b4e826f62e0130aa1d64b1e1a3c92`.
-Other vec3 types, vec4 GPU behavior, other operations, and graphics stages
-remain unproven.
+eligible on this Vulkan 1.0 profile. Strict firmware 12.02 runs covered the
+four extended operand types in vec3 and vec4 forms, with separate high and low
+halves of every 64-bit component and exact binary16 bits for Float16 vec3/vec4.
+Each one-shot run checked 64 active and 64 inactive slots, all components,
+source IDs and guards, a bounded fence and clean title closure. The signed
+Int64 vec4 eboot SHA-256 was
+`dcdf2c56e5113bce00a61b6459880720419add7053dfefdee2f34d5e5c9c74c7`
+(run `20260923T132917238Z`); the exact-half Float16 vec4 eboot SHA-256 was
+`d183e93eab8daf92b325f14730266f8cda1fafd4818eb06952fc513a928061b3`
+(run `20260923T133502244Z`). Private strict receipts retain the other exact
+artifact identities. A separate shader loaded each of 32 runtime source IDs
+from GPU memory and issued 32 explicit Broadcast operations. Its strict run
+`20260923T134237991Z` checked 4,096 values over four wave32 groups with zero
+mismatches and intact source/guard bytes; signed eboot SHA-256
+`a256c635732ed4669be033c99a00fe3fa1e432730e314ce18b9e1f51ba84c06d`.
+The pinned CTS source also requires the matching narrow-type/storage features
+for extended-format cases. Other operations and graphics stages remain
+unproven, and these diagnostic runs do not establish a public Vulkan 1.2 route.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
