@@ -840,6 +840,10 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiPipelineTests.cpp",
         focused_sources / "vktApiCopiesAndBlittingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp",
+        # Original UBO block-layout factory, shader bodies and result oracle.
+        cts_root / "external/vulkancts/modules/vulkan/ubo/vktUniformBlockTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/ubo/vktUniformBlockCase.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/ubo/vktRandomUniformBlockCase.cpp",
         # Pipeline cache module: only the compute case is selected (the graphics
         # cache cases need a D16_UNORM depth attachment this profile lacks), but
         # the module registers both families. Its helper definitions already
