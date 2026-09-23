@@ -1261,5 +1261,47 @@ static void core_dynamic_state_recording(void)
     vkCmdSetStencilReference(c,0,1);assert(c->state==PS5VK_INVALID);
     vkDestroyCommandPool(&d,p,NULL);
 }
+static void dispatch_base_recording(void)
+{
+    struct VkDevice_T d = {.device_group_extension_enabled = VK_TRUE};
+    struct VkPipeline_T pipeline = {.device = &d, .dispatch_base_enabled = VK_TRUE};
+    VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c = command(&d, p);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, &pipeline);
+    vkCmdDispatchBaseKHR(c, 4, 5, 1, 3, 7, 2);
+    assert(c->state == PS5VK_RECORDING && c->operation_count == 1);
+    assert(c->operations[0].groups[0] == 3 && c->operations[0].groups[1] == 7 &&
+           c->operations[0].groups[2] == 2);
+    assert(c->operations[0].group_base[0] == 4 &&
+           c->operations[0].group_base[1] == 5 &&
+           c->operations[0].group_base[2] == 1);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+
+    pipeline.dispatch_base_enabled = VK_FALSE;
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, &pipeline);
+    vkCmdDispatchBaseKHR(c, 0, 0, 0, 1, 1, 1);
+    assert(c->state == PS5VK_RECORDING && c->operation_count == 1 &&
+           !c->operations[0].group_base[0]);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, &pipeline);
+    vkCmdDispatchBaseKHR(c, 1, 0, 0, 1, 1, 1);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 0);
+
+    pipeline.dispatch_base_enabled = VK_TRUE;
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, &pipeline);
+    vkCmdDispatchBaseKHR(c, 65534, 0, 0, 2, 1, 1);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 0);
+
+    d.device_group_extension_enabled = VK_FALSE;
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, &pipeline);
+    vkCmdDispatchBaseKHR(c, 0, 0, 0, 1, 1, 1);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 0);
+    vkDestroyCommandPool(&d, p, NULL);
+}
 int main(void)
-{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); dispatch_base_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }

@@ -260,6 +260,7 @@ struct VkDevice_T {
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
+    VkBool32 device_group_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the

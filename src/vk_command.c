@@ -704,6 +704,26 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t
         op->descriptor_dynamic_offsets[j]=c->set_dynamic_offsets[binding->set][index];
     }
 }
+VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHR(VkCommandBuffer c,
+    uint32_t base_x, uint32_t base_y, uint32_t base_z,
+    uint32_t count_x, uint32_t count_y, uint32_t count_z)
+{
+    const uint32_t base[3] = {base_x, base_y, base_z};
+    const uint32_t count[3] = {count_x, count_y, count_z};
+    if (!c || c->state != PS5VK_RECORDING || !c->pool ||
+        !c->pool->device->device_group_extension_enabled || !c->pipeline ||
+        ((base_x || base_y || base_z) && !c->pipeline->dispatch_base_enabled)) {
+        invalid(c); return;
+    }
+    for (unsigned n = 0; n < 3; ++n)
+        if (base[n] >= 65535 || count[n] > 65535 - base[n]) {
+            invalid(c); return;
+        }
+    const uint32_t before = c->operation_count;
+    vkCmdDispatch(c, count_x, count_y, count_z);
+    if (c->state == PS5VK_RECORDING && c->operation_count == before + 1)
+        memcpy(c->operations[before].group_base, base, sizeof(base));
+}
 static VkBool32 indirect_buffer_valid(VkCommandBuffer c, VkBuffer buffer,
     VkDeviceSize offset, VkDeviceSize bytes)
 {

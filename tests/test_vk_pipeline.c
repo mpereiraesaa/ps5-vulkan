@@ -85,6 +85,32 @@ static void legacy_offline_abi(void)
     assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)!=VK_SUCCESS);
     vkDestroyShaderModule(&d,m,NULL);vkDestroyPipelineLayout(&d,l,NULL);
 }
+static void dispatch_base_flag(void)
+{
+    struct ps5vk_compiled_program p = fixture(module_a, code_a);
+    struct ps5vk_program_library lib = {&p, 1};
+    struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}};
+    VkShaderModule m = shader(&d, module_a);
+    VkPipelineLayout l = layout(&d);
+    VkComputePipelineCreateInfo ci = info(m, l);
+    ci.flags = VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!pipeline);
+    d.device_group_extension_enabled = VK_TRUE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_SUCCESS);
+    assert(pipeline->dispatch_base_enabled);
+    vkDestroyPipeline(&d, pipeline, NULL);
+    ci.flags |= VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) != VK_SUCCESS);
+    assert(!pipeline);
+    vkDestroyPipelineLayout(&d, l, NULL);
+    vkDestroyShaderModule(&d, m, NULL);
+    assert(!d.pipeline_objects && !d.descriptor_objects);
+}
 static void negative(void)
 {
     struct ps5vk_compiled_program p = fixture(module_a, code_a);
@@ -180,7 +206,7 @@ static void t08_capability_gates(void)
 }
 int main(void)
 {
-    lifecycle(); legacy_offline_abi(); negative(); graphics_entries();
+    lifecycle(); legacy_offline_abi(); dispatch_base_flag(); negative(); graphics_entries();
     t08_capability_gates();
     puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
 }

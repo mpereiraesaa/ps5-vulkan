@@ -214,9 +214,14 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     if (info->sType != VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO || !info->layout ||
         info->layout->device != d || info->stage.sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO ||
         !info->stage.module || info->stage.module->device != d || !info->stage.pName) return INVALID;
-    if (info->pNext || info->flags || info->stage.pNext || info->stage.flags ||
+    if (info->pNext ||
+        (info->flags & ~VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR) ||
+        info->stage.pNext || info->stage.flags ||
         info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT)
         return VK_ERROR_UNKNOWN;
+    if ((info->flags & VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR) &&
+        !d->device_group_extension_enabled)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!d->compiler.resolve && (!d->runtime_compiler_enabled || !d->compiler.compile)) return VK_ERROR_UNKNOWN;
     uint32_t required_features = 0;
     if (!spirv_narrow_requirements(info->stage.module->words,
@@ -297,6 +302,8 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     p->device = d; p->allocator = saved; p->custom_allocator = custom;
+    p->dispatch_base_enabled =
+        !!(info->flags & VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR);
     p->set_count = info->layout->set_count;
     memcpy(p->sets, info->layout->sets, sizeof(p->sets));
     p->push_constant_size = info->layout->push_constant_size;

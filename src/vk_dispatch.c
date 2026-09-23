@@ -99,6 +99,7 @@ static const struct entry entries[] = {
     ENTRY(vkCmdBindDescriptorSets, DEVICE),
     ENTRY(vkCmdPushConstants, DEVICE),
     ENTRY(vkCmdDispatch, DEVICE),
+    ENTRY(vkCmdDispatchBaseKHR, DEVICE),
     ENTRY(vkCmdDispatchIndirect, DEVICE),
     ENTRY(vkCmdBeginRenderPass, DEVICE),
     ENTRY(vkCmdNextSubpass, DEVICE),
@@ -177,6 +178,9 @@ static int gpdp2_command(const char *name)
 static int group_creation_command(const char *name)
 { return !strcmp(name, "vkEnumeratePhysicalDeviceGroupsKHR"); }
 
+static int device_group_command(const char *name)
+{ return !strcmp(name, "vkCmdDispatchBaseKHR"); }
+
 static int buffer_device_address_command(const char *name)
 {
     return !strcmp(name, "vkGetBufferDeviceAddressKHR") ||
@@ -204,6 +208,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
     if (!device || !name) return NULL;
     if (buffer_device_address_command(name) &&
         !(device->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
+        return NULL;
+    if (device_group_command(name) && !device->device_group_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;
