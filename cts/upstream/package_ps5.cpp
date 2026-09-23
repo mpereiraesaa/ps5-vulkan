@@ -6,6 +6,7 @@
 #include "vktApiCopiesAndBlittingTests.hpp"
 #include "vktApiFillBufferTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
+#include "vktBindingBufferDeviceAddressTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktSynchronizationBasicEventTests.hpp"
 #include "vktSynchronizationBasicSemaphoreTests.hpp"
@@ -141,6 +142,10 @@ void FocusedVkTestPackage::init(void)
     {
         de::MovePtr<tcu::TestCaseGroup> bindingModelGroup(new tcu::TestCaseGroup(m_testCtx, "binding_model"));
         bindingModelGroup->addChild(vkt::BindingModel::createShaderAccessTests(m_testCtx));
+        // Original BDA test body, support gate and GPU oracle. The build copy
+        // bounds registration to two base-address compute cases; cases.txt
+        // remains the execution filter for measurement versus acceptance.
+        bindingModelGroup->addChild(vkt::BindingModel::createBufferDeviceAddressTests(m_testCtx));
         addChild(bindingModelGroup.release());
     }
 

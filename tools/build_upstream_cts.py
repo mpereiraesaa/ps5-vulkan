@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -305,6 +306,47 @@ def write_focused_robust_buffer_source(source: Path, destination: Path) -> None:
     destination.write_text(text, encoding="utf-8")
 
 
+def write_focused_bda_source(source: Path, destination: Path) -> None:
+    """Keep two original compute BDA oracles while bounding factory creation.
+
+    Only the pinned case-choice arrays change in the build copy. The test
+    bodies, shaders, resource construction, support checks and result oracle
+    remain the original upstream source.
+    """
+    text = source.read_text(encoding="utf-8")
+    choices = {
+        "setCases": (("set0", "set3", "set7", "set15", "set31"), "set0"),
+        "depthCases": (("depth1", "depth2", "depth3"), "depth1"),
+        "baseCases": (("baseubo", "basessbo"), "basessbo"),
+        "cvtCases": (("load", "convert", "convertuvec2", "convertchecku64",
+                      "convertcheckuv2", "crossconvertu2p", "crossconvertp2u"), "load"),
+        "storeCases": (("nostore", "store"), "nostore"),
+        "btCases": (("single", "multi", "replay"), "single"),
+        "layoutCases": (("std140", "scalar"), "std140"),
+        "stageCases": (("comp", "frag", "vert", "rgen"), "comp"),
+    }
+    for name, (expected, selected) in choices.items():
+        pattern = re.compile(r"^    TestGroupCase " + re.escape(name) +
+                             r"\[\] = \{\n(?P<body>.*?)^    \};",
+                             re.MULTILINE | re.DOTALL)
+        matches = list(pattern.finditer(text))
+        if len(matches) != 1:
+            raise SystemExit(f"focused BDA registration drift: {name}")
+        entries = re.findall(r'\{\s*([^,{}]+),\s*"([^"]+)"\s*\}',
+                             matches[0].group("body"))
+        if tuple(label for _, label in entries) != expected:
+            raise SystemExit(f"focused BDA case choices drift: {name}")
+        value = next(value.strip() for value, label in entries if label == selected)
+        replacement = (f"    TestGroupCase {name}[] = {{\n"
+                       f"        {{{value}, \"{selected}\"}},\n    }};")
+        text = text[:matches[0].start()] + replacement + text[matches[0].end():]
+    if text.count('{OFFSET_ZERO, "offset_zero"}') != 1 or \
+       text.count('{OFFSET_NONZERO, "offset_nonzero"}') != 1:
+        raise SystemExit("focused BDA offset cases drift")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(text, encoding="utf-8")
+
+
 def object_is_current(obj: Path, dep_file: Path, stamp: Path,
                       fingerprint: str) -> bool:
     """Reuse an object only when its command, sources and headers are unchanged.
@@ -437,6 +479,9 @@ def main(argv=None):
     write_focused_robust_buffer_source(
         cts_root / "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp",
         focused_sources / "vktRobustnessBufferAccessTests.cpp")
+    write_focused_bda_source(
+        cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingBufferDeviceAddressTests.cpp",
+        focused_sources / "vktBindingBufferDeviceAddressTests.cpp")
 
     # Amber's Vulkan engine includes generated function wrappers. Regenerate them
     # from the pinned Vulkan registry so the amber objects match the CTS headers.
@@ -850,6 +895,7 @@ def main(argv=None):
         # the buffer-view access tests use to build their compute shader.
         cts_root / "external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp",
+        focused_sources / "vktBindingBufferDeviceAddressTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp",
