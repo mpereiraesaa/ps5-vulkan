@@ -7,7 +7,9 @@
 
 int main(int argc, char **argv)
 {
-    if (argc != 3)
+    if (argc != 3 && argc != 4)
+        return 2;
+    if (argc == 4 && strcmp(argv[3], "int8"))
         return 2;
     PsbcStage stage;
     if (!strcmp(argv[1], "vertex"))
@@ -49,6 +51,7 @@ int main(int argc, char **argv)
     options.stage = stage;
     options.entrypoint = "main";
     options.optimise = true;
+    options.enable_int8 = argc == 4;
     options.address32_hi = 2;
     options.primitive_type = 4; /* triangle list */
     options.rasterization_samples = 1;
