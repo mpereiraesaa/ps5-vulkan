@@ -3,6 +3,11 @@
 #include "graphics_program.h"
 #include "runtime_shader.h"
 
+/* Reserved logical-feature mask position for the SPIR-V ImageGatherExtended
+ * capability. The physical profile keeps the corresponding Vk feature false
+ * until its native pixel and CTS gates pass. */
+#define PS5VK_GRAPHICS_FEATURE_IMAGE_GATHER_EXTENDED (1u << 21)
+
 struct ps5vk_runtime_graphics_program {
     /* The pre-raster program: a vertex-only compile, the merged vertex+geometry
      * program, or zero for a tessellation pipeline, whose pre-raster state is

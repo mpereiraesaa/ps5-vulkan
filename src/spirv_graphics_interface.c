@@ -655,6 +655,34 @@ done:
     free(ids);return valid;
 }
 
+int ps5vk_spirv_module_uses_extended_gather(
+    const struct ps5vk_graphics_module_key *module)
+{
+    if(!module || !module->words || module->word_count<5 ||
+       module->words[0]!=0x07230203u)return -1;
+    for(size_t at=5;at<module->word_count;) {
+        const uint32_t instruction=module->words[at];
+        const size_t words=instruction>>16;
+        const uint32_t opcode=instruction&0xffffu;
+        if(!words || words>module->word_count-at)return -1;
+        if(opcode==17u) { /* OpCapability */
+            if(words!=2)return -1;
+            if(module->words[at+1]==25u)return 1; /* ImageGatherExtended */
+        } else if(opcode==96u || opcode==97u) { /* OpImageGather, OpImageDrefGather */
+            /* Both instructions place the optional Image Operands mask after
+             * their five required operands. shaderImageGatherExtended governs
+             * Offset, ConstOffset, and ConstOffsets even when the front end
+             * omits the ImageGatherExtended capability for a constant form. */
+            if(words>6u) {
+                const uint32_t image_operands=module->words[at+6u];
+                if(image_operands & (0x08u | 0x10u | 0x20u))return 1;
+            }
+        }
+        at+=words;
+    }
+    return 0;
+}
+
 int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_key *module,
                                             unsigned *clip_distances,
                                             unsigned *cull_distances)

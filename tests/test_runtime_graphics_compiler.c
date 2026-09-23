@@ -4,6 +4,7 @@
 #include "resolve_program.h"
 #include "vertex_format_probe.h"
 #include "descriptor_table_layout.h"
+#include "vk_descriptor.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -678,6 +679,69 @@ static int patch_array_length(struct ps5vk_graphics_module_key *m,uint32_t from,
  * checks the description against the real compiled metadata, the refusal in the
  * shipping profile, and the description predicate's own negatives.
  */
+/* These compiler probes use a real set-0 combined image sampler declaration.
+ * The implicit core gather, explicit component selectors, constant offset,
+ * runtime single offset, four independent constant offsets, and depth-reference
+ * gather each have to survive SPIR-V ingestion, PSBC compilation, runtime-header
+ * validation and draw-ABI construction. The offset Dref form must be gated by
+ * shaderImageGatherExtended just like color gathers. This is compiler evidence
+ * only; pixel values still need the native gather oracle. */
+static void check_gather_compiler_forms(void)
+{
+    const char *const fragments[]={
+        "build/runtime-graphics/gather_core.frag.spv",
+        "build/runtime-graphics/gather_const_offset.frag.spv",
+        "build/runtime-graphics/gather_dynamic_offset.frag.spv",
+        "build/runtime-graphics/gather_four_offsets.frag.spv",
+        "build/runtime-graphics/gather_component_0.frag.spv",
+        "build/runtime-graphics/gather_component_1.frag.spv",
+        "build/runtime-graphics/gather_component_2.frag.spv",
+        "build/runtime-graphics/gather_component_3.frag.spv",
+        "build/runtime-graphics/gather_dref.frag.spv"};
+    const int extended_required[]={0,1,1,1,0,0,0,0,1};
+    struct ps5vk_set_signature set={0};
+    set.binding[0]=(struct ps5vk_binding){
+        .count=1,.stages=VK_SHADER_STAGE_FRAGMENT_BIT};
+    set.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    set.count=1;
+    /* Canonical signatures carry the running descriptor prefix through empty
+     * bindings, exactly as vkCreateDescriptorSetLayout stores them. */
+    for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)set.binding[b].first=1;
+    for(unsigned i=0;i<sizeof(fragments)/sizeof(fragments[0]);++i) {
+        struct ps5vk_graphics_key key={
+            .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+            .fragment=read_module(fragments[i]),
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .color_format=VK_FORMAT_B8G8R8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+            .descriptor_set_count=1,.descriptor_sets=&set};
+        assert(ps5vk_spirv_graphics_interface(&key));
+        const int extended=ps5vk_spirv_module_uses_extended_gather(&key.fragment);
+        assert(extended==extended_required[i]);
+        key.feature_mask=0;
+        if(extended) {
+            const void *refused=NULL;
+            assert(!ps5vk_runtime_graphics_supported(&key));
+            assert(ps5vk_runtime_graphics_compile(NULL,&key,&refused)==
+                   VK_ERROR_FEATURE_NOT_PRESENT && !refused);
+            key.feature_mask=PS5VK_GRAPHICS_FEATURE_IMAGE_GATHER_EXTENDED;
+        }
+        assert(ps5vk_runtime_graphics_supported(&key));
+        const void *out=NULL;
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+        const struct ps5vk_runtime_graphics_program *program=out;
+        assert(program->fragment.machine_code && program->fragment.machine_code_size);
+        assert(program->fragment.metadata.descriptor_binding_count==1);
+        assert(program->fragment.metadata.descriptor_set_valid[0]);
+        assert(program->fragment.metadata.descriptor_used_binding_mask[0]==1u);
+        struct ps5vk_runtime_shader header;
+        assert(ps5vk_runtime_shader_build(&header,&program->fragment)==0);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)key.vertex.words);free((void *)key.fragment.words);
+    }
+    puts("Image gather compiler forms: core selectors are baseline; gather offsets including depth-reference gather require the gated feature");
+}
+
 static void check_fragment_distance_read(void)
 {
     struct ps5vk_graphics_key key={
@@ -2305,6 +2369,7 @@ int main(void)
     check_two_mrt_exports();
     check_two_target_write_masks();
     check_second_target_only();
+    check_gather_compiler_forms();
     check_geometry_stage();
     check_viewport_index_routing();
     check_geometry_output_components();
