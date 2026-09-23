@@ -40,6 +40,14 @@
 #include "tcuTestPackage.hpp"
 #include "deUniquePtr.hpp"
 
+namespace vkt
+{
+namespace SpirVAssembly
+{
+tcu::TestCaseGroup *createFocusedVolatileAtomicComputeGroup(tcu::TestContext &testCtx);
+}
+}
+
 namespace cts
 {
 namespace ps5
@@ -366,6 +374,7 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createWorkgroupMemoryComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocusedVolatileAtomicComputeGroup(m_testCtx));
         instructionGroup->addChild(computeGroup.release());
         spirvGroup->addChild(instructionGroup.release());
         addChild(spirvGroup.release());

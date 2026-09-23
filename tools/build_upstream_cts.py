@@ -1007,6 +1007,7 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmGraphicsShaderTestUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmUtils.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp",
+        ROOT / "cts/upstream/volatile_atomic_focus.cpp",
     ]
     for src in test_cpp:
         obj = obj_dir / "modules" / (src.stem + ".o")
