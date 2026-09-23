@@ -16,6 +16,27 @@ int main(void)
     assert(!ps5vk_native_video_format(VK_FORMAT_D32_SFLOAT));
     assert(!ps5vk_native_video_format(VK_FORMAT_UNDEFINED));
     struct VkDevice_T device = {0};
+    /* The padded sampled/upload backing keeps one level for every image layer;
+     * a two-cube resource therefore accounts for all twelve faces. */
+    {
+        VkImageCreateInfo cube_array = {
+            .sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+            .imageType=VK_IMAGE_TYPE_2D,
+            .format=VK_FORMAT_R8G8B8A8_UNORM,
+            .extent={64,64,1},.mipLevels=1,.arrayLayers=12,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            .sharingMode=VK_SHARING_MODE_EXCLUSIVE};
+        VkMemoryRequirements cube_array_requirements;
+        assert(ps5vk_native_image_requirements(&device,&cube_array,
+            &cube_array_requirements)==VK_SUCCESS);
+        assert(cube_array_requirements.size==196608u &&
+               cube_array_requirements.alignment==256u);
+        cube_array.arrayLayers=7;
+        assert(ps5vk_native_image_requirements(&device,&cube_array,
+            &cube_array_requirements)==VK_ERROR_FORMAT_NOT_SUPPORTED);
+    }
     struct VkImage_T image = {.info={.imageType=VK_IMAGE_TYPE_2D, .format=VK_FORMAT_D32_SFLOAT,
         .extent={32,32,1}, .mipLevels=1, .arrayLayers=1, .samples=VK_SAMPLE_COUNT_1_BIT,
         .tiling=VK_IMAGE_TILING_OPTIMAL, .usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT}};
