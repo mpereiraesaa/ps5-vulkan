@@ -16,6 +16,8 @@
       "dEQP-VK.api.smoke.create_sampler",
       "dEQP-VK.api.smoke.create_shader",
       "dEQP-VK.api.smoke.triangle",
+      "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+      "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero",
       "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.fragment.single_descriptor.2d",
       "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex.single_descriptor.2d",
       "dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.combined_image_sampler_mutable.vertex_fragment.single_descriptor.2d",
@@ -573,9 +575,7 @@
       "dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_0",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_1",
-      "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
-      "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
-      "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
+      "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test"
     ],
     "manifest": "cts/upstream/manifest.json",
     "note": "Only original upstream cases whose prerequisites the reported profile satisfies belong here; anything else stays a diagnostic."
@@ -1742,15 +1742,18 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "the KHR feature query reports false on the shipping platform and vkCreateDevice refuses a request for the unsupported bit",
+      "detail": "the Vulkan 1.0 KHR query/create route enables bounded physical storage-buffer addressing; two unchanged original compute CTS leaves and an independent GPU address witness passed",
       "feature": "bufferDeviceAddress",
       "kind": "extension-feature",
       "profile": "graphics",
-      "reported": false,
+      "reported": true,
       "verdict": "satisfied"
     },
     {
@@ -2914,15 +2917,18 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "no selected case requires this bit",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
       },
-      "detail": "the KHR feature query reports false on the shipping platform and vkCreateDevice refuses a request for the unsupported bit",
+      "detail": "the Vulkan 1.0 KHR query/create route enables bounded physical storage-buffer addressing; two unchanged original compute CTS leaves and an independent GPU address witness passed",
       "feature": "bufferDeviceAddress",
       "kind": "extension-feature",
       "profile": "compute",
-      "reported": false,
+      "reported": true,
       "verdict": "satisfied"
     }
   ],
@@ -7496,7 +7502,7 @@
           "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
         ],
         "note": "original compute BDA leaves exercise the bounded R32_UINT storage image",
-        "status": "diagnostic"
+        "status": "acceptance"
       },
       "detail": "VK_FORMAT_R32_UINT reports VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT",
@@ -27116,7 +27122,7 @@
     "compute": {
       "apiVersion": 4194304,
       "buffer_device_address_query": {
-        "bufferDeviceAddress": false,
+        "bufferDeviceAddress": true,
         "bufferDeviceAddressCaptureReplay": false,
         "bufferDeviceAddressMultiDevice": false,
         "route": "VK_KHR_buffer_device_address"
@@ -27143,7 +27149,7 @@
     "graphics": {
       "apiVersion": 4194304,
       "buffer_device_address_query": {
-        "bufferDeviceAddress": false,
+        "bufferDeviceAddress": true,
         "bufferDeviceAddressCaptureReplay": false,
         "bufferDeviceAddressMultiDevice": false,
         "route": "VK_KHR_buffer_device_address"
@@ -27242,14 +27248,14 @@
     },
     {
       "action": "requires-extension-feature",
-      "advertised": false,
+      "advertised": true,
       "applicable_cts": {
         "cases": [],
         "note": "no original CTS case for this capability is selected here",
         "status": "not-selected"
       },
       "capability": "PhysicalStorageBufferAddresses",
-      "detail": "accepted only when PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS is advertised (advertised=False), so the gate and the advertisement cannot disagree",
+      "detail": "accepted only when PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS is advertised (advertised=True), so the gate and the advertisement cannot disagree",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
       "number": 5347,
@@ -27394,14 +27400,14 @@
     },
     {
       "action": "requires-extension-feature",
-      "advertised": false,
+      "advertised": true,
       "applicable_cts": {
         "cases": [],
         "note": "no original CTS case for this capability is selected here",
         "status": "not-selected"
       },
       "capability": "PhysicalStorageBufferAddresses",
-      "detail": "accepted only when PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS is advertised (advertised=False), so the gate and the advertisement cannot disagree",
+      "detail": "accepted only when PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS is advertised (advertised=True), so the gate and the advertisement cannot disagree",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
       "number": 5347,

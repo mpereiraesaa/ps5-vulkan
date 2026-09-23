@@ -39,11 +39,6 @@ MEMORY_MODEL_IDS = {
 BDA_ID = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
 DEVICE_SCOPE_ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
 DIAGNOSTIC_IMPLEMENTATIONS = {
-    BDA_ID: (
-        ("src/vk_memory.c", "VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR"),
-        ("src/vk_device.c", "VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME"),
-        ("src/ps5vk_compiler.c", "opts.enable_physical_storage_buffer_addresses"),
-    ),
     DEVICE_SCOPE_ID: (
         ("src/vk_device.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
         ("src/vk_pipeline.c", "case 5346u: /* VulkanMemoryModelDeviceScope */"),
@@ -90,8 +85,35 @@ def memory_model_axes(row: dict, query: dict, extensions: set[str],
              "refs": ["src/vk_device.c", "src/vk_pipeline.c", "src/ps5vk_compiler.c",
                       "native/runtime_graphics_compiler.c",
                       "conformance_inventory/reporting_matrix.json"],
-             "detail": "The base model and DeviceScope are independently gated; "
+            "detail": "The base model and DeviceScope are independently gated; "
                        "compute and graphics compiler options follow each SPIR-V module's memory model."})
+
+
+def buffer_address_axes(row: dict, query: dict, extensions: set[str],
+                        feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    if row["id"] != BDA_ID:
+        return None
+    if query.get("route") != "VK_KHR_buffer_device_address":
+        raise ValueError("buffer device address public query route is absent")
+    value = query.get("bufferDeviceAddress")
+    capture_replay = query.get("bufferDeviceAddressCaptureReplay")
+    multi_device = query.get("bufferDeviceAddressMultiDevice")
+    if (not all(isinstance(v, bool) for v in (value, capture_replay, multi_device)) or
+            capture_replay or multi_device):
+        raise ValueError("invalid buffer device address public query")
+    route = ("VK_KHR_buffer_device_address" in extensions and
+             "VK_KHR_device_group" in extensions)
+    report = feature_reports.get("bufferDeviceAddress", {})
+    implemented = (value and route and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if value and route else "blocker",
+             "observed": value and route, "expected": row["expected"],
+             "via": "VK_KHR_buffer_device_address" if route else None,
+             "detail": "Equivalent KHR feature on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised."},
+            {"state": "implemented" if implemented else "missing",
+             "refs": ["src/vk_device.c", "src/vk_memory.c", "src/vk_pipeline.c",
+                      "src/ps5vk_compiler.c", "conformance_inventory/reporting_matrix.json"],
+             "detail": "Reviewed KHR feature query, opt-in, address binding and compute compilation."})
 
 
 def standard_ubo_axes(row: dict, query: dict, extensions: set[str],
@@ -180,7 +202,7 @@ def implemented_device_extensions() -> set[str]:
     # A default-off measurement build is not the shipping capability probe.
     # Strip only this explicitly named conditional block, and fail closed if
     # its preprocessor boundary is malformed rather than counting its bits.
-    for name in ("PS5VK_MEMORY_MODEL_DIAGNOSTIC", "PS5VK_BDA_DIAGNOSTIC"):
+    for name in ("PS5VK_MEMORY_MODEL_DIAGNOSTIC",):
         guard = f"#if defined({name}) && {name}"
         if guard in platform_source:
             pattern = re.compile(r"^" + re.escape(guard) + r"\n.*?^#endif\s*$",
@@ -372,6 +394,11 @@ def generate() -> dict:
             extensions, feature_reports)
         if memory_model is not None:
             api, implementation = memory_model
+        buffer_address = buffer_address_axes(requirement,
+            reporting["profiles"]["graphics"].get("buffer_device_address_query", {}),
+            extensions, feature_reports)
+        if buffer_address is not None:
+            api, implementation = buffer_address
         diagnostic = diagnostic_implementation(identifier)
         if diagnostic is not None:
             implementation = diagnostic

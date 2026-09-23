@@ -50,17 +50,25 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 505 original upstream acceptance cases frozen in
+* **Selected**: the 507 original upstream acceptance cases frozen in
   `cts/upstream/manifest.json`. This includes four standard UBO layout vertex
-  oracles, seven VulkanKHR volatile storage-buffer atomic oracles, and the
-  earlier API, graphics, compute, resource and synchronization cases. Two
+  oracles, seven VulkanKHR volatile storage-buffer atomic oracles, two
+  buffer-device-address compute oracles, and the earlier API, graphics,
+  compute, resource and synchronization cases. Before the BDA promotion, the
   first two strict shipping runs on 2026-09-23 each reported 505/505 Pass. A
   third integrated run on eboot SHA-256
   `0aadc18fb2d7537b85fa678b7dd0abbcbe7ec5babcb6cd762523d3e367ea4ba4`
   also reported 505/505 Pass after the graphics memory-model compiler gate,
   with selection
   SHA-256 `9ddd0d09c4dc8d6bf5d4c83fe55f3f3a13c92db66badeb9c504fa9c00d4911c7`.
-  The manifest also carries 68 diagnostic paths, which remain outside strict
+  After the bounded BDA KHR promotion, the ordinary build passed the 507-case
+  selection twice with zero failures, missing or unexpected cases. Both runs
+  used eboot SHA-256
+  `bb47f59c159bc230da0f266197cfef1a14c3cd5ac9b1c0c133a2387815871745`
+  and selection SHA-256
+  `d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`;
+  see [the evidence](VALIDATION.md#buffer-device-address-khr-promotion).
+  The manifest also carries 66 diagnostic paths, which remain outside strict
   acceptance. Earlier dated sections below record the smaller selections used
   at each promotion and preserve their historical counts.
 * **Executed**: what a given report actually contains, which the strict verifier

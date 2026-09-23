@@ -68,7 +68,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * (tools/build_native.py: use_runtime_compiler = compute and ...). */
     platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
                                    PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT |
-                                   PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
+                                   PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                                   PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
     if (!graphics_objects)
         platform->supported_features |= PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                         PS5VK_FEATURE_STORAGE_BUFFER_16BIT;

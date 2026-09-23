@@ -1944,13 +1944,14 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **19/62 satisfied and 43 blockers**. Core
+The current checked result is **20/62 satisfied and 42 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
 `fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,
 `dualSrcBlend`, `independentBlend`, `sampleRateShading`,
 `uniformBufferStandardLayout` (via `VK_KHR_uniform_buffer_standard_layout`),
-base `vulkanMemoryModel` (via `VK_KHR_vulkan_memory_model`) and the four
+base `vulkanMemoryModel` (via `VK_KHR_vulkan_memory_model`), bounded
+`bufferDeviceAddress` (via `VK_KHR_buffer_device_address`) and the four
 rasterization and viewport features (`depthClamp`,
 `depthBiasClamp`, `fillModeNonSolid`, `multiViewport`) have all four axes. See
 [their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16),
@@ -4669,8 +4670,8 @@ the bounded GPU result.
 
 ### Buffer device address
 
-The BDA bit also stays false. Its public-SDK diagnostic GPU witness used three
-distinct shader-address buffers with nonzero 256-byte bind offsets and a
+At this measurement stage, the BDA bit stayed false. Its public-SDK diagnostic
+GPU witness used three distinct shader-address buffers with nonzero 256-byte bind offsets and a
 combined device-mask/address allocation. Run
 `20260923T125810572Z_PPSA99994_ps5vk_0x1eedd039ad681` on signed eboot
 `9d774447102cb5934e1581d37a130683a847cd015365a5fbf03960b08284fee0`
@@ -4695,8 +4696,55 @@ selection passed 496/496 twice on eboot
 run logs have SHA-256
 `88f664187eb8ff4cce1cc1b06fb34ff4cbbe48c237363f09dd3427a864e03afb`
 and `ebfbd09171469f263ebdae01c42898ad0d62f4a1164f770ac9225b8e8a3de31f`.
-The ordinary shipping profile still reports BDA false; its frozen acceptance selection
-passed 505/505 on eboot
+Before the KHR promotion, the ordinary shipping profile reported BDA false;
+its frozen acceptance selection passed 505/505 on eboot
 `adb3c13c121f25967b54d94b1a92fe401f96023adc4660cb598f741c3ab80fe4`
 (`run-563826813332835`). The bounded storage-image result does not qualify
 other formats, image loads or atomics.
+
+### Buffer device address KHR promotion
+
+The ordinary build now reports `bufferDeviceAddress=1` through
+`VK_KHR_buffer_device_address` on the Vulkan 1.0 KHR query and opt-in route;
+capture replay and multiple-device addressing remain false. The public SDK
+capability probe strictly verified all 62 profile records on signed eboot
+SHA-256 `cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3`.
+Run `20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2`, log SHA-256
+`b0263aacbdebc8f6170d70a21450e5f77121bd2e89e973dd06972203b0bff7a2`,
+reported the BDA KHR query as `1`, 22 requested values at their thresholds and
+40 queried blockers. The four-axis DXVK matrix records 20/62 ready and 42
+blockers; the difference includes independently missing CTS/native evidence
+for other requirements. Vulkan 1.2 aggregate feature structs and the Vulkan
+1.3.204 profile API floor remain unadvertised. The original two BDA compute
+oracles passed twice in the preceding diagnostic-bit runs; the shipping-bit
+507-case acceptance is recorded separately below.
+
+The shipping SDK's independent address witness ran on signed eboot SHA-256
+`cc5422c8f279c287beb39d459d598f5e8fc09aa286aeda62dbdd6dc2a8fc0396`.
+Run `20260923T195434898Z_PPSA99994_ps5vk_0x205960cd0cddf`, log SHA-256
+`1d267689f9d4dc15099ab50bbcb3446ae7b542adebba0e7f1030b419c410962f`,
+read back all 64 expected values from three distinct address buffers at
+256-byte bind offsets, with zero value or guard mismatches, the expected
+`178f01c5` digest, bounded fence completion and clean resource retirement.
+
+The ordinary shipping build then passed the promoted 507-case frozen upstream
+selection twice, with **507 Pass, zero Fail, zero NotSupported, zero missing or
+unexpected** in each strict receipt. Both runs used eboot SHA-256
+`bb47f59c159bc230da0f266197cfef1a14c3cd5ac9b1c0c133a2387815871745`
+and selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`:
+
+- `20260923T195944895Z_PPSA99994_upstream-cts_0x205de39e95e8f`, log SHA-256
+  `e9855e3fdefd57735802a1d7850e3954d502234a2572db8da4e6ae63c4fbb84e`,
+  QPA SHA-256 `d6fb46eca0323fd6170217d2a0105ae3ae3021998dd12a8c1095d67c2e40c6da`.
+- `20260923T200037929Z_PPSA99994_upstream-cts_0x205ea92cf014e`, log SHA-256
+  `f0942c038f726fc1ddbf222a58d901ca3b4d31e7ae59be069913a29000002260`,
+  QPA SHA-256 `5fbfea1dd39d0300d41d94bedea9c45deb605432ebd33d1809f5a9afb0a4e4e0`.
+
+Both receipts verified the two original BDA compute leaves, exact build
+identity and clean title closure. An earlier attempt on the same eboot stopped
+while emitting QPA for a pre-existing multiview case and produced no final
+receipt; it was closed and is not counted as an acceptance run. Firmware was
+not independently recorded in these T08 receipts. The bounded result does
+not claim capture replay, multiple-device addressing or additional image
+formats.

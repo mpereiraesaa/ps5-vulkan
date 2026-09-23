@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "446142b15a5464851d004f463f26e8c4563ae8f7f1b5428df41e68916bca20c5",
+    "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -21,6 +21,7 @@
       "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "feature:VkPhysicalDeviceFeatures:tessellationShader",
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
+      "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
       "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
@@ -28,8 +29,8 @@
     ],
     "runs": [
       {
-        "id": "20260923T142938117Z_PPSA99994_ps5vk_0x1f3daaa244415",
-        "log_sha256": "652e687a5745781c615ee15bfc8f4afa3bc72f6b2d53db5450f494de2809ae16"
+        "id": "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2",
+        "log_sha256": "b0263aacbdebc8f6170d70a21450e5f77121bd2e89e973dd06972203b0bff7a2"
       }
     ],
     "transport": "ps5log/1",
@@ -49,14 +50,18 @@
         "route": "VK_KHR_vulkan_memory_model",
         "vulkanMemoryModel": "1",
         "vulkanMemoryModelDeviceScope": "0"
+      },
+      {
+        "route": "VK_KHR_buffer_device_address",
+        "bufferDeviceAddress": "1"
       }
     ],
-    "source_matrix_sha256": "a1a257b7f3f99bff5e5ea8fb6e8b5833a37902d17651df3895cd1fa40bce8402",
-    "satisfied": 21,
-    "blockers": 41,
+    "source_matrix_sha256": "299653cd4d8bcc655d292fb3c68f0fa54b8c29142884cf8206788ad3b31b022b",
+    "satisfied": 22,
+    "blockers": 40,
     "requirements": 62,
     "device_api": "1.0.0",
-    "device_extensions": 7
+    "device_extensions": 9
   },
   "historical_capability_probes": [
     {
@@ -1407,9 +1412,9 @@
       }
     },
     "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress": {
-      "_comment": "Bounded GPU address witness passes under a diagnostic bit; original CTS fails before shader on unsupported storage-image descriptor layout.",
+      "_comment": "Shipping Vulkan 1.0 KHR feature, two original CTS leaves and public-SDK GPU witness independently pass; capture replay and multiple-device addressing stay false.",
       "cts": {
-        "state": "cts-fail",
+        "state": "cts-pass",
         "cases": [
           "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
           "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
@@ -1417,18 +1422,18 @@
         "refs": [
           "VALIDATION.md#buffer-device-address"
         ],
-        "note": "Strict 496-case measurement: 494 frozen Pass, both original BDA leaves Fail at storage-image descriptor layout before shader execution."
+        "note": "Both original BDA compute leaves passed in two strict 507-case shipping acceptance runs with zero missing or unexpected cases; an earlier incomplete QPA attempt is excluded."
       },
       "native": {
         "state": "native-evidence",
         "run_ids": [
-          "20260923T125810572Z_PPSA99994_ps5vk_0x1eedd039ad681"
+          "20260923T195434898Z_PPSA99994_ps5vk_0x205960cd0cddf"
         ],
-        "artifact_sha256": "9d774447102cb5934e1581d37a130683a847cd015365a5fbf03960b08284fee0",
+        "artifact_sha256": "cc5422c8f279c287beb39d459d598f5e8fc09aa286aeda62dbdd6dc2a8fc0396",
         "refs": [
           "VALIDATION.md#buffer-device-address"
         ],
-        "note": "Public SDK diagnostic GPU witness uses three distinct address buffers with nonzero bind offsets, exact 64-value output and guard readback, bounded fence and clean retirement."
+        "note": "Public SDK GPU witness on the shipping KHR feature: three distinct address buffers with nonzero bind offsets, exact 64-value and guard readback, bounded fence and clean retirement."
       }
     }
   }

@@ -90,13 +90,13 @@ class UpstreamSelectionTests(unittest.TestCase):
         # of them - the triangle and quad shapes - are measured Pass and are
         # now the sample-rate-shading acceptance group, and the 20 line and
         # point_1px shapes moved to plain-point-line-pipeline-refused, whose
-        # pipeline shape this profile refuses at creation. The 68 diagnostics
+        # pipeline shape this profile refuses at creation. The 66 diagnostics
         # that remain document refusals, capability gaps and pending
-        # measurement windows, including two original buffer-device-address
-        # cases. Seven T08 volatile atomic leaves now belong to acceptance.
+        # measurement windows. Seven T08 volatile atomic leaves and two
+        # original buffer-device-address leaves now belong to acceptance.
         # `leaves` counts every attachment_write_mask leaf
         # the pinned factory generates, wherever the manifest now keeps it.
-        self.assertEqual((505, 68, 48),
+        self.assertEqual((507, 66, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]
@@ -215,13 +215,12 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual(set(), set(derive(source, integration, builder.replace(
             'focused_sources / "vktBindingBufferDeviceAddressTests.cpp"',
             'focused_sources / "other.cpp"'))))
-        diagnostics = [d for d in self.current_manifest["diagnostics"]
-                       if d["category"] == "t08-buffer-device-address-base"]
-        self.assertEqual(expected, {d["path"] for d in diagnostics})
-        self.assertTrue(all(d["expected_status"] == "Pass" for d in diagnostics))
+        selected = [d for d in self.current_manifest["cases"]
+                    if d["category"] == "t08-buffer-device-address-base"]
+        self.assertEqual(expected, {d["path"] for d in selected})
         self.assertTrue(all(d["features_required"] == [
             "extension:VK_KHR_buffer_device_address", "feature:bufferDeviceAddress"]
-            for d in diagnostics))
+            for d in selected))
 
     def _ready_witness(self):
         """The measured host witness: this host can create the shape."""
