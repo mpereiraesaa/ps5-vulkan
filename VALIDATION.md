@@ -4419,12 +4419,13 @@ evidence, not a legal public feature or original CTS result.
 | Unsigned Int8 vec4 exclusive `subgroupAdd` scan | Compute | Exact per-lane four-component results including the zero first lane and eight-bit wraparound; 64 active outputs, 64 inactive slots untouched, guards zero | False |
 | Unsigned Int64 vec4 inclusive `subgroupAdd` scan | Compute | Exact per-lane high and low words of four components; 64 active outputs, 64 inactive slots untouched, guards zero | False |
 | Extended operand types with `subgroupMul`, `subgroupMin`, `subgroupMax` and integer `subgroupAnd`/`Or`/`Xor`, each reduce/inclusive/exclusive | Compute | 252 original-CTS-selected typed forms compiled to distinct live PS5 machine code; GPU evidence below covers unsigned Int8 vec4 Min reduction only | False |
-| Signed Int8, unsigned Int16 and signed Int64 arithmetic, scalar through vec4, reduce/inclusive/exclusive | Compute | 252 additional original-CTS-selected forms, including Add, compiled to distinct live PS5 machine code alongside 12 no-op controls; GPU evidence below covers signed Int8 vec4 Max only | False |
+| Signed Int8, unsigned Int16 and signed Int64 arithmetic, scalar through vec4, reduce/inclusive/exclusive | Compute | 252 additional original-CTS-selected forms, including Add, compiled to distinct live PS5 machine code alongside 12 no-op controls; GPU evidence below covers signed Int8 vec4 Max reduction and inclusive scan | False |
 | Unsigned Int8 vec4 `subgroupMin` reduction | Compute | Four components used distinct minimum source lanes; exact results for 64 active outputs, 64 inactive slots untouched, guards zero | False |
 | Signed Int16 vec4 `subgroupMax` reduction | Compute | Four component maxima from lanes 0, 31, 17 and 25; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
 | Float16 vec4 `subgroupMax` reduction | Compute | Four component maxima from lanes 0, 31, 17 and 25; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
 | Float16 vec4 `subgroupMul` reduction | Compute | Four exact products from distinct lane pairs with group-varying factors; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
 | Signed Int8 vec4 `subgroupMax` with negative values | Compute | Four component maxima from lanes 0, 31, 17 and 25, including negative outputs and mixed-sign comparisons; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
+| Signed Int8 vec4 inclusive `subgroupMax` scan | Compute | Per-lane signed prefix maxima across four components: 64 exact active outputs in two workgroups, 64 inactive slots untouched, guards zero | False |
 | Other subgroup operations or graphics stages | None | No reviewed public stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4546,6 +4547,17 @@ across two workgroups matched, 64 inactive slots and guards remained intact,
 and the 300 ms fence, transport and title lifecycle completed. Run
 `20260923T175308641Z` used signed eboot SHA-256
 `6e098cbaa26ed2abef696cc7f4dc9bd322d304dbe4ef113ff8bba484b3644812`.
+
+A separate signed Int8 vec4 inclusive Max scan checked prefix values with
+negative inputs and different winning lanes in all four components. A CPU
+control verified the expected values for each measured even lane and confirmed
+that unsigned Max and an exclusive scan would give different results. On
+firmware 12.02, the strict GPU run checked 64 exact active outputs across two
+workgroups, 64 untouched inactive slots and unchanged guards. Its 300 ms
+fence, transport and title lifecycle completed; the console was released with
+the accepted payload restored. Run `20260923T192201405Z` used signed eboot
+SHA-256
+`5496be4235e41788b2ea05121f9402a3d247305016d86e6d9022092c1865ff34`.
 These diagnostics do not change the public subgroup feature bits.
 
 A separate vertex-stage diagnostic used a runtime source ID loaded from a
