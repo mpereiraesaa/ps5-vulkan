@@ -311,6 +311,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
     platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
 #endif
+#if defined(PS5VK_MEMORY_MODEL_DIAGNOSTIC) && PS5VK_MEMORY_MODEL_DIAGNOSTIC
+    /* Measurement builds alone may negotiate the KHR memory model and device
+     * scope. Keep both shipping bits false until GPU ordering and the original
+     * CTS oracle have been measured independently. */
+    platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                                    PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+#endif
     platform->max_allocation = HEAP_BYTES;
     /* The same initializer the host reporting dump uses; see
      * src/device_profile_report.h. Object-model sizing follows

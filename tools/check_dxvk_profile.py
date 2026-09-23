@@ -88,6 +88,20 @@ def implemented_device_extensions() -> set[str]:
     # platform's supported-features mask, keeping the capability probe aligned
     # until a measured promotion changes that mask.
     platform_source = (ROOT / "native/platform_ps5.c").read_text()
+    # A default-off measurement build is not the shipping capability probe.
+    # Strip only this explicitly named conditional block, and fail closed if
+    # its preprocessor boundary is malformed rather than counting its bits.
+    guard = "#if defined(PS5VK_MEMORY_MODEL_DIAGNOSTIC) && PS5VK_MEMORY_MODEL_DIAGNOSTIC"
+    if guard in platform_source:
+        pattern = re.compile(r"^" + re.escape(guard) + r"\n.*?^#endif\s*$",
+                             re.MULTILINE | re.DOTALL)
+        blocks = list(pattern.finditer(platform_source))
+        if (len(blocks) != 1 or
+                re.search(r"^#(?:if|ifdef|ifndef|elif|else)\b",
+                          blocks[0].group()[len(guard):],
+                          re.MULTILINE)):
+            raise ValueError("malformed memory-model diagnostic guard")
+        platform_source = pattern.sub("", platform_source)
     platform_source = re.sub(r"/\*.*?\*/|//[^\n]*", "", platform_source, flags=re.DOTALL)
     assignments = re.findall(r"platform->supported_features\s*(?:\|=|=)\s*(.*?);",
                              platform_source, re.DOTALL)

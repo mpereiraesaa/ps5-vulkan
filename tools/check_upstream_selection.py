@@ -23,6 +23,7 @@ UPSTREAM = ROOT / "third_party/vk-gl-cts"
 # The integration supplies the package and its leading groups; upstream supplies
 # everything below them.
 INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
+VOLATILE_ATOMIC_WRAPPER = ROOT / "cts/upstream/volatile_atomic_focus.cpp"
 # The capabilities a selection is allowed to rely on come from the device's own
 # sources, not from the selection itself.
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
@@ -105,6 +106,29 @@ def _quoted_in(needle: str, haystack: str) -> bool:
 def _format_segments(text: str) -> frozenset:
     return frozenset(token[len("VK_FORMAT_"):].lower()
                      for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text))
+
+
+@functools.lru_cache(maxsize=None)
+def _volatile_atomic_leaf_names(text: str, integration: str, wrapper: str) -> frozenset:
+    """Derive the wrapper-registered VulkanKHR volatile atomic leaves.
+
+    The pinned factory composes its group name and registers case names through
+    macros, so neither final spelling is a quoted literal. Require its exact
+    volatile/storage-buffer branch and the package's focused registration.
+    """
+    if not all(part in text for part in (
+            'std::string groupName("opatomic")',
+            'groupName += "_storage_buffer"',
+            'groupName += "_volatile"',
+            'if (volatileAtomic)',
+            'spec.requestedVulkanFeatures.extVulkanMemoryModel.vulkanMemoryModel = true;',
+            'specializations["SCOPE"]     = "%five";')):
+        return frozenset()
+    if ('createOpAtomicGroup(testCtx, true, 65535, false, true)' not in wrapper or
+            'createFocusedVolatileAtomicComputeGroup(m_testCtx)' not in integration):
+        return frozenset()
+    factory = _source_function_at_line(text, 1472)
+    return frozenset(re.findall(r'ADD_OPATOMIC_CASE_(?:1|N)\(\s*([a-z]+)\s*,', factory))
 
 
 def _memoized(function):
@@ -1577,6 +1601,12 @@ def main() -> int:
         module_root = source_path.parent
         searchable = _module_searchable(integration_text, module_root)
         generated_format_segments = _format_segments(text)
+        volatile_atomic_leaves = (
+            _volatile_atomic_leaf_names(text, integration_text,
+                VOLATILE_ATOMIC_WRAPPER.read_text(encoding="utf-8"))
+            if source_path.name == "vktSpvAsmInstructionTests.cpp" and
+               VOLATILE_ATOMIC_WRAPPER.is_file() else frozenset()
+        )
         generated_segments = (
             _dynamic_state_compute_generated_segments(text)
             if source_path.name == "vktDynamicStateComputeTests.cpp" else
@@ -1589,6 +1619,8 @@ def main() -> int:
             generated_segments |= _multisample_generated_segments(text)
         if source_path.name == "vktRenderPassTests.cpp":
             generated_segments |= _attachment_write_mask_generated_segments(text)
+        if volatile_atomic_leaves:
+            generated_segments |= {"opatomic_storage_buffer_volatile"}
         for segment in segments[1:-1]:
             if (not _quoted_in(segment, searchable) and
                     segment not in generated_segments and
@@ -1662,6 +1694,10 @@ def main() -> int:
         # table-derived name, or a number produced
         # by an instance factory whose parent group is a literal in that file.
         if _quoted_in(leaf, text):
+            continue
+        if (path.startswith("dEQP-VK.spirv_assembly.instruction.compute."
+                            "opatomic_storage_buffer_volatile.") and
+                leaf in volatile_atomic_leaves):
             continue
         if leaf in _table_composed_leaf_names(text, function_text):
             continue

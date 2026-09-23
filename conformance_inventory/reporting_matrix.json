@@ -562,7 +562,14 @@
       "dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_0",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_1",
-      "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test"
+      "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iadd",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.isub",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iinc",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.idec",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.load",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.store",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex"
     ],
     "manifest": "cts/upstream/manifest.json",
     "note": "Only original upstream cases whose prerequisites the reported profile satisfies belong here; anything else stays a diagnostic."

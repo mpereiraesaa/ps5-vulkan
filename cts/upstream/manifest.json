@@ -5577,6 +5577,83 @@
       "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
       "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles.",
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:1898"
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iadd",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp:1472",
+      "category": "t08-vulkan-memory-model-volatile-atomic",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_vulkan_memory_model",
+        "feature:vulkanMemoryModel"
+      ],
+      "rationale": "Original pinned OpAtomic VulkanKHR shader uses volatile queue-family scope and its upstream buffer-result oracle; diagnostic until native result is measured."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.isub",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp:1472",
+      "category": "t08-vulkan-memory-model-volatile-atomic",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_vulkan_memory_model",
+        "feature:vulkanMemoryModel"
+      ],
+      "rationale": "Original pinned OpAtomic VulkanKHR shader uses volatile queue-family scope and its upstream buffer-result oracle; diagnostic until native result is measured."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iinc",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp:1472",
+      "category": "t08-vulkan-memory-model-volatile-atomic",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_vulkan_memory_model",
+        "feature:vulkanMemoryModel"
+      ],
+      "rationale": "Original pinned OpAtomic VulkanKHR shader uses volatile queue-family scope and its upstream buffer-result oracle; diagnostic until native result is measured."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.idec",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp:1472",
+      "category": "t08-vulkan-memory-model-volatile-atomic",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_vulkan_memory_model",
+        "feature:vulkanMemoryModel"
+      ],
+      "rationale": "Original pinned OpAtomic VulkanKHR shader uses volatile queue-family scope and its upstream buffer-result oracle; diagnostic until native result is measured."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.load",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp:1472",
+      "category": "t08-vulkan-memory-model-volatile-atomic",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_vulkan_memory_model",
+        "feature:vulkanMemoryModel"
+      ],
+      "rationale": "Original pinned OpAtomic VulkanKHR shader uses volatile queue-family scope and its upstream buffer-result oracle; diagnostic until native result is measured."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.store",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp:1472",
+      "category": "t08-vulkan-memory-model-volatile-atomic",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_vulkan_memory_model",
+        "feature:vulkanMemoryModel"
+      ],
+      "rationale": "Original pinned OpAtomic VulkanKHR shader uses volatile queue-family scope and its upstream buffer-result oracle; diagnostic until native result is measured."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp:1472",
+      "category": "t08-vulkan-memory-model-volatile-atomic",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_vulkan_memory_model",
+        "feature:vulkanMemoryModel"
+      ],
+      "rationale": "Original pinned OpAtomic VulkanKHR shader uses volatile queue-family scope and its upstream buffer-result oracle; diagnostic until native result is measured."
     }
   ]
 }

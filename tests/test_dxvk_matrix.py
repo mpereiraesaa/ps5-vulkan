@@ -22,6 +22,13 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_memory_model_measurement_guard_does_not_change_shipping_extensions(self):
+        extensions = matrix.implemented_device_extensions()
+        self.assertNotIn("VK_KHR_vulkan_memory_model", extensions)
+        evidence = json.loads(matrix.EVIDENCE.read_text())
+        self.assertEqual(evidence["capability_probe"]["device_extensions"],
+                         len(extensions))
+
     def test_multiview_equivalence_never_invents_values_or_other_features(self):
         profile = json.loads(derive.OUTPUT.read_text())
         rows = [r for r in profile["requirements"] if r["id"] in matrix.MULTIVIEW_FIELDS]
