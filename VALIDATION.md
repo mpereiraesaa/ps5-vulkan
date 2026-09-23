@@ -4387,16 +4387,32 @@ unadvertised. `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId`
 remain false: the former has a Vulkan 1.1 KHR dependency and incomplete
 operation/type coverage, while the latter has no Vulkan 1.0 extension alias.
 
-The subgroup boundary is explicit. These probes compile shaders on the host;
-none establishes active-lane or divergent-source behavior on the PS5 GPU, and
-the public device exposes no subgroup stage or operation properties.
+The subgroup boundary is explicit. The shipping Vulkan 1.0 device exposes no
+subgroup stage or operation properties and rejects subgroup SPIR-V at shader
+module creation. A separate, default-off diagnostic build used Vulkan 1.2
+SPIR-V and the local PSBC candidate `bf2e00b` to measure compute behavior.
+It selected each broadcast source ID from GPU memory, used two workgroups and
+even-lane activity, checked exact outputs and untouched inactive slots, and
+completed a bounded fence with zero guard mismatches. This is compiler/GPU
+evidence, not a legal public feature or original CTS result.
 
 | Operand and operation | Stage tested | Verified state | T08 feature bit |
 | --- | --- | --- | --- |
-| 32-bit unsigned `subgroupBroadcast` with a runtime buffer source ID | Compute | PSBC host compilation only | False |
-| 16-bit signed `subgroupBroadcast` with a constant source ID | Compute | PSBC host compilation with 16-bit option only | False |
-| 8-bit, 64-bit and 16-bit float subgroup operands/results | None | No complete compiler and GPU evidence | False |
+| 32-bit unsigned `subgroupBroadcast` with a runtime buffer source ID | Compute | Diagnostic GPU readback: 64/64 active values, 64 inactive slots untouched, guards zero; repeated | False |
+| Unsigned 8-bit, signed 16-bit, unsigned 64-bit and 16-bit float scalar `subgroupBroadcast` | Compute | Each diagnostic GPU readback: 64/64 active values, 64 inactive untouched, guards zero | False |
+| The same four operand types as two-component vectors | Compute | Both components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| The same four operand types as three- and four-component vectors | Compute | PSBC host compile and wave32 NIR only; no GPU result | False |
 | Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
+
+The diagnostic narrow-integer runs enabled compiler options and SPIR-V
+capabilities only in the private build. The shipping guards remain in place.
+The vec2 run IDs are `20260923T114013349Z`, `20260923T114102324Z`,
+`20260923T114235184Z`, and `20260923T114324202Z` for 8-bit, 16-bit,
+64-bit, and 16-bit float respectively; their signed eboot SHA-256 values are
+recorded with the private strict receipts. The pinned original dynamic
+broadcast CTS factory requires Vulkan 1.2, so no original subgroup leaf is
+eligible on this Vulkan 1.0 profile. Wider vector GPU behavior, other
+operations, and graphics stages remain unproven.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
