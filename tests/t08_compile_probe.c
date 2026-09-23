@@ -1,5 +1,6 @@
 /* Host-only compiler probe for T08 shader contracts. */
 #include "psbc_compile.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,12 +45,19 @@ int main(int argc, char **argv)
             .array_size = 1, .offset = 16, .stride = 16
         };
     options.enable_int16 = !strcmp(argv[3], "int16");
+    options.enable_int8 = !strcmp(argv[3], "int8");
 
     PsbcShaderOutput output = {0};
     const PsbcResult result = psbc_compile_shader(
         spirv, (size_t)length, &options, &output);
-    printf("result=%d code_bytes=%zu descriptors=%u\n", result,
-           output.machine_code_size, output.metadata.descriptor_binding_count);
+    unsigned long long hash = UINT64_C(1469598103934665603);
+    for (size_t n = 0; n < output.machine_code_size; ++n) {
+        hash ^= ((const uint8_t *)output.machine_code)[n];
+        hash *= UINT64_C(1099511628211);
+    }
+    printf("result=%d code_bytes=%zu descriptors=%u fnv64=%016llx\n", result,
+           output.machine_code_size, output.metadata.descriptor_binding_count,
+           hash);
     if (result == PSBC_RESULT_OK && (!output.machine_code ||
         !output.machine_code_size || output.metadata.descriptor_binding_count !=
         options.descriptor_binding_count)) {
