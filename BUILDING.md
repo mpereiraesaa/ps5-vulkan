@@ -18,10 +18,11 @@ The regular host suite runs offline after these dependencies are prepared.
 The pin is a single commit in `tools/prepare_compiler_deps.py`; a change that
 needs newer compiler behaviour names that requirement in the pin comment and
 moves the pin only once the corresponding fork PR is merged. The DXVK262-T06
-sample-rate window is the current example: the driver passes
-`PsbcCompileOptions::sample_shading_enable`, which the pinned `be4d043` does not
-have, so the pin has to move to the merge commit of `opengnm-psbc` PR #23 before
-that change builds from a fresh clone.
+sample-rate window did exactly that: the driver passes
+`PsbcCompileOptions::sample_shading_enable`, which the previous pin `be4d043`
+does not have, and the pin now names the merge commit of `opengnm-psbc` PR #23
+(`0d4e80c`). The payload built from that revision is byte-identical to the one
+the acceptance run measured, so the move changed no artifact.
 
 `make check` runs the Python suite through `tools/run_python_tests.py`, one
 process per `tests/test_*.py` module, as many at a time as there are CPUs
