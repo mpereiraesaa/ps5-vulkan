@@ -4411,8 +4411,11 @@ evidence, not a legal public feature or original CTS result.
 | Negative signed Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | Distinct negative high and positive low words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
 | 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Vertex | Private GPU color readback: 160/160 rendered pixels matched source lane 7; a lane-ID control on the same draw differed at all 160 pixels. The diagnostic draw covered 16 of its 32 intended tile regions, so this does not establish full graphics coverage | False |
 | Unsigned Int8, signed Int16, unsigned Int64 and Float16 `subgroupAdd` reduction, scalar through vec4 | Compute | All 16 typed SPIR-V modules compiled to live PS5 machine code distinct from no-reduction controls; GPU evidence below covers unsigned Int8 vec4 and unsigned Int64 vec4 | False |
+| The same 16 type and width forms with inclusive and exclusive `subgroupAdd` scans | Compute | All 32 scan SPIR-V modules compiled to live PS5 machine code; reduce, both scans and no-op control had distinct code per form. GPU evidence below covers Int8 vec4 exclusive and Int64 vec4 inclusive only | False |
 | Unsigned Int8 vec4 `subgroupAdd` reduction with wraparound | Compute | Exact four-component results for 64 active outputs over four wave32 groups, 64 inactive slots untouched, guards zero | False |
 | Unsigned Int64 vec4 `subgroupAdd` reduction | Compute | Exact high and low words of all four components for 64 active outputs over four wave32 groups, 64 inactive slots untouched, guards zero | False |
+| Unsigned Int8 vec4 exclusive `subgroupAdd` scan | Compute | Exact per-lane four-component results including the zero first lane and eight-bit wraparound; 64 active outputs, 64 inactive slots untouched, guards zero | False |
+| Unsigned Int64 vec4 inclusive `subgroupAdd` scan | Compute | Exact per-lane high and low words of four components; 64 active outputs, 64 inactive slots untouched, guards zero | False |
 | Other subgroup operations or graphics stages | None | No reviewed public stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4476,6 +4479,20 @@ Int64 vec4 run checked both 32-bit halves of each 64-bit result:
 The unsigned Int8 vec4 run used values whose sums wrap at eight bits:
 `20260923T155857928Z`, signed eboot SHA-256
 `9518f1e1f0c99d7cea5946f170c3a2c00f90a7d4bca77d67d08156ed5a42aeab`.
+Both had zero result, inactive-slot and guard mismatches.
+
+The same original arithmetic factory selects inclusive and exclusive Add
+scans. The host regression checks 32 additional scalar through vec4 typed
+scan modules, their exact SPIR-V scan modes, and machine code distinct from
+the reduction and no-op controls. Separate firmware 12.02 GPU diagnostics
+checked per-lane results across four wave32 groups, 64 active outputs, 64
+untouched inactive slots, guards, bounded fences, complete transport and title
+closure. The unsigned Int8 vec4 exclusive scan included the zero first lane
+and wrapped sums: run `20260923T161253042Z`, signed eboot SHA-256
+`c97e879864014b5a59933b719f4a76635db6f92e2d544abba9c8c99290dbf6b9`.
+The unsigned Int64 vec4 inclusive scan checked both halves of all four
+components at every active lane: run `20260923T161354023Z`, signed eboot
+SHA-256 `e98f647ecfd09eced62b483c42814bb435bb5c0e3888b18e1794c02945a7c2b7`.
 Both had zero result, inactive-slot and guard mismatches. These diagnostics
 do not establish other arithmetic operations, original CTS eligibility or a
 public subgroup feature route.
@@ -4510,7 +4527,7 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
-`subgroupBroadcastDynamicId`. Operations beyond reduction Add and
+`subgroupBroadcastDynamicId`. Operations beyond Add reductions and scans, and
 graphics-stage behavior beyond the bounded vertex Broadcast draw remain
 unproven on hardware. These diagnostics establish neither original CTS
 eligibility nor a public subgroup feature route.
