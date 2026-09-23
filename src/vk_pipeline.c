@@ -17,6 +17,28 @@ static int module_valid(const uint32_t *words, size_t count)
     }
     return 1;
 }
+/* No subgroup operation/stage properties are reported by the Vulkan 1.0
+ * device. Refuse subgroup SPIR-V at module creation for every shader stage,
+ * including malformed modules that omit their required capability. */
+static int subgroup_module_unsupported(const uint32_t *words, size_t count)
+{
+    for (size_t at = 5; at < count; at += words[at] >> 16) {
+        uint32_t opcode = words[at] & 0xffffu;
+        uint32_t length = words[at] >> 16;
+        if (opcode == 17u && length == 2) {
+            uint32_t capability = words[at + 1];
+            if ((capability >= 61u && capability <= 68u) ||
+                capability == 4423u || capability == 4431u ||
+                capability == 5297u || capability == 6026u)
+                return 1;
+        }
+        if ((opcode >= 333u && opcode <= 366u) ||
+            opcode == 4431u || opcode == 5110u || opcode == 5111u ||
+            opcode == 5296u)
+            return 1;
+    }
+    return 0;
+}
 VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
                             const char *name, uint32_t *out)
 {
@@ -89,6 +111,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
     if (info->codeSize > 16 * 1024 * 1024 || info->codeSize > SIZE_MAX - sizeof(struct VkShaderModule_T))
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (!module_valid(info->pCode, info->codeSize / 4)) return INVALID;
+    if (subgroup_module_unsupported(info->pCode, info->codeSize / 4))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!ps5vk_spirv_validate_ubo_layout(info->pCode, info->codeSize / 4,
             !!(d->enabled_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT)))
         return INVALID;
