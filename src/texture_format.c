@@ -28,6 +28,7 @@
 #define CAP_DEPTH PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT
 #define CAP_VERTEX PS5VK_FORMAT_CAP_VERTEX_BUFFER
 #define CAP_UTEXEL PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER
+#define CAP_STORAGE_IMAGE PS5VK_FORMAT_CAP_STORAGE_IMAGE
 
 /* Sampled row: the GFX1013 word/selectors/texel size are the pinned GPL
  * encoding. ENABLED carries additional directly qualified roles. */
@@ -149,7 +150,7 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R16G16B16A16_SINT, 8, UINT32_C(0x04600000), 4, 5, 6, 7,
             CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R32_UINT, 4, UINT32_C(0x01400000), 4, 0, 0, 1,
-            CAP_VERTEX | CAP_UTEXEL, 0),
+            CAP_VERTEX | CAP_UTEXEL, CAP_SRC | CAP_STORAGE_IMAGE),
     SAMPLED(VK_FORMAT_R32_SINT, 4, UINT32_C(0x01500000), 4, 0, 0, 1,
             CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R32G32_UINT, 8, UINT32_C(0x03e00000), 4, 5, 0, 1,
@@ -336,6 +337,7 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
         {VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, PS5VK_FORMAT_CAP_COLOR_ATTACHMENT},
         {VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
          PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT},
+        {VK_IMAGE_USAGE_STORAGE_BIT, PS5VK_FORMAT_CAP_STORAGE_IMAGE},
     };
     for (unsigned i = 0; i < sizeof(roles) / sizeof(roles[0]); ++i)
         if ((usage & roles[i].usage) && !(w & roles[i].capability))
@@ -347,6 +349,17 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
         (usage == VK_IMAGE_USAGE_SAMPLED_BIT ||
          usage == (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
         return VK_TRUE;
+    /* The BDA result image is a resource-only R32_UINT UAV over padded
+     * linear backing. Its clear, compute write and readback use all three
+     * declared roles in GENERAL. */
+    if (format == VK_FORMAT_R32_UINT &&
+        (w & (PS5VK_FORMAT_CAP_STORAGE_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_SRC |
+              PS5VK_FORMAT_CAP_TRANSFER_DST)) ==
+            (PS5VK_FORMAT_CAP_STORAGE_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_SRC |
+             PS5VK_FORMAT_CAP_TRANSFER_DST) &&
+        usage == (VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+        return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_TRANSFER_DST) && usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT)
         return VK_TRUE;
     /* The standalone transfer roles. A depth format is excluded: its transfer
@@ -355,6 +368,7 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
      * has no path here - it would be neither the tiled depth attachment the
      * Z_X equation describes nor a padded linear one. */
     if ((w & PS5VK_FORMAT_CAP_TRANSFER_SRC) &&
+        format != VK_FORMAT_R32_UINT &&
         !(w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT) &&
         (usage == VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
          usage == (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))

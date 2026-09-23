@@ -34,7 +34,7 @@ DEPS = [
         # options to enable for each negotiated logical-device feature.
         # PR 25 fixes compute subgroup-ID lowering and the fixed wave32
         # compiler contract. Public subgroup reporting remains disabled.
-        "pin": "ee7ecd030e9b3f5ddac72ccb69ebaa6535515ace",
+        "pin": "ee8959186cfb1f5c0a574d1e2ee329aad1fe2747",
     },
     {
         "name": "opengnm",

@@ -16,6 +16,7 @@
 #include "physical_device_profile.h"
 #include "texture_copy.h"
 #include "texture_layout.h"
+#include "graphics_formats.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -145,6 +146,89 @@ static void submit_and_wait(VkCommandBuffer command)
     assert(vkQueueSubmit(&device->queue, 1, &si, fence) == VK_SUCCESS);
     assert(vkWaitForFences(device, 1, &fence, VK_TRUE, 1000000000ull) == VK_SUCCESS);
     vkDestroyFence(device, fence, NULL);
+}
+
+static void bda_storage_image_trace(void)
+{
+    enum { DIM=8 };
+    const VkImageUsageFlags usage=VK_IMAGE_USAGE_STORAGE_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkFormatProperties format={0};
+    ps5vk_graphics_format_properties(VK_FORMAT_R32_UINT,&format);
+    assert(format.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
+    VkImageFormatProperties properties={0};
+    assert(ps5vk_graphics_image_properties(VK_FORMAT_R32_UINT,VK_IMAGE_TYPE_2D,
+        VK_IMAGE_TILING_OPTIMAL,usage,0,1u<<20,&properties)==VK_SUCCESS);
+    assert(properties.maxExtent.width==8 && properties.maxExtent.height==8 &&
+        properties.maxMipLevels==1 && properties.maxArrayLayers==1);
+    VkImageCreateInfo info={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R32_UINT,
+        .extent={DIM,DIM,1},.mipLevels=1,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+        .usage=usage,.sharingMode=VK_SHARING_MODE_EXCLUSIVE};
+    VkImage image=VK_NULL_HANDLE;
+    info.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    assert(vkCreateImage(device,&info,NULL,&image)==VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+    info.usage=usage;
+    info.extent.width=DIM+1;
+    assert(vkCreateImage(device,&info,NULL,&image)==VK_ERROR_FORMAT_NOT_SUPPORTED && !image);
+    info.extent.width=DIM;
+    assert(vkCreateImage(device,&info,NULL,&image)==VK_SUCCESS);
+    VkMemoryRequirements requirements={0};
+    vkGetImageMemoryRequirements(device,image,&requirements);
+    VkMemoryAllocateInfo allocation={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=requirements.size,.memoryTypeIndex=0};
+    VkDeviceMemory memory=VK_NULL_HANDLE;
+    assert(vkAllocateMemory(device,&allocation,NULL,&memory)==VK_SUCCESS);
+    assert(vkBindImageMemory(device,image,memory,0)==VK_SUCCESS);
+    void *mapped=NULL;
+    assert(vkMapMemory(device,memory,0,VK_WHOLE_SIZE,0,&mapped)==VK_SUCCESS);
+    VkImageViewCreateInfo view_info={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=image,.viewType=VK_IMAGE_VIEW_TYPE_2D,.format=VK_FORMAT_R32_UINT,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+    VkImageView view=VK_NULL_HANDLE;
+    assert(vkCreateImageView(device,&view_info,NULL,&view)==VK_SUCCESS);
+    void *buffer_mapped=NULL;
+    VkBuffer readback=make_buffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT,DIM*DIM*4,
+        &buffer_mapped);
+    VkCommandBuffer command=begin();
+    VkImageMemoryBarrier initial=transfer_barrier(image,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL,0,VK_ACCESS_TRANSFER_WRITE_BIT);
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&initial);
+    VkClearColorValue clear={.uint32={0,0,0,0}};
+    VkImageSubresourceRange range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+    vkCmdClearColorImage(command,image,VK_IMAGE_LAYOUT_GENERAL,&clear,1,&range);
+    VkMemoryBarrier to_shader={.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT};
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&to_shader,0,NULL,0,NULL);
+    VkMemoryBarrier to_transfer={.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT};
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&to_transfer,0,NULL,0,NULL);
+    VkBufferImageCopy region={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .imageExtent={DIM,DIM,1}};
+    vkCmdCopyImageToBuffer(command,image,VK_IMAGE_LAYOUT_GENERAL,readback,1,&region);
+    assert(vkEndCommandBuffer(command)==VK_SUCCESS);
+    assert(command->operation_count==5 &&
+        command->operations[0].type==PS5VK_IMAGE_BARRIER &&
+        command->operations[1].type==PS5VK_CLEAR_COLOR_IMAGE &&
+        command->operations[2].type==PS5VK_BARRIER &&
+        command->operations[3].type==PS5VK_BARRIER &&
+        command->operations[4].type==PS5VK_COPY_IMAGE_BUFFER);
+    assert(ps5vk_image_linear_execute(device,&command->operations[0])==VK_SUCCESS);
+    assert(ps5vk_image_transfer_execute(device,&command->operations[1])==VK_SUCCESS);
+    for(uint32_t y=0;y<DIM;++y)
+        for(uint32_t x=0;x<DIM;++x)
+            ((uint32_t *)((unsigned char *)mapped+y*256))[x]=1;
+    assert(ps5vk_image_linear_execute(device,&command->operations[4])==VK_SUCCESS);
+    for(uint32_t i=0;i<DIM*DIM;++i)assert(((uint32_t *)buffer_mapped)[i]==1);
+    vkDestroyBuffer(device,readback,NULL);
+    vkDestroyImageView(device,view,NULL);
+    vkDestroyImage(device,image,NULL);
 }
 
 /* The exact input-attachment resource the pinned multiview helper needs: 2D
@@ -336,6 +420,7 @@ int main(void)
     VkCommandPoolCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                    .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
     assert(vkCreateCommandPool(device, &pci, NULL, &pool) == VK_SUCCESS);
+    bda_storage_image_trace();
     readback_return_recording();
 
     const VkImageUsageFlags transfer_usage =

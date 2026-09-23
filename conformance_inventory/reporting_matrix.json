@@ -1411,7 +1411,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_IMAGE_USAGE_STORAGE_BIT family in src/graphics_formats.h",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageExtendedFormats",
       "kind": "feature",
       "profile": "graphics",
@@ -1424,7 +1424,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_IMAGE_USAGE_STORAGE_BIT family in src/graphics_formats.h",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageMultisample",
       "kind": "feature",
       "profile": "graphics",
@@ -1437,7 +1437,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_IMAGE_USAGE_STORAGE_BIT family in src/graphics_formats.h",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageReadWithoutFormat",
       "kind": "feature",
       "profile": "graphics",
@@ -1450,7 +1450,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_IMAGE_USAGE_STORAGE_BIT family in src/graphics_formats.h",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageWriteWithoutFormat",
       "kind": "feature",
       "profile": "graphics",
@@ -2583,7 +2583,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_IMAGE_USAGE_STORAGE_BIT family in src/graphics_formats.h",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageExtendedFormats",
       "kind": "feature",
       "profile": "compute",
@@ -2596,7 +2596,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_IMAGE_USAGE_STORAGE_BIT family in src/graphics_formats.h",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageMultisample",
       "kind": "feature",
       "profile": "compute",
@@ -2609,7 +2609,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_IMAGE_USAGE_STORAGE_BIT family in src/graphics_formats.h",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageReadWithoutFormat",
       "kind": "feature",
       "profile": "compute",
@@ -2622,7 +2622,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_IMAGE_USAGE_STORAGE_BIT family in src/graphics_formats.h",
+      "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
       "feature": "shaderStorageImageWriteWithoutFormat",
       "kind": "feature",
       "profile": "compute",
@@ -7491,11 +7491,14 @@
     },
     {
       "applicable_cts": {
-        "cases": [],
-        "note": "mandatory format families are not implemented; no selected case covers them",
-        "status": "not-selected"
+        "cases": [
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
+        ],
+        "note": "original compute BDA leaves exercise the bounded R32_UINT storage image",
+        "status": "diagnostic"
       },
-      "detail": "advertised format VK_FORMAT_R32_UINT lacks mandatory VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32_UINT reports VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT in optimalTilingFeatures",
       "feature": "VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT",
       "format": "VK_FORMAT_R32_UINT",
       "kind": "format-cell",
@@ -7503,7 +7506,7 @@
       "scope": "optimalTilingFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -17451,7 +17454,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 24; blocker: no storage image descriptor type is accepted",
+      "detail": "core: reported 0 must be >= 24; blocker: bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
       "kind": "limit",
       "limit": "maxDescriptorSetStorageImages",
       "profile": "graphics",
@@ -17466,7 +17469,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 24; blocker: no storage image descriptor type is accepted",
+      "detail": "core: reported 0 must be >= 24; blocker: bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
       "kind": "limit",
       "limit": "maxDescriptorSetStorageImages",
       "profile": "compute",
@@ -20781,7 +20784,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 4; blocker: no storage image descriptor type is accepted",
+      "detail": "core: reported 0 must be >= 4; blocker: bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
       "kind": "limit",
       "limit": "maxPerStageDescriptorStorageImages",
       "profile": "graphics",
@@ -20796,7 +20799,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 0 must be >= 4; blocker: no storage image descriptor type is accepted",
+      "detail": "core: reported 0 must be >= 4; blocker: bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
       "kind": "limit",
       "limit": "maxPerStageDescriptorStorageImages",
       "profile": "compute",
@@ -26283,12 +26286,12 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:shaderStorageImageMultisample: reported 0 must be >= 1; blocker: no storage image format is advertised",
+      "detail": "cts-gated-off:shaderStorageImageMultisample: reported 1 must be >= 1",
       "kind": "limit",
       "limit": "storageImageSampleCounts",
       "profile": "graphics",
-      "reported": 0,
-      "verdict": "blocker"
+      "reported": 1,
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -26298,7 +26301,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "cts-gated-off:shaderStorageImageMultisample: reported 0 must be >= 1; blocker: no storage image format is advertised",
+      "detail": "cts-gated-off:shaderStorageImageMultisample: reported 0 must be >= 1; blocker: compute-only profile has no image objects; graphics supports one-sample R32_UINT storage images",
       "kind": "limit",
       "limit": "storageImageSampleCounts",
       "profile": "compute",
@@ -27486,14 +27489,14 @@
       "satisfied": 60
     },
     "formats": {
-      "blocker": 522,
+      "blocker": 521,
       "not-applicable": 2,
-      "satisfied": 140
+      "satisfied": 141
     },
     "limits": {
-      "blocker": 61,
+      "blocker": 60,
       "not-applicable": 656,
-      "satisfied": 137
+      "satisfied": 138
     },
     "shader_capabilities": {
       "not-audited": 2,

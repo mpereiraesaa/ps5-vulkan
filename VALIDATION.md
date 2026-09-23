@@ -1908,10 +1908,10 @@ public query paths rather than from a copied table:
 
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
-to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 140 mandatory format-feature cells satisfied
-with 522 documented per-format blockers, 60 format-query consistency
-checks, and twelve shader-capability rows satisfied with two precision rows
+to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
+the code path that enforces them, 141 mandatory format-feature cells satisfied
+with 521 documented per-format blockers, 60 format-query consistency
+checks, and eighteen shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
 
@@ -4374,7 +4374,9 @@ fragment coordinate the shader reads. Every payload above was built and run
 with that revision - the driver passes `sample_shading_enable` into
 `PsbcCompileOptions`, which does not exist before it - so
 `tools/prepare_compiler_deps.py` has to pin the merged commit before this
-promotion reproduces from a fresh clone. The pin still names `be4d043`.
+promotion reproduces from a fresh clone. The current pin,
+`ee8959186cfb1f5c0a574d1e2ee329aad1fe2747`, includes that revision and
+the bounded storage-image descriptor ABI.
 
 ## Standard uniform buffer layout (2026-09-23)
 
@@ -4682,3 +4684,19 @@ SHA-256 `3fe1acd7609f1719b3eaa997f4f636140b007b5f969e1e57e12e2b24093467c6`.
 The BDA implementation and bounded GPU path are recorded independently from
 the blocked public API and original CTS axes. Firmware was not recorded in
 these T08 receipts.
+
+The bounded `VK_FORMAT_R32_UINT` storage-image route now accepts the 8×8
+compute output used by those original BDA leaves: a one-sample 2D image in
+`GENERAL`, an image-store descriptor, integer clear and image-to-buffer
+readback. With the BDA diagnostic bit enabled, the unchanged original
+selection passed 496/496 twice on eboot
+`a6afe5d198846088c4e4bec426f0be99250359dd6862888df0003163b6fa32c4`
+(runs `run-563312724497565` and `run-563382634987775`). The two
+run logs have SHA-256
+`88f664187eb8ff4cce1cc1b06fb34ff4cbbe48c237363f09dd3427a864e03afb`
+and `ebfbd09171469f263ebdae01c42898ad0d62f4a1164f770ac9225b8e8a3de31f`.
+The ordinary shipping profile still reports BDA false; its frozen acceptance selection
+passed 505/505 on eboot
+`adb3c13c121f25967b54d94b1a92fe401f96023adc4660cb598f741c3ab80fe4`
+(`run-563826813332835`). The bounded storage-image result does not qualify
+other formats, image loads or atomics.

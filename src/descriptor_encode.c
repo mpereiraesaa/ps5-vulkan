@@ -1,6 +1,52 @@
 #include "descriptor_encode.h"
 #include "texture_format.h"
+#include "texture_layout.h"
+#include "vk_image.h"
 #include <string.h>
+
+/* The compute UAV uses the same GFX10 T# fields as an ordinary 2D texture,
+ * but carries no sampler. The exact supported image is one R32_UINT plane
+ * over padded rows, with GENERAL layout and 256-byte address alignment. */
+static VkResult storage_image_descriptor(VkDevice device,
+    const VkDescriptorImageInfo *info, uint32_t out[8])
+{
+    if (!info || !info->imageView || info->imageLayout != VK_IMAGE_LAYOUT_GENERAL)
+        return VK_ERROR_UNKNOWN;
+    VkImageView view = info->imageView;
+    VkImage image = view->image;
+    if (view->device != device || !ps5vk_storage_image(image) ||
+        image->layout != VK_IMAGE_LAYOUT_GENERAL ||
+        view->format != VK_FORMAT_R32_UINT || view->view_type != VK_IMAGE_VIEW_TYPE_2D ||
+        view->range.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+        view->range.baseMipLevel || view->range.levelCount != 1 ||
+        view->range.baseArrayLayer || view->range.layerCount != 1)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    const struct ps5vk_texture_format *format =
+        ps5vk_texture_format_lookup(VK_FORMAT_R32_UINT);
+    if (!format || !(format->witnessed & PS5VK_FORMAT_CAP_STORAGE_IMAGE))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t pitch; uint64_t needed;
+    if (ps5vk_texture_row_layout(4, image->info.extent.width,
+            image->info.extent.height, &pitch, &needed))
+        return VK_ERROR_UNKNOWN;
+    void *address = NULL; VkDeviceSize bytes = 0;
+    if (ps5vk_image_span(device, image, &address, &bytes) != VK_SUCCESS ||
+        !address || bytes < needed || ((uintptr_t)address & 255u) ||
+        (uintptr_t)address >= (UINT64_C(1) << 48))
+        return VK_ERROR_UNKNOWN;
+    const uint64_t gpu = (uintptr_t)address;
+    const uint32_t width = image->info.extent.width - 1;
+    uint32_t words[8] = {0};
+    words[0] = (uint32_t)(gpu >> 8);
+    words[1] = (uint32_t)(gpu >> 40) | format->descriptor_format_word |
+        ((width & 3u) << 30);
+    words[2] = (width >> 2) | ((image->info.extent.height - 1) << 14) | (1u << 31);
+    words[3] = ps5vk_texture_format_dst_sel(format) | (9u << 28);
+    words[4] = pitch / 4u - 1u;
+    words[5] = 4u << 20;
+    memcpy(out, words, sizeof(words));
+    return VK_SUCCESS;
+}
 
 VkResult ps5vk_buffer_descriptor(VkDevice device, const VkDescriptorBufferInfo *info,
                                  VkDeviceSize dynamic_offset, uint32_t out[4])
@@ -42,13 +88,17 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
     for (uint32_t i = 0; i < program->descriptor_count; ++i) {
         const struct ps5vk_program_descriptor *p = &program->descriptors[i];
         if (p->set != set_index) continue;
+        const uint32_t record_dwords =
+            p->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u;
         if (p->binding >= PS5VK_MAX_BINDINGS ||
-            p->table_dword > 124 || p->table_dword % 4 ||
-            capacity_dwords < p->table_dword + 4)
+            p->table_dword > 128u - record_dwords || p->table_dword % 4 ||
+            capacity_dwords < p->table_dword + record_dwords)
             return VK_ERROR_UNKNOWN;
         for (uint32_t j = 0; j < i; ++j)
             if (program->descriptors[j].set == set_index &&
-                (program->descriptors[j].table_dword == p->table_dword ||
+                ((program->descriptors[j].table_dword < p->table_dword + record_dwords &&
+                  p->table_dword < program->descriptors[j].table_dword +
+                    (program->descriptors[j].type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u)) ||
                  (program->descriptors[j].binding == p->binding &&
                   program->descriptors[j].element == p->element)))
                 return VK_ERROR_UNKNOWN;
@@ -57,6 +107,16 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
         if (binding->count <= p->element || index >= PS5VK_MAX_DESCRIPTORS ||
             !set->defined[index] || set->signature.type[p->binding] != p->type)
             return VK_ERROR_UNKNOWN;
+        if (p->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+            const VkDescriptorImageInfo *info = &set->images[index];
+            if (!set->image_resources[index] || !info->imageView ||
+                set->image_resources[index] != info->imageView->image ||
+                storage_image_descriptor(device, info,
+                    scratch + p->table_dword) != VK_SUCCESS)
+                return VK_ERROR_UNKNOWN;
+            if (extent < p->table_dword + 8) extent = p->table_dword + 8;
+            continue;
+        }
         if (p->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
             VkBufferView view = set->texel_views[index];
             if (!view || view->device != device || !view->buffer) return VK_ERROR_UNKNOWN;
