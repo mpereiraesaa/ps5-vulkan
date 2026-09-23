@@ -190,7 +190,7 @@ void main() {
                                     f"{stage} Broadcast was discarded by the compiler")
 
     def test_extended_arithmetic_add_lowering(self):
-        """Original CTS arithmetic formats must retain a live reduce in PSBC ISA."""
+        """Original CTS Add reductions and scans must retain live PSBC ISA."""
         glslang = shutil.which("glslangValidator")
         archive = ROOT / "build/libpsbc.host.a"
         factory = CTS / "vktSubgroupsArithmeticTests.cpp"
@@ -198,8 +198,11 @@ void main() {
         if not all((glslang, archive.is_file(), factory.is_file(),
                     utilities.is_file())):
             self.skipTest("pinned CTS, host PSBC archive and glslang required")
-        self.assertIn("createSubgroupsArithmeticTests", factory.read_text())
-        self.assertIn("subgroups::getAllFormats()", factory.read_text())
+        factory_source = factory.read_text()
+        self.assertIn("createSubgroupsArithmeticTests", factory_source)
+        self.assertIn("subgroups::getAllFormats()", factory_source)
+        for case in ("OPTYPE_ADD", "OPTYPE_INCLUSIVE_ADD", "OPTYPE_EXCLUSIVE_ADD"):
+            self.assertIn(case, factory_source)
         format_source = utilities.read_text()
         self.assertIn("getAllFormats()", format_source)
         formats = {
@@ -244,8 +247,11 @@ void main() {
                                   "layout(set=0,binding=0,std430) buffer Data "
                                   "{ uint values[]; } data;\n")
                         signatures = {}
-                        for variant, operation in (
-                            ("add", "subgroupAdd(value)"), ("control", "value")):
+                        for variant, operation, group_operation in (
+                            ("add", "subgroupAdd(value)", 0),
+                            ("inclusive", "subgroupInclusiveAdd(value)", 1),
+                            ("exclusive", "subgroupExclusiveAdd(value)", 2),
+                            ("control", "value", None)):
                             outputs = "\n".join(
                                 f"data.values[gl_GlobalInvocationID.x * {width}u + {index}u]"
                                 f" = uint(result{'.' + 'xyzw'[index] if width > 1 else ''});"
@@ -262,9 +268,9 @@ void main() {
                                            capture_output=True, text=True)
                             adds = [args for op, args in instructions(binary.read_bytes())
                                     if op == opcode]
-                            self.assertEqual(len(adds), int(variant == "add"))
+                            self.assertEqual(len(adds), int(group_operation is not None))
                             if adds:
-                                self.assertEqual(adds[0][3], 0)  # Reduce
+                                self.assertEqual(adds[0][3], group_operation)
                             result = subprocess.run(
                                 [str(probe), "subgroup", str(binary), kind],
                                 capture_output=True, text=True)
@@ -274,7 +280,8 @@ void main() {
                                 r"fnv64=([0-9a-f]{16})\n", result.stdout)
                             self.assertIsNotNone(match, result.stdout)
                             signatures[variant] = match.group(1)
-                        self.assertNotEqual(signatures["add"], signatures["control"])
+                        self.assertEqual(len(set(signatures.values())), len(signatures),
+                                         "reduce, scans and control must have distinct ISA")
 
 
 if __name__ == "__main__":
