@@ -261,8 +261,13 @@ primitives), `min_sample_shading_enabled` and `min_sample_shading_disabled`
 (both a quad). At the counts this profile serves, with the sparse variants
 excluded because no sparse binding is advertised here and with
 `primitive_point` excluded because its 3.0 point size needs the `largePoints`
-feature this profile does not advertise, that is 50 leaves under
-`t06-sample-rate-pending`; each one renders the multisampled colour target,
+feature this profile does not advertise, that is 50 leaves, which the T06 line
+first held under the `t06-sample-rate-pending` diagnostic category and then
+split when the feature was promoted on 2026-09-23: the thirty triangle and quad
+shapes are the `sample-rate-shading` acceptance group and the twenty line and
+`primitive_point_1px` shapes sit in `plain-point-line-pipeline-refused`, because
+what refuses them is this profile's pipeline resolver and not the feature. Each
+of them renders the multisampled colour target,
 resolves it into the single-sample image and then reads the multisampled colour
 back once per sample through `subpassLoad(imageMS, sampleNdx)`, so a build that
 shades once per pixel cannot pass it. The category's traceability is derived by
