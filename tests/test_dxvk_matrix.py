@@ -25,6 +25,8 @@ class DxvkMatrixTests(unittest.TestCase):
     def test_memory_model_measurement_guard_does_not_change_shipping_extensions(self):
         extensions = matrix.implemented_device_extensions()
         self.assertNotIn("VK_KHR_vulkan_memory_model", extensions)
+        self.assertNotIn("VK_KHR_device_group", extensions)
+        self.assertNotIn("VK_KHR_buffer_device_address", extensions)
         evidence = json.loads(matrix.EVIDENCE.read_text())
         self.assertEqual(evidence["capability_probe"]["device_extensions"],
                          len(extensions))

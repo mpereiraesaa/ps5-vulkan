@@ -255,6 +255,11 @@ def main():
             raise SystemExit("PS5VK_MEMORY_MODEL_DIAGNOSTIC must be 0 or 1")
         if memory_model_diagnostic == "1":
             native_cflags.append("-DPS5VK_MEMORY_MODEL_DIAGNOSTIC=1")
+        bda_diagnostic = os.environ.get("PS5VK_BDA_DIAGNOSTIC", "0")
+        if bda_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_BDA_DIAGNOSTIC must be 0 or 1")
+        if bda_diagnostic == "1":
+            native_cflags.append("-DPS5VK_BDA_DIAGNOSTIC=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:

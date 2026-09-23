@@ -75,7 +75,7 @@ def main() -> None:
         "#include <stdint.h>\n" + emit_array("t08_bda_spirv", shader),
         encoding="utf-8")
 
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), PS5VK_BDA_DIAGNOSTIC="1")
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t08_bda_witness/main.c"
