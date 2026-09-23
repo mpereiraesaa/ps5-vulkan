@@ -4410,6 +4410,7 @@ evidence, not a legal public feature or original CTS result.
 | Opposite integer signedness in scalar through vec4 `subgroupBroadcast` and `subgroupBroadcastFirst` | Compute | Signed Int8, unsigned Int16 and signed Int64: 24 typed SPIR-V modules compiled to nonempty machine code; GPU proof below covers signed Int64 vec4 BroadcastFirst only | False |
 | Negative signed Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | Distinct negative high and positive low words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
 | 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Vertex | Corrected linear-staging GPU readback: 320/320 drawn pixels across all 32 tiles matched source lane 7; the lane-ID control differed in all 320 | False |
+| Signed Int8 `subgroupBroadcast` with a runtime source ID | Vertex and fragment | Exact signed 8-bit SPIR-V and distinct live PS5 code in both stages; vertex Broadcast matched 320/320 pixels (control 0/320), while fragment Broadcast matched 104/104 active-source pixels (control 8/104), with zero invalid colors or guards | False |
 | 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Fragment | Corrected linear-staging GPU readback: 2,004/2,004 pixels with active source lane matched lane 7 across a full 2,048-pixel, 32-tile target; the lane-ID control differed in 1,937 eligible pixels | False |
 | Unsigned Int8, signed Int16, unsigned Int64 and Float16 `subgroupAdd` reduction, scalar through vec4 | Compute | All 16 typed SPIR-V modules compiled to live PS5 machine code distinct from no-reduction controls; GPU evidence below covers unsigned Int8 vec4 and unsigned Int64 vec4 | False |
 | The same 16 type and width forms with inclusive and exclusive `subgroupAdd` scans | Compute | All 32 scan SPIR-V modules compiled to live PS5 machine code; reduce, both scans and no-op control had distinct code per form. GPU evidence below covers Int8 vec4 exclusive and Int64 vec4 inclusive only | False |
@@ -4418,7 +4419,12 @@ evidence, not a legal public feature or original CTS result.
 | Unsigned Int8 vec4 exclusive `subgroupAdd` scan | Compute | Exact per-lane four-component results including the zero first lane and eight-bit wraparound; 64 active outputs, 64 inactive slots untouched, guards zero | False |
 | Unsigned Int64 vec4 inclusive `subgroupAdd` scan | Compute | Exact per-lane high and low words of four components; 64 active outputs, 64 inactive slots untouched, guards zero | False |
 | Extended operand types with `subgroupMul`, `subgroupMin`, `subgroupMax` and integer `subgroupAnd`/`Or`/`Xor`, each reduce/inclusive/exclusive | Compute | 252 original-CTS-selected typed forms compiled to distinct live PS5 machine code; GPU evidence below covers unsigned Int8 vec4 Min reduction only | False |
+| Signed Int8, unsigned Int16 and signed Int64 arithmetic, scalar through vec4, reduce/inclusive/exclusive | Compute | 252 additional original-CTS-selected forms, including Add, compiled to distinct live PS5 machine code alongside 12 no-op controls; GPU evidence below covers signed Int8 vec4 Max only | False |
 | Unsigned Int8 vec4 `subgroupMin` reduction | Compute | Four components used distinct minimum source lanes; exact results for 64 active outputs, 64 inactive slots untouched, guards zero | False |
+| Signed Int16 vec4 `subgroupMax` reduction | Compute | Four component maxima from lanes 0, 31, 17 and 25; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
+| Float16 vec4 `subgroupMax` reduction | Compute | Four component maxima from lanes 0, 31, 17 and 25; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
+| Float16 vec4 `subgroupMul` reduction | Compute | Four exact products from distinct lane pairs with group-varying factors; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
+| Signed Int8 vec4 `subgroupMax` with negative values | Compute | Four component maxima from lanes 0, 31, 17 and 25, including negative outputs and mixed-sign comparisons; 64 exact active outputs across two workgroups, 64 inactive slots untouched, guards zero | False |
 | Other subgroup operations or graphics stages | None | No reviewed public stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4513,6 +4519,35 @@ slots, guards, complete transport and title closure with zero mismatches:
 `20260923T162745545Z`, signed eboot SHA-256
 `5027881ae2c5ddd8188597423b73cb47b544fb9ba45a67cc04b55ecabbb0625c`.
 
+The source-derived arithmetic compiler contract also covers signed Int8,
+unsigned Int16 and signed Int64, scalar through vec4, for Add, Mul, Min, Max
+and integer And, Or and Xor across reduce and both scan modes. These 252
+additional typed forms each emitted nonempty PS5 machine code distinct from
+the other operations and a no-op control. Compilation alone does not prove
+their GPU results.
+
+Separate signed Int16 vec4 and Float16 vec4 Max reductions selected component
+maxima from lanes 0, 31, 17 and 25. A Float16 vec4 Mul reduction used four
+distinct lane pairs and group-varying exact products. Each diagnostic checked
+all four components for 64 active outputs across two workgroups, preserved 64
+inactive slots, and reported zero value or guard mismatches with bounded
+fences and complete transport. The Int16 Max run was `20260923T172928053Z`
+(signed eboot SHA-256
+`b8a761d25aab1e619413694c8a2ea0fcc5eefb530842d27b2166d22ca9e6d26e`);
+Float16 Max was `20260923T173238713Z` (signed eboot SHA-256
+`737bd68549d4c9719580440c6c3e848c01e7a919cc0ea95371b2cbe65396725d`);
+Float16 Mul was `20260923T173613150Z` (signed eboot SHA-256
+`dfa58860aeff09ad8ad860660542f688d1ee398b1038464133edb0952c7eaf11`).
+
+A signed Int8 vec4 Max reduction used negative result components and
+mixed-sign inputs, so an unsigned comparison would change the oracle. Four
+component maxima came from lanes 0, 31, 17 and 25. All 64 active outputs
+across two workgroups matched, 64 inactive slots and guards remained intact,
+and the 300 ms fence, transport and title lifecycle completed. Run
+`20260923T175308641Z` used signed eboot SHA-256
+`6e098cbaa26ed2abef696cc7f4dc9bd322d304dbe4ef113ff8bba484b3644812`.
+These diagnostics do not change the public subgroup feature bits.
+
 A separate vertex-stage diagnostic used a runtime source ID loaded from a
 uniform buffer and passed the subgroup result through a flat varying to a
 fragment color attachment. Its control and Broadcast variants completed a
@@ -4533,6 +4568,39 @@ run was `20260923T171645174Z` (signed eboot SHA-256
 `50ec8a044661870601e605531f84f9fd7a1a5df76d7cb37fcb994dca81ef363e`);
 the Broadcast run was `20260923T171723313Z` (signed eboot SHA-256
 `55f6915717b934d5f9330fcbac94179db68df759edb66b95a236b75f50c07fb9`).
+
+A separate signed Int8 vertex diagnostic used a runtime source ID 7 from a
+uniform buffer. Its signed 8-bit Broadcast result for source lane 7 was
+negative nine, encoded as red byte 247; a lane-ID control used the same output
+path. Host contracts checked the exact signed 8-bit SPIR-V result and runtime
+source load, and distinct live PS5 machine code, in both vertex and fragment
+stages. On firmware 12.02, corrected linear-staging GPU readback covered 320
+pixels across all 32 tile regions for each vertex draw. The control differed
+from source lane 7 in all 320 pixels; Broadcast matched in all 320. Both had
+zero invalid colors and source-buffer guard changes, bounded fences, complete
+transport, clean title closure and exact accepted-payload restoration. The
+control run was `20260923T182435799Z` (signed eboot SHA-256
+`668bf61201e9bc84e2f1c0441cce98658864c46d3a2282d3780b2b8d8a933097`);
+the Broadcast run was `20260923T182501820Z` (signed eboot SHA-256
+`95bcc2813f1a5d58ce56b695ed33766366f6c9d2eff9558eb803268103c7e731`).
+These diagnostic runs establish vertex-stage GPU behavior without advertising
+a public subgroup feature.
+
+A separate signed Int8 fragment diagnostic loaded source ID 7 from a uniform
+buffer, checked its active state with a subgroup ballot, and compared a
+runtime Broadcast to a lane-local control. The signed 8-bit source-lane value
+was negative nine, encoded as red byte 247. Corrected linear-staging readback
+covered 320 pixels across all 32 tile regions. Of these, 104 had an active
+source lane: the control matched 8 and differed 96; Broadcast matched all
+104. The other 216 pixels carried the inactive-source marker. Both runs had
+zero invalid colors and source-buffer guard changes, bounded fences,
+complete transport, clean title closure and exact accepted-payload
+restoration. The control run was `20260923T183516491Z` (signed eboot SHA-256
+`dd974b35bdab593e8c0b75cbf6c9c02756f5bbe4b4f1955eb7f2812f3e2d76de`);
+the Broadcast run was `20260923T183544471Z` (signed eboot SHA-256
+`456653d3220afc831e7ee6c11d81dcfef56f38f588d212f565d4b138e40abfb4`).
+This is diagnostic fragment-stage GPU evidence; neither subgroup feature is
+advertised publicly.
 
 A separate fragment-stage diagnostic loaded source ID 7 from a uniform buffer
 and used a ballot to identify pixels whose source lane was active. Its control
