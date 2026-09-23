@@ -63,6 +63,41 @@ official conformance process remain separate obligations.
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
 | 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
 
+### T07 Part2 diagnostic status (2026-09-23)
+
+The T07 Part2 diagnostics have strict source-derived hardware passes for the
+`query_pool.occlusion_query.basic_precise` D16 diagnostic and the bounded D32
+depth-gather case, each repeated twice on the same diagnostic eboot. The
+default-off frozen selection also passed 362/362 before the BC Part1 integration.
+These results qualify narrow diagnostic paths only: the public query, gather
+and format bits remain off, and the runs do not satisfy the four-axis DXVK
+promotion gate. Part1 has since reported a separate successful public-SDK
+cube-array witness; that result is not combined acceptance and does not promote
+the feature.
+
+A second isolated Part2 port is based on Part1's fixed commit `722973c`, which
+includes T08 #406. It preserves T08 feature bits 20/21/22, UBO layout bit 23,
+BC bit 24, cube-array bit 25, gather bit 26 and precise-query bit 27. PSBC host
+and PS5 archives were rebuilt at `ee8959186cfb1f5c0a574d1e2ee329aad1fe2747`.
+Full `make check` passed on exact pre-integration HEAD
+`0364726c3fbc20db932789be4ae61cc50ecfd3b4`: 652 Python tests in 103 modules
+(48 skipped), C contracts, reporting audit, SDK consumers and runtime compiler.
+This is host validation only; no combined hardware/CTS run or public feature
+promotion is claimed.
+
+#### Review status (2026-09-24)
+
+The T08 baseline was published to `codex/t07-part1-final` at `722973c`. Five
+review PRs are now staged in order: #425 (CTS factory registration), #426
+(diagnostic selection), #427 (gather compiler gate), #428 (host query state),
+and #429 (host ZPASS control encoding). They remain open and unmerged. Exact
+`make check` passes on #428 HEAD `b69dde1` and #429 HEAD `01d167d` (643 Python
+tests in 102 modules, one skip, plus C, SDK, reporting, upstream-selection and
+compiler checks). These results are host-only. The BC work and combined
+hardware/CTS acceptance remain outstanding; no public feature bit is promoted.
+After serial integration onto the final branch, rerun combined checks and
+canonical acceptance before reassessing CTS eligibility or public reporting.
+
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
 is stable while readiness and completion are derived from the live matrix, so implemented

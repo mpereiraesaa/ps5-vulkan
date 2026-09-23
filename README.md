@@ -31,7 +31,12 @@ results; visual output is not the sole correctness signal.
 - Extension-negotiated 8-bit and 16-bit storage-buffer access
 - Push constants and scalar specialization constants in compute and runtime graphics
 - Vulkan pipeline-cache objects with a normative header export (no portable compiled-code records yet)
-- Occlusion query-pool lifetime (result retrieval deferred) and empty sparse image queries
+- Occlusion query-pool lifetime; result retrieval remains disabled in the
+  default profile. T07 diagnostics pass one precise D16 occlusion leaf and one
+  D32 depth-gather leaf twice each, but neither behavior is advertised or
+  promoted. The T08 baseline is `722973c`; T07 Part2 changes are under review
+  in stacked PRs #425–#429. Combined hardware/CTS acceptance and feature
+  promotion remain pending
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list and
   triangle-strip draws (the strip has host coverage but no native witness yet);

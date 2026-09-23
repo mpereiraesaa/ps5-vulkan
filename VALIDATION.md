@@ -4873,3 +4873,89 @@ receipt; it was closed and is not counted as an acceptance run. Firmware was
 not independently recorded in these T08 receipts. The bounded result does
 not claim capture replay, multiple-device addressing or additional image
 formats.
+
+## T07 Part2 precise-query and depth-gather diagnostics (2026-09-23)
+
+This isolated diagnostic work exercises two source-derived CTS leaves. All
+diagnostic switches are default-off; it does not change the shipping format
+table, feature bits, frozen selection or public query behavior.
+
+The exact `dEQP-VK.query_pool.occlusion_query.basic_precise` D16 profile passed
+twice with selection SHA-256
+`a356b3c615fd7ed79f0e6f744e7fd7825bb13209645006e091a4e95a42d6dafc` and
+diagnostic eboot SHA-256
+`871d862aacf5c17b23b522cb02596ce3e68783b7a796f6ffffa676476817506e`:
+
+- run `run-556986329375935`, report SHA-256
+  `6112f5896f8a7b51805b3f2290da21fa40bc6ce3d67bee62f901f0dd9fe11f24`;
+- run `run-557034144732150`, report SHA-256
+  `c858a982ced2bd3c0b1c6770881c1b5a986049ca703293119b27c88cdb80d124`.
+
+The exact D32 depth-gather case
+`dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.depth32f.size_pot.compare_less.clamp_to_edge_repeat`
+passed twice on the same diagnostic eboot. Its bounded image is 2D, 64x64,
+one layer, seven mips, sampled plus transfer-destination, with a depth-aspect
+upload and compare sampler. The measurements use selection SHA-256
+`3564731db031196812cb5ecc800d943a13679e48bac0155b7af1adeb8a8b28c0` and eboot
+SHA-256 `8aa1f7ad5d5f5993a53aefe034bd5e587b339a8382d1e0791a9f4e91bc8399fd`:
+
+- run `20260923T183058404Z`, report SHA-256
+  `2e5a711d2f82294be2645e609cacd5ad25dab7a94d46bf932ef855a0834267d2`;
+- run `20260923T183353896Z`, report SHA-256
+  `6ee8e93d336bdf5bd0c810591d9fb4280d386d9193166b576a64804757c33445`.
+
+The project console was on firmware 12.02. Each diagnostic title closed, the
+console lease was released, and the accepted eboot SHA-256
+`3028ca0e478ec1af88c82799e00c15a1e2e3899833d7aa8e8148878d2e927abf` was
+restored. The first repeat attempt collided with another console deploy and
+aborted before CTS; it produced no evidence and both wrappers restored the
+accepted payload before the dedicated repeat.
+
+For default-off neutrality, the pre-integration frozen selection passed
+362/362 on eboot SHA-256
+`d444a3cd753ac99cc315c6a84c54aed852b803c9226c698eaa5ab667c126a218`, selection
+SHA-256 `26862d1a5eb9ca93121797e1e9649b45ad753c319e3ee75624bbec3f0d995cba`,
+report SHA-256
+`2eb37864d2faaac0ae1609fbd51203699b68ef660da0e3f6a2c9fe85eca27cc4`, run
+`20260923T183623651Z`. This confirms the default build path only on the
+pre-integration tree. Full `make check` then passed on exact local candidate
+HEAD `1a43025a8d3b8b88e51e411de70068ac7c4704d4`: 575 Python tests in 91 modules,
+zero skipped; reporting audit had zero unresolved violations; the D32 gather
+host oracle, SDK consumer links, runtime compiler diagnostics and remaining
+host suite passed. `git diff --check origin/main..HEAD` was clean.
+
+### Port on the T08 baseline (2026-09-23)
+
+A separate worktree replayed the Part2 commits onto fixed Part1 commit `722973c`.
+It preserves T08 feature bits 20/21/22, UBO layout bit 23 and BC bit 24, with
+cube-array/gather/precise-query assigned bits 25/26/27. The gather compiler mask
+is bit 26. PSBC host and PS5 archives were rebuilt from
+`ee8959186cfb1f5c0a574d1e2ee329aad1fe2747`. Full `make check` passed on exact
+HEAD `0364726c3fbc20db932789be4ae61cc50ecfd3b4`: 652 Python tests in 103
+modules (48 skipped), C contracts, reporting audit, SDK consumers and runtime
+compiler. This is host validation only; it does not include combined hardware
+or CTS acceptance. Part1's separate cube-array witness has a successful
+hardware report, but the BC slice and combined acceptance remain outstanding.
+At validation time the remote Part1 final branch was still `3521401`; `722973c`
+had not been published.
+
+### Review status (2026-09-24)
+
+These focused leaves do not qualify all gather forms, general D32 sampling,
+broad precise-query semantics, or any public capability promotion. After the
+T08 baseline was published, five review PRs were prepared as a serial stack:
+#425 registers the upstream factories, #426 selects source-verified diagnostic
+leaves, #427 adds the gather compiler gate at bit 26, #428 adds bounded host
+query state and result handling, and #429 encodes precise-query ZPASS control.
+At the time of this update, the PR heads are respectively `949e9ae`, `2b724bb`,
+`7f033a7`, `b69dde1` and `01d167d`; each PR targets its predecessor except
+#425, which targets `codex/t07-part1-final` at `722973c`. None is merged.
+
+Full `make check` passed on exact #428 HEAD `b69dde1` and #429 HEAD `01d167d`:
+643 Python tests in 102 modules (one skip), C contracts, reporting audit, SDK
+consumer, upstream selection and compiler contracts. These are host checks;
+they do not prove hardware query execution or combined CTS acceptance. The
+current public-review sequence preserves the T08 bits 20/21/22, UBO bit 23,
+and the cube-array/gather/precise-query assignments 25/26/27. The BC bit 24
+and all T07 behavior remain unpromoted pending serial combined integration,
+canonical hardware acceptance and applicable CTS evidence.
