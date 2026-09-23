@@ -4374,7 +4374,9 @@ fragment coordinate the shader reads. Every payload above was built and run
 with that revision - the driver passes `sample_shading_enable` into
 `PsbcCompileOptions`, which does not exist before it - so
 `tools/prepare_compiler_deps.py` has to pin the merged commit before this
-promotion reproduces from a fresh clone. The pin still names `be4d043`.
+promotion reproduces from a fresh clone. The current pin,
+`ee8959186cfb1f5c0a574d1e2ee329aad1fe2747`, includes that revision and
+the bounded storage-image descriptor ABI.
 
 ## Standard uniform buffer layout (2026-09-23)
 
