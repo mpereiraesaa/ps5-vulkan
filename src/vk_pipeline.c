@@ -104,8 +104,8 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyShaderModule(VkDevice d, VkShaderModule m, c
     --d->pipeline_objects; ps5vk_object_free(m, &saved, custom);
 }
 
-/* Storage-only narrow capabilities are negotiated device features. Narrow
- * arithmetic and the broader storage classes remain deliberately unsupported. */
+/* OpCapability declarations that name negotiated device features. Narrow
+ * arithmetic and the broader storage classes remain unsupported. */
 static int spirv_narrow_requirements(const uint32_t *words, size_t count,
                                      uint32_t *required)
 {
@@ -120,6 +120,13 @@ static int spirv_narrow_requirements(const uint32_t *words, size_t count,
             switch (words[at + 1]) {
             case 4433u: *required |= PS5VK_FEATURE_STORAGE_BUFFER_16BIT; break;
             case 4448u: *required |= PS5VK_FEATURE_STORAGE_BUFFER_8BIT; break;
+            case 5345u: /* VulkanMemoryModel */
+                *required |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL; break;
+            case 5346u: /* VulkanMemoryModelDeviceScope */
+                *required |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                             PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE; break;
+            case 5347u: /* PhysicalStorageBufferAddresses */
+                *required |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS; break;
             case 22u:   /* Int16 */
             case 39u:   /* Int8 */
             case 4434u: /* UniformAndStorageBuffer16BitAccess */

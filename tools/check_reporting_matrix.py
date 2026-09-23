@@ -1196,7 +1196,7 @@ def main() -> int:
         }
     for row in shaders:
         row["applicable_cts"] = {"cases": [], "status": "not-selected",
-                                 "note": "the selected storage-width cases exercise the accepted capabilities"}
+                                 "note": "no original CTS case for this capability is selected here"}
 
     matrix = {
         "schema": "ps5vk-reporting-matrix/1",
@@ -1307,7 +1307,7 @@ def _load_required_floors() -> dict[str, int]:
 REQUIRED_FLOORS = _load_required_floors()
 
 
-# SPIR-V capability enumerants handled by the narrow-storage gate. These are
+# SPIR-V capability enumerants handled by the shader feature gate. These are
 # stable SPIR-V registry values; the names are confirmed against the pinned
 # compiler header when that optional checkout is present (it is absent in CI,
 # where a hard dependency would make the gate environment-dependent).
@@ -1318,6 +1318,9 @@ SPIRV_CAPABILITY_NAMES = {
     4434: "UniformAndStorageBuffer16BitAccess",
     4448: "StorageBuffer8BitAccess",
     4449: "UniformAndStorageBuffer8BitAccess",
+    5345: "VulkanMemoryModel",
+    5346: "VulkanMemoryModelDeviceScope",
+    5347: "PhysicalStorageBufferAddresses",
 }
 
 
@@ -1336,7 +1339,7 @@ def _verify_spirv_capabilities() -> None:
 SPIRV_CAPABILITIES = dict(SPIRV_CAPABILITY_NAMES)
 _verify_spirv_capabilities()
 
-# The SPIR-V capabilities the frontend's narrow-storage gate handles, and the
+# The SPIR-V capabilities the frontend's shader feature gate handles, and the
 # advertisement each one corresponds to. Anything not listed here has no
 # frontend gate, so it is recorded as not-audited rather than assumed rejected.
 # Keyed by enumerant so registry renames of the same capability cannot silently
@@ -1348,6 +1351,9 @@ SHADER_CAPABILITY_ADVERTISEMENT = {
     39: ("core", None),
     4434: ("extension", "uniformAndStorageBuffer16BitAccess"),
     4449: ("extension", "uniformAndStorageBuffer8BitAccess"),
+    5345: ("extension", "vulkanMemoryModel"),
+    5346: ("extension", "vulkanMemoryModelDeviceScope"),
+    5347: ("extension", "bufferDeviceAddress"),
 }
 
 
@@ -1366,8 +1372,9 @@ def evaluate_shader_capabilities(dump: dict) -> list[dict]:
         if terminator == "return 0;":
             action, required = "reject", None
         else:
-            match = re.search(r"PS5VK_FEATURE_STORAGE_BUFFER_(\d+)BIT", body)
-            action, required = ("requires-extension-feature", match.group(0)) if match else ("accept", None)
+            feature_bits = list(dict.fromkeys(re.findall(r"PS5VK_FEATURE_[A-Z0-9_]+", body)))
+            action, required = (("requires-extension-feature", " | ".join(feature_bits))
+                                if feature_bits else ("accept", None))
         if advertisement is None:
             rows.append({"kind": "shader-capability", "capability": name, "number": number,
                          "action": action, "verdict": "not-audited",

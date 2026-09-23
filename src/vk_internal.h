@@ -120,6 +120,12 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_DUAL_SRC_BLEND = 1u << 17,
     PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS = 1u << 18,
     PS5VK_FEATURE_SAMPLE_RATE_SHADING = 1u << 19,
+    /* Vulkan 1.0 extension features (DXVK262-T08). Keep physical addresses
+     * and both memory-model promises independent: device scope requires the
+     * base Vulkan memory model, while BDA does not imply either one. */
+    PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS = 1u << 20,
+    PS5VK_FEATURE_VULKAN_MEMORY_MODEL = 1u << 21,
+    PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE = 1u << 22,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

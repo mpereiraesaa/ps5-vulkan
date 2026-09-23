@@ -134,8 +134,53 @@ static void graphics_entries(void)
     assert(!ps5vk_shader_entry(module, VK_SHADER_STAGE_FRAGMENT_BIT, "main", &id));
     vkDestroyShaderModule(&d, module, NULL); assert(!d.pipeline_objects);
 }
+static void t08_capability_gates(void)
+{
+    const struct { uint32_t capability, required; } cases[] = {
+        {5347u, PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS},
+        {5345u, PS5VK_FEATURE_VULKAN_MEMORY_MODEL},
+        {5346u, PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        uint32_t words[] = {0x07230203, 0x10000, 0, 2, 0,
+            (2u << 16) | 17, cases[i].capability,
+            (5u << 16) | 15, 5, 1, 0x6e69616d, 0,
+            (6u << 16) | 16, 1, 17, 64, 1, 1};
+        uint32_t code[] = {0x11111111};
+        struct ps5vk_compiled_program p = fixture(words, code);
+        p.spirv_words = sizeof(words) / sizeof(words[0]);
+        struct ps5vk_program_library lib = {&p, 1};
+        struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}};
+        VkShaderModuleCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = sizeof(words), .pCode = words};
+        VkShaderModule m = VK_NULL_HANDLE;
+        assert(vkCreateShaderModule(&d, &si, NULL, &m) == VK_SUCCESS);
+        VkPipelineLayout l = layout(&d);
+        VkComputePipelineCreateInfo ci = info(m, l);
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                        &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+        assert(!pipeline);
+        d.enabled_features = cases[i].required;
+        if (cases[i].capability == 5346u) {
+            d.enabled_features = PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+            assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                            &pipeline) == VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!pipeline);
+            d.enabled_features = cases[i].required;
+        }
+        assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                        &pipeline) == VK_SUCCESS);
+        vkDestroyPipeline(&d, pipeline, NULL);
+        vkDestroyPipelineLayout(&d, l, NULL);
+        vkDestroyShaderModule(&d, m, NULL);
+        assert(!d.pipeline_objects && !d.descriptor_objects);
+    }
+}
 int main(void)
 {
     lifecycle(); legacy_offline_abi(); negative(); graphics_entries();
+    t08_capability_gates();
     puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
 }
