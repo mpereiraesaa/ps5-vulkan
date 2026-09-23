@@ -5664,7 +5664,7 @@
         "extension:VK_KHR_buffer_device_address",
         "feature:bufferDeviceAddress"
       ],
-      "rationale": "Original pinned compute buffer-reference load and output-image oracle; zero memory offset remains diagnostic until strict native measurement."
+      "rationale": "Original pinned compute buffer-reference load and output-image oracle; strict native measurement failed at storage-image descriptor-set layout creation before shader execution, so this case remains diagnostic."
     },
     {
       "path": "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero",
@@ -5675,7 +5675,7 @@
         "extension:VK_KHR_buffer_device_address",
         "feature:bufferDeviceAddress"
       ],
-      "rationale": "Original pinned compute buffer-reference load and output-image oracle; nonzero memory offset remains diagnostic until strict native measurement."
+      "rationale": "Original pinned compute buffer-reference load and output-image oracle with nonzero memory offset; strict native measurement failed at storage-image descriptor-set layout creation before shader execution, so this case remains diagnostic."
     }
   ]
 }

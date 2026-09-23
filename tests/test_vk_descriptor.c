@@ -144,6 +144,31 @@ static void negative(void)
     vkDestroyDescriptorSetLayout(&d,l,NULL);
     assert(!d.descriptor_objects);
 }
+static void bda_cts_output_layout_refusal(void)
+{
+    /* The original BDA compute cases declare a storage-image result at
+     * binding 0 and an SSBO at binding 1, both visible to all three stages.
+     * They currently stop here, before compiling or dispatching the shader. */
+    struct VkDevice_T d = {.graphics_enabled = VK_TRUE};
+    VkShaderStageFlags stages = VK_SHADER_STAGE_COMPUTE_BIT |
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutBinding bindings[] = {
+        {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+         .descriptorCount = 1, .stageFlags = stages},
+        {.binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+         .descriptorCount = 1, .stageFlags = stages},
+    };
+    VkDescriptorSetLayoutCreateInfo ci = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 2, .pBindings = bindings};
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &layout) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &layout) == VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(&d, layout, NULL);
+    assert(!d.descriptor_objects);
+}
 static void push_constant_layouts(void)
 {
     struct VkDevice_T d={0};
@@ -640,6 +665,6 @@ static void input_attachments(void)
 
 int main(void)
 {
-    lifecycle(); rollback(); negative(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources(); input_attachments();
+    lifecycle(); rollback(); negative(); bda_cts_output_layout_refusal(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources(); input_attachments();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }
