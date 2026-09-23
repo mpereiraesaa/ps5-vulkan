@@ -26,9 +26,11 @@ void main()
                     gl_StorageSemanticsBuffer,
                     gl_SemanticsRelease | gl_SemanticsMakeAvailable);
     } else {
-        uint seen = atomicLoad(flags.value[slot], T08_SCOPE,
-                               gl_StorageSemanticsBuffer,
-                               gl_SemanticsAcquire | gl_SemanticsMakeVisible);
+        uint seen = 0u;
+        for (uint attempt = 0u; attempt < 64u && seen == 0u; ++attempt)
+            seen = atomicLoad(flags.value[slot], T08_SCOPE,
+                              gl_StorageSemanticsBuffer,
+                              gl_SemanticsAcquire | gl_SemanticsMakeVisible);
         if (seen == 1u) {
             memoryBarrier(T08_SCOPE, gl_StorageSemanticsBuffer,
                           gl_SemanticsAcquire | gl_SemanticsMakeVisible);
