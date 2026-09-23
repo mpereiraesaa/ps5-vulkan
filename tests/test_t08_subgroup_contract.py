@@ -189,6 +189,93 @@ void main() {
                 self.assertNotEqual(signatures["broadcast"], signatures["control"],
                                     f"{stage} Broadcast was discarded by the compiler")
 
+    def test_extended_arithmetic_add_lowering(self):
+        """Original CTS arithmetic formats must retain a live reduce in PSBC ISA."""
+        glslang = shutil.which("glslangValidator")
+        archive = ROOT / "build/libpsbc.host.a"
+        factory = CTS / "vktSubgroupsArithmeticTests.cpp"
+        utilities = CTS / "vktSubgroupsTestsUtils.cpp"
+        if not all((glslang, archive.is_file(), factory.is_file(),
+                    utilities.is_file())):
+            self.skipTest("pinned CTS, host PSBC archive and glslang required")
+        self.assertIn("createSubgroupsArithmeticTests", factory.read_text())
+        self.assertIn("subgroups::getAllFormats()", factory.read_text())
+        format_source = utilities.read_text()
+        self.assertIn("getAllFormats()", format_source)
+        formats = {
+            "int8": ("uint8_t", "u8vec", "GL_EXT_shader_explicit_arithmetic_types_int8",
+                     "GL_EXT_shader_subgroup_extended_types_int8", 349),
+            "int16": ("int16_t", "i16vec", "GL_EXT_shader_explicit_arithmetic_types_int16",
+                      "GL_EXT_shader_subgroup_extended_types_int16", 349),
+            "int64": ("uint64_t", "u64vec", "GL_ARB_gpu_shader_int64",
+                      "GL_EXT_shader_subgroup_extended_types_int64", 349),
+            "float16": ("float16_t", "f16vec", "GL_EXT_shader_explicit_arithmetic_types_float16",
+                        "GL_EXT_shader_subgroup_extended_types_float16", 350),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            probe = temp / "probe"
+            subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            "-Ithird_party/psbc-reference/libpsbc",
+                            "tests/t08_compile_probe.c", str(archive),
+                            "-lstdc++", "-lm", "-lpthread", "-o", str(probe)],
+                           cwd=ROOT, check=True, capture_output=True, text=True)
+            for kind, (scalar, vector, explicit, extended, opcode) in formats.items():
+                for width in (1, 2, 3, 4):
+                    with self.subTest(kind=kind, width=width):
+                        channels = ("R", "RG", "RGB", "RGBA")[width - 1]
+                        bits, suffix = {
+                            "int8": (8, "UINT"), "int16": (16, "SINT"),
+                            "int64": (64, "UINT"), "float16": (16, "SFLOAT"),
+                        }[kind]
+                        format_name = "".join(f"{channel}{bits}" for channel in channels)
+                        self.assertIn(f"formats.push_back(VK_FORMAT_{format_name}_{suffix})",
+                                      format_source)
+                        typename = scalar if width == 1 else f"{vector}{width}"
+                        components = ", ".join(
+                            f"{scalar}(gl_SubgroupInvocationID + {index}u)"
+                            for index in range(width))
+                        expression = f"{typename}({components})"
+                        header = ("#version 450\n"
+                                  "#extension GL_KHR_shader_subgroup_arithmetic : require\n"
+                                  f"#extension {explicit} : require\n"
+                                  f"#extension {extended} : require\n"
+                                  "layout(local_size_x=64) in;\n"
+                                  "layout(set=0,binding=0,std430) buffer Data "
+                                  "{ uint values[]; } data;\n")
+                        signatures = {}
+                        for variant, operation in (
+                            ("add", "subgroupAdd(value)"), ("control", "value")):
+                            outputs = "\n".join(
+                                f"data.values[gl_GlobalInvocationID.x * {width}u + {index}u]"
+                                f" = uint(result{'.' + 'xyzw'[index] if width > 1 else ''});"
+                                for index in range(width))
+                            shader = temp / f"{kind}-vec{width}-{variant}.comp"
+                            binary = shader.with_suffix(".spv")
+                            shader.write_text(
+                                header + "void main() {\n"
+                                f"  {typename} value = {expression};\n"
+                                f"  {typename} result = {operation};\n"
+                                f"  {outputs}\n}}\n")
+                            subprocess.run([glslang, "-V", "--target-env", "vulkan1.2",
+                                            str(shader), "-o", str(binary)], check=True,
+                                           capture_output=True, text=True)
+                            adds = [args for op, args in instructions(binary.read_bytes())
+                                    if op == opcode]
+                            self.assertEqual(len(adds), int(variant == "add"))
+                            if adds:
+                                self.assertEqual(adds[0][3], 0)  # Reduce
+                            result = subprocess.run(
+                                [str(probe), "subgroup", str(binary), kind],
+                                capture_output=True, text=True)
+                            self.assertEqual(result.returncode, 0, result.stderr)
+                            match = re.fullmatch(
+                                r"result=0 code_bytes=[1-9][0-9]* descriptors=1 "
+                                r"fnv64=([0-9a-f]{16})\n", result.stdout)
+                            self.assertIsNotNone(match, result.stdout)
+                            signatures[variant] = match.group(1)
+                        self.assertNotEqual(signatures["add"], signatures["control"])
+
 
 if __name__ == "__main__":
     unittest.main()
