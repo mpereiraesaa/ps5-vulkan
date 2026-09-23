@@ -211,17 +211,26 @@ void main() {
         formats = {
             "int8": ("uint8_t", "u8vec", "GL_EXT_shader_explicit_arithmetic_types_int8",
                      "GL_EXT_shader_subgroup_extended_types_int8"),
+            "int8_signed": ("int8_t", "i8vec", "GL_EXT_shader_explicit_arithmetic_types_int8",
+                            "GL_EXT_shader_subgroup_extended_types_int8"),
             "int16": ("int16_t", "i16vec", "GL_EXT_shader_explicit_arithmetic_types_int16",
                       "GL_EXT_shader_subgroup_extended_types_int16"),
+            "int16_unsigned": ("uint16_t", "u16vec", "GL_EXT_shader_explicit_arithmetic_types_int16",
+                               "GL_EXT_shader_subgroup_extended_types_int16"),
             "int64": ("uint64_t", "u64vec", "GL_ARB_gpu_shader_int64",
                       "GL_EXT_shader_subgroup_extended_types_int64"),
+            "int64_signed": ("int64_t", "i64vec", "GL_ARB_gpu_shader_int64",
+                             "GL_EXT_shader_subgroup_extended_types_int64"),
             "float16": ("float16_t", "f16vec", "GL_EXT_shader_explicit_arithmetic_types_float16",
                         "GL_EXT_shader_subgroup_extended_types_float16"),
         }
         opcodes = {
             "int8": (349, 351, 354, 357, 359, 360, 361),
+            "int8_signed": (349, 351, 353, 356, 359, 360, 361),
             "int16": (349, 351, 353, 356, 359, 360, 361),
+            "int16_unsigned": (349, 351, 354, 357, 359, 360, 361),
             "int64": (349, 351, 354, 357, 359, 360, 361),
+            "int64_signed": (349, 351, 353, 356, 359, 360, 361),
             "float16": (350, 352, 355, 358),
         }
         with tempfile.TemporaryDirectory() as directory:
@@ -237,8 +246,10 @@ void main() {
                     with self.subTest(kind=kind, width=width):
                         channels = ("R", "RG", "RGB", "RGBA")[width - 1]
                         bits, suffix = {
-                            "int8": (8, "UINT"), "int16": (16, "SINT"),
-                            "int64": (64, "UINT"), "float16": (16, "SFLOAT"),
+                            "int8": (8, "UINT"), "int8_signed": (8, "SINT"),
+                            "int16": (16, "SINT"), "int16_unsigned": (16, "UINT"),
+                            "int64": (64, "UINT"), "int64_signed": (64, "SINT"),
+                            "float16": (16, "SFLOAT"),
                         }[kind]
                         format_name = "".join(f"{channel}{bits}" for channel in channels)
                         self.assertIn(f"formats.push_back(VK_FORMAT_{format_name}_{suffix})",
@@ -286,7 +297,8 @@ void main() {
                             expected = [] if opcode is None else [(opcode, group_operation)]
                             self.assertEqual(arithmetic, expected)
                             result = subprocess.run(
-                                [str(probe), "subgroup", str(binary), kind],
+                                [str(probe), "subgroup", str(binary),
+                                 kind.split("_", 1)[0]],
                                 capture_output=True, text=True)
                             self.assertEqual(result.returncode, 0, result.stderr)
                             match = re.fullmatch(
