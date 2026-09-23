@@ -13,6 +13,7 @@ static const struct entry entries[] = {
     ENTRY(vkEnumerateInstanceLayerProperties, GLOBAL),
     ENTRY(vkDestroyInstance, INSTANCE),
     ENTRY(vkEnumeratePhysicalDevices, INSTANCE),
+    ENTRY(vkEnumeratePhysicalDeviceGroupsKHR, INSTANCE),
     ENTRY(vkGetPhysicalDeviceProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceMemoryProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceFeatures, INSTANCE),
@@ -170,12 +171,18 @@ static int gpdp2_command(const char *name)
     return 0;
 }
 
+static int group_creation_command(const char *name)
+{ return !strcmp(name, "vkEnumeratePhysicalDeviceGroupsKHR"); }
+
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
                                                               const char *name)
 {
     if (!name) return NULL;
     if (gpdp2_command(name) &&
         (!instance || !instance->features2_extension_enabled))
+        return NULL;
+    if (group_creation_command(name) &&
+        (!instance || !instance->device_group_creation_enabled))
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if ((instance || entries[j].scope == GLOBAL) && !strcmp(name, entries[j].name))

@@ -8,6 +8,8 @@
 static const VkExtensionProperties instance_extensions[] = {
     {VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
      VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION},
+    {VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME,
+     VK_KHR_DEVICE_GROUP_CREATION_SPEC_VERSION},
 };
 
 static VkResult enumerate_extensions(const VkExtensionProperties *properties,
@@ -134,15 +136,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
     *out = VK_NULL_HANDLE;
     if (!info || info->sType != VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO) return INVALID;
     if (info->enabledLayerCount) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkBool32 features2_enabled = VK_FALSE;
+    VkBool32 features2_enabled = VK_FALSE, device_group_creation_enabled = VK_FALSE;
     if (info->enabledExtensionCount && !info->ppEnabledExtensionNames) return INVALID;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         if (!name) return INVALID;
-        if (strcmp(name, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
-            return VK_ERROR_EXTENSION_NOT_PRESENT;
-        if (features2_enabled) return INVALID;
-        features2_enabled = VK_TRUE;
+        if (!strcmp(name, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+            if (features2_enabled) return INVALID;
+            features2_enabled = VK_TRUE;
+        } else if (!strcmp(name, VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME)) {
+            if (device_group_creation_enabled) return INVALID;
+            device_group_creation_enabled = VK_TRUE;
+        } else return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
     if (info->pNext || info->flags) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (info->pApplicationInfo) {
@@ -158,6 +163,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
     if (!i) return VK_ERROR_OUT_OF_HOST_MEMORY;
     i->allocator = saved; i->custom_allocator = custom;
     i->features2_extension_enabled = features2_enabled;
+    i->device_group_creation_enabled = device_group_creation_enabled;
     VkResult result = ps5vk_platform_query(&i->physical.platform);
     if (result == VK_SUCCESS) {
         struct ps5vk_platform *p = &i->physical.platform;
@@ -186,6 +192,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices(VkInstance i, uint32_t
     if (!out) { *count = 1; return VK_SUCCESS; }
     if (!*count) return VK_INCOMPLETE;
     out[0] = &i->physical; *count = 1;
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR(VkInstance i,
+    uint32_t *count, VkPhysicalDeviceGroupProperties *out)
+{
+    if (!i || !count || !i->device_group_creation_enabled) return INVALID;
+    if (!out) { *count = 1; return VK_SUCCESS; }
+    if (!*count) return VK_INCOMPLETE;
+    if (out[0].sType != VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES)
+        return INVALID;
+    out[0].physicalDeviceCount = 1;
+    out[0].physicalDevices[0] = &i->physical;
+    for (uint32_t n = 1; n < VK_MAX_DEVICE_GROUP_SIZE; ++n)
+        out[0].physicalDevices[n] = VK_NULL_HANDLE;
+    out[0].subsetAllocation = VK_FALSE;
+    *count = 1;
     return VK_SUCCESS;
 }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties(VkPhysicalDevice p,
@@ -479,10 +501,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
     VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
     VkBool32 saw_memory_model = VK_FALSE;
+    VkBool32 saw_device_group = VK_FALSE;
     VkBool32 saw_dynamic_rendering = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
-        if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2) {
+        if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO) {
+            if (saw_device_group || !p->instance->device_group_creation_enabled)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            saw_device_group = VK_TRUE;
+            const VkDeviceGroupDeviceCreateInfo *group =
+                (const VkDeviceGroupDeviceCreateInfo *)next;
+            if (group->physicalDeviceCount != 1 || !group->pPhysicalDevices ||
+                group->pPhysicalDevices[0] != p)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2) {
             if (saw_features2 || info->pEnabledFeatures) return INVALID;
             saw_features2 = VK_TRUE;
             const VkPhysicalDeviceFeatures2 *features =

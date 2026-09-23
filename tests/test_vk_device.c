@@ -1344,15 +1344,18 @@ static void negative(void)
 static void narrow_storage_features(void)
 {
     uint32_t count = 0;
-    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, NULL) == VK_SUCCESS && count == 1);
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, NULL) == VK_SUCCESS && count == 2);
     VkExtensionProperties instance_properties[2] = {0};
     count = 0;
     assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_INCOMPLETE && count == 0);
     count = 2;
-    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_SUCCESS && count == 1);
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_SUCCESS && count == 2);
     assert(!strcmp(instance_properties[0].extensionName,
                    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
     assert(instance_properties[0].specVersion == VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION);
+    assert(!strcmp(instance_properties[1].extensionName,
+                   VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME));
+    assert(instance_properties[1].specVersion == VK_KHR_DEVICE_GROUP_CREATION_SPEC_VERSION);
     assert(vkEnumerateInstanceExtensionProperties("layer", &count, NULL) == VK_ERROR_LAYER_NOT_PRESENT);
     assert(vkEnumerateInstanceExtensionProperties(NULL, NULL, NULL) == VK_ERROR_UNKNOWN);
 
@@ -1828,11 +1831,65 @@ static void memory_model_feature_negotiation(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void single_device_group_creation(void)
+{
+    const char *extension = VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME;
+    VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 1, .ppEnabledExtensionNames = &extension};
+    VkInstance i = VK_NULL_HANDLE;
+    assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS);
+    assert(i->device_group_creation_enabled && !i->features2_extension_enabled);
+    assert(vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroupsKHR"));
+    assert(!vkGetInstanceProcAddr(NULL, "vkEnumeratePhysicalDeviceGroupsKHR"));
+    uint32_t count = 0;
+    assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, NULL) == VK_SUCCESS && count == 1);
+    VkPhysicalDeviceGroupProperties groups[2] = {
+        {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES},
+        {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES}};
+    count = 0;
+    assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, groups) == VK_INCOMPLETE && !count);
+    count = 2;
+    assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, groups) == VK_SUCCESS && count == 1);
+    assert(groups[0].physicalDeviceCount == 1 &&
+           groups[0].physicalDevices[0] == physical(i) &&
+           !groups[0].subsetAllocation);
+    assert(groups[1].physicalDeviceCount == 0);
+
+    VkDeviceQueueCreateInfo q; float priority;
+    VkDeviceCreateInfo device = device_info(&q, &priority);
+    VkPhysicalDevice member = physical(i);
+    VkDeviceGroupDeviceCreateInfo group = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO,
+        .physicalDeviceCount = 1, .pPhysicalDevices = &member};
+    device.pNext = &group;
+    VkDevice d = VK_NULL_HANDLE;
+    assert(vkCreateDevice(member, &device, NULL, &d) == VK_SUCCESS);
+    vkDestroyDevice(d, NULL);
+    group.physicalDeviceCount = 2;
+    assert(vkCreateDevice(member, &device, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    group.physicalDeviceCount = 1;
+    VkPhysicalDevice wrong = (VkPhysicalDevice)(uintptr_t)1;
+    group.pPhysicalDevices = &wrong;
+    assert(vkCreateDevice(member, &device, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    group.pPhysicalDevices = &member;
+    VkDeviceGroupDeviceCreateInfo duplicate = group;
+    group.pNext = &duplicate;
+    assert(vkCreateDevice(member, &device, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+
+    i = instance();
+    assert(!vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroupsKHR"));
+    count = 0;
+    assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, NULL) == VK_ERROR_UNKNOWN);
+    vkDestroyInstance(i, NULL);
+}
+
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     consumer_physical_queries();
     tessellation_feature_negotiation();
     memory_model_feature_negotiation();
+    single_device_group_creation();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

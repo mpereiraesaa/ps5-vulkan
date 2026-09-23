@@ -235,6 +235,7 @@ struct VkInstance_T {
     VkBool32 custom_allocator;
     struct VkPhysicalDevice_T physical;
     VkBool32 features2_extension_enabled;
+    VkBool32 device_group_creation_enabled;
     unsigned devices, lifetime_errors;
 };
 struct VkQueue_T {
