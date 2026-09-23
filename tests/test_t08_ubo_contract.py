@@ -20,8 +20,10 @@ class T08UniformBufferContracts(unittest.TestCase):
         root = ET.parse(REGISTRY).getroot()
         extension = root.find(".//extensions/extension[@name='VK_KHR_uniform_buffer_standard_layout']")
         self.assertIsNotNone(extension)
-        self.assertIn("VK_VERSION_1_1", extension.get("depends"))
-        self.assertIn("VK_KHR_get_physical_device_properties2", extension.get("depends"))
+        # In vk.xml dependency expressions a comma is OR: this extension has
+        # a legal Vulkan 1.0 route through the properties2 instance extension.
+        self.assertEqual(extension.get("depends").split(","), [
+            "VK_KHR_get_physical_device_properties2", "VK_VERSION_1_1"])
         self.assertIsNotNone(extension.find(
             ".//feature[@name='uniformBufferStandardLayout']"))
         case = CTS / "vktUniformBlockCase.cpp"
