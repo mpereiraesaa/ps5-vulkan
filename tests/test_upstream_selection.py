@@ -90,16 +90,16 @@ class UpstreamSelectionTests(unittest.TestCase):
         # of them - the triangle and quad shapes - are measured Pass and are
         # now the sample-rate-shading acceptance group, and the 20 line and
         # point_1px shapes moved to plain-point-line-pipeline-refused, whose
-        # pipeline shape this profile refuses at creation. The 75 diagnostics
+        # pipeline shape this profile refuses at creation. The 68 diagnostics
         # that remain document refusals, capability gaps and pending
-        # measurement windows, including seven T08 volatile atomic candidates
-        # and two original buffer-device-address cases.
+        # measurement windows, including two original buffer-device-address
+        # cases. Seven T08 volatile atomic leaves now belong to acceptance.
         # `leaves` counts every attachment_write_mask leaf
         # the pinned factory generates, wherever the manifest now keeps it.
-        self.assertEqual((494, 75, 48),
+        self.assertEqual((505, 68, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
-        volatile = [d for d in manifest["diagnostics"] if
-                    d["category"] == "t08-vulkan-memory-model-volatile-atomic"]
+        volatile = [d for d in manifest["cases"] if
+                    d["category"] == "t08-vulkan-memory-model-base"]
         self.assertEqual(7, len(volatile))
         self.assertEqual({"iadd", "isub", "iinc", "idec", "load", "store", "compex"},
                          {d["path"].rsplit(".", 1)[-1] for d in volatile})
@@ -144,6 +144,30 @@ class UpstreamSelectionTests(unittest.TestCase):
         contract["execution_supported"] = False
         contract["supported"] = False
         self.assertEqual(1, self._gate_exit_code_for_manifest(broken))
+
+    def test_std430_ubo_generated_paths_follow_pinned_factory(self):
+        source = UPSTREAM / "external/vulkancts/modules/vulkan/ubo/vktUniformBlockTests.cpp"
+        if not source.is_file():
+            self.skipTest("pinned vk-gl-cts checkout not present")
+        text = source.read_text(encoding="utf-8", errors="replace")
+        expected = {
+            "dEQP-VK.ubo.single_basic_array.std430.mat2.vertex",
+            "dEQP-VK.ubo.single_struct.per_block_buffer.std430_vertex",
+            "dEQP-VK.ubo.2_level_struct_array.per_block_buffer.std430_vertex",
+        }
+        self.assertEqual(expected, self.gate._ubo_generated_paths(text))
+        mutations = (
+            ('glu::TYPE_FLOAT_MAT2',
+             'dEQP-VK.ubo.single_basic_array.std430.mat2.vertex'),
+            ('BlockSingleStructCase',
+             'dEQP-VK.ubo.single_struct.per_block_buffer.std430_vertex'),
+            ('Block2LevelStructArrayCase',
+             'dEQP-VK.ubo.2_level_struct_array.per_block_buffer.std430_vertex'),
+        )
+        for marker, missing in mutations:
+            with self.subTest(marker=marker):
+                altered = text.replace(marker, "REMOVED_FACTORY_MARKER")
+                self.assertNotIn(missing, self.gate._ubo_generated_paths(altered))
 
     def setUp(self):
         self.source = UPSTREAM / MODULE

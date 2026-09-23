@@ -482,6 +482,13 @@
       "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.storagebuffer_32_to_8.storage_buffer_scalar_uint",
       "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.storagebuffer_32_to_8.storage_buffer_vector_sint",
       "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.storagebuffer_32_to_8.storage_buffer_vector_uint",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iadd",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.idec",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iinc",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.isub",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.load",
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.store",
       "dEQP-VK.spirv_assembly.instruction.compute.workgroup_memory.uint32",
       "dEQP-VK.synchronization.basic.binary_semaphore.chain",
       "dEQP-VK.synchronization.basic.binary_semaphore.one_queue",
@@ -494,7 +501,11 @@
       "dEQP-VK.synchronization.basic.fence.multi_waitall_false",
       "dEQP-VK.synchronization.basic.fence.multiple_signaled",
       "dEQP-VK.synchronization.basic.fence.one",
-      "dEQP-VK.synchronization.basic.fence.one_signaled"
+      "dEQP-VK.synchronization.basic.fence.one_signaled",
+      "dEQP-VK.ubo.2_level_struct_array.per_block_buffer.std430_vertex",
+      "dEQP-VK.ubo.single_basic_array.std430.mat2.vertex",
+      "dEQP-VK.ubo.single_basic_array.std430.uint.vertex",
+      "dEQP-VK.ubo.single_struct.per_block_buffer.std430_vertex"
     ],
     "diagnostics": [
       "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_3_extra_bytes_offset_12",
@@ -563,13 +574,6 @@
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_0",
       "dEQP-VK.renderpass.dedicated_allocation.attachment_write_mask.attachment_count_2.start_index_1",
       "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
-      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iadd",
-      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.isub",
-      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iinc",
-      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.idec",
-      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.load",
-      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.store",
-      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex",
       "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
       "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
     ],
@@ -1689,6 +1693,68 @@
     },
     {
       "applicable_cts": {
+        "cases": [
+          "dEQP-VK.ubo.single_basic_array.std430.uint.vertex"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
+      },
+      "detail": "the Vulkan 1.0 KHR query and create route enables bounded std430 uniform buffer layout validation before compiler lowering",
+      "feature": "uniformBufferStandardLayout",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iadd",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.idec",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iinc",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.isub",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.load",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.store"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
+      },
+      "detail": "the Vulkan 1.0 KHR query and opt-in route enables VulkanKHR volatile queue-family atomics; seven unchanged upstream atomic oracles and a bounded GPU producer/consumer witness passed",
+      "feature": "vulkanMemoryModel",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the KHR feature query reports false on the shipping platform and vkCreateDevice refuses a request for the unsupported bit",
+      "feature": "vulkanMemoryModelDeviceScope",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the KHR feature query reports false on the shipping platform and vkCreateDevice refuses a request for the unsupported bit",
+      "feature": "bufferDeviceAddress",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
         "cases": [],
         "note": "no selected case requires this bit",
         "status": "not-selected"
@@ -2793,6 +2859,68 @@
       "detail": "only line width 1.0 is accepted (src/vk_graphics_pipeline.c)",
       "feature": "wideLines",
       "kind": "feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [
+          "dEQP-VK.ubo.single_basic_array.std430.uint.vertex"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
+      },
+      "detail": "the Vulkan 1.0 KHR query and create route enables bounded std430 uniform buffer layout validation before compiler lowering",
+      "feature": "uniformBufferStandardLayout",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iadd",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.idec",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iinc",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.isub",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.load",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.store"
+        ],
+        "note": "selected original upstream reporting oracle",
+        "status": "acceptance"
+      },
+      "detail": "the Vulkan 1.0 KHR query and opt-in route enables VulkanKHR volatile queue-family atomics; seven unchanged upstream atomic oracles and a bounded GPU producer/consumer witness passed",
+      "feature": "vulkanMemoryModel",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the KHR feature query reports false on the shipping platform and vkCreateDevice refuses a request for the unsupported bit",
+      "feature": "vulkanMemoryModelDeviceScope",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the KHR feature query reports false on the shipping platform and vkCreateDevice refuses a request for the unsupported bit",
+      "feature": "bufferDeviceAddress",
+      "kind": "extension-feature",
       "profile": "compute",
       "reported": false,
       "verdict": "satisfied"
@@ -26984,25 +27112,55 @@
   "profiles": {
     "compute": {
       "apiVersion": 4194304,
+      "buffer_device_address_query": {
+        "bufferDeviceAddress": false,
+        "bufferDeviceAddressCaptureReplay": false,
+        "bufferDeviceAddressMultiDevice": false,
+        "route": "VK_KHR_buffer_device_address"
+      },
       "deviceID": 0,
       "deviceName": "ps5vk gfx1013 experimental compute profile",
+      "memory_model_query": {
+        "route": "VK_KHR_vulkan_memory_model",
+        "vulkanMemoryModel": true,
+        "vulkanMemoryModelDeviceScope": false
+      },
       "multiview_query": {
         "maxMultiviewInstanceIndex": 0,
         "maxMultiviewViewCount": 0,
         "multiview": false,
         "route": "VK_KHR_multiview"
       },
+      "standard_ubo_query": {
+        "route": "VK_KHR_uniform_buffer_standard_layout",
+        "uniformBufferStandardLayout": true
+      },
       "vendorID": 4098
     },
     "graphics": {
       "apiVersion": 4194304,
+      "buffer_device_address_query": {
+        "bufferDeviceAddress": false,
+        "bufferDeviceAddressCaptureReplay": false,
+        "bufferDeviceAddressMultiDevice": false,
+        "route": "VK_KHR_buffer_device_address"
+      },
       "deviceID": 0,
       "deviceName": "ps5vk gfx1013 experimental graphics profile",
+      "memory_model_query": {
+        "route": "VK_KHR_vulkan_memory_model",
+        "vulkanMemoryModel": true,
+        "vulkanMemoryModelDeviceScope": false
+      },
       "multiview_query": {
         "maxMultiviewInstanceIndex": 134217727,
         "maxMultiviewViewCount": 6,
         "multiview": true,
         "route": "VK_KHR_multiview"
+      },
+      "standard_ubo_query": {
+        "route": "VK_KHR_uniform_buffer_standard_layout",
+        "uniformBufferStandardLayout": true
       },
       "vendorID": 4098
     }
@@ -27049,14 +27207,14 @@
     },
     {
       "action": "requires-extension-feature",
-      "advertised": false,
+      "advertised": true,
       "applicable_cts": {
         "cases": [],
         "note": "no original CTS case for this capability is selected here",
         "status": "not-selected"
       },
       "capability": "VulkanMemoryModel",
-      "detail": "accepted only when PS5VK_FEATURE_VULKAN_MEMORY_MODEL is advertised (advertised=False), so the gate and the advertisement cannot disagree",
+      "detail": "accepted only when PS5VK_FEATURE_VULKAN_MEMORY_MODEL is advertised (advertised=True), so the gate and the advertisement cannot disagree",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
       "number": 5345,
@@ -27201,14 +27359,14 @@
     },
     {
       "action": "requires-extension-feature",
-      "advertised": false,
+      "advertised": true,
       "applicable_cts": {
         "cases": [],
         "note": "no original CTS case for this capability is selected here",
         "status": "not-selected"
       },
       "capability": "VulkanMemoryModel",
-      "detail": "accepted only when PS5VK_FEATURE_VULKAN_MEMORY_MODEL is advertised (advertised=False), so the gate and the advertisement cannot disagree",
+      "detail": "accepted only when PS5VK_FEATURE_VULKAN_MEMORY_MODEL is advertised (advertised=True), so the gate and the advertisement cannot disagree",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
       "number": 5345,
@@ -27322,7 +27480,7 @@
   ],
   "summary": {
     "features": {
-      "satisfied": 110
+      "satisfied": 118
     },
     "format_query_consistency": {
       "satisfied": 60

@@ -278,6 +278,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                 !!(p->platform.supported_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
             features->bufferDeviceAddressCaptureReplay = VK_FALSE;
             features->bufferDeviceAddressMultiDevice = VK_FALSE;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES) {
+            ((VkPhysicalDeviceUniformBufferStandardLayoutFeatures *)next)->uniformBufferStandardLayout =
+                !!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT);
         }
     }
 }
@@ -408,7 +412,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkExtensionProperties properties[8];
+    VkExtensionProperties properties[9];
     uint32_t total = 0;
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
@@ -448,6 +452,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
             VK_KHR_BUFFER_DEVICE_ADDRESS_SPEC_VERSION};
     }
+    if (p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME,
+            VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -475,6 +484,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 draw_parameters = VK_FALSE, multiview_extension = VK_FALSE;
     VkBool32 memory_model_extension = VK_FALSE;
     VkBool32 group_extension = VK_FALSE, buffer_address_extension = VK_FALSE;
+    VkBool32 uniform_buffer_standard_layout_extension = VK_FALSE;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -495,6 +505,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &group_extension;
         else if (!strcmp(name, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME))
             seen = &buffer_address_extension;
+        else if (!strcmp(name, VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME))
+            seen = &uniform_buffer_standard_layout_extension;
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -527,6 +539,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!(p->platform.supported_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS) ||
          !p->instance->features2_extension_enabled || !group_extension))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (uniform_buffer_standard_layout_extension &&
+        (!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
@@ -534,6 +550,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_memory_model = VK_FALSE;
     VkBool32 saw_buffer_address = VK_FALSE;
     VkBool32 saw_device_group = VK_FALSE;
+    VkBool32 saw_uniform_buffer_standard_layout = VK_FALSE;
     VkBool32 saw_dynamic_rendering = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
@@ -626,6 +643,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                     !(p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW))
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features |= PS5VK_FEATURE_MULTIVIEW;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES) {
+            if (saw_uniform_buffer_standard_layout) return INVALID;
+            saw_uniform_buffer_standard_layout = VK_TRUE;
+            const VkPhysicalDeviceUniformBufferStandardLayoutFeatures *features =
+                (const VkPhysicalDeviceUniformBufferStandardLayoutFeatures *)next;
+            if (!valid_bool(features->uniformBufferStandardLayout)) return INVALID;
+            if (features->uniformBufferStandardLayout) {
+                if (!uniform_buffer_standard_layout_extension ||
+                    !(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features |= PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
             }
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES) {

@@ -207,7 +207,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, ps5vk_compiler_adapter_compile};
     platform->supported_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                    PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
-                                   PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+                                   PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                                   PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
 #if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW
     /* The graphics runtime path delivers the draw-parameter built-ins for the
      * direct and single-indirect contract this profile witnessed. */
@@ -311,12 +312,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
     platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
 #endif
+    /* The Vulkan 1.0 KHR route is backed by the seven unchanged volatile
+     * queue-family atomic CTS leaves and the bounded GPU ordering witness.
+     * DeviceScope has separate requirements and remains diagnostic-only. */
+    platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
 #if defined(PS5VK_MEMORY_MODEL_DIAGNOSTIC) && PS5VK_MEMORY_MODEL_DIAGNOSTIC
-    /* Measurement builds alone may negotiate the KHR memory model and device
-     * scope. Keep both shipping bits false until GPU ordering and the original
-     * CTS oracle have been measured independently. */
-    platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
-                                    PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+    /* DeviceScope remains measurement-only: the original message-passing
+     * factory rejects Vulkan 1.0 before querying this extension feature. */
+    platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
 #endif
 #if defined(PS5VK_BDA_DIAGNOSTIC) && PS5VK_BDA_DIAGNOSTIC
     /* Only a bounded measurement build may negotiate physical addresses

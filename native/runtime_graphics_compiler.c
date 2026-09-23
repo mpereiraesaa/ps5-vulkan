@@ -666,18 +666,39 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
     return VK_SUCCESS;
 }
 
+static int spirv_vulkan_memory_model(const struct ps5vk_graphics_module_key *module)
+{
+    if (!module || !module->words || module->word_count < 5 ||
+        module->words[0] != 0x07230203u) return -1;
+    int model = -1;
+    for (size_t at = 5; at < module->word_count;) {
+        const uint32_t length = module->words[at] >> 16;
+        const uint32_t opcode = module->words[at] & 0xffffu;
+        if (!length || length > module->word_count - at) return -1;
+        if (opcode == 14u) {
+            if (length != 3 || model != -1) return -1;
+            model = (int)module->words[at + 2];
+        }
+        at += length;
+    }
+    if (model != 1 && model != 3) return -1;
+    return model == 3;
+}
+
 VkResult ps5vk_runtime_graphics_t08_options(uint32_t feature_mask,
-    PsbcCompileOptions *options)
+    const struct ps5vk_graphics_module_key *module, PsbcCompileOptions *options)
 {
     if (!options || ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
                      !(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL)))
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    const int vulkan_memory_model = spirv_vulkan_memory_model(module);
+    if (vulkan_memory_model < 0) return VK_ERROR_UNKNOWN;
     options->enable_physical_storage_buffer_addresses =
         !!(feature_mask & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
     options->enable_vulkan_memory_model =
-        !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL);
+        vulkan_memory_model && !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL);
     options->enable_vulkan_memory_model_device_scope =
-        !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE);
+        vulkan_memory_model && !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE);
     return VK_SUCCESS;
 }
 
@@ -703,7 +724,7 @@ static int apply_parameters(PsbcCompileOptions *options,
                             const struct ps5vk_graphics_key *key,VkShaderStageFlags stages)
 {
     if(module->specialization_count>PSBC_MAX_SPECIALIZATION_CONSTANTS)return 0;
-    if(ps5vk_runtime_graphics_t08_options(key->feature_mask,options)!=VK_SUCCESS)return 0;
+    if(ps5vk_runtime_graphics_t08_options(key->feature_mask,module,options)!=VK_SUCCESS)return 0;
     options->specialization_constant_count=module->specialization_count;
     for(uint32_t i=0;i<module->specialization_count;++i) {
         if(!module->specializations[i].size || module->specializations[i].size>8)return 0;
@@ -762,6 +783,21 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     if(!out)return VK_ERROR_UNKNOWN;
     *out=NULL;
     if(!ps5vk_runtime_graphics_supported(key))return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* PSBC's merged stage entry points take one memory-model option for all
+     * their input modules. Refuse a mixed-model link rather than silently
+     * recompiling a GLSL450 stage with VulkanKHR Device-scope rules. Fragment
+     * and unmerged vertex stages still choose their options independently. */
+    const int vertex_model=spirv_vulkan_memory_model(&key->vertex);
+    if(vertex_model<0)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(ps5vk_graphics_has_geometry(key) &&
+       spirv_vulkan_memory_model(&key->geometry)!=vertex_model &&
+       !ps5vk_graphics_has_tessellation(key))return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(ps5vk_graphics_has_tessellation(key) &&
+       (spirv_vulkan_memory_model(&key->tess_control)!=vertex_model ||
+        spirv_vulkan_memory_model(&key->tess_eval)!=vertex_model ||
+        (ps5vk_graphics_has_geometry(key) &&
+         spirv_vulkan_memory_model(&key->geometry)!=vertex_model)))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_runtime_graphics_program *p=calloc(1,sizeof(*p));
     if(!p)return VK_ERROR_OUT_OF_HOST_MEMORY;
     PsbcResult result=PSBC_RESULT_INTERNAL_ERROR;

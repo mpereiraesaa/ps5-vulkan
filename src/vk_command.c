@@ -101,7 +101,10 @@ void ps5vk_command_invalidate(VkCommandBuffer c)
 {
     if (c) { ++c->pool->device->lifetime_errors; if (c->state != PS5VK_PENDING) c->state = PS5VK_INVALID; }
 }
-#define invalid ps5vk_command_invalidate
+#define invalid(c) do { \
+    CMD_MARK("PS5VK_CMD_REFUSE site=%s:%d", __func__, __LINE__); \
+    ps5vk_command_invalidate(c); \
+} while (0)
 
 struct ps5vk_operation *ps5vk_command_reserve_operations(VkCommandBuffer c,
     enum ps5vk_operation_type type, enum ps5vk_operation_scope scope, uint32_t count)
@@ -1222,7 +1225,8 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & (VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)) &&
-        !(stages & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+        !(stages & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|
+                    VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & (VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     /* A shader write is ordered by the same stages a shader read is. The

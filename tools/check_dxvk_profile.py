@@ -22,6 +22,7 @@ REPORTING = ROOT / "conformance_inventory/reporting_matrix.json"
 CORE_REQUIREMENTS = ROOT / "conformance_inventory/requirements.json"
 OUTPUT = ROOT / "conformance_inventory/dxvk_v262_matrix.json"
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
+PLATFORM_SOURCE = ROOT / "native/platform_ps5.c"
 VULKAN_HEADER = ROOT / "third_party/vulkan-headers/include/vulkan/vulkan_core.h"
 SCHEMA = "ps5vk-dxvk-matrix/1"
 MULTIVIEW_FIELDS = {
@@ -29,6 +30,90 @@ MULTIVIEW_FIELDS = {
     "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": "maxMultiviewViewCount",
     "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": "maxMultiviewInstanceIndex",
 }
+STANDARD_UBO_ID = "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout"
+MEMORY_MODEL_IDS = {
+    "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel": "vulkanMemoryModel",
+    "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope":
+        "vulkanMemoryModelDeviceScope",
+}
+BDA_ID = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
+DEVICE_SCOPE_ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
+DIAGNOSTIC_IMPLEMENTATIONS = {
+    BDA_ID: (
+        ("src/vk_memory.c", "VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR"),
+        ("src/vk_device.c", "VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME"),
+        ("src/ps5vk_compiler.c", "opts.enable_physical_storage_buffer_addresses"),
+    ),
+    DEVICE_SCOPE_ID: (
+        ("src/vk_device.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
+        ("src/vk_pipeline.c", "case 5346u: /* VulkanMemoryModelDeviceScope */"),
+        ("src/ps5vk_compiler.c", "opts.enable_vulkan_memory_model_device_scope"),
+    ),
+}
+
+
+def diagnostic_implementation(identifier: str) -> dict | None:
+    citations = DIAGNOSTIC_IMPLEMENTATIONS.get(identifier)
+    if citations is None:
+        return None
+    missing = [f"{path}:{token}" for path, token in citations
+               if not (ROOT / path).is_file() or token not in (ROOT / path).read_text()]
+    return {"state": "missing" if missing else "implemented",
+            "refs": sorted({path for path, _ in citations}),
+            "detail": ("Missing reviewed diagnostic implementation: " + ", ".join(missing)
+                       if missing else "Bounded implementation exists in a diagnostic build; "
+                       "the independent API, original CTS and native axes still control promotion.")}
+
+
+def memory_model_axes(row: dict, query: dict, extensions: set[str],
+                      feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    field = MEMORY_MODEL_IDS.get(row["id"])
+    if field is None:
+        return None
+    if query.get("route") != "VK_KHR_vulkan_memory_model":
+        raise ValueError("memory model public query route is absent")
+    value = query.get(field)
+    base = query.get("vulkanMemoryModel")
+    scope = query.get("vulkanMemoryModelDeviceScope")
+    if (not isinstance(value, bool) or not isinstance(base, bool) or
+            not isinstance(scope, bool) or (scope and not base)):
+        raise ValueError("invalid memory model public query value")
+    extension = "VK_KHR_vulkan_memory_model" in extensions
+    report = feature_reports.get(field, {})
+    implemented = (value and extension and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if value and extension else "blocker",
+             "observed": value and extension, "expected": row["expected"],
+             "via": "VK_KHR_vulkan_memory_model" if extension else None,
+             "detail": "KHR feature query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised."},
+            {"state": "implemented" if implemented else "missing",
+             "refs": ["src/vk_device.c", "src/vk_pipeline.c", "src/ps5vk_compiler.c",
+                      "native/runtime_graphics_compiler.c",
+                      "conformance_inventory/reporting_matrix.json"],
+             "detail": "The base model and DeviceScope are independently gated; "
+                       "compute and graphics compiler options follow each SPIR-V module's memory model."})
+
+
+def standard_ubo_axes(row: dict, query: dict, extensions: set[str],
+                      feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    if row["id"] != STANDARD_UBO_ID:
+        return None
+    if query.get("route") != "VK_KHR_uniform_buffer_standard_layout" or (
+            "VK_KHR_uniform_buffer_standard_layout" not in extensions):
+        raise ValueError("standard UBO public query route is absent")
+    value = query.get("uniformBufferStandardLayout")
+    if not isinstance(value, bool):
+        raise ValueError("invalid standard UBO public query value")
+    report = feature_reports.get("uniformBufferStandardLayout", {})
+    implemented = (value and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if value else "blocker", "observed": value,
+             "expected": row["expected"], "via": "VK_KHR_uniform_buffer_standard_layout",
+             "detail": "Equivalent KHR field; aggregate Vulkan 1.2 structures remain unadvertised."},
+            {"state": "implemented" if implemented else "missing",
+             "refs": ["src/vk_device.c", "src/spirv_ubo_layout.c",
+                      "conformance_inventory/reporting_matrix.json"],
+             "detail": "Reviewed KHR feature query, opt-in and layout validation."})
 
 
 def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, dict] | None:
@@ -80,6 +165,10 @@ def implemented_device_extensions() -> set[str]:
     end = source_text.index("VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties", start)
     tokens = set(re.findall(r'VK_[A-Z0-9_]+_EXTENSION_NAME',
                             source_text[start:end]))
+    # The extension is implemented only when the native platform advertises
+    # the feature that makes its public query and device-create route usable.
+    if "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT" not in PLATFORM_SOURCE.read_text():
+        tokens.discard("VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME")
     missing = sorted(token for token in tokens if token not in definitions)
     if missing:
         raise ValueError("unresolved device extension macros: " + ", ".join(missing))
@@ -148,16 +237,18 @@ def core_indexes(requirements: dict) -> tuple[dict[str, list[dict]],
 
 
 def cts_join(rows: list[dict], override: dict | None,
-             selected_cases: set[str]) -> dict:
+             selected_cases: set[str], diagnostic_cases: set[str]) -> dict:
     cases = sorted({case for row in rows for case in row.get("cts", {}).get("cases", [])})
     requirement_ids = sorted({row["id"] for row in rows})
     if override:
         state = override.get("state")
-        if state != "cts-pass":
+        if state not in ("cts-pass", "cts-fail"):
             raise ValueError(f"unsupported CTS evidence state {state!r}")
         claimed = override.get("cases", [])
-        if not claimed or not set(claimed).issubset(selected_cases):
-            raise ValueError("CTS evidence names a case outside the current upstream selection")
+        allowed = selected_cases if state == "cts-pass" else diagnostic_cases
+        if not claimed or not set(claimed).issubset(allowed):
+            raise ValueError("CTS evidence names a case outside the current upstream "
+                             f"{'selection' if state == 'cts-pass' else 'diagnostics'}")
         return {
             "state": state, "cases": claimed,
             "mapped_cases": cases, "related_requirement_ids": requirement_ids,
@@ -251,6 +342,7 @@ def generate() -> dict:
                        if row.get("profile") == "graphics"}
     feature_index, property_index, extension_index = core_indexes(requirements)
     selected_cases = set(reporting.get("applicable_cts_selection", {}).get("cases", []))
+    diagnostic_cases = set(reporting.get("applicable_cts_selection", {}).get("diagnostics", []))
     rows = []
     for requirement in profile["requirements"]:
         identifier = requirement["id"]
@@ -270,7 +362,20 @@ def generate() -> dict:
             reporting["profiles"]["graphics"].get("multiview_query", {}), extensions)
         if multiview is not None:
             api, implementation = multiview
-        cts = cts_join(related, override.get("cts"), selected_cases)
+        standard_ubo = standard_ubo_axes(requirement,
+            reporting["profiles"]["graphics"].get("standard_ubo_query", {}),
+            extensions, feature_reports)
+        if standard_ubo is not None:
+            api, implementation = standard_ubo
+        memory_model = memory_model_axes(requirement,
+            reporting["profiles"]["graphics"].get("memory_model_query", {}),
+            extensions, feature_reports)
+        if memory_model is not None:
+            api, implementation = memory_model
+        diagnostic = diagnostic_implementation(identifier)
+        if diagnostic is not None:
+            implementation = diagnostic
+        cts = cts_join(related, override.get("cts"), selected_cases, diagnostic_cases)
         if "native" in override:
             native = override["native"]
         elif probe:

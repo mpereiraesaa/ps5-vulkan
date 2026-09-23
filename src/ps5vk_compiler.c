@@ -5,6 +5,30 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* PSBC interprets Device-scope barriers according to the enabled SPIR-V
+ * memory model. A logical device may enable VK_KHR_vulkan_memory_model while
+ * still compiling ordinary GLSL450 modules. Passing the KHR compiler option
+ * to such a module incorrectly asks SPIRV-to-NIR to apply VulkanKHR's
+ * DeviceScope capability rule to its legacy barriers. Read the module's
+ * OpMemoryModel (opcode 14) before choosing the compiler options. */
+static int module_uses_vulkan_memory_model(const uint32_t *spirv, size_t words)
+{
+    int model = -1;
+    for (size_t at = 5; at < words;) {
+        uint32_t length = spirv[at] >> 16;
+        uint32_t opcode = spirv[at] & 0xffffu;
+        if (!length || length > words - at) return -1;
+        if (opcode == 14u) {
+            if (length != 3 || model != -1) return -1;
+            model = (int)spirv[at + 2];
+        }
+        at += length;
+    }
+    /* Vulkan permits GLSL450 (1) and VulkanKHR (3) for this compute path. */
+    if (model != 1 && model != 3) return -1;
+    return model == 3;
+}
+
 VkResult ps5vk_runtime_compile_compute_features(
     const uint32_t *spirv,
     size_t spirv_words,
@@ -45,6 +69,9 @@ VkResult ps5vk_runtime_compile_compute_features(
         offset += len;
     }
     if (!entry_found)
+        return VK_ERROR_UNKNOWN;
+    const int vulkan_memory_model = module_uses_vulkan_memory_model(spirv, spirv_words);
+    if (vulkan_memory_model < 0)
         return VK_ERROR_UNKNOWN;
 
     PsbcCompileOptions opts = {0};
@@ -138,7 +165,8 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_SAMPLE_RATE_SHADING |
                           PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS |
                           PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
-                          PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE))
+                          PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE |
+                          PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
         !(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL))
@@ -150,9 +178,9 @@ VkResult ps5vk_runtime_compile_compute_features(
     opts.enable_physical_storage_buffer_addresses =
         !!(feature_mask & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
     opts.enable_vulkan_memory_model =
-        !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL);
+        vulkan_memory_model && !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL);
     opts.enable_vulkan_memory_model_device_scope =
-        !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE);
+        vulkan_memory_model && !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE);
 
     if (specialization) {
         if (specialization->mapEntryCount > PSBC_MAX_SPECIALIZATION_CONSTANTS ||

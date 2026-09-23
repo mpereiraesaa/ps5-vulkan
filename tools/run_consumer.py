@@ -32,11 +32,12 @@ def running(host: str) -> str:
     return match.group(1)
 
 
-def wait_for_log(runs_dir: Path, known: set[str], timeout: float) -> Path:
+def wait_for_log(runs_dir: Path, known: set[str], timeout: float,
+                 app: str = "ps5vk") -> Path:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         candidates = sorted(
-            path for path in runs_dir.glob("*_PPSA99994_ps5vk_*.log")
+            path for path in runs_dir.glob(f"*_PPSA99994_{app}_*.log")
             if path.name not in known)
         if candidates:
             candidate = candidates[-1]

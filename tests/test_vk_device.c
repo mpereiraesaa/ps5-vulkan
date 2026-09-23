@@ -2039,6 +2039,71 @@ static void buffer_address_khr_device_route(void)
     assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
     vkDestroyInstance(i, NULL);
 }
+static void uniform_buffer_standard_layout_route(void)
+{
+    VkInstance instance_with_features2 = features2_instance();
+    VkPhysicalDevice p = physical(instance_with_features2);
+    VkPhysicalDeviceUniformBufferStandardLayoutFeatures layout_feature = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES};
+    VkPhysicalDeviceFeatures2 features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &layout_feature};
+    vkGetPhysicalDeviceFeatures2KHR(p, &features);
+    assert(!layout_feature.uniformBufferStandardLayout);
+    VkExtensionProperties extensions[8]; uint32_t count = 8;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, extensions) == VK_SUCCESS);
+    for (uint32_t n = 0; n < count; ++n)
+        assert(strcmp(extensions[n].extensionName,
+                      VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME));
+
+    /* Simulate a capable platform to test the Vulkan 1.0 KHR negotiation.
+     * The shipping platform never sets this bit until native acceptance. */
+    p->platform.supported_features |= PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
+    layout_feature.uniformBufferStandardLayout = VK_FALSE;
+    vkGetPhysicalDeviceFeatures2KHR(p, &features);
+    assert(layout_feature.uniformBufferStandardLayout == VK_TRUE);
+    count = 8;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, extensions) == VK_SUCCESS);
+    int found = 0;
+    for (uint32_t n = 0; n < count; ++n)
+        found |= !strcmp(extensions[n].extensionName,
+                         VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME);
+    assert(found);
+
+    const char *name = VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME;
+    VkDeviceQueueCreateInfo queue; float priority;
+    VkDeviceCreateInfo info = device_info(&queue, &priority);
+    info.enabledExtensionCount = 1; info.ppEnabledExtensionNames = &name;
+    VkDevice device = VK_NULL_HANDLE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(!(device->enabled_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT));
+    vkDestroyDevice(device, NULL);
+    layout_feature.uniformBufferStandardLayout = VK_TRUE;
+    info.pNext = &layout_feature;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT);
+    vkDestroyDevice(device, NULL);
+
+    info.enabledExtensionCount = 0; info.ppEnabledExtensionNames = NULL;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    info.enabledExtensionCount = 1; info.ppEnabledExtensionNames = &name;
+    VkPhysicalDeviceUniformBufferStandardLayoutFeatures duplicate = layout_feature;
+    layout_feature.pNext = &duplicate;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+    layout_feature.pNext = NULL;
+    layout_feature.uniformBufferStandardLayout = 2;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+    layout_feature.uniformBufferStandardLayout = VK_TRUE;
+    p->platform.supported_features &= ~PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_EXTENSION_NOT_PRESENT && !device);
+    vkDestroyInstance(instance_with_features2, NULL);
+
+    VkInstance plain_instance = instance();
+    VkPhysicalDevice plain = physical(plain_instance);
+    plain->platform.supported_features |= PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
+    info.pNext = NULL;
+    assert(vkCreateDevice(plain, &info, NULL, &device) == VK_ERROR_EXTENSION_NOT_PRESENT && !device);
+    vkDestroyInstance(plain_instance, NULL);
+}
 
 int main(void)
 {
@@ -2050,5 +2115,6 @@ int main(void)
     buffer_address_command_gate();
     device_group_dispatch_command_gate();
     buffer_address_khr_device_route();
+    uniform_buffer_standard_layout_route();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

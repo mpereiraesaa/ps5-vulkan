@@ -96,7 +96,7 @@ class MeasurementManifestTests(unittest.TestCase):
                  "diagnostic:t08-buffer-device-address-base"]
         self.assertEqual(expected, {c["path"] for c in moved})
         self.assertEqual(2, derived["measurement"]["moved"])
-        self.assertEqual(496, len(derived["cases"]))
+        self.assertEqual(507, len(derived["cases"]))
         self.assertEqual(selection_hash(derived["cases"]),
                          derived["measurement"]["selection_hash"])
         self.assertNotEqual(derived["measurement"]["base_selection_hash"],

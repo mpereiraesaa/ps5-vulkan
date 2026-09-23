@@ -252,6 +252,34 @@ int main(void)
         free(t08_code);
         free(spirv);
     }
+    /* The original ssbo_local_barrier_multiple_groups shader uses GLSL450
+     * OpMemoryModel and Device-scope barriers. Advertising the separate KHR
+     * base feature on the logical device must not reinterpret that legacy
+     * module as VulkanKHR and demand DeviceScope for it. */
+    size_t legacy_bytes = 0;
+    uint32_t *legacy = read_file("build/test-shaders/cts_ssbo_local_barrier.spv",
+                                 &legacy_bytes);
+    assert(legacy);
+    VkBool32 glsl450 = VK_FALSE;
+    for (size_t at = 5; at < legacy_bytes / 4;) {
+        const uint32_t words = legacy[at] >> 16;
+        assert(words && at + words <= legacy_bytes / 4);
+        if ((legacy[at] & 0xffffu) == 14u) {
+            assert(words == 3 && legacy[at + 2] == 1u);
+            glsl450 = VK_TRUE;
+        }
+        at += words;
+    }
+    assert(glsl450);
+    struct ps5vk_compiled_program legacy_program = {0};
+    uint32_t *legacy_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(legacy, legacy_bytes / 4,
+        "main", &single_storage_layout, NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL,
+        &legacy_program, &legacy_code) == VK_SUCCESS);
+    assert(legacy_code && legacy_program.local_size[0] == 3 &&
+           legacy_program.local_size[1] == 4 && legacy_program.local_size[2] == 1);
+    free(legacy_code);
+    free(legacy);
     /* 4. Test error handling */
     struct ps5vk_compiled_program bad_prog;
     uint32_t *bad_code = NULL;
@@ -273,6 +301,15 @@ int main(void)
         assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
             NULL, graphics_device_mask, &graphics_device_program,
             &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* Standard UBO layout changes SPIR-V layout validation, not PSBC's
+         * compute compilation options. A device that enables it must still
+         * compile unrelated compute shaders on the same logical device. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, graphics_device_mask | PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT,
+            &graphics_device_program, &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);
         /* The four DXVK262-T05 rasterization/viewport bits are the same kind

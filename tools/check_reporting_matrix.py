@@ -207,6 +207,34 @@ ADVERTISED_FEATURES = {
     },
 }
 
+ADVERTISED_FEATURES["uniformBufferStandardLayout"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT"),
+        ("src/vk_device.c", "VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME"),
+        ("src/vk_pipeline.c", "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT"),
+        ("src/spirv_ubo_layout.c", "ps5vk_spirv_validate_ubo_layout"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query and create route enables bounded std430 uniform "
+               "buffer layout validation before compiler lowering"),
+    "cts": ("dEQP-VK.ubo.single_basic_array.std430.uint.vertex",),
+}
+
+_MEMORY_MODEL_VOLATILE_CTS = tuple(
+    "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile." + operation
+    for operation in ("compex", "iadd", "idec", "iinc", "isub", "load", "store"))
+ADVERTISED_FEATURES["vulkanMemoryModel"] = {
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;"),
+        ("src/vk_device.c", "VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME"),
+        ("src/vk_pipeline.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL"),
+        ("src/ps5vk_compiler.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query and opt-in route enables VulkanKHR volatile "
+               "queue-family atomics; seven unchanged upstream atomic oracles and a bounded "
+               "GPU producer/consumer witness passed"),
+    "cts": _MEMORY_MODEL_VOLATILE_CTS,
+}
+
 # DXVK262-T04. The applicable upstream oracle for both distance features is the
 # pinned clipping module's user-defined family, which the frozen selection lists
 # in full for the shapes this device can run: vertex-only, the two indexing modes
@@ -646,6 +674,15 @@ def evaluate_feature(name: str, value: bool, profile: str = "graphics") -> tuple
         return "satisfied", advertised["detail"]
     if advertised:
         return "violation", "required reviewed feature is no longer advertised"
+    if name in ("vulkanMemoryModelDeviceScope", "bufferDeviceAddress"):
+        token = ("PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE" if
+                 name == "vulkanMemoryModelDeviceScope" else
+                 "PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS")
+        source = (ROOT / "src/vk_device.c").read_text()
+        if token not in source or "return VK_ERROR_FEATURE_NOT_PRESENT;" not in source:
+            return "not-audited", "extension feature request gate citation is missing"
+        return ("satisfied", "the KHR feature query reports false on the shipping "
+                "platform and vkCreateDevice refuses a request for the unsupported bit")
     if name in FEATURE_GATES:
         where, token, reason = FEATURE_GATES[name]
         path = ROOT / where
@@ -1148,6 +1185,13 @@ def main() -> int:
             verdict, detail = evaluate_feature(name, value, profile)
             features.append({"kind": "feature", "feature": name, "profile": profile,
                              "reported": value, "verdict": verdict, "detail": detail})
+        for name in ("uniformBufferStandardLayout", "vulkanMemoryModel",
+                     "vulkanMemoryModelDeviceScope", "bufferDeviceAddress"):
+            value = dump["extensionFeatures"][name]
+            verdict, detail = evaluate_feature(name, value, profile)
+            features.append({"kind": "extension-feature", "feature": name,
+                             "profile": profile, "reported": value,
+                             "verdict": verdict, "detail": detail})
 
     formats = []
     for profile, dump in dumps.items():
@@ -1220,7 +1264,10 @@ def main() -> int:
         },
         "profiles": {profile: {"deviceName": dump["deviceName"], "apiVersion": dump["apiVersion"],
                                "vendorID": dump["vendorID"], "deviceID": dump["deviceID"],
-                               "multiview_query": dump["multiviewQuery"]}
+                               "multiview_query": dump["multiviewQuery"],
+                               "standard_ubo_query": dump["standardUBOQuery"],
+                               "memory_model_query": dump["memoryModelQuery"],
+                               "buffer_device_address_query": dump["bufferDeviceAddressQuery"]}
                      for profile, dump in dumps.items()},
         "limits": limits,
         "features": features,

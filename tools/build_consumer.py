@@ -139,6 +139,8 @@ def main():
                         help="Reuse dist-sdk without rebuilding it (caller guarantees freshness)")
     parser.add_argument("--dxvk-v262-probe", action="store_true",
                         help="Build the public-ABI-only DXVK v2.6.2 capability probe")
+    parser.add_argument("--ubo-standard-layout", action="store_true",
+                        help="Build the compact UBO GPU witness entry point")
     args = parser.parse_args()
     if args.continuous and args.shared_stage_samplers:
         parser.error("Shared-stage qualification requires the finite consumer")
@@ -152,8 +154,13 @@ def main():
         parser.error("Choose one uniform-texel witness")
     if args.dxvk_v262_probe and any((args.continuous, args.shared_stage_samplers,
                                     args.single_set_samplers, args.mixed_resources,
-                                    args.texel_rgba8, args.texel_formats)):
+                                    args.texel_rgba8, args.texel_formats,
+                                    args.ubo_standard_layout)):
         parser.error("DXVK capability probing is an independent finite profile")
+    if args.ubo_standard_layout and any((args.continuous, args.shared_stage_samplers,
+                                        args.single_set_samplers, args.mixed_resources,
+                                        args.texel_rgba8, args.texel_formats)):
+        parser.error("Standard UBO layout witness is an independent finite profile")
     if sum((args.shared_stage_samplers, args.single_set_samplers,
             args.mixed_resources)) > 1:
         parser.error("Choose one sampled-descriptor profile")
@@ -227,6 +234,12 @@ def main():
             sys.executable, str(ROOT / "tools/prepare_consumer_texel_formats.py"),
             "--out", str(texel_format_header),
         ], check=True)
+    ubo_shader_header = BUILD_DIR / "ubo_standard_layout_shader.h"
+    if args.ubo_standard_layout:
+        subprocess.run([
+            sys.executable, str(ROOT / "tools/prepare_consumer_ubo_shader.py"),
+            "--out", str(ubo_shader_header),
+        ], check=True)
     cflags = [
         "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
         "-ffunction-sections", "-fdata-sections",
@@ -250,19 +263,21 @@ def main():
         cflags.append("-DCONSUMER_TEXEL_FORMATS=1")
     if args.dxvk_v262_probe:
         cflags.append("-DCONSUMER_DXVK262_PROBE=1")
+    consumer_source = (CONSUMER_DIR / "ubo_layout_main.c" if args.ubo_standard_layout
+                       else CONSUMER_DIR / "main.c")
 
     has_native_toolchain = clang_wrapper.is_file() and linker.is_file() and builder.is_file()
 
-    print("Compiling consumer main.c...")
+    print(f"Compiling consumer {consumer_source.name}...")
     if has_native_toolchain:
         env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
         subprocess.run(
-            ["sh", str(clang_wrapper), *cflags, "-c", str(CONSUMER_DIR / "main.c"), "-o", str(obj_file)],
+            ["sh", str(clang_wrapper), *cflags, "-c", str(consumer_source), "-o", str(obj_file)],
             env=env, check=True
         )
     else:
         subprocess.run(
-            ["cc", *cflags, "-c", str(CONSUMER_DIR / "main.c"), "-o", str(obj_file)],
+            ["cc", *cflags, "-c", str(consumer_source), "-o", str(obj_file)],
             check=True
         )
 
@@ -497,6 +512,23 @@ def main():
                 "requirements": profile["summary"]["requirements"],
                 "profile_sha256": hashlib.sha256(profile_path.read_bytes()).hexdigest(),
                 "matrix_sha256": hashlib.sha256(matrix_path.read_bytes()).hexdigest(),
+            },
+        }
+    if args.ubo_standard_layout:
+        artifact = {
+            "title": "PPSA99994",
+            "profile": "ubo-standard-layout-witness",
+            "submit_enabled": True,
+            "files": files,
+            "ubo_standard_layout": {
+                "api": "Vulkan 1.0 KHR extension",
+                "shipping_feature": True,
+                "shader_spirv_sha256": hashlib.sha256(
+                    ubo_shader_header.with_suffix(".spv").read_bytes()).hexdigest(),
+                "workgroups": 2,
+                "values": 64,
+                "ubo_bytes": 136,
+                "guarded_output": True,
             },
         }
     if args.single_set_samplers:

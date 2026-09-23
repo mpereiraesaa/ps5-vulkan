@@ -129,6 +129,8 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS = 1u << 20,
     PS5VK_FEATURE_VULKAN_MEMORY_MODEL = 1u << 21,
     PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE = 1u << 22,
+    /* Keep this layout gate independent of the other feature bits. */
+    PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

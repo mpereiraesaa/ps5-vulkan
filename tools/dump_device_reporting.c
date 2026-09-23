@@ -66,7 +66,9 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     /* Mirror native/platform_ps5.c: the narrow-storage features are negotiated
      * only by builds that link the runtime compiler
      * (tools/build_native.py: use_runtime_compiler = compute and ...). */
-    platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
+    platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                                   PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT |
+                                   PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
     if (!graphics_objects)
         platform->supported_features |= PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                         PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
@@ -562,6 +564,12 @@ int main(int argc, char **argv)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES};
     VkPhysicalDeviceMultiviewFeatures multiview = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES};
+    VkPhysicalDeviceUniformBufferStandardLayoutFeatures standard_ubo = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES};
+    VkPhysicalDeviceVulkanMemoryModelFeaturesKHR memory_model = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR};
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR device_address = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR};
     VkPhysicalDeviceMultiviewProperties multiview_properties = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
     uint32_t extensions = 0;
@@ -576,6 +584,9 @@ int main(int argc, char **argv)
     storage16.pNext = &protected_memory;
     protected_memory.pNext = &draw_parameters;
     draw_parameters.pNext = &multiview;
+    multiview.pNext = &standard_ubo;
+    standard_ubo.pNext = &memory_model;
+    memory_model.pNext = &device_address;
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = &storage8};
     vkGetPhysicalDeviceFeatures2KHR(dump_physical, &features2);
@@ -588,6 +599,24 @@ int main(int argc, char **argv)
         "\"maxMultiviewInstanceIndex\": %u},\n",
         multiview.multiview ? "true" : "false", multiview_properties.maxMultiviewViewCount,
         multiview_properties.maxMultiviewInstanceIndex);
+    fprintf(stdout, "  \"standardUBOQuery\": {\"route\": "
+                    "\"VK_KHR_uniform_buffer_standard_layout\", "
+                    "\"uniformBufferStandardLayout\": %s},\n",
+        standard_ubo.uniformBufferStandardLayout ? "true" : "false");
+    fprintf(stdout, "  \"memoryModelQuery\": {\"route\": "
+                    "\"VK_KHR_vulkan_memory_model\", "
+                    "\"vulkanMemoryModel\": %s, "
+                    "\"vulkanMemoryModelDeviceScope\": %s},\n",
+        memory_model.vulkanMemoryModel ? "true" : "false",
+        memory_model.vulkanMemoryModelDeviceScope ? "true" : "false");
+    fprintf(stdout, "  \"bufferDeviceAddressQuery\": {\"route\": "
+                    "\"VK_KHR_buffer_device_address\", "
+                    "\"bufferDeviceAddress\": %s, "
+                    "\"bufferDeviceAddressCaptureReplay\": %s, "
+                    "\"bufferDeviceAddressMultiDevice\": %s},\n",
+        device_address.bufferDeviceAddress ? "true" : "false",
+        device_address.bufferDeviceAddressCaptureReplay ? "true" : "false",
+        device_address.bufferDeviceAddressMultiDevice ? "true" : "false");
     fprintf(stdout, "  \"extensionCount\": %u,\n", extensions);
     fputs("  \"extensions\": [", stdout);
     for (uint32_t i = 0; i < extensions; ++i)
@@ -602,7 +631,11 @@ int main(int argc, char **argv)
                     "    \"storagePushConstant16\": %s,\n"
                     "    \"storageInputOutput16\": %s,\n"
                     "    \"protectedMemory\": %s,\n"
-                    "    \"shaderDrawParameters\": %s\n"
+                    "    \"shaderDrawParameters\": %s,\n"
+                    "    \"uniformBufferStandardLayout\": %s,\n"
+                    "    \"vulkanMemoryModel\": %s,\n"
+                    "    \"vulkanMemoryModelDeviceScope\": %s,\n"
+                    "    \"bufferDeviceAddress\": %s\n"
                     "  },\n",
         storage8.storageBuffer8BitAccess ? "true" : "false",
         storage8.uniformAndStorageBuffer8BitAccess ? "true" : "false",
@@ -612,7 +645,11 @@ int main(int argc, char **argv)
         storage16.storagePushConstant16 ? "true" : "false",
         storage16.storageInputOutput16 ? "true" : "false",
         protected_memory.protectedMemory ? "true" : "false",
-        draw_parameters.shaderDrawParameters ? "true" : "false");
+        draw_parameters.shaderDrawParameters ? "true" : "false",
+        standard_ubo.uniformBufferStandardLayout ? "true" : "false",
+        memory_model.vulkanMemoryModel ? "true" : "false",
+        memory_model.vulkanMemoryModelDeviceScope ? "true" : "false",
+        device_address.bufferDeviceAddress ? "true" : "false");
     free(extension_names);
     free(extension_properties);
 

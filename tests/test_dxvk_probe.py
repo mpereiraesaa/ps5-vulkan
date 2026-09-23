@@ -178,6 +178,73 @@ class DxvkProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "explicit multiview query route"):
             fixture.validate()
 
+    def test_standard_ubo_positive_requires_matching_khr_query_route(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        identifier = "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout"
+        records = list(fixture.records)
+        index = next(i for i, record in enumerate(records) if f"id={identifier} " in record)
+        records[index] = records[index].replace("observed=0 status=blocker",
+                                                 "observed=1 status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                         "satisfied=2 blockers=60")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit standard UBO query route"):
+            fixture.validate()
+        route = ("DXVK262_STANDARD_UBO_QUERY route=VK_KHR_uniform_buffer_standard_layout "
+                 "uniformBufferStandardLayout=1")
+        records.insert(1, route)
+        fixture.write(records)
+        self.assertEqual(2, fixture.validate()["satisfied"])
+        records[1] = route.replace("uniformBufferStandardLayout=1",
+                                   "uniformBufferStandardLayout=0")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit standard UBO query route"):
+            fixture.validate()
+
+    def test_memory_model_base_and_scope_require_exact_khr_query(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        identifier = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel"
+        records = list(fixture.records)
+        index = next(i for i, record in enumerate(records) if f"id={identifier} " in record)
+        records[index] = records[index].replace("observed=0 status=blocker",
+                                                 "observed=1 status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                         "satisfied=2 blockers=60")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit memory model query route"):
+            fixture.validate()
+        route = ("DXVK262_MEMORY_MODEL_QUERY route=VK_KHR_vulkan_memory_model "
+                 "vulkanMemoryModel=1 vulkanMemoryModelDeviceScope=0")
+        records.insert(1, route)
+        fixture.write(records)
+        self.assertEqual(2, fixture.validate()["satisfied"])
+        records[1] = route.replace("vulkanMemoryModelDeviceScope=0",
+                                   "vulkanMemoryModelDeviceScope=1")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "memory model route value mismatch"):
+            fixture.validate()
+
+    def test_buffer_device_address_positive_requires_exact_khr_query(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        identifier = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
+        records = list(fixture.records)
+        index = next(i for i, record in enumerate(records) if f"id={identifier} " in record)
+        records[index] = records[index].replace("observed=0 status=blocker",
+                                                 "observed=1 status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                         "satisfied=2 blockers=60")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit buffer device address query route"):
+            fixture.validate()
+        route = ("DXVK262_BUFFER_DEVICE_ADDRESS_QUERY "
+                 "route=VK_KHR_buffer_device_address bufferDeviceAddress=1")
+        records.insert(1, route)
+        fixture.write(records)
+        self.assertEqual(2, fixture.validate()["satisfied"])
+
     def test_historical_matrix_snapshot_remains_hash_bound(self):
         fixture = ProbeFixture()
         self.addCleanup(fixture.tmp.cleanup)
