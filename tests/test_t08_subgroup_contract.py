@@ -189,6 +189,79 @@ void main() {
                 self.assertNotEqual(signatures["broadcast"], signatures["control"],
                                     f"{stage} Broadcast was discarded by the compiler")
 
+    def test_signed_int8_graphics_broadcast_survives_pipeline_context(self):
+        """A runtime ID and signed narrow result survive both graphics stages."""
+        glslang = shutil.which("glslangValidator")
+        archive = ROOT / "build/libpsbc.host.a"
+        if not glslang or not archive.is_file():
+            self.skipTest("host PSBC archive and glslangValidator required")
+        header = """#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_subgroup_extended_types_int8 : require
+layout(set=0,binding=0,std430) readonly buffer Sources { uint ids[]; } data;
+"""
+        sources = {
+            "vertex": ("vert", header + """layout(location=0) flat out uint result;
+void main() {
+    uint source = data.ids[gl_VertexIndex & 3];
+    int8_t item = int8_t(int(gl_SubgroupInvocationID) - 16);
+    result = uint(subgroupBroadcast(item, source));
+    gl_Position = vec4(float(gl_VertexIndex & 1) * 0.5, 0.0, 0.0, 1.0);
+}
+"""),
+            "fragment": ("frag", header + """layout(location=0) out vec4 color;
+void main() {
+    uint source = data.ids[uint(gl_FragCoord.x) & 3u];
+    int8_t item = int8_t(int(gl_SubgroupInvocationID) - 16);
+    uint result = uint(subgroupBroadcast(item, source));
+    color = vec4(float(result & 255u) / 255.0, 0.0, 0.0, 1.0);
+}
+"""),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            probe = temp / "probe"
+            subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            "-Ithird_party/psbc-reference/libpsbc",
+                            "tests/t08_graphics_subgroup_probe.c", str(archive),
+                            "-lstdc++", "-lm", "-lpthread", "-o", str(probe)],
+                           cwd=ROOT, check=True, capture_output=True, text=True)
+            for stage, (suffix, source) in sources.items():
+                signatures = {}
+                for variant, shader_source in (
+                    ("broadcast", source),
+                    ("control", source.replace(
+                        "uint(subgroupBroadcast(item, source))",
+                        "uint(item) + source")),
+                ):
+                    shader = temp / f"{stage}-{variant}.{suffix}"
+                    binary = temp / f"{stage}-{variant}.spv"
+                    shader.write_text(shader_source)
+                    subprocess.run([glslang, "-V", "--target-env", "vulkan1.2",
+                                    str(shader), "-o", str(binary)], check=True,
+                                   capture_output=True, text=True)
+                    ops = list(instructions(binary.read_bytes()))
+                    broadcasts = [args for opcode, args in ops if opcode == 337]
+                    self.assertEqual(len(broadcasts), int(variant == "broadcast"))
+                    if broadcasts:
+                        signed_int8 = {args[0] for opcode, args in ops
+                                       if opcode == 21 and args[1:] == (8, 1)}
+                        loads = {args[1] for opcode, args in ops if opcode == 61}
+                        self.assertIn(broadcasts[0][0], signed_int8)
+                        self.assertIn(broadcasts[0][-1], loads)
+                    result = subprocess.run([str(probe), stage, str(binary), "int8"],
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    match = re.fullmatch(
+                        r"result=0 code_bytes=([1-9][0-9]*) descriptors=1 "
+                        r"fnv64=([0-9a-f]{16})\n", result.stdout)
+                    self.assertIsNotNone(match, result.stdout)
+                    signatures[variant] = match.group(2)
+                self.assertNotEqual(signatures["broadcast"], signatures["control"],
+                                    f"{stage} signed Int8 Broadcast was discarded")
+
     def test_extended_arithmetic_lowering(self):
         """Original CTS arithmetic reductions and scans retain live PSBC ISA."""
         glslang = shutil.which("glslangValidator")
