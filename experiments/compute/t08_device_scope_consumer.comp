@@ -1,0 +1,21 @@
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_KHR_memory_scope_semantics : require
+
+#if defined(T08_DEVICE_SCOPE)
+#define T08_SCOPE gl_ScopeDevice
+#else
+#define T08_SCOPE gl_ScopeQueueFamily
+#endif
+
+layout(local_size_x=32) in;
+layout(set=0, binding=0) nonprivate readonly buffer SharedData { uint value[]; } data;
+layout(set=0, binding=1) nonprivate writeonly buffer ResultData { uint value[]; } resultData;
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+    memoryBarrier(T08_SCOPE, gl_StorageSemanticsBuffer,
+                  gl_SemanticsAcquire | gl_SemanticsMakeVisible);
+    resultData.value[8u + index] = data.value[8u + index] ^ 0x9e3779b9u;
+}

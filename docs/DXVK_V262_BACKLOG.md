@@ -24,7 +24,7 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 18/62 ready with 44 blockers. The ordered table preserves the
+live matrix is 20/62 ready with 42 blockers. The ordered table preserves the
 original tranche membership.
 
 Tranche delivery and DXVK profile scoring are different gates. The current

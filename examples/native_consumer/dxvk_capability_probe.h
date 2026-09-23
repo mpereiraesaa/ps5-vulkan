@@ -177,6 +177,34 @@ static int run_dxvk262_capability_probe(void)
             "DXVK262_STANDARD_UBO_QUERY route=VK_KHR_uniform_buffer_standard_layout "
             "uniformBufferStandardLayout=%u", standard_ubo.uniformBufferStandardLayout);
     }
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME)) {
+        VkPhysicalDeviceVulkanMemoryModelFeaturesKHR memory_model = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &memory_model};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features12.vulkanMemoryModel = memory_model.vulkanMemoryModel;
+        features12.vulkanMemoryModelDeviceScope = memory_model.vulkanMemoryModelDeviceScope;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_MEMORY_MODEL_QUERY route=VK_KHR_vulkan_memory_model "
+            "vulkanMemoryModel=%u vulkanMemoryModelDeviceScope=%u",
+            memory_model.vulkanMemoryModel, memory_model.vulkanMemoryModelDeviceScope);
+    }
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+        VkPhysicalDeviceBufferDeviceAddressFeaturesKHR device_address = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &device_address};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features12.bufferDeviceAddress = device_address.bufferDeviceAddress;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_BUFFER_DEVICE_ADDRESS_QUERY route=VK_KHR_buffer_device_address "
+            "bufferDeviceAddress=%u", device_address.bufferDeviceAddress);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",

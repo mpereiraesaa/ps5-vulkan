@@ -1,0 +1,12 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+layout(local_size_x=1) in;
+layout(buffer_reference, std430, buffer_reference_align=16) buffer Data {
+    uint value;
+};
+layout(push_constant) uniform Parameters {
+    Data target;
+} params;
+void main() {
+    params.target.value = 0x12345678u;
+}

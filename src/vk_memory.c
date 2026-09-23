@@ -25,6 +25,8 @@ struct VkDeviceMemory_T {
     VkDevice device;
     VkDeviceSize size, map_offset, map_size;
     void *address, *backing;
+    VkDeviceAddress gpu_address;
+    VkBool32 device_address_allocation;
     VkBool32 mapped;
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
@@ -67,6 +69,17 @@ static void object_free(void *object, const VkAllocationCallbacks *a, VkBool32 c
     ps5vk_object_free(object, a, custom);
 }
 
+/* The host backend has no GPU virtual address. The native direct-memory
+ * backend supplies a strong implementation; a host test can do the same with
+ * a synthetic GPU address distinct from its CPU mapping. */
+__attribute__((weak)) VkResult ps5vk_memory_backend_device_address(
+    void *backing, VkDeviceAddress *out)
+{
+    (void)backing;
+    if (out) *out = 0;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
     const VkMemoryAllocateInfo *info, const VkAllocationCallbacks *allocator,
     VkDeviceMemory *out)
@@ -75,7 +88,40 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO ||
         !info->allocationSize || info->memoryTypeIndex != 0) return INVALID;
-    if (info->pNext) return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkBool32 device_address_allocation = VK_FALSE;
+    VkBool32 saw_flags = VK_FALSE, saw_capture = VK_FALSE;
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
+         next; next = next->pNext) {
+        if (next->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO) {
+            if (saw_flags) return INVALID;
+            saw_flags = VK_TRUE;
+            const VkMemoryAllocateFlagsInfo *flags =
+                (const VkMemoryAllocateFlagsInfo *)next;
+            const VkMemoryAllocateFlags supported =
+                VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT |
+                VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR;
+            if (flags->flags & ~supported)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (flags->flags & VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR) {
+                /* The driver exposes one physical device in its group. */
+                if (!d->device_group_extension_enabled || flags->deviceMask != 1)
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+            } else if (flags->deviceMask) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (flags->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT) {
+                if (!(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                device_address_allocation = VK_TRUE;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO) {
+            if (saw_capture) return INVALID;
+            saw_capture = VK_TRUE;
+            if (((const VkMemoryOpaqueCaptureAddressAllocateInfo *)next)->opaqueCaptureAddress)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        } else return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    if (saw_capture && !device_address_allocation)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!d->memory.allocate || !d->memory.release || !d->memory.flush ||
         !d->memory.invalidate || !power_two(d->noncoherent_atom))
         return VK_ERROR_INITIALIZATION_FAILED;
@@ -95,7 +141,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
         object_free(m, &saved, custom);
         return VK_ERROR_MEMORY_MAP_FAILED;
     }
+    if (device_address_allocation) {
+        VkDeviceAddress gpu_address = 0;
+        result = ps5vk_memory_backend_device_address(m->backing, &gpu_address);
+        if (result != VK_SUCCESS || !gpu_address ||
+            info->allocationSize > UINT64_MAX - gpu_address) {
+            d->memory.release(d->memory.context, m->backing);
+            object_free(m, &saved, custom);
+            return result == VK_SUCCESS ? VK_ERROR_MEMORY_MAP_FAILED : result;
+        }
+        m->gpu_address = gpu_address;
+    }
     m->device = d; m->size = info->allocationSize;
+    m->device_address_allocation = device_address_allocation;
     m->next = d->memories; d->memories = m; *out = m;
     return VK_SUCCESS;
 }
@@ -214,7 +272,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateBuffer(VkDevice d, const VkBufferCreateIn
         !info->usage || (info->usage & ~(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
         VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)))
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if ((info->usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) &&
+        !(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if (info->size > UINT64_MAX - (d->buffer_alignment - 1))
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -300,9 +362,30 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory(VkDevice d, VkBuffer b,
     if (!d || !b || !m || b->device != d || m->device != d || b->ever_bound ||
         offset % d->buffer_alignment || offset > m->size ||
         b->required_size > m->size - offset) return INVALID;
+    if ((b->usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) &&
+        !m->device_address_allocation) return VK_ERROR_FEATURE_NOT_PRESENT;
     b->memory = m; b->offset = offset; b->ever_bound = VK_TRUE;
     return VK_SUCCESS;
 }
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR(VkDevice d,
+    const VkBufferDeviceAddressInfo *info)
+{
+    if (!d || !info || info->sType != VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO ||
+        info->pNext || !(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
+        return 0;
+    VkBuffer live = d->buffers;
+    while (live && live != info->buffer) live = live->next;
+    if (!live || !(live->usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) ||
+        !live->memory || !live->memory->device_address_allocation)
+        return 0;
+    return live->memory->gpu_address + live->offset;
+}
+VKAPI_ATTR uint64_t VKAPI_CALL vkGetBufferOpaqueCaptureAddressKHR(VkDevice d,
+    const VkBufferDeviceAddressInfo *info)
+{ (void)d; (void)info; return 0; }
+VKAPI_ATTR uint64_t VKAPI_CALL vkGetDeviceMemoryOpaqueCaptureAddressKHR(VkDevice d,
+    const VkDeviceMemoryOpaqueCaptureAddressInfo *info)
+{ (void)d; (void)info; return 0; }
 VkResult ps5vk_buffer_span(VkDevice d, VkBuffer b, VkDeviceSize offset,
                           VkDeviceSize range, void **address, VkDeviceSize *size)
 {
@@ -408,7 +491,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
      * combination stays refused. */
     const VkImageUsageFlags supported = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_STORAGE_BIT;
     /* The input-attachment role is bounded by the measured six-view floor: the
      * format query reports exactly that ceiling for this shape, so creation has
      * to refuse anything deeper rather than accept a shape the query says does
@@ -433,6 +517,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     if (info->mipLevels > levels ||
         (info->format == VK_FORMAT_D32_SFLOAT ? (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
          (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) return INVALID;
+    if ((info->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+        (info->format != VK_FORMAT_R32_UINT || info->imageType != VK_IMAGE_TYPE_2D ||
+         info->extent.width > 8 || info->extent.height > 8 ||
+         info->mipLevels != 1 || info->arrayLayers != 1 ||
+         info->usage != (VK_IMAGE_USAGE_STORAGE_BIT |
+             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     /* The backend owns format/usage support. Keeping a second format whitelist
      * here made newly validated native formats impossible to create even when
      * the query and requirements paths accepted them. */

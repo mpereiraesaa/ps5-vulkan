@@ -1,4 +1,5 @@
 #include "descriptor_encode.h"
+#include "vk_image.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -10,6 +11,15 @@ VkResult ps5vk_buffer_span(VkDevice d, VkBuffer b, VkDeviceSize offset,
     (void)d;
     if (!b) return VK_ERROR_UNKNOWN;
     *address = (void *)((uintptr_t)b + offset); *size = range;
+    return VK_SUCCESS;
+}
+VkResult ps5vk_image_span(VkDevice d, VkImage image, void **address,
+                          VkDeviceSize *bytes)
+{
+    (void)d;
+    if (!image || !image->memory) return VK_ERROR_UNKNOWN;
+    *address = (void *)(uintptr_t)UINT64_C(0x200001000);
+    *bytes = image->requirements.size;
     return VK_SUCCESS;
 }
 int main(void)
@@ -103,5 +113,50 @@ int main(void)
         assert(ps5vk_descriptor_encode(&device, &typed, 1, &texel, dynamic, table, 16) != VK_SUCCESS);
         for (unsigned j = 0; j < 16; ++j) assert(table[j] == 0xabababab);
     }
+    /* Pinned BDA output: R32_UINT 8x8, padded 256-byte rows, one UAV T#
+     * followed by the original SSBO. A buffer-width declaration for binding
+     * one would overlap the eight-DWORD image record. */
+    struct VkImage_T image = {.device=&device,
+        .memory=(VkDeviceMemory)(uintptr_t)1,
+        .layout=VK_IMAGE_LAYOUT_GENERAL,
+        .requirements={.size=2048},
+        .info={.format=VK_FORMAT_R32_UINT,.imageType=VK_IMAGE_TYPE_2D,
+            .extent={8,8,1},.mipLevels=1,.arrayLayers=1,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT}};
+    struct VkImageView_T image_view={.device=&device,.image=&image,
+        .format=VK_FORMAT_R32_UINT,.view_type=VK_IMAGE_VIEW_TYPE_2D,
+        .range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+    struct VkDescriptorSet_T storage={.pool=&pool,
+        .defined={VK_TRUE,VK_TRUE},.image_resources={&image}};
+    storage.signature.binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
+    storage.signature.binding[1]=(struct ps5vk_binding){1,1,VK_SHADER_STAGE_COMPUTE_BIT};
+    storage.signature.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    storage.signature.type[1]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    storage.images[0]=(VkDescriptorImageInfo){VK_NULL_HANDLE,&image_view,VK_IMAGE_LAYOUT_GENERAL};
+    storage.buffers[1]=(VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)0x200006000,0,256};
+    struct ps5vk_compiled_program storage_program={.gfx=1013,.descriptor_count=2,
+        .descriptors={{0,0,0,0,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
+                      {0,1,0,8,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
+    uint32_t image_table[16];
+    memset(image_table,0,sizeof(image_table));
+    assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
+        image_table,16)==VK_SUCCESS);
+    assert(image_table[0]==0x2000010 && image_table[1]==0xc1400000 &&
+        image_table[2]==0x8001c001 && image_table[3]==0x90000204 &&
+        image_table[4]==63 && image_table[5]==0x00400000);
+    assert(image_table[8]==0x6000 && image_table[9]==2 && image_table[10]==256);
+    storage_program.descriptors[1].table_dword=4;
+    assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
+        image_table,16)!=VK_SUCCESS);
+    storage_program.descriptors[1].table_dword=8;
+    image.layout=VK_IMAGE_LAYOUT_UNDEFINED;
+    assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
+        image_table,16)!=VK_SUCCESS);
+    image.layout=VK_IMAGE_LAYOUT_GENERAL;
+    storage.images[0].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
+        image_table,16)!=VK_SUCCESS);
     puts("Compiler-ordered raw descriptor table: pass (host only)");
 }

@@ -312,6 +312,19 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
     platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
 #endif
+    /* The Vulkan 1.0 KHR route is backed by the seven unchanged volatile
+     * queue-family atomic CTS leaves and the bounded GPU ordering witness.
+     * DeviceScope has separate requirements and remains diagnostic-only. */
+    platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
+#if defined(PS5VK_MEMORY_MODEL_DIAGNOSTIC) && PS5VK_MEMORY_MODEL_DIAGNOSTIC
+    /* DeviceScope remains measurement-only: the original message-passing
+     * factory rejects Vulkan 1.0 before querying this extension feature. */
+    platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+#endif
+    /* Vulkan 1.0 exposes the KHR route through device-group creation and
+     * properties2. The bounded address witness and two unchanged original
+     * buffer-address compute leaves execute through the R32_UINT output. */
+    platform->supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
     platform->max_allocation = HEAP_BYTES;
     /* The same initializer the host reporting dump uses; see
      * src/device_profile_report.h. Object-model sizing follows

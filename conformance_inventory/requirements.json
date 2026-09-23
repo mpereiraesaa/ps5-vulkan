@@ -3000,7 +3000,7 @@
         "cases": [
           "dEQP-VK.info.memory_limits"
         ],
-        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 140 mandatory format-feature cells satisfied and 522 per-format blockers recorded.",
+        "note": "Format-dependent cases span many groups; no single case covers the mandatory table. Reporting audit: mandatory format feature tables evaluated against the reported matrix; 141 mandatory format-feature cells satisfied and 521 per-format blockers recorded.",
         "coverage_quality": "representative-case",
         "coverage_note": "Mapped to a representative case from vk-default/info.txt, vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
       },
@@ -4826,16 +4826,15 @@
         "mapping": "mapped",
         "basis": "static-source-listing",
         "groups": [
-          "vk-default/binding-model.txt",
-          "vk-default/api.txt"
+          "vk-default/binding-model.txt"
         ],
         "cases": [
-          "dEQP-VK.api.device_address.misc.basic_set_stride",
-          "dEQP-VK.binding_model.buffer_device_address.capture_replay_stress.seed_0"
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
         ],
-        "note": "Two representative device-address cases.",
+        "note": "Two present base device-address cases; neither requests optional capture-replay.",
         "coverage_quality": "representative-case",
-        "coverage_note": "Mapped to a representative case from vk-default/binding-model.txt, vk-default/api.txt; the requirement spans several aspects and this single case is not complete coverage."
+        "coverage_note": "Mapped to two original cases in vk-default/binding-model.txt. Both require a storage-image output that this driver currently refuses before shader execution; they do not cover every device-address obligation."
       },
       "implementation_state": "not-audited",
       "baseline": {

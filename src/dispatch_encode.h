@@ -8,6 +8,7 @@ struct ps5vk_dispatch_encoding {
     uint64_t descriptor_tables[PS5VK_MAX_SETS];
     uint64_t push_constants;
     uint32_t groups[3];
+    uint32_t group_base[3];
     uint64_t completion_value;
 };
 /* Encodes an owned/mapped GPU dispatch; mapping, submission and waiting belong

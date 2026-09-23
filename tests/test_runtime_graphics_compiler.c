@@ -2172,6 +2172,15 @@ static void check_fragment_store_atomic_contract(void)
         PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS));
     ps5vk_runtime_graphics_free(NULL,compiled);
 
+    /* Both stages declare GLSL450. The base KHR memory-model bit may be
+     * enabled on the logical device without changing this legacy fragment
+     * atomic shader's PSBC memory-model interpretation. */
+    key.feature_mask|=PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
+    compiled=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS && compiled);
+    ps5vk_runtime_graphics_free(NULL,compiled);
+    key.feature_mask=PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
+
     /* Match the focused upstream frag_side_effects shape: derive an SSBO
      * index from gl_FragCoord, store, then discard.  This composes the shared
      * fragment-position contract with the T06 side-effect contract and proves
@@ -2228,8 +2237,54 @@ static void check_fragment_store_atomic_contract(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+static void check_t08_compiler_options(void)
+{
+    const uint32_t glsl450[] = {0x07230203u, 0x00010000u, 0, 3, 0,
+        (3u << 16) | 14u, 0, 1};
+    const uint32_t vulkankhr[] = {0x07230203u, 0x00010000u, 0, 3, 0,
+        (3u << 16) | 14u, 0, 3};
+    const struct ps5vk_graphics_module_key legacy = {
+        .words = glsl450, .word_count = sizeof(glsl450) / sizeof(glsl450[0])};
+    const struct ps5vk_graphics_module_key khr = {
+        .words = vulkankhr, .word_count = sizeof(vulkankhr) / sizeof(vulkankhr[0])};
+    PsbcCompileOptions options = {.target = PSBC_TARGET_PS5,
+        .sample_shading_enable = true};
+    assert(ps5vk_runtime_graphics_t08_options(0, &legacy, &options) == VK_SUCCESS);
+    assert(!options.enable_physical_storage_buffer_addresses &&
+           !options.enable_vulkan_memory_model &&
+           !options.enable_vulkan_memory_model_device_scope);
+    assert(ps5vk_runtime_graphics_t08_options(
+        PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE, &khr, &options) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    const uint32_t all = PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS |
+        PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+        PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+    assert(ps5vk_runtime_graphics_t08_options(all, &khr, &options) == VK_SUCCESS);
+    assert(options.enable_physical_storage_buffer_addresses &&
+           options.enable_vulkan_memory_model &&
+           options.enable_vulkan_memory_model_device_scope);
+    assert(options.target == PSBC_TARGET_PS5 && options.sample_shading_enable);
+    assert(ps5vk_runtime_graphics_t08_options(PS5VK_FEATURE_VULKAN_MEMORY_MODEL,
+                                              &khr, &options) == VK_SUCCESS);
+    assert(!options.enable_physical_storage_buffer_addresses &&
+           options.enable_vulkan_memory_model &&
+           !options.enable_vulkan_memory_model_device_scope);
+    /* A legacy stage on the same logical device retains GLSL450 barrier
+     * semantics even when KHR memory-model features are enabled. */
+    assert(ps5vk_runtime_graphics_t08_options(all, &legacy, &options) == VK_SUCCESS);
+    assert(options.enable_physical_storage_buffer_addresses &&
+           !options.enable_vulkan_memory_model &&
+           !options.enable_vulkan_memory_model_device_scope);
+    const uint32_t malformed[] = {0x07230203u, 0x00010000u, 0, 3, 0,
+        (4u << 16) | 14u, 0, 3};
+    const struct ps5vk_graphics_module_key bad = {
+        .words = malformed, .word_count = sizeof(malformed) / sizeof(malformed[0])};
+    assert(ps5vk_runtime_graphics_t08_options(all, &bad, &options) == VK_ERROR_UNKNOWN);
+}
+
 int main(void)
 {
+    check_t08_compiler_options();
     check_flat_interfaces();
     check_descriptor_options();
     check_input_attachment_descriptors();

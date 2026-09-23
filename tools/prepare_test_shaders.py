@@ -53,6 +53,8 @@ def main():
                ("minimal", "xor", "shared_grid", "resource_abi", "push_specialization",
                 "storage8", "storage16", "sync_producer", "sync_consumer",
                 "shared_atomic_multiwave")}
+    sources.update({name: ROOT / f"experiments/compute/{name}.comp"
+                    for name in ("t08_address", "t08_memory_model_queue", "t08_memory_model")})
     targets = {name: OUTPUT / f"{name}.spv" for name in sources}
     recipe_mtime = Path(__file__).stat().st_mtime
     if all(target.is_file() and target.stat().st_mtime >= max(sources[name].stat().st_mtime,
@@ -70,7 +72,7 @@ def main():
         # UniformAndStorageBuffer8BitAccess capability. Start from the exact
         # Vulkan 1.1 storage-buffer form, then express its storage class through
         # the Vulkan 1.0 SPIR-V extension without changing instructions.
-        target_env = "vulkan1.1" if name == "storage8" else "vulkan1.0"
+        target_env = "vulkan1.1" if name == "storage8" or name.startswith("t08_") else "vulkan1.0"
         subprocess.run(
             [compiler, "-V", "--target-env", target_env, str(source), "-o", str(target)],
             check=True,

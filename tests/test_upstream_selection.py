@@ -92,10 +92,18 @@ class UpstreamSelectionTests(unittest.TestCase):
         # point_1px shapes moved to plain-point-line-pipeline-refused, whose
         # pipeline shape this profile refuses at creation. The 66 diagnostics
         # that remain document refusals, capability gaps and pending
-        # measurement windows. `leaves` counts every attachment_write_mask leaf
+        # measurement windows. Seven T08 volatile atomic leaves and two
+        # original buffer-device-address leaves now belong to acceptance.
+        # `leaves` counts every attachment_write_mask leaf
         # the pinned factory generates, wherever the manifest now keeps it.
-        self.assertEqual((498, 66, 48),
+        self.assertEqual((507, 66, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
+        volatile = [d for d in manifest["cases"] if
+                    d["category"] == "t08-vulkan-memory-model-base"]
+        self.assertEqual(7, len(volatile))
+        self.assertEqual({"iadd", "isub", "iinc", "idec", "load", "store", "compex"},
+                         {d["path"].rsplit(".", 1)[-1] for d in volatile})
+        self.assertTrue(all(d["expected_status"] == "Pass" for d in volatile))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
         self.assertEqual([], pending)
@@ -172,6 +180,47 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.witness, self.witness_failures = self.gate._resource_witness()
         self.tests_text = text
         self.util_text = (UPSTREAM / UTIL).read_text(encoding="utf-8", errors="replace")
+
+    def test_t08_volatile_atomic_names_come_from_registered_factory(self):
+        source = (UPSTREAM / "external/vulkancts/modules/vulkan/spirv_assembly/"
+                  "vktSpvAsmInstructionTests.cpp").read_text()
+        integration = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        wrapper = (ROOT / "cts/upstream/volatile_atomic_focus.cpp").read_text()
+        derive = self.gate._volatile_atomic_leaf_names
+        expected = {"iadd", "isub", "iinc", "idec", "load", "store", "compex"}
+        self.assertEqual(expected, set(derive(source, integration, wrapper)))
+        self.assertEqual(set(), set(derive(source, integration, wrapper.replace(
+            "createOpAtomicGroup(testCtx, true, 65535, false, true)",
+            "createOpAtomicGroup(testCtx, true, 65535, false, false)"))))
+        self.assertEqual(set(), set(derive(source, integration.replace(
+            "createFocusedVolatileAtomicComputeGroup(m_testCtx)",
+            "createWorkgroupMemoryComputeGroup(m_testCtx)"), wrapper)))
+
+    def test_t08_bda_paths_come_from_focused_original_factory(self):
+        source = (UPSTREAM / "external/vulkancts/modules/vulkan/binding_model/"
+                  "vktBindingBufferDeviceAddressTests.cpp").read_text()
+        integration = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        derive = self.gate._focused_bda_leaf_paths
+        prefix = ("dEQP-VK.binding_model.buffer_device_address."
+                  "set0.depth1.basessbo.load.nostore.single.std140.")
+        expected = {prefix + "comp", prefix + "comp_offset_nonzero"}
+        self.assertEqual(expected, set(derive(source, integration, builder)))
+        self.assertEqual(set(), set(derive(
+            source.replace('caseName << "_offset_nonzero";',
+                           'caseName << "_other_offset";'), integration, builder)))
+        self.assertEqual(set(), set(derive(source, integration.replace(
+            "createBufferDeviceAddressTests(m_testCtx)",
+            "createBufferDeviceAddressOtherTests(m_testCtx)"), builder)))
+        self.assertEqual(set(), set(derive(source, integration, builder.replace(
+            'focused_sources / "vktBindingBufferDeviceAddressTests.cpp"',
+            'focused_sources / "other.cpp"'))))
+        selected = [d for d in self.current_manifest["cases"]
+                    if d["category"] == "t08-buffer-device-address-base"]
+        self.assertEqual(expected, {d["path"] for d in selected})
+        self.assertTrue(all(d["features_required"] == [
+            "extension:VK_KHR_buffer_device_address", "feature:bufferDeviceAddress"]
+            for d in selected))
 
     def _ready_witness(self):
         """The measured host witness: this host can create the shape."""

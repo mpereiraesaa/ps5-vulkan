@@ -22,6 +22,14 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_shipping_memory_model_and_address_extensions(self):
+        extensions = matrix.implemented_device_extensions()
+        self.assertIn("VK_KHR_vulkan_memory_model", extensions)
+        self.assertIn("VK_KHR_device_group", extensions)
+        self.assertIn("VK_KHR_buffer_device_address", extensions)
+        evidence = json.loads(matrix.EVIDENCE.read_text())
+        self.assertEqual(evidence["capability_probe"]["device_extensions"],
+                         len(extensions))
     def test_standard_ubo_khr_route_requires_reported_feature_and_extension(self):
         row = next(row for row in json.loads(derive.OUTPUT.read_text())["requirements"]
                    if row["id"] == matrix.STANDARD_UBO_ID)
@@ -44,6 +52,73 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual(("blocker", "missing"),
                          (api["state"], implementation["state"]))
         api, implementation = matrix.standard_ubo_axes(row, query, extensions, {})
+        self.assertEqual(("satisfied", "missing"),
+                         (api["state"], implementation["state"]))
+
+    def test_memory_model_khr_route_keeps_device_scope_independent(self):
+        rows = {row["id"]: row for row in json.loads(derive.OUTPUT.read_text())["requirements"]}
+        query = {"route": "VK_KHR_vulkan_memory_model", "vulkanMemoryModel": True,
+                 "vulkanMemoryModelDeviceScope": False}
+        reports = {"vulkanMemoryModel": {
+            "kind": "extension-feature", "reported": True, "verdict": "satisfied"}}
+        extensions = {"VK_KHR_vulkan_memory_model"}
+        base = rows["feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel"]
+        scope = rows["feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"]
+        api, implementation = matrix.memory_model_axes(base, query, extensions, reports)
+        self.assertEqual(("satisfied", "implemented"),
+                         (api["state"], implementation["state"]))
+        api, implementation = matrix.memory_model_axes(scope, query, extensions, reports)
+        self.assertEqual(("blocker", "missing"),
+                         (api["state"], implementation["state"]))
+        for bad in ({}, {**query, "route": "VK_VERSION_1_2"},
+                    {**query, "vulkanMemoryModel": False,
+                     "vulkanMemoryModelDeviceScope": True}):
+            with self.assertRaises(ValueError):
+                matrix.memory_model_axes(base, bad, extensions, reports)
+        api, implementation = matrix.memory_model_axes(base, query, set(), reports)
+        self.assertEqual(("blocker", "missing"),
+                         (api["state"], implementation["state"]))
+
+    def test_t08_rows_preserve_independent_evidence_axes(self):
+        rows = {row["id"]: row for row in matrix.generate()["requirements"]}
+        prefix = "feature:VkPhysicalDeviceVulkan12Features:"
+        expected = {
+            "bufferDeviceAddress": ("satisfied", "implemented", "cts-pass",
+                                    "native-evidence", "satisfied"),
+            "vulkanMemoryModel": ("satisfied", "implemented", "cts-pass",
+                                  "native-evidence", "satisfied"),
+            "vulkanMemoryModelDeviceScope": ("blocker", "implemented", "not-mapped",
+                                             "native-evidence", "blocker"),
+        }
+        for feature, states in expected.items():
+            row = rows[prefix + feature]
+            self.assertEqual(states,
+                tuple(row[axis]["state"] for axis in ("api", "implementation",
+                       "cts", "native")) + (row["verdict"],))
+
+    def test_bda_khr_route_requires_public_query_extensions_and_report(self):
+        row = {r["id"]: r for r in matrix.generate()["requirements"]}[matrix.BDA_ID]
+        query = {"route": "VK_KHR_buffer_device_address", "bufferDeviceAddress": True,
+                 "bufferDeviceAddressCaptureReplay": False,
+                 "bufferDeviceAddressMultiDevice": False}
+        extensions = {"VK_KHR_buffer_device_address", "VK_KHR_device_group"}
+        report = {"bufferDeviceAddress": {"kind": "extension-feature",
+                  "reported": True, "verdict": "satisfied"}}
+        api, implementation = matrix.buffer_address_axes(row, query, extensions, report)
+        self.assertEqual(("satisfied", "implemented"),
+                         (api["state"], implementation["state"]))
+        self.assertEqual("VK_KHR_buffer_device_address", api["via"])
+        for bad in ({**query, "route": "VK_VERSION_1_2"},
+                    {**query, "bufferDeviceAddressCaptureReplay": True},
+                    {**query, "bufferDeviceAddressMultiDevice": True}):
+            with self.assertRaises(ValueError):
+                matrix.buffer_address_axes(row, bad, extensions, report)
+        for missing in (set(), {"VK_KHR_device_group"},
+                        {"VK_KHR_buffer_device_address"}):
+            api, implementation = matrix.buffer_address_axes(row, query, missing, report)
+            self.assertEqual(("blocker", "missing"),
+                             (api["state"], implementation["state"]))
+        api, implementation = matrix.buffer_address_axes(row, query, extensions, {})
         self.assertEqual(("satisfied", "missing"),
                          (api["state"], implementation["state"]))
 
@@ -103,8 +178,8 @@ class DxvkMatrixTests(unittest.TestCase):
         # independently witnessed fragment-storage and dual-source features, and
         # the four T05 rasterization and viewport features advance; API 1.3
         # remains a separate blocker.
-        self.assertEqual(18, document["summary"]["satisfied"])
-        self.assertEqual(44, document["summary"]["blocker"])
+        self.assertEqual(20, document["summary"]["satisfied"])
+        self.assertEqual(42, document["summary"]["blocker"])
 
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
@@ -113,8 +188,8 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(18, document["summary"]["satisfied"])
-        self.assertEqual(44, document["summary"]["blocker"])
+        self.assertEqual(20, document["summary"]["satisfied"])
+        self.assertEqual(42, document["summary"]["blocker"])
         self.assertEqual(
             [
                          "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
@@ -132,7 +207,9 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
                          "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
                          "feature:VkPhysicalDeviceVulkan11Features:multiview",
+                         "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
                          "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+                         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
             ],
@@ -178,8 +255,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(18, document["summary"]["satisfied"])
-                self.assertEqual(44, document["summary"]["blocker"])
+                self.assertEqual(20, document["summary"]["satisfied"])
+                self.assertEqual(42, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 

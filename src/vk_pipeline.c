@@ -132,8 +132,8 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyShaderModule(VkDevice d, VkShaderModule m, c
     --d->pipeline_objects; ps5vk_object_free(m, &saved, custom);
 }
 
-/* Storage-only narrow capabilities are negotiated device features. Narrow
- * arithmetic and the broader storage classes remain deliberately unsupported. */
+/* OpCapability declarations that name negotiated device features. Narrow
+ * arithmetic and the broader storage classes remain unsupported. */
 static int spirv_narrow_requirements(const uint32_t *words, size_t count,
                                      uint32_t *required)
 {
@@ -148,6 +148,13 @@ static int spirv_narrow_requirements(const uint32_t *words, size_t count,
             switch (words[at + 1]) {
             case 4433u: *required |= PS5VK_FEATURE_STORAGE_BUFFER_16BIT; break;
             case 4448u: *required |= PS5VK_FEATURE_STORAGE_BUFFER_8BIT; break;
+            case 5345u: /* VulkanMemoryModel */
+                *required |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL; break;
+            case 5346u: /* VulkanMemoryModelDeviceScope */
+                *required |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                             PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE; break;
+            case 5347u: /* PhysicalStorageBufferAddresses */
+                *required |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS; break;
             case 22u:   /* Int16 */
             case 39u:   /* Int8 */
             case 4434u: /* UniformAndStorageBuffer16BitAccess */
@@ -214,16 +221,22 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
     for (uint32_t j = 0; j < p->descriptor_count; ++j) {
         const struct ps5vk_program_descriptor *b = &p->descriptors[j];
         if (b->set >= layout->set_count || !(p->descriptor_set_mask & (1u << b->set)) ||
-            b->binding >= PS5VK_MAX_BINDINGS || b->table_dword >= 128 || b->table_dword % 4) return 0;
+            b->binding >= PS5VK_MAX_BINDINGS || b->table_dword % 4 ||
+            b->table_dword > 128u -
+                (b->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u)) return 0;
         const struct ps5vk_binding *binding = &layout->sets[b->set].binding[b->binding];
         if (layout->sets[b->set].type[b->binding] != b->type ||
             (ps5vk_base_buffer_descriptor_type(b->type) != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER &&
              ps5vk_base_buffer_descriptor_type(b->type) != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
-             b->type != VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) ||
+             b->type != VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER &&
+             b->type != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) ||
             binding->count <= b->element || !(binding->stages & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
         for (uint32_t k = 0; k < j; ++k)
             if (p->descriptors[k].set == b->set &&
-                (p->descriptors[k].table_dword == b->table_dword ||
+                ((p->descriptors[k].table_dword < b->table_dword +
+                    (b->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u) &&
+                  b->table_dword < p->descriptors[k].table_dword +
+                    (p->descriptors[k].type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u)) ||
                  (p->descriptors[k].binding == b->binding && p->descriptors[k].element == b->element))) return 0;
     }
     return 1;
@@ -235,9 +248,14 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     if (info->sType != VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO || !info->layout ||
         info->layout->device != d || info->stage.sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO ||
         !info->stage.module || info->stage.module->device != d || !info->stage.pName) return INVALID;
-    if (info->pNext || info->flags || info->stage.pNext || info->stage.flags ||
+    if (info->pNext ||
+        (info->flags & ~VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR) ||
+        info->stage.pNext || info->stage.flags ||
         info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT)
         return VK_ERROR_UNKNOWN;
+    if ((info->flags & VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR) &&
+        !d->device_group_extension_enabled)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!d->compiler.resolve && (!d->runtime_compiler_enabled || !d->compiler.compile)) return VK_ERROR_UNKNOWN;
     uint32_t required_features = 0;
     if (!spirv_narrow_requirements(info->stage.module->words,
@@ -318,6 +336,8 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     p->device = d; p->allocator = saved; p->custom_allocator = custom;
+    p->dispatch_base_enabled =
+        !!(info->flags & VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR);
     p->set_count = info->layout->set_count;
     memcpy(p->sets, info->layout->sets, sizeof(p->sets));
     p->push_constant_size = info->layout->push_constant_size;

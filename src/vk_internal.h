@@ -37,6 +37,9 @@ struct ps5vk_memory_backend {
 
 struct ps5vk_memory_backend ps5vk_native_memory_backend(void);
 struct ps5vk_memory_backend ps5vk_native_graphics_memory_backend(void);
+/* Resolve a direct-memory allocation's GPU virtual address. The host default
+ * refuses this; native memory provides the address used by GPU descriptors. */
+VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out);
 VkResult ps5vk_native_image_requirements(VkDevice, const VkImageCreateInfo *, VkMemoryRequirements *);
 /* Storage of one array layer of a color/depth attachment surface, and of a
  * whole layered attachment: stride == the per-layer footprint slice A measured,
@@ -120,12 +123,17 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_DUAL_SRC_BLEND = 1u << 17,
     PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS = 1u << 18,
     PS5VK_FEATURE_SAMPLE_RATE_SHADING = 1u << 19,
-    /* T07 feature masks follow the T06 range above. Keep these assignments
-     * stable across Part1 and Part2 so enabled logical-device features reach
-     * the image and shader execution gates without aliasing another feature. */
-    PS5VK_FEATURE_IMAGE_CUBE_ARRAY = 1u << 20,
-    PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED = 1u << 21,
-    PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE = 1u << 22,
+    /* Vulkan 1.0 extension features (DXVK262-T08). Keep physical addresses
+     * and both memory-model promises independent: device scope requires the
+     * base Vulkan memory model, while BDA does not imply either one. */
+    PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS = 1u << 20,
+    PS5VK_FEATURE_VULKAN_MEMORY_MODEL = 1u << 21,
+    PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE = 1u << 22,
+    /* T07 features use a separate range so their enabled gates coexist with
+     * the T08 Vulkan 1.0 extension features above. */
+    PS5VK_FEATURE_IMAGE_CUBE_ARRAY = 1u << 25,
+    PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED = 1u << 26,
+    PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE = 1u << 27,
     /* Keep this layout gate independent of the other feature bits. */
     PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
     PS5VK_FEATURE_TEXTURE_COMPRESSION_BC = 1u << 24,
@@ -238,6 +246,7 @@ struct VkInstance_T {
     VkBool32 custom_allocator;
     struct VkPhysicalDevice_T physical;
     VkBool32 features2_extension_enabled;
+    VkBool32 device_group_creation_enabled;
     unsigned devices, lifetime_errors;
 };
 struct VkQueue_T {
@@ -259,6 +268,7 @@ struct VkDevice_T {
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
+    VkBool32 device_group_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the

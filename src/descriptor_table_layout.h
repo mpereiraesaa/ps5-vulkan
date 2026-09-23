@@ -9,10 +9,10 @@
 /* One canonical byte layout for compiler declarations and native table
  * preparation. The layout itself does not enable a shader/resource profile.
  * It describes the descriptor types our encoders actually implement: four
- * DWORD buffer SRDs, twelve DWORD combined T#/S# records and an eight DWORD
- * resource-only image record for input attachments, which carries no sampler
- * payload at all. Empty bindings retain their prefix offset but never consume
- * table storage.
+ * DWORD buffer SRDs, twelve DWORD combined T#/S# records and eight DWORD
+ * resource-only image records for input attachments and storage images. Those
+ * records carry no sampler payload. Empty bindings retain their prefix offset
+ * but never consume table storage.
  *
  * Stage filtering must NOT compact offsets: one set is shared by stages,
  * even when their statically used binding subsets differ. */
@@ -30,7 +30,8 @@ static inline uint32_t ps5vk_descriptor_record_bytes(VkDescriptorType type)
     switch (type) {
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: return 48;
     /* Resource-only image record: the same GFX10 image fields, no S# words. */
-    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: return 32;
+    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: return 32;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:

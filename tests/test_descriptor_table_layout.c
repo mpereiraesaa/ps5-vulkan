@@ -65,7 +65,11 @@ int main(void)
     sets[0].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;rejects(4,sets);sets[0]=good;
     sets[0].binding[7].stages=0;rejects(4,sets);sets[0]=good;
     sets[0].binding[7].stages=UINT32_C(0x40000000);rejects(4,sets);sets[0]=good;
-    sets[0].type[7]=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;rejects(4,sets);
+    sets[0].type[7]=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    assert(ps5vk_descriptor_table_layout_build(4,sets,&out)==VK_SUCCESS);
+    assert(out.binding[0][7].byte_offset==32 && out.binding[0][7].byte_stride==32);
+    assert(out.binding[0][31].byte_offset==800 && out.set_bytes[0]==816);
+    sets[0]=good;
     memset(sets,0,sizeof(sets));
     for(unsigned s=0;s<4;++s) {
         sets[s].binding[31]=(struct ps5vk_binding){.count=PS5VK_MAX_DESCRIPTORS,

@@ -126,6 +126,7 @@ struct ps5vk_operation {
      * of the precompiled program's optional descriptor enumeration. */
     VkDeviceSize graphics_dynamic_offsets[PS5VK_MAX_SETS][PS5VK_MAX_DESCRIPTORS];
     uint32_t groups[3];
+    uint32_t group_base[3];
     uint32_t push_constant_size;
     uint8_t push_constants[PS5VK_MAX_PUSH_CONSTANT_BYTES];
     VkPipelineStageFlags src_stage, dst_stage;

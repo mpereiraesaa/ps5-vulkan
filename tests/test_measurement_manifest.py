@@ -84,6 +84,20 @@ class MeasurementManifestTests(unittest.TestCase):
         paths = [c["path"] for c in derived["cases"]]
         self.assertEqual(len(paths), len(set(paths)))
 
+    def test_frozen_manifest_contains_promoted_bda_selection(self):
+        frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        prefix = ("dEQP-VK.binding_model.buffer_device_address."
+                  "set0.depth1.basessbo.load.nostore.single.std140.")
+        expected = {prefix + "comp", prefix + "comp_offset_nonzero"}
+        selected = [c for c in frozen["cases"]
+                    if c["category"] == "t08-buffer-device-address-base"]
+        self.assertEqual(expected, {c["path"] for c in selected})
+        self.assertEqual(507, len(frozen["cases"]))
+        self.assertEqual(66, len(frozen["diagnostics"]))
+        self.assertEqual("d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321",
+                         selection_hash(frozen["cases"]))
+        self.assertFalse(expected & {d["path"] for d in frozen["diagnostics"]})
+
     def test_cli_writes_the_manifest_the_builder_and_runner_take(self):
         with tempfile.TemporaryDirectory() as tmp:
             frozen = Path(tmp) / "frozen.json"

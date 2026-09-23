@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "9075c100fab8326c73b7bb458be1b560a153ebfb2eb2f8e85389303d5c431a62",
+    "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -21,14 +21,16 @@
       "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "feature:VkPhysicalDeviceFeatures:tessellationShader",
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
+      "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
       "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+      "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
     ],
     "runs": [
       {
-        "id": "20260923T094657975Z_PPSA99994_ps5vk_0x1e46de0b656f8",
-        "log_sha256": "733e047d9014d7b5cd8481520e4a422df5bd6b6081f8182b85b156e7e9fbe4b6"
+        "id": "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2",
+        "log_sha256": "b0263aacbdebc8f6170d70a21450e5f77121bd2e89e973dd06972203b0bff7a2"
       }
     ],
     "transport": "ps5log/1",
@@ -43,14 +45,23 @@
       {
         "route": "VK_KHR_uniform_buffer_standard_layout",
         "uniformBufferStandardLayout": "1"
+      },
+      {
+        "route": "VK_KHR_vulkan_memory_model",
+        "vulkanMemoryModel": "1",
+        "vulkanMemoryModelDeviceScope": "0"
+      },
+      {
+        "route": "VK_KHR_buffer_device_address",
+        "bufferDeviceAddress": "1"
       }
     ],
-    "source_matrix_sha256": "8bce2535a2d02eb2d04395d6daba5a427ecce8bdb89d99facd46e361dd0637f8",
-    "satisfied": 20,
-    "blockers": 42,
+    "source_matrix_sha256": "299653cd4d8bcc655d292fb3c68f0fa54b8c29142884cf8206788ad3b31b022b",
+    "satisfied": 22,
+    "blockers": 40,
     "requirements": 62,
     "device_api": "1.0.0",
-    "device_extensions": 6
+    "device_extensions": 9
   },
   "historical_capability_probes": [
     {
@@ -1353,6 +1364,76 @@
           "VALIDATION.md#standard-uniform-buffer-layout"
         ],
         "note": "Four unchanged original std430 UBO leaves passed: the first leaf twice in the 495-case measurement selection, and three additional leaves twice in the 498-case measurement selection. The promoted frozen 498-case selection passed 498/498 on the shipping profile and again with the merged compiler pin, with zero missing, foreign, or duplicate cases and clean lifecycle."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel": {
+      "_comment": "Vulkan 1.0 KHR base model is enabled; DeviceScope remains false.",
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iadd",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.idec",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.iinc",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.isub",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.load",
+          "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.store"
+        ],
+        "refs": [
+          "VALIDATION.md#vulkan-memory-model-base"
+        ],
+        "note": "Seven unchanged VulkanKHR volatile atomic leaves passed twice in a 501-case measurement, twice with the 505-case frozen acceptance selection after an exact GLSL450 compiler regression fix (runs run-550981405618005 and run-551035301819012, eboot af02547c751492c1), and again with the graphics module-aware fix on integrated eboot 0aadc18fb2d7537b (run-553885831365818, 505/505 Pass)."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260923T110124909Z_PPSA99994_ps5vk_0x1e87de7316f98"
+        ],
+        "artifact_sha256": "659df5ac7a95e873a97aa4dad448c990b01b6775700217a3c397b385ceaf8108",
+        "refs": [
+          "VALIDATION.md#vulkan-memory-model-base"
+        ],
+        "note": "Public SDK queue-family acquire/release litmus: 1024 observed producer-consumer pairs, zero skips, failures or guard mismatches; bounded fence and clean retirement."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope": {
+      "_comment": "KHR DeviceScope executes in a diagnostic build but remains unadvertised because original message-passing CTS rejects Vulkan 1.0 before feature query.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260923T110012605Z_PPSA99994_ps5vk_0x1e86d119f7914",
+          "20260923T110031778Z_PPSA99994_ps5vk_0x1e8718860bd81"
+        ],
+        "artifact_sha256": "035e0a631e4f5521543b33c16f45c19e67e0beb3ce998180fe414f3cda0a1e40",
+        "refs": [
+          "VALIDATION.md#vulkan-memory-model-device-scope"
+        ],
+        "note": "Two unchanged diagnostic same-dispatch cross-workgroup runs each observed 1024 producer-consumer pairs with zero skips, failures or guard mismatches; bounded fence and clean retirement."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress": {
+      "_comment": "Shipping Vulkan 1.0 KHR feature, two original CTS leaves and public-SDK GPU witness independently pass; capture replay and multiple-device addressing stay false.",
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+          "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
+        ],
+        "refs": [
+          "VALIDATION.md#buffer-device-address"
+        ],
+        "note": "Both original BDA compute leaves passed in two strict 507-case shipping acceptance runs with zero missing or unexpected cases; an earlier incomplete QPA attempt is excluded."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260923T195434898Z_PPSA99994_ps5vk_0x205960cd0cddf"
+        ],
+        "artifact_sha256": "cc5422c8f279c287beb39d459d598f5e8fc09aa286aeda62dbdd6dc2a8fc0396",
+        "refs": [
+          "VALIDATION.md#buffer-device-address"
+        ],
+        "note": "Public SDK GPU witness on the shipping KHR feature: three distinct address buffers with nonzero bind offsets, exact 64-value and guard readback, bounded fence and clean retirement."
       }
     }
   }

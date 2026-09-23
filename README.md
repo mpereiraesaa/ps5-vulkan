@@ -102,20 +102,22 @@ DXVK support is tracked against the immutable DXVK **v2.6.2** profile
 into a checked-in machine-readable profile and joined independently to the
 current public API, reviewed implementation, CTS and native evidence.
 
-The fail-closed matrix currently proves **18/62** requirements completely:
+The fail-closed matrix currently proves **20/62** requirements completely:
 `robustBufferAccess`, multiview and its two required limits, the three
 indirect/indexed draw features `drawIndirectFirstInstance`,
 `multiDrawIndirect` (with `maxDrawIndirectCount = 65535`) and
 `fullDrawIndexUint32`, the user-defined `shaderClipDistance` and
 `shaderCullDistance` pair, `fragmentStoresAndAtomics`, `dualSrcBlend`,
-`independentBlend`, `sampleRateShading` and `uniformBufferStandardLayout` through
-its Vulkan 1.0 KHR route. The blend features draw into two colour attachments;
+`independentBlend`, `sampleRateShading`, `uniformBufferStandardLayout`,
+base `vulkanMemoryModel` and bounded `bufferDeviceAddress` through their Vulkan
+1.0 KHR routes. The blend
+features draw into two colour attachments;
 sample-rate shading runs once per sample at 2x and 4x. The four
 rasterization and viewport features `depthClamp`, `depthBiasClamp`,
 `fillModeNonSolid` and `multiViewport`. Multiview is queried through its
 explicit KHR route. `geometryShader` and `tessellationShader` are positive on
 the API, implementation and CTS axes but their native axis is still
-`reported-not-executed`, so they stay among the other 44 requirements that
+`reported-not-executed`, so they stay among the other 43 requirements that
 remain blockers, together with the API-version requirement. This is an
 implementation roadmap, not a DXVK compatibility claim.
 

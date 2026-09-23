@@ -46,6 +46,9 @@ int main(void)
     ps5vk_graphics_limits(&graphics_properties.limits);
     assert(graphics_properties.limits.maxMemoryAllocationCount == 2048);
     assert(graphics_properties.limits.maxImageDimension2D == 16383);
+    assert(graphics_properties.limits.storageImageSampleCounts ==
+           VK_SAMPLE_COUNT_1_BIT);
+    assert(properties.limits.storageImageSampleCounts == 0);
     assert(ps5vk_physical_profile_valid(&graphics_properties, &graphics_memory,
         graphics.heap_size, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 1, 1));
 

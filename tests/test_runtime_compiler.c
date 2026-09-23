@@ -199,6 +199,87 @@ int main(void)
         free(narrow_code);
         free(narrow_spv);
     }
+    /* The pinned compiler fixtures declare the actual SPIR-V capabilities.
+     * The adapter must keep each option off until its logical-device bit is
+     * enabled; DeviceScope also needs the base Vulkan memory model. */
+    const struct {
+        const char *shader;
+        uint32_t feature;
+        VkBool32 uses_push;
+    } t08_cases[] = {
+        {"t08_address", PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS, VK_TRUE},
+        {"t08_memory_model_queue", PS5VK_FEATURE_VULKAN_MEMORY_MODEL, VK_FALSE},
+        {"t08_memory_model", PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+            PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE, VK_FALSE},
+    };
+    for (size_t i = 0; i < sizeof(t08_cases) / sizeof(t08_cases[0]); ++i) {
+        char path[128];
+        snprintf(path, sizeof(path), "build/test-shaders/%s.spv",
+                 t08_cases[i].shader);
+        size_t bytes = 0;
+        uint32_t *spirv = read_file(path, &bytes);
+        assert(spirv);
+        struct VkPipelineLayout_T t08_layout = {0};
+        if (t08_cases[i].uses_push) {
+            t08_layout.push_constant_size = 8;
+            t08_layout.push_constant_stages[0] = VK_SHADER_STAGE_COMPUTE_BIT;
+        } else {
+            t08_layout.set_count = 1;
+            t08_layout.sets[0].count = 1;
+            t08_layout.sets[0].binding[0].count = 1;
+            t08_layout.sets[0].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+            t08_layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        }
+        struct ps5vk_compiled_program t08_program = {0};
+        uint32_t *t08_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spirv, bytes / 4, "main",
+            &t08_layout, NULL, 0, &t08_program, &t08_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+        assert(!t08_code);
+        if (i == 2) {
+            assert(ps5vk_runtime_compile_compute_features(spirv, bytes / 4, "main",
+                &t08_layout, NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE,
+                &t08_program, &t08_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!t08_code);
+            assert(ps5vk_runtime_compile_compute_features(spirv, bytes / 4, "main",
+                &t08_layout, NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL,
+                &t08_program, &t08_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+            assert(!t08_code);
+        }
+        assert(ps5vk_runtime_compile_compute_features(spirv, bytes / 4, "main",
+            &t08_layout, NULL, t08_cases[i].feature,
+            &t08_program, &t08_code) == VK_SUCCESS);
+        assert(t08_code && t08_program.code_words && t08_program.gfx == 1013);
+        free(t08_code);
+        free(spirv);
+    }
+    /* The original ssbo_local_barrier_multiple_groups shader uses GLSL450
+     * OpMemoryModel and Device-scope barriers. Advertising the separate KHR
+     * base feature on the logical device must not reinterpret that legacy
+     * module as VulkanKHR and demand DeviceScope for it. */
+    size_t legacy_bytes = 0;
+    uint32_t *legacy = read_file("build/test-shaders/cts_ssbo_local_barrier.spv",
+                                 &legacy_bytes);
+    assert(legacy);
+    VkBool32 glsl450 = VK_FALSE;
+    for (size_t at = 5; at < legacy_bytes / 4;) {
+        const uint32_t words = legacy[at] >> 16;
+        assert(words && at + words <= legacy_bytes / 4);
+        if ((legacy[at] & 0xffffu) == 14u) {
+            assert(words == 3 && legacy[at + 2] == 1u);
+            glsl450 = VK_TRUE;
+        }
+        at += words;
+    }
+    assert(glsl450);
+    struct ps5vk_compiled_program legacy_program = {0};
+    uint32_t *legacy_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(legacy, legacy_bytes / 4,
+        "main", &single_storage_layout, NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL,
+        &legacy_program, &legacy_code) == VK_SUCCESS);
+    assert(legacy_code && legacy_program.local_size[0] == 3 &&
+           legacy_program.local_size[1] == 4 && legacy_program.local_size[2] == 1);
+    free(legacy_code);
+    free(legacy);
     /* 4. Test error handling */
     struct ps5vk_compiled_program bad_prog;
     uint32_t *bad_code = NULL;
@@ -261,7 +342,7 @@ int main(void)
         /* A bit above every known feature still fails closed. */
         graphics_device_code = NULL;
         assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
-            NULL, t06_device_mask | (1u << 20), &graphics_device_program,
+            NULL, t06_device_mask | (1u << 31), &graphics_device_program,
             &graphics_device_code) == VK_ERROR_FEATURE_NOT_PRESENT);
     }
 

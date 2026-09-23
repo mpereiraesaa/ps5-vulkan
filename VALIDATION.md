@@ -1908,10 +1908,10 @@ public query paths rather than from a copied table:
 
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
-to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 110 feature rows consistent with
-the code path that enforces them, 140 mandatory format-feature cells satisfied
-with 522 documented per-format blockers, 60 format-query consistency
-checks, and twelve shader-capability rows satisfied with two precision rows
+to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
+the code path that enforces them, 141 mandatory format-feature cells satisfied
+with 521 documented per-format blockers, 60 format-query consistency
+checks, and eighteen shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
 
@@ -1944,12 +1944,14 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **18/62 satisfied and 44 blockers**. Core
+The current checked result is **20/62 satisfied and 42 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
 `fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,
 `dualSrcBlend`, `independentBlend`, `sampleRateShading`,
-`uniformBufferStandardLayout` (via `VK_KHR_uniform_buffer_standard_layout`) and the four
+`uniformBufferStandardLayout` (via `VK_KHR_uniform_buffer_standard_layout`),
+base `vulkanMemoryModel` (via `VK_KHR_vulkan_memory_model`), bounded
+`bufferDeviceAddress` (via `VK_KHR_buffer_device_address`) and the four
 rasterization and viewport features (`depthClamp`,
 `depthBiasClamp`, `fillModeNonSolid`, `multiViewport`) have all four axes. See
 [their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16),
@@ -4372,8 +4374,10 @@ standalone compile needs, and the single compile-time decision about which
 fragment coordinate the shader reads. Every payload above was built and run
 with that revision - the driver passes `sample_shading_enable` into
 `PsbcCompileOptions`, which does not exist before it - so
-`tools/prepare_compiler_deps.py` pins `47ae2a3`, which includes the merged
-compiler change, so this promotion can reproduce from a fresh clone.
+`tools/prepare_compiler_deps.py` has to pin the merged commit before this
+promotion reproduces from a fresh clone. The current pin,
+`ee8959186cfb1f5c0a574d1e2ee329aad1fe2747`, includes that revision and
+the bounded storage-image descriptor ABI.
 
 ## Standard uniform buffer layout (2026-09-23)
 
@@ -4712,3 +4716,160 @@ and QPA SHA-256
 The strict verifier recorded a clean close; the accepted payload was restored
 and the title stopped. This compiler update does not change public subgroup
 feature reporting.
+
+## Vulkan memory model and device address accounting (2026-09-23)
+
+The Vulkan 1.0 device uses feature-specific KHR queries. It does not expose a
+`VkPhysicalDeviceVulkan12Features` aggregate or claim the Vulkan 1.3.204 API
+floor. The public capability probe observed seven device extensions and the
+KHR memory-model query returned `vulkanMemoryModel=1` and
+`vulkanMemoryModelDeviceScope=0`; `bufferDeviceAddress=0`. Its signed eboot
+SHA-256 was `446142b15a5464851d004f463f26e8c4563ae8f7f1b5428df41e68916bca20c5`.
+Run `20260923T142938117Z_PPSA99994_ps5vk_0x1f3daaa244415`, log SHA-256
+`652e687a5745781c615ee15bfc8f4afa3bc72f6b2d53db5450f494de2809ae16`,
+passed strict identity, all 62 profile records, the explicit query-route
+checks and clean termination. The probe reported 21 queried values at their
+requested thresholds; the independent four-axis matrix has **19/62 ready**
+and **43 blockers**.
+
+### Vulkan memory model base
+
+The enabled base feature has an independent queue-family ordering witness:
+`20260923T110124909Z_PPSA99994_ps5vk_0x1e87de7316f98` on signed eboot
+`659df5ac7a95e873a97aa4dad448c990b01b6775700217a3c397b385ceaf8108`.
+A bounded producer/consumer dispatch observed all 1024 cross-workgroup pairs,
+with zero skipped, value failures or guard mismatches and a completed fence.
+Seven unchanged original `spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile`
+leaves passed twice in a 501-case diagnostic selection before promotion.
+After the source-derived promotion, the 505-case frozen selection passed twice
+on one signed eboot SHA-256
+`af02547c751492c17bc362e30cd276298bc087517370ec79219e21f8dbaa26cd`
+and selection SHA-256
+`9ddd0d09c4dc8d6bf5d4c83fe55f3f3a13c92db66badeb9c504fa9c00d4911c7`.
+Runs `run-550981405618005` and `run-551035301819012` each reported
+**505 Pass, zero Fail, NotSupported, missing or unexpected**, with QPA
+SHA-256 `d2b5836fa4a5981d4295131ebf2422ed2905987905dd3febf47b79a5ba2db61c`
+and `ba730293b9bcb4a9dbefa592ab20e0734a140844ee2f07bff8a7ed24cc03a137`.
+Both titles closed cleanly. A third source-integrated candidate, eboot SHA-256
+`0aadc18fb2d7537b85fa678b7dd0abbcbe7ec5babcb6cd762523d3e367ea4ba4`,
+passed the same frozen selection in strict run `run-553885831365818`: **505 Pass,
+zero Fail, NotSupported, missing, unexpected or duplicate**, QPA SHA-256
+`f442542fb6bd1348fddd3ca74c8e3306ca30c1c49f89e306a03a1cda2518ad61`.
+The title closed cleanly, the previously deployed eboot was restored, and the
+console returned to `running=none` with no claim. Firmware was not emitted by
+these receipts. This evidence covers the selected volatile atomic oracles and
+the bounded ordering witness; it is not a claim about every memory-model
+instruction or cache topology.
+
+The first integrated 505-case attempt stopped inside the pre-existing
+`compute.basic.ssbo_local_barrier_multiple_groups` case without a completed
+QPA. An exact host reproduction showed that the compiler was applying its
+VulkanKHR memory-model option to that shader's GLSL450 `OpMemoryModel`, which
+made its legacy Device-scope barriers require the separate DeviceScope
+capability. The compute adapter now chooses those compiler options from the
+module's declared memory model. The original barrier leaf then passed alone
+and inside both complete 505-case runs.
+
+The graphics compiler independently reads each module's `OpMemoryModel` before
+setting PSBC's VulkanKHR options. A host compilation of the existing GLSL450
+vertex/fragment pipeline with an SSBO atomic fragment stage passed while the
+logical device enabled the base memory-model feature. PSBC takes one option
+set for a merged geometry or tessellation program, so mixed GLSL450/VulkanKHR
+modules in those merged stages are refused. This graphics change followed the
+first two 505-case receipts; the third run above verifies the integrated source
+under the same frozen selection.
+
+### Vulkan memory model DeviceScope
+
+The separate DeviceScope bit stays false. In a diagnostic build, two unchanged
+same-dispatch cross-workgroup runs on eboot
+`035e0a631e4f5521543b33c16f45c19e67e0beb3ce998180fe414f3cda0a1e40`
+each observed all 1024 producer/consumer pairs with zero skips, value failures
+or guard mismatches and bounded fence completion: runs
+`20260923T110012605Z_PPSA99994_ps5vk_0x1e86d119f7914` and
+`20260923T110031778Z_PPSA99994_ps5vk_0x1e8718860bd81`. The original
+`vktMemoryModelMessagePassing.cpp` support check rejects API versions below
+1.1 before querying the feature, so no original DeviceScope leaf is eligible
+on this Vulkan 1.0 profile. That CTS/API boundary prevents promotion despite
+the bounded GPU result.
+
+### Buffer device address
+
+At this measurement stage, the BDA bit stayed false. Its public-SDK diagnostic
+GPU witness used three distinct shader-address buffers with nonzero 256-byte bind offsets and a
+combined device-mask/address allocation. Run
+`20260923T125810572Z_PPSA99994_ps5vk_0x1eedd039ad681` on signed eboot
+`9d774447102cb5934e1581d37a130683a847cd015365a5fbf03960b08284fee0`
+read back 64 exact output values plus retained inputs and guards, with zero
+mismatches and a completed fence; stale, unbound and destroyed address queries
+returned zero. Both unchanged original selected BDA compute leaves in the
+strict 496-case diagnostic run failed at `vkCreateDescriptorSetLayout` for an
+unsupported storage-image output before shader execution. Run
+`run-546241633312304` reported 494 frozen Pass and those two Fail, QPA
+SHA-256 `3fe1acd7609f1719b3eaa997f4f636140b007b5f969e1e57e12e2b24093467c6`.
+The BDA implementation and bounded GPU path are recorded independently from
+the blocked public API and original CTS axes. Firmware was not recorded in
+these T08 receipts.
+
+The bounded `VK_FORMAT_R32_UINT` storage-image route now accepts the 8×8
+compute output used by those original BDA leaves: a one-sample 2D image in
+`GENERAL`, an image-store descriptor, integer clear and image-to-buffer
+readback. With the BDA diagnostic bit enabled, the unchanged original
+selection passed 496/496 twice on eboot
+`a6afe5d198846088c4e4bec426f0be99250359dd6862888df0003163b6fa32c4`
+(runs `run-563312724497565` and `run-563382634987775`). The two
+run logs have SHA-256
+`88f664187eb8ff4cce1cc1b06fb34ff4cbbe48c237363f09dd3427a864e03afb`
+and `ebfbd09171469f263ebdae01c42898ad0d62f4a1164f770ac9225b8e8a3de31f`.
+Before the KHR promotion, the ordinary shipping profile reported BDA false;
+its frozen acceptance selection passed 505/505 on eboot
+`adb3c13c121f25967b54d94b1a92fe401f96023adc4660cb598f741c3ab80fe4`
+(`run-563826813332835`). The bounded storage-image result does not qualify
+other formats, image loads or atomics.
+
+### Buffer device address KHR promotion
+
+The ordinary build now reports `bufferDeviceAddress=1` through
+`VK_KHR_buffer_device_address` on the Vulkan 1.0 KHR query and opt-in route;
+capture replay and multiple-device addressing remain false. The public SDK
+capability probe strictly verified all 62 profile records on signed eboot
+SHA-256 `cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3`.
+Run `20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2`, log SHA-256
+`b0263aacbdebc8f6170d70a21450e5f77121bd2e89e973dd06972203b0bff7a2`,
+reported the BDA KHR query as `1`, 22 requested values at their thresholds and
+40 queried blockers. The four-axis DXVK matrix records 20/62 ready and 42
+blockers; the difference includes independently missing CTS/native evidence
+for other requirements. Vulkan 1.2 aggregate feature structs and the Vulkan
+1.3.204 profile API floor remain unadvertised. The original two BDA compute
+oracles passed twice in the preceding diagnostic-bit runs; the shipping-bit
+507-case acceptance is recorded separately below.
+
+The shipping SDK's independent address witness ran on signed eboot SHA-256
+`cc5422c8f279c287beb39d459d598f5e8fc09aa286aeda62dbdd6dc2a8fc0396`.
+Run `20260923T195434898Z_PPSA99994_ps5vk_0x205960cd0cddf`, log SHA-256
+`1d267689f9d4dc15099ab50bbcb3446ae7b542adebba0e7f1030b419c410962f`,
+read back all 64 expected values from three distinct address buffers at
+256-byte bind offsets, with zero value or guard mismatches, the expected
+`178f01c5` digest, bounded fence completion and clean resource retirement.
+
+The ordinary shipping build then passed the promoted 507-case frozen upstream
+selection twice, with **507 Pass, zero Fail, zero NotSupported, zero missing or
+unexpected** in each strict receipt. Both runs used eboot SHA-256
+`bb47f59c159bc230da0f266197cfef1a14c3cd5ac9b1c0c133a2387815871745`
+and selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`:
+
+- `20260923T195944895Z_PPSA99994_upstream-cts_0x205de39e95e8f`, log SHA-256
+  `e9855e3fdefd57735802a1d7850e3954d502234a2572db8da4e6ae63c4fbb84e`,
+  QPA SHA-256 `d6fb46eca0323fd6170217d2a0105ae3ae3021998dd12a8c1095d67c2e40c6da`.
+- `20260923T200037929Z_PPSA99994_upstream-cts_0x205ea92cf014e`, log SHA-256
+  `f0942c038f726fc1ddbf222a58d901ca3b4d31e7ae59be069913a29000002260`,
+  QPA SHA-256 `5fbfea1dd39d0300d41d94bedea9c45deb605432ebd33d1809f5a9afb0a4e4e0`.
+
+Both receipts verified the two original BDA compute leaves, exact build
+identity and clean title closure. An earlier attempt on the same eboot stopped
+while emitting QPA for a pre-existing multiview case and produced no final
+receipt; it was closed and is not counted as an acceptance run. Firmware was
+not independently recorded in these T08 receipts. The bounded result does
+not claim capture replay, multiple-device addressing or additional image
+formats.
