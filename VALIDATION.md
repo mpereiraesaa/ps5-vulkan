@@ -4372,8 +4372,8 @@ standalone compile needs, and the single compile-time decision about which
 fragment coordinate the shader reads. Every payload above was built and run
 with that revision - the driver passes `sample_shading_enable` into
 `PsbcCompileOptions`, which does not exist before it - so
-`tools/prepare_compiler_deps.py` has to pin the merged commit before this
-promotion reproduces from a fresh clone. The pin still names `be4d043`.
+`tools/prepare_compiler_deps.py` pins `47ae2a3`, which includes the merged
+compiler change, so this promotion can reproduce from a fresh clone.
 
 ## Standard uniform buffer layout (2026-09-23)
 
