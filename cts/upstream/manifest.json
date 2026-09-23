@@ -4917,6 +4917,26 @@
       "rationale": "Creates one fence with VK_FENCE_CREATE_SIGNALED_BIT and requires immediate signaled status and successful wait without a submission."
     },
     {
+      "path": "dEQP-VK.ubo.2_level_struct_array.per_block_buffer.std430_vertex",
+      "source": "external/vulkancts/modules/vulkan/ubo/vktUniformBlockTests.cpp:505",
+      "category": "uniform-buffer-standard-layout",
+      "expected_status": "Pass",
+      "features_required": [
+        "uniformBufferStandardLayout"
+      ],
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260923T120049216Z_PPSA99994_upstream-cts_0x1ebbbc5bbda85 on payload eboot 38a8b6e2367a45f6. Two-level struct arrays with matrix/member strides."
+    },
+    {
+      "path": "dEQP-VK.ubo.single_basic_array.std430.mat2.vertex",
+      "source": "external/vulkancts/modules/vulkan/ubo/vktUniformBlockTests.cpp:603",
+      "category": "uniform-buffer-standard-layout",
+      "expected_status": "Pass",
+      "features_required": [
+        "uniformBufferStandardLayout"
+      ],
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260923T120049216Z_PPSA99994_upstream-cts_0x1ebbbc5bbda85 on payload eboot 38a8b6e2367a45f6. Matrix array stride through vertex UBO read."
+    },
+    {
       "path": "dEQP-VK.ubo.single_basic_array.std430.uint.vertex",
       "source": "external/vulkancts/modules/vulkan/ubo/vktUniformBlockTests.cpp:593",
       "category": "uniform-buffer-standard-layout",
@@ -4925,6 +4945,16 @@
         "uniformBufferStandardLayout"
       ],
       "rationale": "Original std430 uniform-buffer scalar-array vertex oracle passed twice with the 494-case frozen selection (eboot b2dbc3f47eaabe6890e1e6a9d603c38344ad18dc011d2f5404913bbc3e9ed6f3; runs run-531783958492360 and run-531826875967264)."
+    },
+    {
+      "path": "dEQP-VK.ubo.single_struct.per_block_buffer.std430_vertex",
+      "source": "external/vulkancts/modules/vulkan/ubo/vktUniformBlockTests.cpp:637",
+      "category": "uniform-buffer-standard-layout",
+      "expected_status": "Pass",
+      "features_required": [
+        "uniformBufferStandardLayout"
+      ],
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260923T120049216Z_PPSA99994_upstream-cts_0x1ebbbc5bbda85 on payload eboot 38a8b6e2367a45f6. Nested struct with matrix array and member offsets."
     }
   ],
   "diagnostics": [

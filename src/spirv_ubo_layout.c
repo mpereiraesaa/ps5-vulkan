@@ -178,7 +178,9 @@ static int parse_decorations(const uint32_t *words, size_t count, struct state *
                 if (n != 3 || t->buffer_block) return 0;
                 t->buffer_block = 1; break;
             case DEC_ARRAY_STRIDE:
-                if (n != 4 || t->has_stride) return 0;
+                if (n != 4 || t->has_stride ||
+                    (t->kind != OP_TYPE_ARRAY && t->kind != OP_TYPE_RUNTIME_ARRAY))
+                    return 0;
                 t->has_stride = 1; t->stride = w[3]; break;
             default: break;
             }

@@ -495,7 +495,10 @@
       "dEQP-VK.synchronization.basic.fence.multiple_signaled",
       "dEQP-VK.synchronization.basic.fence.one",
       "dEQP-VK.synchronization.basic.fence.one_signaled",
-      "dEQP-VK.ubo.single_basic_array.std430.uint.vertex"
+      "dEQP-VK.ubo.2_level_struct_array.per_block_buffer.std430_vertex",
+      "dEQP-VK.ubo.single_basic_array.std430.mat2.vertex",
+      "dEQP-VK.ubo.single_basic_array.std430.uint.vertex",
+      "dEQP-VK.ubo.single_struct.per_block_buffer.std430_vertex"
     ],
     "diagnostics": [
       "dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_3_extra_bytes_offset_12",

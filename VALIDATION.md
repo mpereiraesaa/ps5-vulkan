@@ -4442,3 +4442,15 @@ selection SHA-256:
 `1a8f7ea9c33873abf40b7352c8ddbf3e533fd0048ebb3edc8c0bdbbc9ae695b3`;
 run `20260923T095014926Z_PPSA99994_upstream-cts_0x1e49bbbc79bac`;
 log SHA-256 `7845a522bf5040707b550a30c77d10b5e14a8868d0d888c8c83eb45613176ed1`.
+
+Three additional unchanged original `std430` UBO oracles cover a matrix array,
+a nested struct, and a two-level struct array in the vertex stage. They passed
+twice in the 498-case measurement selection (runs `20260923T115937942Z` and
+`20260923T120049216Z`) and then passed in the promoted frozen selection. The
+strict canonical receipt reports 498/498 Pass, zero missing, foreign or
+duplicate cases, and clean title closure. Signed eboot SHA-256:
+`38a8b6e2367a45f6eeebd3043637d6d01624e71bd46f5f95a53da898058a1ec1`;
+selection SHA-256:
+`c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`;
+run `20260923T120459357Z_PPSA99994_upstream-cts_0x1ebf603188bae`;
+log SHA-256 `94669451880f9a692ca7c6b07a4e93066f100c209d8cc6ca1cd7191f095a867b`.

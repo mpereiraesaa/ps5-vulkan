@@ -118,6 +118,25 @@ class UboLayout(unittest.TestCase):
         words[3] = 262145
         self.assertFalse(self.valid(words, True))
 
+    def test_array_stride_on_scalar_type_is_rejected(self):
+        words = self.compile("std430")
+        self.assertTrue(self.valid(words, True))
+        scalar = next(words[at + 1] for at, size, op in instructions(words)
+                      if op == 21 and size == 4 and words[at + 2] == 32)
+        annotation = next(at for at, _, op in instructions(words) if op == 71)
+        bad = words[:annotation] + [(4 << 16) | 71, scalar, 6, 4] + words[annotation:]
+        self.assertFalse(self.valid(bad, True))
+
+    def test_spec_constant_array_length_inside_ubo_is_rejected(self):
+        words = self.compile("std430")
+        self.assertTrue(self.valid(words, True))
+        length_id = next(words[at + 3] for at, size, op in instructions(words)
+                         if op == 28 and size == 4)
+        constant = next(at for at, size, op in instructions(words)
+                        if op == 43 and size == 4 and words[at + 2] == length_id)
+        words[constant] = (4 << 16) | 50  # OpSpecConstant, same default literal.
+        self.assertFalse(self.valid(words, True))
+
 
 if __name__ == "__main__":
     unittest.main()
