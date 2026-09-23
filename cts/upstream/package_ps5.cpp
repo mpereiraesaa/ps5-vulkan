@@ -37,6 +37,8 @@
 #include "vktFragmentOperationsTests.hpp"
 #include "vktRenderPassTests.hpp"
 #include "vktUniformBlockTests.hpp"
+#include "vktQueryPoolTests.hpp"
+#include "vktShaderRenderTextureGatherTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -324,6 +326,17 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::compute::createIndirectComputeDispatchTests(
             m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
         addChild(computeGroup.release());
+    }
+
+    // Original Vulkan 1.0 occlusion-query and shader texture-gather factories.
+    // Their support checks and result oracles stay upstream; the packaged case
+    // list selects the small measured leaves for these feature rows.
+    addChild(vkt::QueryPool::createTests(m_testCtx, "query_pool"));
+    {
+        de::MovePtr<tcu::TestCaseGroup> shaderRenderGroup(
+            new tcu::TestCaseGroup(m_testCtx, "shaderrender"));
+        shaderRenderGroup->addChild(vkt::sr::createTextureGatherTests(m_testCtx));
+        addChild(shaderRenderGroup.release());
     }
 
     // pipeline.push_constant group. The upstream factory is registered without

@@ -21,8 +21,8 @@ SELECTION_MANIFEST = ROOT / "cts/upstream/manifest.json"
 def tessellation_build_profile(environment):
     """Record build controls, never infer hardware validation from them.
 
-    Only these non-secret SDK switches are captured. Even a ring-only build
-    differs from the default runtime and must not masquerade as its evidence.
+    Only these non-secret SDK switches are captured. A diagnostic build differs
+    from the default runtime and must not masquerade as its evidence.
     Values remain strings, exactly as passed to the SDK compiler invocation.
     """
     switches = {
@@ -47,6 +47,9 @@ def tessellation_build_profile(environment):
             # reported every selected leaf NotSupported for sampleRateShading.
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
             "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
+
+            "PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC",
+            "PS5VK_GATHER_EXTENDED_DIAGNOSTIC",
         )
     }
     return {
@@ -594,6 +597,10 @@ def main(argv=None):
         "-I" + str(cts_root / "external/vulkancts/modules/vulkan/synchronization"),
         "-I" + str(cts_root / "external/vulkancts/modules/vulkan/memory"),
         "-I" + str(cts_root / "external/vulkancts/modules/vulkan/compute"),
+        "-I" + str(cts_root / "external/vulkancts/modules/vulkan/draw"),
+        "-I" + str(cts_root / "external/vulkancts/modules/vulkan/query_pool"),
+        "-I" + str(cts_root / "external/vulkancts/modules/vulkan/shaderrender"),
+        "-I" + str(cts_root / "external/vulkancts/modules/vulkan/util"),
         "-I" + str(cts_root / "external/spirv-tools/src/include"),
         "-I" + str(cts_root / "external/spirv-headers/src/include"),
         "-I" + str(glslang_root),
@@ -913,6 +920,20 @@ def main(argv=None):
         # is compiled directly from the pinned checkout; no body or oracle is
         # copied into the integration.
         cts_root / "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp",
+        # Original query-pool factories. The focused case list selects only
+        # precise occlusion leaves; all query bodies and result checks remain
+        # those from the pinned upstream sources.
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolOcclusionTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolStatisticsTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolConcurrentTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolFragInvocationTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolPerformanceTests.cpp",
+        # Original texture_gather factory and shared shader-render execution
+        # support. The packaged case list is the sole filter; shader generation,
+        # sampling setup and image oracle come from upstream unchanged.
+        cts_root / "external/vulkancts/modules/vulkan/shaderrender/vktShaderRender.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp",
         # Original multiview module. The package registers the module's own
         # factory, the view-mask support gate and the per-view layer oracle are
         # the upstream ones, and cases.txt selects only the 48 audited legacy

@@ -168,7 +168,89 @@ class UpstreamSelectionTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 altered = text.replace(marker, "REMOVED_FACTORY_MARKER")
                 self.assertNotIn(missing, self.gate._ubo_generated_paths(altered))
+    def test_original_gather_and_precise_query_leaf_derivation_is_pinned(self):
+        gather_path = UPSTREAM / self.gate.GATHER_TEST_SOURCE
+        query_path = UPSTREAM / self.gate.OCCLUSION_TEST_SOURCE
+        if not gather_path.is_file() or not query_path.is_file():
+            self.skipTest("pinned vk-gl-cts gather/query sources not present")
+        gather_text = gather_path.read_text(encoding="utf-8")
+        query_text = query_path.read_text(encoding="utf-8")
+        gather = self.gate._texture_gather_leaf_requirements(gather_text)
+        query = self.gate._precise_occlusion_leaf_requirements(query_text)
 
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot."
+            "clamp_to_edge_repeat"])
+        for group in ("offset", "offset_dynamic", "offsets"):
+            path = ("dEQP-VK.shaderrender.texture_gather." + group +
+                    ".min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat")
+            self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        for group in ("offset", "offset_dynamic"):
+            path = ("dEQP-VK.shaderrender.texture_gather." + group +
+                    ".implementation_offset.2d.rgba8.size_pot.clamp_to_edge_repeat")
+            self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.offsets.implementation_offset."
+            "2d.rgba8.size_pot.clamp_to_edge_repeat"])
+        for pair in ("clamp_to_edge_repeat", "repeat_mirrored_repeat",
+                     "mirrored_repeat_clamp_to_edge"):
+            path = ("dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8."
+                    "size_pot." + pair)
+            self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        self.assertEqual(["core:occlusionQueryPrecise"], query[
+            "dEQP-VK.query_pool.occlusion_query.basic_precise"])
+
+        self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
+            gather_text.replace('"min_required_offset"', '"invented_offset"', 1)))
+        self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
+            gather_text.replace(
+                "void TextureGather2DCase::checkSupport(Context &context) const\n{\n"
+                "    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);",
+                "void TextureGather2DCase::checkSupport(Context &context) const\n{\n",
+                1)))
+        self.assertEqual({}, self.gate._precise_occlusion_leaf_requirements(
+            query_text.replace(
+                "testVector.queryControlFlags = vk::VK_QUERY_CONTROL_PRECISE_BIT;",
+                "testVector.queryControlFlags = vk::VK_QUERY_CONTROL_RESERVED_BIT;", 1)))
+
+    def test_source_derived_feature_requirements_gate_diagnostics_and_acceptance(self):
+        manifest = copy.deepcopy(self.current_manifest)
+        entries = [
+            {
+                "category": "t07-feature-diagnostic", "expected_status": "Fail",
+                "features_required": ["core:shaderImageGatherExtended"],
+                "path": ("dEQP-VK.shaderrender.texture_gather.basic."
+                         "2d.rgba8.size_pot.clamp_to_edge_repeat"),
+                "rationale": "Temporary source-bound feature-gate regression fixture.",
+                "source": self.gate.GATHER_TEST_SOURCE + ":2783",
+            },
+            {
+                "category": "t07-feature-diagnostic", "expected_status": "Fail",
+                "features_required": ["core:occlusionQueryPrecise"],
+                "path": "dEQP-VK.query_pool.occlusion_query.basic_precise",
+                "rationale": "Temporary source-bound feature-gate regression fixture.",
+                "source": self.gate.OCCLUSION_TEST_SOURCE + ":1389",
+            },
+        ]
+        manifest["diagnostics"].extend(copy.deepcopy(entries))
+        self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
+
+        missing_metadata = copy.deepcopy(manifest)
+        missing_metadata["diagnostics"][-2]["features_required"] = []
+        self.assertEqual(1, self._gate_exit_code_for_manifest(missing_metadata))
+
+        advertised_too_early = copy.deepcopy(manifest)
+        gather = advertised_too_early["diagnostics"][-2]
+        gather["expected_status"] = "Pass"
+        advertised_too_early["diagnostics"].pop(-2)
+        advertised_too_early["cases"].append(gather)
+        self.assertEqual(1, self._gate_exit_code_for_manifest(advertised_too_early))
+
+        precise_too_early = copy.deepcopy(manifest)
+        query = precise_too_early["diagnostics"].pop()
+        query["expected_status"] = "Pass"
+        precise_too_early["cases"].append(query)
+        self.assertEqual(1, self._gate_exit_code_for_manifest(precise_too_early))
     def setUp(self):
         self.source = UPSTREAM / MODULE
         if not self.source.is_file():
@@ -407,6 +489,8 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertNotIn("VK_KHR_CREATE_RENDERPASS_2", self.capabilities["extensions"])
         self.assertFalse(self.capabilities["features"]["multiviewGeometryShader"])
         self.assertFalse(self.capabilities["features"]["multiviewTessellationShader"])
+        self.assertNotIn("occlusionQueryPrecise", self.capabilities["core_features"])
+        self.assertNotIn("shaderImageGatherExtended", self.capabilities["core_features"])
         self.assertEqual(6, self.capabilities["max_multiview_view_count"])
 
     def test_t06_sample_rate_leaves_are_the_feature_gated_oracle(self):
