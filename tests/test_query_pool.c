@@ -157,7 +157,7 @@ int main(void)
         VK_QUERY_RESULT_WAIT_BIT) == VK_NOT_READY);
     assert(vkGetQueryPoolResults(device, pool, 2, 1, sizeof(one), one, 0,
         VK_QUERY_RESULT_PARTIAL_BIT) == VK_NOT_READY);
-    assert(one[0] == 0x12345678u && one[1] == 0);
+    assert(one[0] == 0 && one[1] == 0);
 
     /* A completed backend may publish only a real measured result. The public
      * result path then writes the low 32 bits or the full 64 bits and sets the
@@ -202,7 +202,10 @@ int main(void)
     vkCmdCopyQueryPoolResults(command, pool, 2, 1, query_copy_buffer, 0, 16,
         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT |
         VK_QUERY_RESULT_WAIT_BIT);
-    assert(command->state == PS5VK_RECORDING && command->operation_count == 1 &&
+    vkCmdCopyQueryPoolResults(command, pool, 3, 1, query_copy_buffer, 32, 0,
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT |
+        VK_QUERY_RESULT_PARTIAL_BIT);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 2 &&
         command->operations[0].type == PS5VK_QUERY_COPY);
     assert(vkEndCommandBuffer(command) == VK_SUCCESS);
     submit = (VkSubmitInfo){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -210,6 +213,8 @@ int main(void)
     assert(vkQueueSubmit(&device->queue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS);
     assert(((uint64_t *)query_copy_map)[0] == UINT64_C(0x12345678abcdef01) &&
         ((uint64_t *)query_copy_map)[1] == 1);
+    assert(((uint64_t *)query_copy_map)[4] == 0 &&
+        ((uint64_t *)query_copy_map)[5] == 0);
     assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
 
     /* Pinned CTS copy-reset stride coverage uses zero stride only with one

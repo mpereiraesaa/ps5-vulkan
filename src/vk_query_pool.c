@@ -184,8 +184,10 @@ VkResult ps5vk_query_operation_execute(VkDevice d,
         uint8_t *record = (uint8_t *)address + (size_t)j * (size_t)op->query_stride;
         VkBool32 available = op->query_pool->states[op->query_first + j] ==
             PS5VK_QUERY_AVAILABLE;
-        if (available) {
-            uint64_t value = op->query_pool->values[op->query_first + j];
+        if (available || (op->query_flags & VK_QUERY_RESULT_PARTIAL_BIT)) {
+            /* Zero is a valid intermediate value for an unavailable query. */
+            uint64_t value = available ?
+                op->query_pool->values[op->query_first + j] : 0;
             if (word == 8u) memcpy(record, &value, sizeof(value));
             else { uint32_t low = (uint32_t)value; memcpy(record, &low, sizeof(low)); }
         }
@@ -388,12 +390,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetQueryPoolResults(VkDevice d,
     for (uint32_t j = 0; j < count; ++j) {
         uint8_t *record_data = (uint8_t *)data + (size_t)j * (size_t)stride;
         VkBool32 available = pool->states[first + j] == PS5VK_QUERY_AVAILABLE;
-        if (available) {
-            uint64_t value = pool->values[first + j];
+        if (!available) all_available = VK_FALSE;
+        if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT)) {
+            /* Return a legal zero intermediate until the GPU publishes its
+             * completed sample count. */
+            uint64_t value = available ? pool->values[first + j] : 0;
             if (word == 8u) memcpy(record_data, &value, sizeof(value));
             else { uint32_t low = (uint32_t)value; memcpy(record_data, &low, sizeof(low)); }
-        } else {
-            all_available = VK_FALSE;
         }
         if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {
             uint64_t availability = available ? 1u : 0u;
