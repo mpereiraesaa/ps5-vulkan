@@ -4401,7 +4401,8 @@ evidence, not a legal public feature or original CTS result.
 | 32-bit unsigned `subgroupBroadcast` with a runtime buffer source ID | Compute | Diagnostic GPU readback: 64/64 active values, 64 inactive slots untouched, guards zero; repeated | False |
 | Unsigned 8-bit, signed 16-bit, unsigned 64-bit and 16-bit float scalar `subgroupBroadcast` | Compute | Each diagnostic GPU readback: 64/64 active values, 64 inactive untouched, guards zero | False |
 | The same four operand types as two-component vectors | Compute | Both components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
-| The same four operand types as three- and four-component vectors | Compute | PSBC host compile and wave32 NIR only; no GPU result | False |
+| Unsigned 8-bit three-component vector | Compute | All three components checked on GPU: 64/64 active values, 64 inactive untouched, guards zero | False |
+| Other three-component and all four-component vectors | Compute | PSBC host compile and wave32 NIR only; no GPU result | False |
 | Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4411,8 +4412,15 @@ The vec2 run IDs are `20260923T114013349Z`, `20260923T114102324Z`,
 64-bit, and 16-bit float respectively; their signed eboot SHA-256 values are
 recorded with the private strict receipts. The pinned original dynamic
 broadcast CTS factory requires Vulkan 1.2, so no original subgroup leaf is
-eligible on this Vulkan 1.0 profile. Wider vector GPU behavior, other
-operations, and graphics stages remain unproven.
+eligible on this Vulkan 1.0 profile. The isolated Int8 vec3 run
+`20260923T123142059Z` checked all three components, active and inactive slots,
+source IDs and guard bytes with zero mismatches and clean lifecycle. Its signed
+eboot SHA-256 is
+`77d348113b56ed23a89c04316438263bd9a17297bc09ddbcf994a1555bc7cbf1`;
+the shader SPIR-V SHA-256 is
+`8876db26030b3d9316d8498d4d20cf6bd26b4e826f62e0130aa1d64b1e1a3c92`.
+Other vec3 types, vec4 GPU behavior, other operations, and graphics stages
+remain unproven.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
