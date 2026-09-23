@@ -237,6 +237,17 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                 (VkBool32)ps5vk_platform_multiview_supported(p->platform.supported_features);
             features->multiviewGeometryShader = VK_FALSE;
             features->multiviewTessellationShader = VK_FALSE;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR) {
+            VkPhysicalDeviceVulkanMemoryModelFeaturesKHR *features =
+                (VkPhysicalDeviceVulkanMemoryModelFeaturesKHR *)next;
+            const uint32_t supported = p->platform.supported_features;
+            features->vulkanMemoryModel =
+                !!(supported & PS5VK_FEATURE_VULKAN_MEMORY_MODEL);
+            features->vulkanMemoryModelDeviceScope =
+                !!((supported & PS5VK_FEATURE_VULKAN_MEMORY_MODEL) &&
+                   (supported & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE));
+            features->vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
         }
     }
 }
@@ -367,7 +378,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkExtensionProperties properties[5];
+    VkExtensionProperties properties[6];
     uint32_t total = 0;
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
@@ -391,6 +402,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW) {
         properties[total++] = (VkExtensionProperties){VK_KHR_MULTIVIEW_EXTENSION_NAME,
                                                       VK_KHR_MULTIVIEW_SPEC_VERSION};
+    }
+    if (p->platform.supported_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME,
+            VK_KHR_VULKAN_MEMORY_MODEL_SPEC_VERSION};
     }
     return enumerate_extensions(properties, total, count, out);
 }
@@ -417,6 +433,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     }
     VkBool32 storage_class = VK_FALSE, extension8 = VK_FALSE, extension16 = VK_FALSE;
     VkBool32 draw_parameters = VK_FALSE, multiview_extension = VK_FALSE;
+    VkBool32 memory_model_extension = VK_FALSE;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -431,6 +448,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &draw_parameters;
         else if (!strcmp(name, VK_KHR_MULTIVIEW_EXTENSION_NAME))
             seen = &multiview_extension;
+        else if (!strcmp(name, VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME))
+            seen = &memory_model_extension;
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -449,10 +468,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!(p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW) ||
          !p->instance->features2_extension_enabled))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    /* On Vulkan 1.0 the KHR route depends on the instance's Features2
+     * extension; an internal platform bit alone is not an enabled API route. */
+    if (memory_model_extension &&
+        (!(p->platform.supported_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
     VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
+    VkBool32 saw_memory_model = VK_FALSE;
     VkBool32 saw_dynamic_rendering = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
@@ -556,6 +582,32 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             if (features->shaderDrawParameters) {
                 if (!draw_parameters) return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features |= PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR) {
+            if (saw_memory_model) return INVALID;
+            saw_memory_model = VK_TRUE;
+            const VkPhysicalDeviceVulkanMemoryModelFeaturesKHR *features =
+                (const VkPhysicalDeviceVulkanMemoryModelFeaturesKHR *)next;
+            if (!valid_bool(features->vulkanMemoryModel) ||
+                !valid_bool(features->vulkanMemoryModelDeviceScope) ||
+                !valid_bool(features->vulkanMemoryModelAvailabilityVisibilityChains))
+                return INVALID;
+            if (features->vulkanMemoryModelAvailabilityVisibilityChains)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (features->vulkanMemoryModelDeviceScope && !features->vulkanMemoryModel)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (features->vulkanMemoryModel) {
+                if (!memory_model_extension ||
+                    !(p->platform.supported_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
+            }
+            if (features->vulkanMemoryModelDeviceScope) {
+                if (!(p->platform.supported_features &
+                      PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
             }
         } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;

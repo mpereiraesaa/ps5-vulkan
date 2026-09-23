@@ -1741,10 +1741,98 @@ static void tessellation_feature_negotiation(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void memory_model_feature_negotiation(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    const uint32_t baseline = p->platform.supported_features;
+    const char *extension = VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME;
+    VkPhysicalDeviceVulkanMemoryModelFeaturesKHR reported = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR};
+    VkPhysicalDeviceFeatures2 features2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &reported};
+    vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+    assert(!reported.vulkanMemoryModel && !reported.vulkanMemoryModelDeviceScope &&
+           !reported.vulkanMemoryModelAvailabilityVisibilityChains);
+
+    VkDeviceQueueCreateInfo q;
+    float priority;
+    VkDeviceCreateInfo info = device_info(&q, &priority);
+    info.enabledExtensionCount = 1;
+    info.ppEnabledExtensionNames = &extension;
+    VkDevice d = VK_NULL_HANDLE;
+    const unsigned before = opened;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT);
+    assert(!d && opened == before);
+
+    p->platform.supported_features = baseline | PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
+    vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+    assert(reported.vulkanMemoryModel && !reported.vulkanMemoryModelDeviceScope &&
+           !reported.vulkanMemoryModelAvailabilityVisibilityChains);
+    uint32_t count = 0;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS);
+    VkExtensionProperties properties[8];
+    memset(properties, 0, sizeof(properties));
+    assert(count <= 8);
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, properties) == VK_SUCCESS);
+    int found = 0;
+    for (uint32_t n = 0; n < count; ++n)
+        found |= !strcmp(properties[n].extensionName, extension);
+    assert(found);
+
+    VkPhysicalDeviceVulkanMemoryModelFeaturesKHR requested = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR};
+    info.pNext = &requested;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && !(d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL));
+    vkDestroyDevice(d, NULL);
+    requested.vulkanMemoryModel = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && (d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL) &&
+           !(d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE));
+    vkDestroyDevice(d, NULL);
+    requested.vulkanMemoryModelDeviceScope = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    p->platform.supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+    vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+    assert(reported.vulkanMemoryModel && reported.vulkanMemoryModelDeviceScope);
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && (d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL) &&
+           (d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE));
+    vkDestroyDevice(d, NULL);
+
+    requested.vulkanMemoryModel = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    requested.vulkanMemoryModel = VK_TRUE;
+    requested.vulkanMemoryModelDeviceScope = VK_FALSE;
+    requested.vulkanMemoryModelAvailabilityVisibilityChains = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    requested.vulkanMemoryModelAvailabilityVisibilityChains = 2;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
+    requested.pNext = &reported;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.pNext = NULL;
+    info.enabledExtensionCount = 0;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    p->platform.supported_features = baseline;
+    vkDestroyInstance(i, NULL);
+
+    i = instance();
+    p = physical(i);
+    p->platform.supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
+    info = device_info(&q, &priority);
+    info.enabledExtensionCount = 1;
+    info.ppEnabledExtensionNames = &extension;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+}
+
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     consumer_physical_queries();
     tessellation_feature_negotiation();
+    memory_model_feature_negotiation();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

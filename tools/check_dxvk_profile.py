@@ -83,7 +83,33 @@ def implemented_device_extensions() -> set[str]:
     missing = sorted(token for token in tokens if token not in definitions)
     if missing:
         raise ValueError("unresolved device extension macros: " + ", ".join(missing))
-    return {definitions[token] for token in tokens}
+    # Compiling a conditional KHR route does not mean the shipping platform
+    # reports that extension. Count only the bits assigned to the native
+    # platform's supported-features mask, keeping the capability probe aligned
+    # until a measured promotion changes that mask.
+    platform_source = (ROOT / "native/platform_ps5.c").read_text()
+    platform_source = re.sub(r"/\*.*?\*/|//[^\n]*", "", platform_source, flags=re.DOTALL)
+    assignments = re.findall(r"platform->supported_features\s*(?:\|=|=)\s*(.*?);",
+                             platform_source, re.DOTALL)
+    shipping_bits = {bit for assignment in assignments
+                     for bit in re.findall(r"PS5VK_FEATURE_[A-Z0-9_]+", assignment)}
+    gates = {
+        "VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME": {
+            "PS5VK_FEATURE_STORAGE_BUFFER_8BIT", "PS5VK_FEATURE_STORAGE_BUFFER_16BIT"},
+        "VK_KHR_8BIT_STORAGE_EXTENSION_NAME": {"PS5VK_FEATURE_STORAGE_BUFFER_8BIT"},
+        "VK_KHR_16BIT_STORAGE_EXTENSION_NAME": {"PS5VK_FEATURE_STORAGE_BUFFER_16BIT"},
+        "VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME": {
+            "PS5VK_FEATURE_SHADER_DRAW_PARAMETERS"},
+        "VK_KHR_MULTIVIEW_EXTENSION_NAME": {"PS5VK_FEATURE_MULTIVIEW"},
+        "VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME": {
+            "PS5VK_FEATURE_VULKAN_MEMORY_MODEL"},
+        "VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME": {
+            "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT"},
+    }
+    unmapped = sorted(tokens - gates.keys())
+    if unmapped:
+        raise ValueError("unmapped conditional device extension macros: " + ", ".join(unmapped))
+    return {definitions[token] for token in tokens if gates[token] & shipping_bits}
 
 
 def core_indexes(requirements: dict) -> tuple[dict[str, list[dict]],
