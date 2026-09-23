@@ -84,9 +84,13 @@ def implemented_device_extensions() -> set[str]:
     # A guarded device-extension route can be compiled before the native
     # platform advertises its capability. The old probe's enumerated count
     # remains authoritative until that platform bit is enabled and a new
-    # hardware probe is recorded. Keep this guard narrow and fail closed if
-    # the platform starts referencing the bit during promotion.
-    if "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT" not in PLATFORM_SOURCE.read_text():
+    # hardware probe is recorded. Ignore only the default-off measurement
+    # block; a shipping assignment must make the probe count fail closed.
+    platform_source = PLATFORM_SOURCE.read_text()
+    platform_source = re.sub(
+        r"#if defined\(PS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC\).*?#endif",
+        "", platform_source, flags=re.S)
+    if "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT" not in platform_source:
         tokens.discard("VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME")
     missing = sorted(token for token in tokens if token not in definitions)
     if missing:

@@ -251,6 +251,11 @@ def main():
             raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC must be 0 or 1")
         if sample_rate_diagnostic == "1":
             native_cflags.append("-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
+        ubo_layout_diagnostic = os.environ.get("PS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC", "0")
+        if ubo_layout_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC must be 0 or 1")
+        if ubo_layout_diagnostic == "1":
+            native_cflags.append("-DPS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:

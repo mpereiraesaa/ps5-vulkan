@@ -1111,6 +1111,15 @@ static void image_barriers(void)
             image.layout==VK_IMAGE_LAYOUT_UNDEFINED);
         assert(vkEndCommandBuffer(c)==VK_SUCCESS);
     }
+    /* The upstream UBO readback case acquires a colour target with a single
+     * write access and ALL_GRAPHICS as the destination stage. */
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1 &&
+        c->operations[0].dst_stage==VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+    assert(vkEndCommandBuffer(c)==VK_SUCCESS);
     assert(vkResetCommandBuffer(c,0)==VK_SUCCESS && vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
     b.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
