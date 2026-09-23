@@ -349,6 +349,22 @@ static void test_buffer_device_address(void)
     flags.pNext = &capture;
     assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
     flags.pNext = NULL;
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT |
+                  VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR;
+    flags.deviceMask = 1;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    d.device_group_extension_enabled = VK_TRUE;
+    flags.deviceMask = 0;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    flags.deviceMask = 2;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    flags.deviceMask = 1;
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_SUCCESS);
+    vkFreeMemory(&d, m, NULL);
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    flags.deviceMask = 0;
     refuse_gpu_address = 1;
     unsigned releases = state.releases;
     assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
@@ -377,6 +393,9 @@ static void test_buffer_device_address(void)
     VkBuffer independent = VK_NULL_HANDLE;
     VkDeviceMemory independent_memory = VK_NULL_HANDLE;
     assert(vkCreateBuffer(&d, &buffer_info, NULL, &independent) == VK_SUCCESS);
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT |
+                  VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR;
+    flags.deviceMask = 1;
     assert(vkAllocateMemory(&d, &memory_info, NULL, &independent_memory) == VK_SUCCESS);
     assert(vkBindBufferMemory(&d, independent, independent_memory, 0) == VK_SUCCESS);
     address_info.buffer = independent;

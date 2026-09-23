@@ -97,12 +97,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
             saw_flags = VK_TRUE;
             const VkMemoryAllocateFlagsInfo *flags =
                 (const VkMemoryAllocateFlagsInfo *)next;
-            if (flags->flags != VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT ||
-                flags->deviceMask)
+            const VkMemoryAllocateFlags supported =
+                VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT |
+                VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR;
+            if (flags->flags & ~supported)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
-            if (!(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
-                return VK_ERROR_FEATURE_NOT_PRESENT;
-            device_address_allocation = VK_TRUE;
+            if (flags->flags & VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR) {
+                /* The driver exposes one physical device in its group. */
+                if (!d->device_group_extension_enabled || flags->deviceMask != 1)
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+            } else if (flags->deviceMask) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (flags->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT) {
+                if (!(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                device_address_allocation = VK_TRUE;
+            }
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO) {
             if (saw_capture) return INVALID;
