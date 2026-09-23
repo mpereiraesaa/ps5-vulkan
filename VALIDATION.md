@@ -4405,6 +4405,8 @@ evidence, not a legal public feature or original CTS result.
 | All four extended operand types as four-component vectors | Compute | All four components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
 | 32-bit unsigned `subgroupBroadcast` with all runtime source IDs 0–31 | Compute | 4,096 GPU values checked across four wave32 groups; zero mismatches and intact guards | False |
 | 32-bit unsigned `subgroupBroadcast` in an upper-half active-lane branch | Compute | 128 all-lane control and 64 branch values checked; 64 inactive slots untouched, guards zero | False |
+| Unsigned Int8, signed Int16, unsigned Int64 and Float16 scalar through vec4 `subgroupBroadcastFirst` | Compute | 16 exact typed SPIR-V modules compiled to nonempty machine code; GPU evidence below covers unsigned Int64 vec4 only | False |
+| Unsigned Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | All eight high/low component words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
 | Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4436,6 +4438,15 @@ control values, 64 upper-half branch values, and 64 untouched inactive slots
 with zero output or guard mismatches. Strict run `20260923T140018066Z` completed
 with a bounded fence and clean title closure; signed eboot SHA-256
 `431a2ba030def9860285b3e5d67c56efab78358528a95b640798a84ee767594a`.
+The pinned compiler also produced nonempty compute machine code for all 16
+scalar through vec4 unsigned Int8, signed Int16, unsigned Int64 and Float16 `subgroupBroadcastFirst`
+variants. One separate GPU run placed full-width Int64 vec4 BroadcastFirst
+inside an odd-lane branch, making lane 1 the first active source. All four
+64-bit components matched in 64 active outputs, with 64 inactive slots and
+guards untouched. Strict run `20260923T141328523Z` completed with a bounded
+fence and clean title closure; signed eboot SHA-256
+`23848cdb5e9a260009aa6912843b06777454515b654ac47f0d2ca52514e27f1b`.
+The other 15 BroadcastFirst forms have host compiler evidence only.
 The pinned CTS source also requires the matching narrow-type/storage features
 for extended-format cases. Other operations and graphics stages remain
 unproven, and these diagnostic runs do not establish a public Vulkan 1.2 route.
