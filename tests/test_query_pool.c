@@ -1,6 +1,6 @@
 /*
- * Host contract tests for the bounded Vulkan 1.0 query-pool surface and the
- * two sparse image queries. This proves ordered reset, result width and
+ * Host contract tests for the bounded Vulkan 1.0 query-pool surface. This
+ * proves ordered reset, precise-control feature gating, result width and
  * availability publication; it does not emulate occlusion counters.
  */
 #include "vk_internal.h"
@@ -30,7 +30,8 @@ static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend;
 VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
-                                 .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT};
+                                 .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT,
+                                 .supported_features = PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU",
         .vendor_id = 0x1002u,
@@ -56,10 +57,12 @@ static VkPhysicalDevice physical_device(void)
 static VkDevice make_device(VkPhysicalDevice physical)
 {
     float priority = 1.0f;
+    VkPhysicalDeviceFeatures features = {.occlusionQueryPrecise = VK_TRUE};
     VkDeviceQueueCreateInfo qci = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                                    .queueCount = 1, .pQueuePriorities = &priority};
     VkDeviceCreateInfo dci = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-                              .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci};
+                              .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
+                              .pEnabledFeatures = &features};
     VkDevice device;
     assert(vkCreateDevice(physical, &dci, NULL, &device) == VK_SUCCESS);
     return device;
@@ -289,6 +292,44 @@ int main(void)
     assert(command->state == PS5VK_RECORDING && command->operation_count == 2 &&
         !command->active_occlusion_query_pool &&
         command->operations[1].type == PS5VK_QUERY_END);
+    command->render_pass = VK_NULL_HANDLE;
+    assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
+
+    /* The precise control bit is accepted only when the logical device enabled
+     * occlusionQueryPrecise. It remains an ordered begin/end pair, and the
+     * operation validator enforces the same feature contract at submit time. */
+    VkPhysicalDeviceFeatures reported_features;
+    vkGetPhysicalDeviceFeatures(physical, &reported_features);
+    assert(reported_features.occlusionQueryPrecise == VK_TRUE);
+    assert(device->enabled_features & PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE);
+    device->enabled_features &= ~PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    vkCmdResetQueryPool(command, pool, 2, 1);
+    command->render_pass = (VkRenderPass)(uintptr_t)1;
+    command->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
+    vkCmdBeginQuery(command, pool, 2, VK_QUERY_CONTROL_PRECISE_BIT);
+    assert(command->state == PS5VK_INVALID && command->operation_count == 1 &&
+        command->operations[0].type == PS5VK_QUERY_RESET &&
+        !command->active_occlusion_query_pool);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
+    device->enabled_features |= PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    vkCmdResetQueryPool(command, pool, 2, 1);
+    command->render_pass = (VkRenderPass)(uintptr_t)1;
+    command->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
+    vkCmdBeginQuery(command, pool, 2, VK_QUERY_CONTROL_PRECISE_BIT);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 2 &&
+        command->operations[1].type == PS5VK_QUERY_BEGIN &&
+        command->operations[1].query_flags == VK_QUERY_CONTROL_PRECISE_BIT);
+    assert(ps5vk_query_operation_validate(device, &command->operations[1]) == VK_SUCCESS);
+    device->enabled_features &= ~PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+    assert(ps5vk_query_operation_validate(device, &command->operations[1]) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    device->enabled_features |= PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+    vkCmdEndQuery(command, pool, 2);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 3 &&
+        command->operations[2].type == PS5VK_QUERY_END);
     command->render_pass = VK_NULL_HANDLE;
     assert(vkEndCommandBuffer(command) == VK_SUCCESS);
     assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
