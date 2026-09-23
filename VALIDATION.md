@@ -4409,7 +4409,8 @@ evidence, not a legal public feature or original CTS result.
 | Unsigned Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | All eight high/low component words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
 | Opposite integer signedness in scalar through vec4 `subgroupBroadcast` and `subgroupBroadcastFirst` | Compute | Signed Int8, unsigned Int16 and signed Int64: 24 typed SPIR-V modules compiled to nonempty machine code; GPU proof below covers signed Int64 vec4 BroadcastFirst only | False |
 | Negative signed Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | Distinct negative high and positive low words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
-| Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
+| 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Vertex | Private GPU color readback: 160/160 rendered pixels matched source lane 7; a lane-ID control on the same draw differed at all 160 pixels. The diagnostic draw covered 16 of its 32 intended tile regions, so this does not establish full graphics coverage | False |
+| Other subgroup operations or graphics stages | None | No reviewed public stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
 capabilities only in the private build. The shipping guards remain in place.
@@ -4458,6 +4459,22 @@ completion. Strict run `20260923T142727583Z`; signed eboot SHA-256
 `634d1ce41d1c0af2c902ef36262bbcafd1acc34333c7ee29de5b8e58981fab2a`.
 The other counterpart forms have host compiler evidence only.
 
+A separate vertex-stage diagnostic used a runtime source ID loaded from a
+uniform buffer and passed the subgroup result through a flat varying to a
+fragment color attachment. With the same 96-vertex draw and measured raster
+footprint, a lane-ID control produced 160 pixels different from the source
+lane's value; the Broadcast variant produced 160 pixels equal to source lane
+7, with zero wrong pixels or source-buffer guard mismatches. Both completed a
+bounded fence, verified the transport stream and closed cleanly. The control
+run was `20260923T152735648Z` (signed eboot SHA-256
+`85d7bf176103b240c0ff507158464f1d43691023bcb1e89c06524b70dc2b6739`);
+the Broadcast run was `20260923T152851269Z` (signed eboot SHA-256
+`5da72163e4dee7fe4e13c68c077357d8f2b0da889da1382d229d91d473de16c8`).
+The same draw covered only 16 of 32 intended tile regions even without
+Broadcast, so the GPU evidence is limited to those rendered pixels. The
+shipping profile still rejects subgroup SPIR-V in graphics stages, and no
+fragment-stage GPU behavior is claimed.
+
 The pinned original CTS factory and registry impose these public eligibility
 conditions. `VK_KHR_shader_subgroup_extended_types` depends on Vulkan 1.1;
 the factory queries its bit only when `VK_KHR_shader_float16_int8` is also
@@ -4472,8 +4489,8 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
-`subgroupBroadcastDynamicId`. Other operations and graphics stages remain
-unproven on hardware. These diagnostics establish neither original CTS
+`subgroupBroadcastDynamicId`. Other operations and graphics-stage behavior
+remain unproven on hardware. These diagnostics establish neither original CTS
 eligibility nor a public subgroup feature route.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
