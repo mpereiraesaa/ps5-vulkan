@@ -4404,6 +4404,7 @@ evidence, not a legal public feature or original CTS result.
 | All four extended operand types as three-component vectors | Compute | All three components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
 | All four extended operand types as four-component vectors | Compute | All four components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
 | 32-bit unsigned `subgroupBroadcast` with all runtime source IDs 0–31 | Compute | 4,096 GPU values checked across four wave32 groups; zero mismatches and intact guards | False |
+| 32-bit unsigned `subgroupBroadcast` in an upper-half active-lane branch | Compute | 128 all-lane control and 64 branch values checked; 64 inactive slots untouched, guards zero | False |
 | Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4428,6 +4429,13 @@ from GPU memory and issued 32 explicit Broadcast operations. Its strict run
 `20260923T134237991Z` checked 4,096 values over four wave32 groups with zero
 mismatches and intact source/guard bytes; signed eboot SHA-256
 `a256c635732ed4669be033c99a00fe3fa1e432730e314ce18b9e1f51ba84c06d`.
+The original nonconstant Broadcast shader also branches into only the upper
+half of each subgroup and uses an ID uniform across those active lanes. A
+separate diagnostic reproduced that shape: two workgroups checked 128 all-lane
+control values, 64 upper-half branch values, and 64 untouched inactive slots
+with zero output or guard mismatches. Strict run `20260923T140018066Z` completed
+with a bounded fence and clean title closure; signed eboot SHA-256
+`431a2ba030def9860285b3e5d67c56efab78358528a95b640798a84ee767594a`.
 The pinned CTS source also requires the matching narrow-type/storage features
 for extended-format cases. Other operations and graphics stages remain
 unproven, and these diagnostic runs do not establish a public Vulkan 1.2 route.
