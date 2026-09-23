@@ -1905,11 +1905,21 @@ static void device_group_dispatch_command_gate(void)
 {
     struct VkDevice_T d = {0};
     assert(!vkGetDeviceProcAddr(&d, "vkCmdDispatchBaseKHR"));
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMaskKHR"));
+    assert(!vkGetDeviceProcAddr(&d, "vkGetDeviceGroupPeerMemoryFeaturesKHR"));
     d.device_group_extension_enabled = VK_TRUE;
     assert(vkGetDeviceProcAddr(&d, "vkCmdDispatchBaseKHR") ==
            (PFN_vkVoidFunction)vkCmdDispatchBaseKHR);
+    assert(vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMaskKHR") ==
+           (PFN_vkVoidFunction)vkCmdSetDeviceMaskKHR);
+    assert(vkGetDeviceProcAddr(&d, "vkGetDeviceGroupPeerMemoryFeaturesKHR") ==
+           (PFN_vkVoidFunction)vkGetDeviceGroupPeerMemoryFeaturesKHR);
+    VkPeerMemoryFeatureFlags peer = ~0u;
+    vkGetDeviceGroupPeerMemoryFeaturesKHR(&d, 0, 0, 0, &peer);
+    assert(!peer);
     /* This device still reports Vulkan 1.0: no core-1.1 command alias. */
     assert(!vkGetDeviceProcAddr(&d, "vkCmdDispatchBase"));
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMask"));
 }
 
 int main(void)

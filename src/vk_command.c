@@ -417,7 +417,7 @@ static VkResult inheritance_valid(VkDevice d, const VkCommandBufferInheritanceIn
 
 VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkCommandBufferBeginInfo *info)
 {
-    if (!c || !info || info->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO || info->pNext ||
+    if (!c || !info || info->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO ||
         c->state == PS5VK_PENDING || c->state == PS5VK_RECORDING ||
         /* VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT is meaningful only
          * for a secondary. For a primary VUID-vkBeginCommandBuffer-flags-09123
@@ -433,6 +433,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
         (c->level == VK_COMMAND_BUFFER_LEVEL_PRIMARY &&
          (info->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) &&
          (info->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT))) return INVALID;
+    if (info->pNext) {
+        const VkDeviceGroupCommandBufferBeginInfo *group =
+            (const VkDeviceGroupCommandBufferBeginInfo *)info->pNext;
+        if (!c->pool->device->device_group_extension_enabled ||
+            group->sType != VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO ||
+            group->pNext || group->deviceMask != 1) return INVALID;
+    }
     if (c->state != PS5VK_INITIAL && !(c->pool->flags & VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)) return INVALID;
     /* A secondary must describe what it inherits; a primary must not, and
      * Vulkan says the pointer is ignored for one, so it is not stored. */
@@ -724,6 +731,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHR(VkCommandBuffer c,
     if (c->state == PS5VK_RECORDING && c->operation_count == before + 1)
         memcpy(c->operations[before].group_base, base, sizeof(base));
 }
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHR(VkCommandBuffer c, uint32_t mask)
+{
+    /* This logical device has exactly one physical device. Selecting it is a
+     * state update with no change to the native command stream. */
+    if (!c || c->state != PS5VK_RECORDING || !c->pool ||
+        !c->pool->device->device_group_extension_enabled || mask != 1)
+        invalid(c);
+}
 static VkBool32 indirect_buffer_valid(VkCommandBuffer c, VkBuffer buffer,
     VkDeviceSize offset, VkDeviceSize bytes)
 {
@@ -754,7 +769,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
     /* Primary-only: a secondary inherits a render pass, it never begins one. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         !c->pool->device->graphics_enabled || c->render_pass ||
-        !info || info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO || info->pNext ||
+        !info || info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO ||
         (contents != VK_SUBPASS_CONTENTS_INLINE &&
          contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
         !info->renderPass || !info->framebuffer ||
@@ -767,6 +782,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;
+    if (info->pNext) {
+        const VkDeviceGroupRenderPassBeginInfo *group =
+            (const VkDeviceGroupRenderPassBeginInfo *)info->pNext;
+        if (!c->pool->device->device_group_extension_enabled ||
+            group->sType != VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO ||
+            group->pNext || group->deviceMask != 1 ||
+            group->deviceRenderAreaCount > 1 ||
+            (group->deviceRenderAreaCount && !group->pDeviceRenderAreas)) {
+            invalid(c); return;
+        }
+        if (group->deviceRenderAreaCount) area = group->pDeviceRenderAreas[0];
+    }
     /* Every colour role the subpass names must be the one the framebuffer
      * carries, in order, and the depth role after them. A subpass that names
      * no colour role at all - the DEPTH-ONLY shape - has an empty list on both

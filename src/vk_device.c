@@ -689,6 +689,14 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue(VkDevice d, uint32_t family, uint32_
 {
     if (out) *out = d && !family && !index ? &d->queue : VK_NULL_HANDLE;
 }
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHR(VkDevice d,
+    uint32_t heap, uint32_t local, uint32_t remote, VkPeerMemoryFeatureFlags *out)
+{
+    /* A singleton device group has no peer: valid usage requires distinct
+     * local and remote indices. Leave a deterministic zero on invalid calls. */
+    if (out) *out = 0;
+    (void)d; (void)heap; (void)local; (void)remote;
+}
 VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbacks *allocator)
 {
     (void)allocator;

@@ -33,6 +33,7 @@ static const struct entry entries[] = {
     ENTRY(vkGetDeviceProcAddr, DEVICE),
     ENTRY(vkDestroyDevice, DEVICE),
     ENTRY(vkGetDeviceQueue, DEVICE),
+    ENTRY(vkGetDeviceGroupPeerMemoryFeaturesKHR, DEVICE),
     ENTRY(vkAllocateMemory, DEVICE),
     ENTRY(vkFreeMemory, DEVICE),
     ENTRY(vkMapMemory, DEVICE),
@@ -100,6 +101,7 @@ static const struct entry entries[] = {
     ENTRY(vkCmdPushConstants, DEVICE),
     ENTRY(vkCmdDispatch, DEVICE),
     ENTRY(vkCmdDispatchBaseKHR, DEVICE),
+    ENTRY(vkCmdSetDeviceMaskKHR, DEVICE),
     ENTRY(vkCmdDispatchIndirect, DEVICE),
     ENTRY(vkCmdBeginRenderPass, DEVICE),
     ENTRY(vkCmdNextSubpass, DEVICE),
@@ -179,7 +181,11 @@ static int group_creation_command(const char *name)
 { return !strcmp(name, "vkEnumeratePhysicalDeviceGroupsKHR"); }
 
 static int device_group_command(const char *name)
-{ return !strcmp(name, "vkCmdDispatchBaseKHR"); }
+{
+    return !strcmp(name, "vkCmdDispatchBaseKHR") ||
+           !strcmp(name, "vkCmdSetDeviceMaskKHR") ||
+           !strcmp(name, "vkGetDeviceGroupPeerMemoryFeaturesKHR");
+}
 
 static int buffer_device_address_command(const char *name)
 {

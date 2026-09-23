@@ -107,7 +107,17 @@ int main(void)
     assert(vkQueueBindSparse(&d.queue, 0, NULL, fence) == VK_ERROR_DEVICE_LOST);
     d.lost = VK_FALSE;
     VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &c};
+    uint32_t mask = 1;
+    VkDeviceGroupSubmitInfo group = {.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBufferDeviceMasks = &mask};
+    submit.pNext = &group;
+    assert(vkQueueSubmit(&d.queue, 1, &submit, fence) == VK_ERROR_UNKNOWN);
+    d.device_group_extension_enabled = VK_TRUE;
+    mask = 0;
+    assert(vkQueueSubmit(&d.queue, 1, &submit, fence) == VK_ERROR_UNKNOWN);
+    mask = 1;
     assert(vkQueueSubmit(&d.queue, 1, &submit, fence) == VK_SUCCESS);
+    submit.pNext = NULL;
     assert(c->state == PS5VK_PENDING && fence->pending_serial == 1 && !fence->signaled);
     assert(vkWaitForFences(&d, 1, &fence, VK_TRUE, 0) == VK_TIMEOUT);
     assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN && f.launches == 1);

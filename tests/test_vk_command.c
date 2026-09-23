@@ -542,6 +542,7 @@ static void graphics_recording(void)
 {
     /* Structural objects only: no shaders, allocation or GPU execution. */
     struct VkDevice_T d = {.graphics_enabled = VK_TRUE,
+        .device_group_extension_enabled = VK_TRUE,
         .memory={NULL,allocate,release,cache,cache},.buffer_alignment=256,
         .noncoherent_atom=64,.max_allocation=4096};
     struct VkImage_T image = {.device = &d};
@@ -563,11 +564,23 @@ static void graphics_recording(void)
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = &pass, .framebuffer = &fb, .renderArea = {.extent = {100, 100}},
         .clearValueCount = 1, .pClearValues = &value};
+    VkRect2D group_area = {.offset = {1, 2}, .extent = {20, 30}};
+    VkDeviceGroupRenderPassBeginInfo group = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO,
+        .deviceMask = 1, .deviceRenderAreaCount = 1,
+        .pDeviceRenderAreas = &group_area};
+    ri.pNext = &group;
     VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     VkCommandBuffer c = command(&d, p);
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
     vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
     vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    assert(c->state == PS5VK_RECORDING &&
+           c->operations[0].render_area.offset.x == 1 &&
+           c->operations[0].render_area.offset.y == 2 &&
+           c->operations[0].render_area.extent.width == 20 &&
+           c->operations[0].render_area.extent.height == 30);
+    ri.pNext = NULL;
     value.color.float32[0] = 1;
     assert(c->operations[0].clears[0].color.float32[0] == 0.25f);
     assert(vkEndCommandBuffer(c) != VK_SUCCESS);
@@ -1267,8 +1280,15 @@ static void dispatch_base_recording(void)
     struct VkPipeline_T pipeline = {.device = &d, .dispatch_base_enabled = VK_TRUE};
     VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     VkCommandBuffer c = command(&d, p);
-    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    VkDeviceGroupCommandBufferBeginInfo group = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO,
+        .deviceMask = 1};
+    VkCommandBufferBeginInfo grouped_begin = begin_info;
+    grouped_begin.pNext = &group;
+    assert(vkBeginCommandBuffer(c, &grouped_begin) == VK_SUCCESS);
     vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, &pipeline);
+    vkCmdSetDeviceMaskKHR(c, 1);
+    assert(c->state == PS5VK_RECORDING && !c->operation_count);
     vkCmdDispatchBaseKHR(c, 4, 5, 1, 3, 7, 2);
     assert(c->state == PS5VK_RECORDING && c->operation_count == 1);
     assert(c->operations[0].groups[0] == 3 && c->operations[0].groups[1] == 7 &&
@@ -1277,6 +1297,10 @@ static void dispatch_base_recording(void)
            c->operations[0].group_base[1] == 5 &&
            c->operations[0].group_base[2] == 1);
     assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+
+    group.deviceMask = 0;
+    assert(vkBeginCommandBuffer(c, &grouped_begin) != VK_SUCCESS);
+    group.deviceMask = 1;
 
     pipeline.dispatch_base_enabled = VK_FALSE;
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
@@ -1294,6 +1318,10 @@ static void dispatch_base_recording(void)
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
     vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_COMPUTE, &pipeline);
     vkCmdDispatchBaseKHR(c, 65534, 0, 0, 2, 1, 1);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 0);
+
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdSetDeviceMaskKHR(c, 0);
     assert(c->state == PS5VK_INVALID && c->operation_count == 0);
 
     d.device_group_extension_enabled = VK_FALSE;
