@@ -135,12 +135,24 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_INDEPENDENT_BLEND |
                           PS5VK_FEATURE_DUAL_SRC_BLEND |
                           PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
-                          PS5VK_FEATURE_SAMPLE_RATE_SHADING))
+                          PS5VK_FEATURE_SAMPLE_RATE_SHADING |
+                          PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS |
+                          PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                          PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
+        !(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
     opts.enable_storage_buffer_16bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_16BIT);
+    opts.enable_physical_storage_buffer_addresses =
+        !!(feature_mask & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
+    opts.enable_vulkan_memory_model =
+        !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL);
+    opts.enable_vulkan_memory_model_device_scope =
+        !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE);
 
     if (specialization) {
         if (specialization->mapEntryCount > PSBC_MAX_SPECIALIZATION_CONSTANTS ||

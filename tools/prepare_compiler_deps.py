@@ -29,7 +29,10 @@ DEPS = [
         # PsbcCompileOptions::sample_shading_enable, which does not exist before
         # this revision, so the pin has to name it for the advertised
         # sample-rate count envelope to build at all.
-        "pin": "0d4e80c026caa16791faaa135f80302f1b63479e",
+        # T08 adds independent opt-in SPIR-V physical-address and Vulkan
+        # memory-model capability handling. Driver adapters still choose which
+        # options to enable for each negotiated logical-device feature.
+        "pin": "b7b01a9c87e4b48d8b5a87c0af110a0ef12228d2",
     },
     {
         "name": "opengnm",
