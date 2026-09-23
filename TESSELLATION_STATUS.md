@@ -1,20 +1,26 @@
-# Tessellation status: integrated native validation, release pending
+# Tessellation status: integrated and merged
 
 ## Current status
 
-The latest default native runtime candidate passes **403/403 original upstream CTS
+The merged default native runtime passes **403/403 original upstream CTS
 cases on one PS5 executable**, including the existing 304-case regression and
 99 tessellation, tessellation clip/cull and TCS/TES resource cases. Strict
 artifact/report verification and application closure pass. Experimental
 tessellation negotiation and all shader/probe bypasses are off.
 This is focused validation, not complete Vulkan CTS or a conformance claim.
-The compiler is pinned to the published metadata21 candidate under review.
-The native runtime-graphics build now enables tessellation by default; its
-fresh public-profile query and integrated default-profile execution both pass
-strict identity and clean closure. Release review remains pending. This
-working-tree change is not yet a published release. Compute-only and offline
-graphics profiles do not gain the feature. Historical experimental receipts
-below must not be relabelled as default-profile runs.
+T04 was merged to `main` in PR #158 (merge commit
+`2dea243e50fadacc666e0d00aea6be54f5a767e4`). The native runtime-graphics
+build enables tessellation by default; its public-profile query and integrated
+default-profile execution pass strict identity and clean closure. The default
+403-case run is `20260920T130122695Z_PPSA99994_upstream-cts_0x1034cdef319e6`
+(SELF SHA-256 `2e0fc22b7de6401f7d12f2f6359efc14a223b4917100acad4c98edecf726d45c`).
+Compute-only and offline graphics profiles do not gain the feature. Historical
+experimental receipts below must not be relabelled as default-profile runs.
+
+The separate DXVK profile matrix still has an evidence-accounting gap:
+these 99 passing leaves have not been added to its frozen acceptance selection.
+That gap does not undo T04's merged implementation or native result, but it
+must be closed before the matrix may count `tessellationShader` as satisfied.
 
 A standalone consumer of staged public SDK headers also verifies that the
 default build reports tessellationShader and the eight intended limits

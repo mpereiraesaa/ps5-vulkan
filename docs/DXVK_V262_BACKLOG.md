@@ -12,24 +12,30 @@ leaves within a 165/165 regression; the indirect and indexed draws (T03)
 have all three requirements satisfied by core feature reports, the
 per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
 leaves within a 211/211 regression and the public-SDK indirect witness; the
-optional graphics stages (T04) satisfied the `shaderClipDistance` and
-`shaderCullDistance` pair with 64 promoted clip/cull leaves and 29 geometry
-leaves inside a 304/304 regression, and additionally passed 99 tessellation,
-tessellation clip/cull and TCS/TES resource cases in the 403/403 default
-candidate run (those 99 stay outside the frozen acceptance selection;
-`geometryShader` and `tessellationShader` are positive on the API,
-implementation and CTS axes but still `reported-not-executed` natively, so
-both remain blockers); the four DXVK262-T05 rasterization and viewport
-features were promoted on 2026-09-21; and DXVK262-T06 is complete, with all
-four of its requirements satisfied: `fragmentStoresAndAtomics` and
-`dualSrcBlend` with their four axes, `independentBlend` promoted on
-2026-09-22, and `sampleRateShading` promoted on 2026-09-23 - the pixel stage
-publishes Vulkan's standard sample positions and interpolates the position at
-the iterated sample, the colour-to-texture barrier waits for a confirmed
-writeback, and the feature's own oracle, thirty leaves at both served counts,
-passes inside the frozen acceptance selection, which now carries them and
-passes 494/494. The live matrix is 17/62 ready with 45 blockers. The ordered
-table preserves the original tranche membership.
+the four DXVK262-T05 rasterization and viewport features were promoted on
+2026-09-21; and DXVK262-T06 is complete, with all four of its requirements
+satisfied: `fragmentStoresAndAtomics` and `dualSrcBlend` with their four axes,
+`independentBlend` promoted on 2026-09-22, and `sampleRateShading` promoted on
+2026-09-23 - the pixel stage publishes Vulkan's standard sample positions and
+interpolates the position at the iterated sample, the colour-to-texture barrier
+waits for a confirmed writeback, and the feature's own oracle, thirty leaves at
+both served counts, passes inside the frozen acceptance selection, which now
+carries them and passes 494/494. **T04 is implemented, hardware-validated and
+merged into `main`** (PR #158): the default graphics profile exposes geometry,
+tessellation and clip/cull distances, and its integrated native run passed
+403/403 focused upstream cases, including 99 tessellation-related cases. The
+live matrix is 17/62 ready with 45 blockers. The ordered table preserves the
+original tranche membership.
+
+Tranche delivery and DXVK profile scoring are different gates. The current
+matrix still leaves `geometryShader` and `tessellationShader` as blockers:
+their native witness receipts have not been admitted to the DXVK evidence
+ledger, and the 99 passing tessellation cases are outside its frozen CTS
+selection. This is **evidence reconciliation**, not unfinished T04 rendering
+work. Promote the exact cases and receipts, then regenerate the matrix and
+rerun its gates before changing its count. T07 may proceed using the merged
+T04 implementation; it need not wait for that accounting change. The current
+score is derived from `conformance_inventory/dxvk_v262_matrix.json`.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
 11_0 baseline. Reaching 62/62 means that this profile has complete API,

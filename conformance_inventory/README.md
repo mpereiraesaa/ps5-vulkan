@@ -336,9 +336,15 @@ indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
 `fragmentStoresAndAtomics`, `dualSrcBlend`, `independentBlend`,
 `sampleRateShading`, and the four rasterization and viewport features
 `depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`) and 45
-blockers. `geometryShader` and `tessellationShader` are
-positive on the API, implementation and CTS axes but their native axis is
-`reported-not-executed`, so both remain blockers.
+blockers.
+
+T04's implementation and focused native validation are
+complete and merged (PR #158), but its `geometryShader` and
+`tessellationShader` rows remain blocked **in this matrix** until the existing
+native receipts are admitted and the 99 passing tessellation leaves are added
+to the frozen acceptance selection. Do not interpret those two evidence-ledger
+blockers as unimplemented stages. The exact current count is in
+`dxvk_v262_matrix.json`; its checked generator, not this prose, is authoritative.
 Multiview values use the explicitly recorded equivalent KHR route; aggregate
 query structures and the API 1.3 floor remain unadvertised. This is not a
 DXVK compatibility or Vulkan conformance statement.

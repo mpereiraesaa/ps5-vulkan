@@ -117,6 +117,15 @@ the API, implementation and CTS axes but their native axis is still
 `reported-not-executed`, so they stay among the other 45 requirements that
 remain blockers, together with the API-version requirement. This is an
 implementation roadmap, not a DXVK compatibility claim.
+
+T04 (geometry, tessellation and clip/cull distances) is implemented,
+hardware-validated and merged. The default graphics build passed a focused
+403/403 upstream run, including 99 tessellation-related cases. The separate
+fail-closed DXVK matrix has not yet admitted the geometry/tessellation native
+receipts or those 99 cases into its frozen selection, so it still scores the
+two rows as blockers. See the [backlog](docs/DXVK_V262_BACKLOG.md) for this
+accounting distinction and the machine-readable matrix for the current score.
+This is an implementation roadmap, not a DXVK compatibility claim.
 The public-SDK-only capability probe can be built with
 `python3 tools/build_consumer.py --dxvk-v262-probe`; see
 [the inventory](conformance_inventory/README.md#dxvk-262-profile) and
