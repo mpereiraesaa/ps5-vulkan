@@ -1,7 +1,7 @@
 /*
  * Host contract tests for the bounded Vulkan 1.0 query-pool surface and the
- * two sparse image queries. This proves ordered reset and the observable
- * reset-but-unavailable result state; it does not emulate occlusion counters.
+ * two sparse image queries. This proves ordered reset, result width and
+ * availability publication; it does not emulate occlusion counters.
  */
 #include "vk_internal.h"
 #include "vk_query_pool.h"
@@ -154,9 +154,63 @@ int main(void)
         VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_NOT_READY);
     assert(one[0] == 0x12345678u && one[1] == 0);
     assert(vkGetQueryPoolResults(device, pool, 2, 1, sizeof(one), one, 0,
-        VK_QUERY_RESULT_WAIT_BIT) == VK_ERROR_UNKNOWN);
+        VK_QUERY_RESULT_WAIT_BIT) == VK_NOT_READY);
     assert(vkGetQueryPoolResults(device, pool, 2, 1, sizeof(one), one, 0,
-        VK_QUERY_RESULT_PARTIAL_BIT) == VK_ERROR_UNKNOWN);
+        VK_QUERY_RESULT_PARTIAL_BIT) == VK_NOT_READY);
+    assert(one[0] == 0x12345678u && one[1] == 0);
+
+    /* A completed backend may publish only a real measured result. The public
+     * result path then writes the low 32 bits or the full 64 bits and sets the
+     * matching availability word. */
+    assert(ps5vk_query_publish(device, pool, 2, UINT64_C(0x12345678abcdef01)) == VK_SUCCESS);
+    uint64_t published64[2] = {0, 0};
+    assert(vkGetQueryPoolResults(device, pool, 2, 1, sizeof(published64),
+        published64, 0, VK_QUERY_RESULT_64_BIT |
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT | VK_QUERY_RESULT_WAIT_BIT) == VK_SUCCESS);
+    assert(published64[0] == UINT64_C(0x12345678abcdef01) && published64[1] == 1);
+    uint32_t published32[2] = {0, 0};
+    assert(vkGetQueryPoolResults(device, pool, 2, 1, sizeof(published32),
+        published32, 0, VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS);
+    assert(published32[0] == UINT32_C(0xabcdef01) && published32[1] == 1);
+    assert(ps5vk_query_publish(device, pool, 0, 1) != VK_SUCCESS);
+
+    VkBufferCreateInfo copy_buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 64,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VkBuffer query_copy_buffer;
+    assert(vkCreateBuffer(device, &copy_buffer_info, NULL, &query_copy_buffer) == VK_SUCCESS);
+    VkMemoryRequirements copy_requirements;
+    vkGetBufferMemoryRequirements(device, query_copy_buffer, &copy_requirements);
+    VkMemoryAllocateInfo copy_memory_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = copy_requirements.size,
+        .memoryTypeIndex = 0,
+    };
+    VkDeviceMemory query_copy_memory;
+    assert(vkAllocateMemory(device, &copy_memory_info, NULL, &query_copy_memory) == VK_SUCCESS);
+    assert(vkBindBufferMemory(device, query_copy_buffer, query_copy_memory, 0) == VK_SUCCESS);
+    void *query_copy_map;
+    VkDeviceSize query_copy_bytes;
+    assert(ps5vk_buffer_span(device, query_copy_buffer, 0, VK_WHOLE_SIZE,
+        &query_copy_map, &query_copy_bytes) == VK_SUCCESS && query_copy_bytes >= 64);
+    memset(query_copy_map, 0x5a, 64);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    vkCmdCopyQueryPoolResults(command, pool, 2, 1, query_copy_buffer, 0, 16,
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT |
+        VK_QUERY_RESULT_WAIT_BIT);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 1 &&
+        command->operations[0].type == PS5VK_QUERY_COPY);
+    assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    submit = (VkSubmitInfo){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &command};
+    assert(vkQueueSubmit(&device->queue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(((uint64_t *)query_copy_map)[0] == UINT64_C(0x12345678abcdef01) &&
+        ((uint64_t *)query_copy_map)[1] == 1);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
 
     /* No fake results: operations requiring a real ZPASS counter or supported
      * timestamp domain invalidate recording without consuming an op slot. */
@@ -178,6 +232,32 @@ int main(void)
     CHECK_QUERY_FAIL_CLOSED(vkCmdExecuteCommands(command, 0, NULL));
     CHECK_QUERY_FAIL_CLOSED(vkCmdExecuteCommands(command, 1, &command));
 #undef CHECK_QUERY_FAIL_CLOSED
+
+    /* The recorder accepts a structurally paired, non-precise occlusion scope
+     * inside an inline pass. Submission still requires native counter support. */
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    vkCmdResetQueryPool(command, pool, 2, 1);
+    assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    submit = (VkSubmitInfo){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &command};
+    assert(vkQueueSubmit(&device->queue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(pool->states[2] == PS5VK_QUERY_UNAVAILABLE);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    command->render_pass = (VkRenderPass)(uintptr_t)1;
+    command->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
+    vkCmdBeginQuery(command, pool, 2, 0);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 1 &&
+        command->active_occlusion_query_pool == pool &&
+        command->operations[0].type == PS5VK_QUERY_BEGIN);
+    vkCmdEndQuery(command, pool, 2);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 2 &&
+        !command->active_occlusion_query_pool &&
+        command->operations[1].type == PS5VK_QUERY_END);
+    command->render_pass = VK_NULL_HANDLE;
+    assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
 
     /* the device cannot be destroyed while the pool child lives */
     unsigned errors = device->lifetime_errors;
@@ -214,6 +294,8 @@ int main(void)
     /* --- teardown --- */
     vkDestroyImage(device, image, NULL);
     vkDestroyCommandPool(device, command_pool, NULL);
+    vkDestroyBuffer(device, query_copy_buffer, NULL);
+    vkFreeMemory(device, query_copy_memory, NULL);
     vkDestroyQueryPool(device, pool, NULL);
     VkInstance instance = device->physical->instance;
     vkDestroyDevice(device, NULL);
