@@ -17,6 +17,11 @@ spec.loader.exec_module(builder)
 
 
 class BdaCtsRegistration(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not MODULE.is_file():
+            raise unittest.SkipTest("pinned vk-gl-cts checkout not present")
+
     def test_two_original_compute_choices_preserve_body_and_oracle(self):
         original = MODULE.read_text()
         with tempfile.TemporaryDirectory() as directory:
