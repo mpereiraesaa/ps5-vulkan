@@ -4387,6 +4387,17 @@ unadvertised. `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId`
 remain false: the former has a Vulkan 1.1 KHR dependency and incomplete
 operation/type coverage, while the latter has no Vulkan 1.0 extension alias.
 
+The subgroup boundary is explicit. These probes compile shaders on the host;
+none establishes active-lane or divergent-source behavior on the PS5 GPU, and
+the public device exposes no subgroup stage or operation properties.
+
+| Operand and operation | Stage tested | Verified state | T08 feature bit |
+| --- | --- | --- | --- |
+| 32-bit unsigned `subgroupBroadcast` with a runtime buffer source ID | Compute | PSBC host compilation only | False |
+| 16-bit signed `subgroupBroadcast` with a constant source ID | Compute | PSBC host compilation with 16-bit option only | False |
+| 8-bit, 64-bit and 16-bit float subgroup operands/results | None | No complete compiler and GPU evidence | False |
+| Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
+
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
 nested struct. Two workgroups produced 64 exact values with zero mismatches and
