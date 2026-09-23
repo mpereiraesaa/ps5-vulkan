@@ -4407,6 +4407,8 @@ evidence, not a legal public feature or original CTS result.
 | 32-bit unsigned `subgroupBroadcast` in an upper-half active-lane branch | Compute | 128 all-lane control and 64 branch values checked; 64 inactive slots untouched, guards zero | False |
 | Unsigned Int8, signed Int16, unsigned Int64 and Float16 scalar through vec4 `subgroupBroadcastFirst` | Compute | 16 exact typed SPIR-V modules compiled to nonempty machine code; GPU evidence below covers unsigned Int64 vec4 only | False |
 | Unsigned Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | All eight high/low component words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
+| Opposite integer signedness in scalar through vec4 `subgroupBroadcast` and `subgroupBroadcastFirst` | Compute | Signed Int8, unsigned Int16 and signed Int64: 24 typed SPIR-V modules compiled to nonempty machine code; GPU proof below covers signed Int64 vec4 BroadcastFirst only | False |
+| Negative signed Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | Distinct negative high and positive low words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
 | Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4447,9 +4449,32 @@ guards untouched. Strict run `20260923T141328523Z` completed with a bounded
 fence and clean title closure; signed eboot SHA-256
 `23848cdb5e9a260009aa6912843b06777454515b654ac47f0d2ca52514e27f1b`.
 The other 15 BroadcastFirst forms have host compiler evidence only.
-The pinned CTS source also requires the matching narrow-type/storage features
-for extended-format cases. Other operations and graphics stages remain
-unproven, and these diagnostic runs do not establish a public Vulkan 1.2 route.
+The pinned CTS format list also contains the opposite integer signedness.
+Twenty-four corresponding scalar through vec4 Broadcast/BroadcastFirst modules
+compiled on the host. A signed Int64 vec4 odd-lane GPU run then checked each
+component's distinct negative high word and positive low word, with 64 active
+outputs, 64 untouched inactive slots, zero guard mismatches and clean bounded
+completion. Strict run `20260923T142727583Z`; signed eboot SHA-256
+`634d1ce41d1c0af2c902ef36262bbcafd1acc34333c7ee29de5b8e58981fab2a`.
+The other counterpart forms have host compiler evidence only.
+
+The pinned original CTS factory and registry impose these public eligibility
+conditions. `VK_KHR_shader_subgroup_extended_types` depends on Vulkan 1.1;
+the factory queries its bit only when `VK_KHR_shader_float16_int8` is also
+available. The shipping Vulkan 1.0 device has neither extension route.
+
+| CTS operand family | Additional feature conditions in the pinned factory | Shipping profile |
+| --- | --- | --- |
+| Signed/unsigned 8-bit integer | `shaderInt8` and `storageBuffer8BitAccess` | `shaderInt8` false |
+| Signed/unsigned 16-bit integer | `shaderInt16` and `storageBuffer16BitAccess` | `shaderInt16` false |
+| Signed/unsigned 64-bit integer | `shaderInt64` | `shaderInt64` false |
+| 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
+| 64-bit float | `shaderFloat64` | `shaderFloat64` false |
+
+The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
+`subgroupBroadcastDynamicId`. Other operations and graphics stages remain
+unproven on hardware. These diagnostics establish neither original CTS
+eligibility nor a public subgroup feature route.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
