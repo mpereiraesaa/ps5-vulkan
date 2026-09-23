@@ -1884,6 +1884,23 @@ static void single_device_group_creation(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void buffer_address_command_gate(void)
+{
+    struct VkDevice_T d = {0};
+    const char *commands[] = {
+        "vkGetBufferDeviceAddressKHR",
+        "vkGetBufferOpaqueCaptureAddressKHR",
+        "vkGetDeviceMemoryOpaqueCaptureAddressKHR",
+    };
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        assert(!vkGetDeviceProcAddr(&d, commands[n]));
+    d.enabled_features = PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        assert(vkGetDeviceProcAddr(&d, commands[n]));
+    /* This device still reports Vulkan 1.0: no core-1.2 command alias. */
+    assert(!vkGetDeviceProcAddr(&d, "vkGetBufferDeviceAddress"));
+}
+
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
@@ -1891,5 +1908,6 @@ int main(void)
     tessellation_feature_negotiation();
     memory_model_feature_negotiation();
     single_device_group_creation();
+    buffer_address_command_gate();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

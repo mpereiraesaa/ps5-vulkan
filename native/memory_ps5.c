@@ -7,6 +7,7 @@
 
 struct native_allocation {
     void *address;
+    VkDeviceAddress gpu_address;
     int64_t physical;
     size_t mapped_size;
     VkDeviceSize requested_size;
@@ -62,6 +63,10 @@ static VkResult allocate_aligned(void *context, VkDeviceSize size, void **addres
         if (result) retain("invalid-address-release", result);
         free(a); return VK_ERROR_MEMORY_MAP_FAILED;
     }
+    /* The direct mapping's virtual address is the one native GPU packets use
+     * for this allocation. Keep it as a separate backend-owned GPU address;
+     * the Vulkan query never derives an address from the CPU map pointer. */
+    a->gpu_address = (VkDeviceAddress)(uintptr_t)a->address;
     *address = a->address; *backing = a;
     if (budget) budget->used += a->mapped_size;
     ps5log_printf(PS5LOG_INFO, "PS5VK_MEMORY_ALLOC requested=%llu mapped=%zu",
@@ -88,6 +93,18 @@ static void release(void *context, void *backing)
     }
     ps5log_printf(PS5LOG_INFO, "PS5VK_MEMORY_RELEASE mapped=%zu", a->mapped_size);
     free(a);
+}
+
+VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out)
+{
+    if (!out) return VK_ERROR_UNKNOWN;
+    *out = 0;
+    const struct native_allocation *a = backing;
+    if (!a || !a->address || !a->gpu_address ||
+        a->gpu_address > UINT64_MAX - a->requested_size)
+        return VK_ERROR_MEMORY_MAP_FAILED;
+    *out = a->gpu_address;
+    return VK_SUCCESS;
 }
 
 static VkResult host_cache(void *context, void *backing, VkDeviceSize offset, VkDeviceSize size)

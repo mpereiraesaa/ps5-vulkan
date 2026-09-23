@@ -46,6 +46,9 @@ static const struct entry entries[] = {
     ENTRY(vkDestroyBufferView, DEVICE),
     ENTRY(vkGetBufferMemoryRequirements, DEVICE),
     ENTRY(vkBindBufferMemory, DEVICE),
+    ENTRY(vkGetBufferDeviceAddressKHR, DEVICE),
+    ENTRY(vkGetBufferOpaqueCaptureAddressKHR, DEVICE),
+    ENTRY(vkGetDeviceMemoryOpaqueCaptureAddressKHR, DEVICE),
     ENTRY(vkCreateImage, DEVICE),
     ENTRY(vkDestroyImage, DEVICE),
     ENTRY(vkGetImageMemoryRequirements, DEVICE),
@@ -174,6 +177,13 @@ static int gpdp2_command(const char *name)
 static int group_creation_command(const char *name)
 { return !strcmp(name, "vkEnumeratePhysicalDeviceGroupsKHR"); }
 
+static int buffer_device_address_command(const char *name)
+{
+    return !strcmp(name, "vkGetBufferDeviceAddressKHR") ||
+           !strcmp(name, "vkGetBufferOpaqueCaptureAddressKHR") ||
+           !strcmp(name, "vkGetDeviceMemoryOpaqueCaptureAddressKHR");
+}
+
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
                                                               const char *name)
 {
@@ -192,6 +202,9 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char *name)
 {
     if (!device || !name) return NULL;
+    if (buffer_device_address_command(name) &&
+        !(device->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
+        return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;
     return NULL;

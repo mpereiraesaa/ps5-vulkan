@@ -37,6 +37,9 @@ struct ps5vk_memory_backend {
 
 struct ps5vk_memory_backend ps5vk_native_memory_backend(void);
 struct ps5vk_memory_backend ps5vk_native_graphics_memory_backend(void);
+/* Resolve a direct-memory allocation's GPU virtual address. The host default
+ * refuses this; native memory provides the address used by GPU descriptors. */
+VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out);
 VkResult ps5vk_native_image_requirements(VkDevice, const VkImageCreateInfo *, VkMemoryRequirements *);
 /* Storage of one array layer of a color/depth attachment surface, and of a
  * whole layered attachment: stride == the per-layer footprint slice A measured,
