@@ -53,7 +53,7 @@ def main():
                ("minimal", "xor", "shared_grid", "resource_abi", "push_specialization",
                 "storage8", "storage16", "sync_producer", "sync_consumer",
                 "shared_atomic_multiwave")}
-    sources.update({name: ROOT / f"third_party/psbc-reference/tests/{name}.comp"
+    sources.update({name: ROOT / f"experiments/compute/{name}.comp"
                     for name in ("t08_address", "t08_memory_model_queue", "t08_memory_model")})
     targets = {name: OUTPUT / f"{name}.spv" for name in sources}
     recipe_mtime = Path(__file__).stat().st_mtime
