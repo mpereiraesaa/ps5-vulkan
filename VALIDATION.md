@@ -4454,3 +4454,18 @@ selection SHA-256:
 `c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`;
 run `20260923T120459357Z_PPSA99994_upstream-cts_0x1ebf603188bae`;
 log SHA-256 `94669451880f9a692ca7c6b07a4e93066f100c209d8cc6ca1cd7191f095a867b`.
+
+The driver now pins merged `opengnm-psbc` PR #25 at
+`47ae2a3bc9d6951d869d4bffd5112a62329ccf04` for corrected compute
+subgroup-ID lowering. Firmware 12.02 completed the unchanged 498-case
+acceptance selection with 498/498 Pass and zero missing, foreign, or duplicate
+cases. The signed eboot SHA-256 was
+`3028ca0e478ec1af88c82799e00c15a1e2e3899833d7aa8e8148878d2e927abf`,
+selection SHA-256
+`c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`,
+run `20260923T130249414Z_PPSA99994_upstream-cts_0x1ef1deeee8764`,
+and QPA SHA-256
+`e3e87c3e8513591062c76a03797d357dc01a6bd3c9aac46b716256439abf17e8`.
+The strict verifier recorded a clean close; the accepted payload was restored
+and the title stopped. This compiler update does not change public subgroup
+feature reporting.

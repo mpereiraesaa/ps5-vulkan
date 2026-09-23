@@ -29,7 +29,9 @@ DEPS = [
         # PsbcCompileOptions::sample_shading_enable, which does not exist before
         # this revision, so the pin has to name it for the advertised
         # sample-rate count envelope to build at all.
-        "pin": "0d4e80c026caa16791faaa135f80302f1b63479e",
+        # PR 25 fixes compute subgroup-ID lowering and the fixed wave32
+        # compiler contract. Public subgroup reporting remains disabled.
+        "pin": "47ae2a3bc9d6951d869d4bffd5112a62329ccf04",
     },
     {
         "name": "opengnm",
