@@ -68,7 +68,7 @@ int main(void)
      * and view semantics, including array subsets, one cube and 3D slices. */
     d.max_allocation=16384;
     VkMemoryAllocateInfo layered_ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize=8192};
+        .allocationSize=16384};
     VkDeviceMemory layered_memory;
     assert(vkAllocateMemory(&d,&layered_ai,NULL,&layered_memory)==VK_SUCCESS);
     VkImageCreateInfo layered_ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -112,7 +112,41 @@ int main(void)
         .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6}};
     assert(vkCreateImageView(&d,&layered_vi,NULL,&layered_view)==VK_SUCCESS);
     assert(ps5vk_texture_descriptor(&d,layered_view,sampler,layered_words)==VK_SUCCESS &&
-        layered_words[3]==0xb0000fac && !layered_words[4]);
+        layered_words[3]==0xb0000fac && layered_words[4]==5);
+    vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
+
+    /* GFX10 cube resources select faces through DEPTH (last accessible layer)
+     * and BASE_ARRAY in word 4. A cube-array view keeps the allocation base;
+     * its cube/face range, including a view of only the second cube, belongs
+     * in those fields rather than in a byte-address adjustment. */
+    layered_ii.flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    layered_ii.extent=(VkExtent3D){4,4,1};
+    layered_ii.arrayLayers=12;
+    assert(vkCreateImage(&d,&layered_ii,NULL,&layered_image)==VK_SUCCESS &&
+        layered_image->requirements.size==12288);
+    assert(vkBindImageMemory(&d,layered_image,layered_memory,0)==VK_SUCCESS);
+    void *cube_array_base;VkDeviceSize cube_array_bytes;
+    assert(ps5vk_image_span(&d,layered_image,&cube_array_base,&cube_array_bytes)==VK_SUCCESS &&
+        cube_array_bytes==12288);
+    d.enabled_features|=PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
+    layered_vi=(VkImageViewCreateInfo){.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=layered_image,.viewType=VK_IMAGE_VIEW_TYPE_CUBE_ARRAY,.format=layered_ii.format,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,12}};
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&layered_view)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,layered_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[3]==0xb0000fac && layered_words[4]==11);
+    layered_vi.subresourceRange.baseArrayLayer=6;
+    layered_vi.subresourceRange.layerCount=6;
+    VkImageView second_cube_view;
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&second_cube_view)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,second_cube_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[0]==(uint32_t)((uintptr_t)cube_array_base>>8) &&
+        layered_words[3]==0xb0000fac && layered_words[4]==0x0006000b);
+    vkDestroyImageView(&d,second_cube_view,NULL);
+    d.enabled_features&=~(uint32_t)PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
+    assert(ps5vk_texture_descriptor(&d,layered_view,sampler,layered_words)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    d.enabled_features|=PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
     vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
 
     layered_ii.flags=0;layered_ii.imageType=VK_IMAGE_TYPE_3D;
