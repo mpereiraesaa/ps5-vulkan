@@ -17,11 +17,11 @@ from build_sdk import get_ps5_toolchain  # noqa: E402
 from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
-SHADER_NAMES = ("producer", "consumer")
+SHADER_NAMES = ("producer", "consumer", "litmus")
 SPIRV_MAGIC = 0x07230203
 
 
-def checked_spirv(payload: bytes, scope: str) -> bytes:
+def checked_spirv(payload: bytes, scope: str, name: str = "producer") -> bytes:
     """Verify the model/scope pair and declare Vulkan 1.0 storage class use."""
     if len(payload) % 4:
         raise ValueError("SPIR-V byte count is not word aligned")
@@ -32,6 +32,10 @@ def checked_spirv(payload: bytes, scope: str) -> bytes:
     extensions: set[str] = set()
     memory_model = None
     barriers = 0
+    atomic_loads = 0
+    atomic_stores = 0
+    constants: dict[int, int] = {}
+    memory_operations: list[tuple[int, int, int]] = []
     storage_class = False
     insert_at = 5
     index = 5
@@ -48,14 +52,33 @@ def checked_spirv(payload: bytes, scope: str) -> bytes:
             extensions.add(encoded.split(b"\0", 1)[0].decode("ascii"))
         elif opcode == 14 and size == 3:  # OpMemoryModel
             memory_model = tuple(operands)
-        elif opcode == 225:  # OpMemoryBarrier
+        elif opcode == 43 and size >= 4:  # OpConstant
+            constants[operands[1]] = operands[2]
+        elif opcode == 225 and size == 3:  # OpMemoryBarrier
             barriers += 1
+            memory_operations.append((opcode, operands[0], operands[1]))
+        elif opcode == 227 and size >= 6:  # OpAtomicLoad
+            atomic_loads += 1
+            memory_operations.append((opcode, operands[3], operands[4]))
+        elif opcode == 228 and size >= 5:  # OpAtomicStore
+            atomic_stores += 1
+            memory_operations.append((opcode, operands[1], operands[2]))
         elif opcode == 32 and size >= 4 and operands[1] == 7:  # StorageBuffer pointer
             storage_class = True
         index += size
     required = {1, 5345} | ({5346} if scope == "device" else set())
+    required_scope = 1 if scope == "device" else 5
+    observed_semantics = sorted(constants.get(semantics, -1)
+                                for _, _, semantics in memory_operations)
+    required_semantics = ([0x2044, 0x2044, 0x4042, 0x4042] if name == "litmus"
+                          else [0x4042] if name == "consumer" else [0x2044])
     if (not required.issubset(capabilities) or (5346 in capabilities) !=
-            (scope == "device") or memory_model != (0, 3) or barriers != 1 or
+            (scope == "device") or memory_model != (0, 3) or
+            barriers != (2 if name == "litmus" else 1) or
+            (name == "litmus" and (atomic_loads != 1 or atomic_stores != 1)) or
+            any(constants.get(scope_id) != required_scope
+                for _, scope_id, _ in memory_operations) or
+            observed_semantics != required_semantics or
             "SPV_KHR_vulkan_memory_model" not in extensions or not storage_class):
         raise ValueError("shader does not match the requested VulkanKHR scope")
     # glslang emits StorageBuffer pointers for the Vulkan 1.0 source but omits
@@ -100,7 +123,7 @@ def main() -> None:
         flags = ["-DT08_DEVICE_SCOPE=1"] if scope == "device" else []
         run(glslang, "-V", "--target-env", "vulkan1.0", *flags,
             str(source), "-o", str(target))
-        payload = checked_spirv(target.read_bytes(), scope)
+        payload = checked_spirv(target.read_bytes(), scope, name)
         target.write_bytes(payload)
         shader_payloads[name] = payload
     header = build / "t08_memory_model_shaders.h"

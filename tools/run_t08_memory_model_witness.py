@@ -41,14 +41,24 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
                         r"digest=([0-9a-f]{8}) fence=(\w+)", text)
     retired = re.findall(r"T08_MEMORY_MODEL_WITNESS_RETIRED scope=(\S+) "
                          r"resources=(\w+)", text)
-    if (len(start) != 1 or len(result) != 1 or len(retired) != 1 or
+    litmus = re.findall(r"T08_MEMORY_MODEL_LITMUS scope=(\S+) pairs=(\d+) "
+                        r"observed=(\d+) skipped=(\d+) failures=(\d+) "
+                        r"guard_mismatches=(\d+) fence=(\w+)", text)
+    if (len(start) != 1 or len(result) != 1 or len(litmus) != 1 or
+            len(retired) != 1 or
             start[0] != (scope, "128", "16", "pass") or
             result[0] != (scope, "128", "0", "0", f"{expected_digest():08x}",
                           "complete") or
+            litmus[0][0] != scope or litmus[0][1] != "1024" or
+            int(litmus[0][2]) < 32 or
+            int(litmus[0][2]) + int(litmus[0][3]) != 1024 or
+            litmus[0][4:] != ("0", "0", "complete") or
             retired[0] != (scope, "clean") or
             text.index("T08_MEMORY_MODEL_WITNESS_START") >=
             text.index("T08_MEMORY_MODEL_WITNESS_RESULT") or
             text.index("T08_MEMORY_MODEL_WITNESS_RESULT") >=
+            text.index("T08_MEMORY_MODEL_LITMUS") or
+            text.index("T08_MEMORY_MODEL_LITMUS") >=
             text.index("T08_MEMORY_MODEL_WITNESS_RETIRED") or
             "T08_MEMORY_MODEL_CHECK" in text or
             "T08_MEMORY_MODEL_REQUIRE" in text):
@@ -58,6 +68,9 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
         "run_id": receipt["run_id"],
         "scope": scope,
         "values": 128,
+        "litmus_pairs": 1024,
+        "litmus_observed": int(litmus[0][2]),
+        "litmus_skipped": int(litmus[0][3]),
         "guard_mismatches": 0,
         "mismatches": 0,
         "digest": f"{expected_digest():08x}",

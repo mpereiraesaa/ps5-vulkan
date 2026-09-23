@@ -47,6 +47,209 @@ static uint32_t consumed(uint32_t index)
 static uint32_t digest_word(uint32_t digest, uint32_t word)
 { return (digest ^ word) * UINT32_C(16777619); }
 
+/* One dispatch pairs producer and consumer workgroups. A consumer that sees
+ * the atomic flag judges the preceding payload; a consumer that runs first
+ * records a skip. There is no API barrier between the actors. */
+static void run_litmus(VkDevice device, VkQueue queue)
+{
+    enum { PAIRS = 1024, WORDS = PAIRS + 2 * GUARD_WORDS,
+           BYTES = WORDS * sizeof(uint32_t) };
+    VkShaderModule module = VK_NULL_HANDLE;
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(t08_litmus_spirv), .pCode = t08_litmus_spirv,
+    };
+    CHECK(vkCreateShaderModule(device, &shader_info, NULL, &module));
+    VkDescriptorSetLayoutBinding bindings[3] = {
+        {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+    };
+    VkDescriptorSetLayoutCreateInfo set_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 3, .pBindings = bindings,
+    };
+    VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
+    CHECK(vkCreateDescriptorSetLayout(device, &set_info, NULL, &set_layout));
+    VkPipelineLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1, .pSetLayouts = &set_layout,
+    };
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    CHECK(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
+    VkComputePipelineCreateInfo pipeline_info = {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                  .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                  .module = module, .pName = "main"},
+        .layout = layout,
+    };
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1,
+                                   &pipeline_info, NULL, &pipeline));
+
+    VkBuffer buffers[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDeviceMemory memories[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    for (unsigned n = 0; n < 3; ++n) {
+        VkBufferCreateInfo buffer_info = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = BYTES, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        };
+        CHECK(vkCreateBuffer(device, &buffer_info, NULL, &buffers[n]));
+        VkMemoryRequirements requirements;
+        vkGetBufferMemoryRequirements(device, buffers[n], &requirements);
+        VkMemoryAllocateInfo allocation = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = requirements.size, .memoryTypeIndex = 0,
+        };
+        CHECK(vkAllocateMemory(device, &allocation, NULL, &memories[n]));
+        CHECK(vkBindBufferMemory(device, buffers[n], memories[n], 0));
+        uint32_t *mapped = NULL;
+        CHECK(vkMapMemory(device, memories[n], 0, VK_WHOLE_SIZE, 0,
+                          (void **)&mapped));
+        for (unsigned j = 0; j < WORDS; ++j)
+            mapped[j] = j < GUARD_WORDS || j >= GUARD_WORDS + PAIRS ?
+                        guard_value : (n == 2 ? UINT32_MAX : 0u);
+        VkMappedMemoryRange flush = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = memories[n], .offset = 0, .size = VK_WHOLE_SIZE,
+        };
+        CHECK(vkFlushMappedMemoryRanges(device, 1, &flush));
+        vkUnmapMemory(device, memories[n]);
+    }
+    VkDescriptorPoolSize pool_size = {
+        .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 3,
+    };
+    VkDescriptorPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &pool_size,
+    };
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    CHECK(vkCreateDescriptorPool(device, &pool_info, NULL, &pool));
+    VkDescriptorSetAllocateInfo set_allocation = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = pool, .descriptorSetCount = 1,
+        .pSetLayouts = &set_layout,
+    };
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    CHECK(vkAllocateDescriptorSets(device, &set_allocation, &set));
+    VkDescriptorBufferInfo descriptor_buffers[3];
+    VkWriteDescriptorSet writes[3];
+    memset(writes, 0, sizeof(writes));
+    for (unsigned n = 0; n < 3; ++n) {
+        descriptor_buffers[n] = (VkDescriptorBufferInfo){
+            .buffer = buffers[n], .offset = 0, .range = BYTES};
+        writes[n] = (VkWriteDescriptorSet){
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = set, .dstBinding = n, .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &descriptor_buffers[n],
+        };
+    }
+    vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
+
+    VkCommandPoolCreateInfo command_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex = 0,
+    };
+    VkCommandPool command_pool = VK_NULL_HANDLE;
+    CHECK(vkCreateCommandPool(device, &command_pool_info, NULL, &command_pool));
+    VkCommandBufferAllocateInfo command_allocation = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = command_pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    CHECK(vkAllocateCommandBuffers(device, &command_allocation, &command));
+    VkCommandBufferBeginInfo begin = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    CHECK(vkBeginCommandBuffer(command, &begin));
+    VkBufferMemoryBarrier host_barriers[3];
+    for (unsigned n = 0; n < 3; ++n) {
+        host_barriers[n] = (VkBufferMemoryBarrier){
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_HOST_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = buffers[n], .offset = 0, .size = BYTES,
+        };
+    }
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_HOST_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 3, host_barriers, 0, NULL);
+    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            layout, 0, 1, &set, 0, NULL);
+    vkCmdDispatch(command, 64, 1, 1);
+    VkBufferMemoryBarrier to_host[3];
+    for (unsigned n = 0; n < 3; ++n) {
+        to_host[n] = (VkBufferMemoryBarrier){
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = buffers[n], .offset = 0, .size = BYTES,
+        };
+    }
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 3, to_host, 0, NULL);
+    CHECK(vkEndCommandBuffer(command));
+    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence fence = VK_NULL_HANDLE;
+    CHECK(vkCreateFence(device, &fence_info, NULL, &fence));
+    VkSubmitInfo submit = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &command,
+    };
+    CHECK(vkQueueSubmit(queue, 1, &submit, fence));
+    CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(500000000)));
+
+    uint32_t *mapped[3] = {NULL, NULL, NULL};
+    unsigned observed = 0, skipped = 0, failures = 0, guard_mismatches = 0;
+    for (unsigned n = 0; n < 3; ++n) {
+        CHECK(vkMapMemory(device, memories[n], 0, VK_WHOLE_SIZE, 0,
+                          (void **)&mapped[n]));
+        VkMappedMemoryRange invalidate = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = memories[n], .offset = 0, .size = VK_WHOLE_SIZE,
+        };
+        CHECK(vkInvalidateMappedMemoryRanges(device, 1, &invalidate));
+        for (unsigned j = 0; j < GUARD_WORDS; ++j)
+            guard_mismatches += mapped[n][j] != guard_value;
+        for (unsigned j = GUARD_WORDS + PAIRS; j < WORDS; ++j)
+            guard_mismatches += mapped[n][j] != guard_value;
+    }
+    for (unsigned j = 0; j < PAIRS; ++j) {
+        uint32_t expected = produced(j);
+        failures += mapped[0][GUARD_WORDS + j] != expected;
+        failures += mapped[1][GUARD_WORDS + j] != 1u;
+        uint32_t value = mapped[2][GUARD_WORDS + j];
+        observed += value == 1u;
+        skipped += value == 0u;
+        failures += value != 0u && value != 1u;
+    }
+    ps5log_printf(PS5LOG_MARK,
+        "T08_MEMORY_MODEL_LITMUS scope=%s pairs=%u observed=%u skipped=%u failures=%u guard_mismatches=%u fence=complete",
+        scope_name, PAIRS, observed, skipped, failures, guard_mismatches);
+    REQUIRE(observed >= 32 && observed + skipped == PAIRS &&
+            !failures && !guard_mismatches, "same-dispatch message passing");
+    for (unsigned n = 0; n < 3; ++n) vkUnmapMemory(device, memories[n]);
+    vkDestroyFence(device, fence, NULL);
+    vkFreeCommandBuffers(device, command_pool, 1, &command);
+    vkDestroyCommandPool(device, command_pool, NULL);
+    vkDestroyDescriptorPool(device, pool, NULL);
+    for (unsigned n = 0; n < 3; ++n) {
+        vkDestroyBuffer(device, buffers[n], NULL);
+        vkFreeMemory(device, memories[n], NULL);
+    }
+    vkDestroyPipeline(device, pipeline, NULL);
+    vkDestroyPipelineLayout(device, layout, NULL);
+    vkDestroyDescriptorSetLayout(device, set_layout, NULL);
+    vkDestroyShaderModule(device, module, NULL);
+}
+
 static void run_witness(void)
 {
     const char *instance_extensions[] = {
@@ -327,6 +530,7 @@ static void run_witness(void)
     }
     vkDestroyPipelineLayout(device, layout, NULL);
     vkDestroyDescriptorSetLayout(device, set_layout, NULL);
+    run_litmus(device, queue);
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     ps5log_printf(PS5LOG_MARK,
