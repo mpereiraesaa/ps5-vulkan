@@ -168,9 +168,48 @@ static void uniform_block_layout_gate(void)
     vkDestroyShaderModule(&device, module, NULL);
     assert(!device.pipeline_objects);
 }
+static void unadvertised_subgroup_gate(void)
+{
+    struct ps5vk_compiled_program p = fixture(module_a, code_a);
+    struct ps5vk_program_library lib = {&p, 1};
+    struct VkDevice_T device = {.compiler = {&lib, ps5vk_program_resolve}};
+    VkPipelineLayout pipeline_layout = layout(&device);
+    VkShaderModule module = shader(&device, module_a);
+    VkComputePipelineCreateInfo create = info(module, pipeline_layout);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&device, pipeline, NULL);
+    vkDestroyShaderModule(&device, module, NULL);
+
+    /* GroupNonUniform capability on an otherwise ordinary compute fixture. */
+    uint32_t capability[18];
+    memcpy(capability, module_a, 5 * sizeof(uint32_t));
+    capability[5] = (2u << 16) | 17u;
+    capability[6] = 61u;
+    memcpy(capability + 7, module_a + 5, 11 * sizeof(uint32_t));
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(capability), .pCode = capability};
+    module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+
+    /* OpGroupNonUniformBroadcast without its required capability still fails. */
+    uint32_t operation[21];
+    memcpy(operation, module_a, sizeof(module_a));
+    operation[16] = (5u << 16) | 337u;
+    operation[17] = operation[18] = operation[19] = operation[20] = 1u;
+    shader_info.codeSize = sizeof(operation);
+    shader_info.pCode = operation;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
+    assert(!device.pipeline_objects && !device.descriptor_objects);
+}
 int main(void)
 {
     lifecycle(); legacy_offline_abi(); negative(); graphics_entries();
-    uniform_block_layout_gate();
+    uniform_block_layout_gate(); unadvertised_subgroup_gate();
     puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
 }
