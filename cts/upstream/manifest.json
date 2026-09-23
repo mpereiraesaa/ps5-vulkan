@@ -5654,6 +5654,28 @@
         "feature:vulkanMemoryModel"
       ],
       "rationale": "Original pinned OpAtomic VulkanKHR shader uses volatile queue-family scope and its upstream buffer-result oracle; diagnostic until native result is measured."
+    },
+    {
+      "path": "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+      "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingBufferDeviceAddressTests.cpp:1547",
+      "category": "t08-buffer-device-address-base",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_buffer_device_address",
+        "feature:bufferDeviceAddress"
+      ],
+      "rationale": "Original pinned compute buffer-reference load and output-image oracle; zero memory offset remains diagnostic until strict native measurement."
+    },
+    {
+      "path": "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero",
+      "source": "external/vulkancts/modules/vulkan/binding_model/vktBindingBufferDeviceAddressTests.cpp:1547",
+      "category": "t08-buffer-device-address-base",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_buffer_device_address",
+        "feature:bufferDeviceAddress"
+      ],
+      "rationale": "Original pinned compute buffer-reference load and output-image oracle; nonzero memory offset remains diagnostic until strict native measurement."
     }
   ]
 }

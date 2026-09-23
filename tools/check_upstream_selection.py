@@ -24,6 +24,7 @@ UPSTREAM = ROOT / "third_party/vk-gl-cts"
 # everything below them.
 INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
 VOLATILE_ATOMIC_WRAPPER = ROOT / "cts/upstream/volatile_atomic_focus.cpp"
+BDA_BUILD_SOURCE = ROOT / "tools/build_upstream_cts.py"
 # The capabilities a selection is allowed to rely on come from the device's own
 # sources, not from the selection itself.
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
@@ -129,6 +130,40 @@ def _volatile_atomic_leaf_names(text: str, integration: str, wrapper: str) -> fr
         return frozenset()
     factory = _source_function_at_line(text, 1472)
     return frozenset(re.findall(r'ADD_OPATOMIC_CASE_(?:1|N)\(\s*([a-z]+)\s*,', factory))
+
+
+@functools.lru_cache(maxsize=None)
+def _focused_bda_leaf_paths(text: str, integration: str, builder: str) -> frozenset[str]:
+    """Recognize only the two original BDA leaves built by the focused copy."""
+    factory = _source_function_at_line(text, 1547)
+    if not factory or not all(part in factory for part in (
+            'tcu::TestCaseGroup(testCtx, "buffer_device_address")',
+            'caseName << stageCases[stageNdx].name;',
+            'caseName << "_offset_nonzero";',
+            'new BufferAddressTestCase(testCtx, caseName.str().c_str(), c)',
+            'c.memoryOffset == OFFSET_NONZERO && c.bufType != BT_SINGLE')):
+        return frozenset()
+    choices = {"setCases": "set0", "depthCases": "depth1",
+               "baseCases": "basessbo", "cvtCases": "load",
+               "storeCases": "nostore", "btCases": "single",
+               "layoutCases": "std140", "stageCases": "comp"}
+    for name, selected in choices.items():
+        array = re.search(r"TestGroupCase " + name +
+                          r"\[\] = \{(.*?)\n    \};", factory, re.DOTALL)
+        if not array or not re.search(r'\{\s*[^,{}]+,\s*"' + selected + r'"\s*\}',
+                                       array.group(1)):
+            return frozenset()
+    if not all(part in factory for part in (
+            '{OFFSET_ZERO, "offset_zero"}',
+            '{OFFSET_NONZERO, "offset_nonzero"}')):
+        return frozenset()
+    if ('createBufferDeviceAddressTests(m_testCtx)' not in integration or
+            'write_focused_bda_source(' not in builder or
+            'focused_sources / "vktBindingBufferDeviceAddressTests.cpp"' not in builder):
+        return frozenset()
+    prefix = ("dEQP-VK.binding_model.buffer_device_address."
+              "set0.depth1.basessbo.load.nostore.single.std140.")
+    return frozenset((prefix + "comp", prefix + "comp_offset_nonzero"))
 
 
 def _memoized(function):
@@ -1595,6 +1630,14 @@ def main() -> int:
             continue
 
         text = _read_source(source_path)
+
+        if source_path.name == "vktBindingBufferDeviceAddressTests.cpp" and \
+           path.startswith("dEQP-VK.binding_model.buffer_device_address."):
+            if (source_line != 1547 or path not in _focused_bda_leaf_paths(
+                    text, integration_text, _read_source(BDA_BUILD_SOURCE))):
+                failures.append(
+                    f"{path}: not produced by the pinned focused BDA factory {source_ref}")
+            continue
 
         # Intermediate groups may come from the integration (package_ps5.cpp) or
         # from the upstream module tree rooted at the cited file's directory.

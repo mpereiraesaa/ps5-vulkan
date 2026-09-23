@@ -569,7 +569,9 @@
       "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.idec",
       "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.load",
       "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.store",
-      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex"
+      "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile.compex",
+      "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+      "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero"
     ],
     "manifest": "cts/upstream/manifest.json",
     "note": "Only original upstream cases whose prerequisites the reported profile satisfies belong here; anything else stays a diagnostic."

@@ -10,6 +10,9 @@ class TessellationRegistrationTests(unittest.TestCase):
     def test_profile_records_experimental_switches_not_validation(self):
         normal = tessellation_build_profile({})
         self.assertFalse(normal["experimental"])
+        self.assertEqual("0", normal["switches"]["PS5VK_BDA_DIAGNOSTIC"])
+        self.assertEqual("1", tessellation_build_profile(
+            {"PS5VK_BDA_DIAGNOSTIC": "1"})["switches"]["PS5VK_BDA_DIAGNOSTIC"])
         for name in normal["switches"]:
             with self.subTest(name=name):
                 profile = tessellation_build_profile({name: "4"})
