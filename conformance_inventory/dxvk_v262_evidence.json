@@ -2,10 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "c438a98123c86925d62b6627b7b640734930dbcae5b8af6f88a4ed0dc61e8201",
-    "device_api": "1.0.0",
-    "device_extensions": 5,
-    "requirements": 62,
+    "artifact_sha256": "439de5c96579b634bb4698adf439631dd545f9298bdccd1c5e1129f750184a07",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -19,6 +16,7 @@
       "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "feature:VkPhysicalDeviceFeatures:multiViewport",
       "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+      "feature:VkPhysicalDeviceFeatures:sampleRateShading",
       "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
       "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "feature:VkPhysicalDeviceFeatures:tessellationShader",
@@ -28,8 +26,8 @@
     ],
     "runs": [
       {
-        "id": "20260922T103414212Z_PPSA99994_ps5vk_0x1986df1aeed66",
-        "log_sha256": "3fa5f0c0049890f2c2679889616f2d0ccaa303d36a9f62ac9a19e0ba0aba6c62"
+        "id": "20260922T234500151Z_PPSA99994_ps5vk_0x1c394a882c7bf",
+        "log_sha256": "2b04497f8ae6a8d01feb3961f2a7b724bb763c611b69b78d9f3c7b497ece8d20"
       }
     ],
     "transport": "ps5log/1",
@@ -42,9 +40,12 @@
         "maxMultiviewInstanceIndex": "134217727"
       }
     ],
-    "source_matrix_sha256": "fe47a07725b126ac55e29cb178c1176696de8d59098de969789fce85978bbe12",
-    "satisfied": 18,
-    "blockers": 44
+    "source_matrix_sha256": "9a1a8dbbe919f6eb1fab167a8338afeba830ed494660a06018e460de6c63d97e",
+    "satisfied": 19,
+    "blockers": 43,
+    "requirements": 62,
+    "device_api": "1.0.0",
+    "device_extensions": 5
   },
   "historical_capability_probes": [
     {
@@ -165,6 +166,51 @@
       "source_matrix_sha256": "49f7fbf9719e1b70f22b09bce2bef58d856045daf16c86d2e354c81df0ba53df",
       "satisfied": 11,
       "blockers": 51
+    },
+    {
+      "artifact_sha256": "c438a98123c86925d62b6627b7b640734930dbcae5b8af6f88a4ed0dc61e8201",
+      "device_api": "1.0.0",
+      "device_extensions": 5,
+      "requirements": 62,
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260922T103414212Z_PPSA99994_ps5vk_0x1986df1aeed66",
+          "log_sha256": "3fa5f0c0049890f2c2679889616f2d0ccaa303d36a9f62ac9a19e0ba0aba6c62"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "fe47a07725b126ac55e29cb178c1176696de8d59098de969789fce85978bbe12",
+      "satisfied": 18,
+      "blockers": 44
     }
   ],
   "requirements": {
@@ -1155,6 +1201,80 @@
           "VALIDATION.md#independentblend-promotion-2026-09-22"
         ],
         "note": "Two colour targets in one pass with their own clear, their own CB_TARGET_MASK nibble and their own readback into separate buffers, and a fragment stage that exports both (start_index_0) or only the second target (start_index_1, which the driver programmes by renumbering the written attachment to hardware target zero - measured: the pinned compiler's export instruction carries no target). The private two-MRT witness (src/two_mrt_oracle.c, native/two_mrt_probe.c) and its oracle recorded one draw writing two attachments with different values before the upstream leaves were selected."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:sampleRateShading": {
+      "_comment": "Per-sample shading executes: the raster stage publishes Vulkan's standard sample positions and the pixel stage interpolates the position at the iterated sample, so fract(gl_FragCoord.xy) is each sample's own; the colour-to-texture barrier waits for a confirmed writeback, which is what made the resolved images stable.",
+      "api": {
+        "state": "satisfied",
+        "observed": true,
+        "expected": true,
+        "refs": [
+          "conformance_inventory/reporting_matrix.json",
+          "VALIDATION.md#dxvk262-t06-samplerateshading-promotion-2026-09-23"
+        ]
+      },
+      "implementation": {
+        "state": "implemented",
+        "refs": [
+          "native/draw_state_ps5.c",
+          "src/graphics_sync.c",
+          "src/sample_rate_contract.h"
+        ],
+        "detail": "the draw programs PA_SC_MODE_CNTL_0.MSAA_ENABLE, the sixteen PA_SC_AA_SAMPLE_LOCS_PIXEL_* words with Vulkan's standard 2x/4x pattern and PA_SC_AA_CONFIG MAX_SAMPLE_DIST, and publishes SPI_BARYC_CNTL POS_FLOAT_LOCATION=2 whenever the wave iterates per sample; the barrier that publishes a colour attachment to the texture path stores a completion token and waits for it; a pipeline asking for a count outside the 2x/4x envelope is refused (src/sample_rate_contract.h)"
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_4.quad"
+        ],
+        "refs": [
+          "VALIDATION.md#the-sample-positions-the-raster-stage-never-had-2026-09-23",
+          "VALIDATION.md#dxvk262-t06-samplerateshading-promotion-2026-09-23"
+        ],
+        "note": "The feature's own oracle - the leaves whose checkSupport requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING - at both served counts, for the triangle and quad shapes this profile renders. Three consecutive 514-case measurement runs reported all thirty Pass with zero quad failures, and the 494-case frozen acceptance selection that now carries them reported 494 Pass / 0 Fail / 0 NotSupported on the shipping profile."
+      },
+      "native": {
+        "state": "native-evidence",
+        "artifact_sha256": "e1ed40fb0089c5a39eb0b6c333b74b9aa430d524c10d4f74220452263d40b4cb",
+        "run_ids": [
+          "20260922T232928853Z_PPSA99994_upstream-cts_0x1c2bbd396dece",
+          "20260922T233238023Z_PPSA99994_ps5vk_0x1c2e7dee46277",
+          "20260922T233053671Z_PPSA99994_ps5vk_0x1c2cf9301e254"
+        ],
+        "refs": [
+          "VALIDATION.md#dxvk262-t06-samplerateshading-promotion-2026-09-23"
+        ],
+        "note": "Native execution: the frozen 494-case acceptance run on the shipping profile reported every selected leaf Pass with a clean lifecycle, and the shipping witness payload (no measurement switch) reported one distinct sample id per sample and one distinct fract(gl_FragCoord.xy) per sample - the four standard 4x positions - each with a clean HELLO/BYE stream. The public-ABI probe run reports the feature true."
       }
     }
   }

@@ -487,6 +487,70 @@ ADVERTISED_FEATURES["independentBlend"] = {
     ),
 }
 
+# DXVK262-T06 sampleRateShading, promoted 2026-09-23 on physical-console
+# evidence. The pixel stage publishes the sample positions and the position at
+# the iterated sample, the barrier that publishes colour to the texture path
+# waits for a confirmed writeback, and the feature's own oracle passes at both
+# served counts for the shapes this profile renders.
+ADVERTISED_FEATURES["sampleRateShading"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_SAMPLE_RATE_SHADING"),
+        ("native/draw_state_ps5.c", "PA_SC_AA_SAMPLE_LOCS_PIXEL"),
+        ("native/draw_state_ps5.c", "POS_FLOAT_LOCATION"),
+        ("src/graphics_sync.c", "ps5vk_graphics_color_to_texture_wait"),
+        ("src/sample_rate_contract.h", "VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT"),
+        ("native/runtime_graphics_compiler.c", "sample_shading_enable"),
+    ),
+    "detail": ("the raster stage programs MSAA_ENABLE, the sixteen "
+               "PA_SC_AA_SAMPLE_LOCS_PIXEL_* words carrying Vulkan's standard 4x pattern and "
+               "the sample distance that pattern asks for, and the pixel stage publishes "
+               "SPI_BARYC_CNTL POS_FLOAT_LOCATION=2 whenever the wave iterates per sample, so "
+               "fract(gl_FragCoord.xy) is the SAMPLE's position and every sample of a pixel "
+               "receives a different one; the barrier that publishes a colour attachment to the "
+               "texture path stores a completion token and waits for it, because the colour "
+               "block writes back asynchronously and a read issued behind the bare event saw "
+               "tiles it had not written yet"),
+    # DXVK262-T06, promoted 2026-09-23. The feature's own oracle - the leaves whose
+    # checkSupport requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING - passes for the
+    # triangle and quad shapes at both served counts, three measured runs in a row
+    # inside the 494-case acceptance selection; the point and line shapes the same
+    # oracle selects are refused by this profile's pipeline resolver and stay
+    # diagnostics (plain-point-line-pipeline-refused).
+    "cts": tuple(sorted([
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_4.quad",
+    ])),
+}
+
 # DXVK262-T05, promoted 2026-09-21 on physical-console evidence. Each feature
 # names the state its draw programs and the upstream leaves that exercise it,
 # all of them in the frozen acceptance selection.
@@ -690,10 +754,25 @@ KNOWN_BLOCKERS = {
     "minTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "maxTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "storageImageSampleCounts": "no storage image format is advertised",
-    "framebufferColorSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
-    "framebufferDepthSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
-    "framebufferStencilSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
-    "framebufferNoAttachmentsSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
+    # The four framebuffer sample-count limits follow the platform mask: the
+    # 2026-09-23 sampleRateShading promotion reports 1x/2x/4x on the graphics
+    # profile, so only the compute-only build (which applies no graphics
+    # limits) stays at the single-sample value.
+    "framebufferColorSampleCounts": "compute-only build: the graphics profile reports 1x/2x/4x",
+    "framebufferDepthSampleCounts": "compute-only build: the graphics profile reports 1x/2x/4x",
+    "framebufferStencilSampleCounts": "compute-only build: the graphics profile reports 1x/2x/4x",
+    "framebufferNoAttachmentsSampleCounts": "compute-only build: the graphics profile reports 1x/2x/4x",
+    # The interpolation-offset limits are the CTS-gated half of
+    # sampleRateShading: while the feature is unreported the CTS leaves them out
+    # and the relaxed floor applies, and the 2026-09-23 promotion brings the
+    # core table's own floors (+/-0.5 and 4 bits) into scope. This profile
+    # reports 0: no path lowers an interpolation offset - the fragment
+    # interface declares position, sample id and the per-sample read, not an
+    # offset - so the value is not inflated and the gap is named here rather
+    # than hidden behind the feature's promotion.
+    "maxInterpolationOffset": "no interpolation-offset path is implemented or measured",
+    "minInterpolationOffset": "no interpolation-offset path is implemented or measured",
+    "subPixelInterpolationOffsetBits": "no interpolation-offset path is implemented or measured",
     "sampledImageColorSampleCounts": "single-sample sampling only: multisampled sampled images are not supported",
     "sampledImageDepthSampleCounts": "single-sample sampling only: multisampled sampled images are not supported",
     "sampledImageStencilSampleCounts": "single-sample sampling only: multisampled sampled images are not supported",

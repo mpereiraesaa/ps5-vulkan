@@ -76,6 +76,8 @@ def main():
          "runtime_sample_id.vert.spv", "sample_id_vertex"),
         ("experiments/graphics/runtime_sample_id.frag",
          "runtime_sample_id.frag.spv", "sample_id_fragment"),
+        ("experiments/graphics/runtime_frag_coord_xy.frag",
+         "runtime_frag_coord_xy.frag.spv", "frag_coord_xy_fragment"),
         ("experiments/graphics/runtime_subpass_write.frag",
          "runtime_subpass_write.frag.spv", "subpass_write_fragment"),
         ("experiments/graphics/runtime_subpass_write_spread.frag",

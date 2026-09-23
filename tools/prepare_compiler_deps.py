@@ -20,7 +20,16 @@ DEPS = [
         # compiler main retains the T04 linked tessellation contract and adds
         # T05's geometry viewport-index export plus the packed fragment-distance
         # register fix. The cache ABI and native loader must agree with it.
-        "pin": "be4d04301ca2c00810c96debb4935890113ec3b7",
+        #
+        # DXVK262-T06 sampleRateShading, published through opengnm-psbc PR 23
+        # and merged on 2026-09-23: the standalone fragment compile lowers the
+        # fragment coordinate unconditionally (the abort fix), is told the
+        # pipeline's sample-shading state, and decides which coordinate the
+        # shader reads once, at compile time. The driver passes
+        # PsbcCompileOptions::sample_shading_enable, which does not exist before
+        # this revision, so the pin has to name it for the advertised
+        # sample-rate count envelope to build at all.
+        "pin": "0d4e80c026caa16791faaa135f80302f1b63479e",
     },
     {
         "name": "opengnm",

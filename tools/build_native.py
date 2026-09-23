@@ -213,8 +213,11 @@ def main():
             os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
             os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
         raise SystemExit("PS5VK_SAMPLE_RATE_PROBE requires graphics API, runtime graphics and draw")
-    if sample_rate_probe != "0" and sample_rate_diagnostic != "1":
-        raise SystemExit("PS5VK_SAMPLE_RATE_PROBE requires PS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
+    # The sample-rate witness no longer needs the measurement switch: the
+    # feature it measures was promoted on 2026-09-23, so the bit is in every
+    # build and the witness's own oracle - one distinct fract(gl_FragCoord.xy)
+    # per sample - runs against the shipping state. The switch still selects the
+    # diagnostic register override the necessity table inside the scene uses.
     if sample_rate_probe != "0" and (multiview_view_probe == "1" or
             input_attachment_probe == "1" or fragment_store_probe == "1" or
             dual_source_probe == "1" or two_mrt_probe == "1" or

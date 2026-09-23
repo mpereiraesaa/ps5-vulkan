@@ -22,6 +22,22 @@ struct ps5vk_sample_rate_probe_params {
     size_t vertex_words;
     const uint32_t *fragment;
     size_t fragment_words;
+    /* DIAGNOSTIC (PS5VK_SAMPLE_RATE_DIAGNOSTIC, and ignored without it): the
+     * pixel-context words every draw this probe records publishes instead of
+     * the compiled ones, as {cx index, value} pairs. The sample-rate line uses
+     * it to measure what the hardware does with the position-input enables and
+     * the barycentric control in a single payload run; see
+     * native/sample_rate_diagnostic.h. */
+    uint32_t diagnostic_cx_count;
+    uint32_t diagnostic_cx_index[24];
+    uint32_t diagnostic_cx_value[24];
+    /* What the shaded phase's census is compared against. Zero (the shipping
+     * witness) requires the module's value per sample index, which is the
+     * sample-id module's contract. One requires only that the draw left as many
+     * DISTINCT values as the sample count, each of them a shaded word (alpha
+     * one, blue zero) - the contract of the fragment-coordinate module, whose
+     * values are positions and not sample indices. */
+    uint32_t coordinate_oracle;
 };
 
 VkResult ps5vk_sample_rate_probe(VkDevice, const struct ps5vk_sample_rate_probe_params *);

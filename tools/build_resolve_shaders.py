@@ -11,6 +11,8 @@ measured.
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -42,8 +44,26 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--samples", default="2,4")
-    parser.add_argument("--compiler", default=str(Path.home() / ".local/bin/glslangValidator"))
+    # The same lookup every other shader tool on this line uses: an explicit
+    # PS5VK_GLSLANG, then whatever PATH carries (the CI image installs
+    # glslang-tools), then the project-local toolchain the Makefile prefers.
+    # A hard-coded ~/.local path made this step fail on a machine whose glslang
+    # is installed normally, which is exactly what the compiler-contracts job
+    # hit.
+    parser.add_argument("--compiler",
+                        default=os.environ.get("PS5VK_GLSLANG") or
+                        shutil.which("glslangValidator") or
+                        str(ROOT / "build/runtime-graphics/toolchain/usr/bin/glslangValidator"))
     args = parser.parse_args()
+    # The Makefile hands over its own $(GLSLANG), which may be a bare name that
+    # only PATH can resolve - the same shape every other tool on this line
+    # accepts. A path is checked as a path, a name through PATH.
+    compiler = (args.compiler if os.sep in args.compiler or Path(args.compiler).is_absolute()
+                else shutil.which(args.compiler))
+    if not compiler or not Path(compiler).is_file():
+        raise SystemExit(f"glslangValidator not found at {args.compiler}: "
+                         "set PS5VK_GLSLANG or install glslang-tools")
+    args.compiler = compiler
     counts = [int(value) for value in args.samples.split(",") if value]
     work = args.out.parent
     work.mkdir(parents=True, exist_ok=True)

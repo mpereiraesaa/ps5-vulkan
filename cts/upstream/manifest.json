@@ -3999,6 +3999,306 @@
       "rationale": "PROMOTED 2026-09-21: the unchanged upstream dual-source blend leaf. The native witness reads control 64,128,191,255 (one LSB) against candidate 51,51,38,255 exactly and requires the two to differ, and this leaf passed in the 404-case run 20260921T142735727Z_PPSA99994_upstream-cts_0x156959662c9a2 on payload aa1cfae7eaf6570f4bf6618d89f7cad1b532907a6a3c2a26691b66fae9aaa870, whose promotion widened the shipping blend space to the whole GFX1013 CB_BLEND0_CONTROL contract, carried partial colour write masks in the pipeline render-target block and reported COLOR_ATTACHMENT_BLEND on VK_FORMAT_R8G8B8A8_UNORM."
     },
     {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_4.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_2.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_4.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_2.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_4.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_2.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_4.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_2.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_4.primitive_triangle",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_2.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
+      "category": "sample-rate-shading",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:sampleRateShading"
+      ],
+      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_4.quad",
+      "rationale": "PROMOTED 2026-09-23: measured Pass on the physical console in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
+    },
+    {
       "path": "dEQP-VK.pipeline.push_constant.compute_pipeline.simple_test",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelinePushConstantTests.cpp:3306",
       "category": "pipeline",
@@ -4281,6 +4581,26 @@
         "core:fragmentStoresAndAtomics"
       ],
       "rationale": "Original upstream variant places the fragment-output assignment after OpKill and independently proves that the storage side effect survives while the killed invocation contributes no color; it passed in the same exact 306/306 hardware run."
+    },
+    {
+      "path": "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
+      "category": "renderpass",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:independentBlend"
+      ],
+      "rationale": "PROMOTED 2026-09-22: the unchanged upstream attachment_write_mask leaf. Both suballocation leaves passed in the 464-case run 20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1 on payload a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4, whose promotion advertised independentBlend, served the integer colour target R8G8B8A8_UINT the leaf draws into and raised maxColorAttachments to two."
+    },
+    {
+      "path": "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1",
+      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
+      "category": "renderpass",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:independentBlend"
+      ],
+      "rationale": "PROMOTED 2026-09-22: the unchanged upstream attachment_write_mask leaf. Both suballocation leaves passed in the 464-case run 20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1 on payload a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4, whose promotion advertised independentBlend, served the integer colour target R8G8B8A8_UINT the leaf draws into and raised maxColorAttachments to two."
     },
     {
       "path": "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_1_byte",
@@ -4595,26 +4915,6 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Creates one fence with VK_FENCE_CREATE_SIGNALED_BIT and requires immediate signaled status and successful wait without a submission."
-    },
-    {
-      "path": "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
-      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
-      "category": "renderpass",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:independentBlend"
-      ],
-      "rationale": "PROMOTED 2026-09-22: the unchanged upstream attachment_write_mask leaf. Both suballocation leaves passed in the 464-case run 20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1 on payload a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4, whose promotion advertised independentBlend, served the integer colour target R8G8B8A8_UINT the leaf draws into and raised maxColorAttachments to two."
-    },
-    {
-      "path": "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1",
-      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
-      "category": "renderpass",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:independentBlend"
-      ],
-      "rationale": "PROMOTED 2026-09-22: the unchanged upstream attachment_write_mask leaf. Both suballocation leaves passed in the 464-case run 20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1 on payload a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4, whose promotion advertised independentBlend, served the integer colour target R8G8B8A8_UINT the leaf draws into and raised maxColorAttachments to two."
     }
   ],
   "diagnostics": [
@@ -5039,504 +5339,204 @@
       "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:3147"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_4.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_4.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_4.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_2.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_2.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_2.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_4.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_4.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_4.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_2.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_2.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_2.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_4.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_4.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_4.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_2.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_2.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_2.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_4.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_4.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_4.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_2.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_2.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_2.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_4.primitive_line",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
     },
     {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
+      "category": "plain-point-line-pipeline-refused",
+      "expected_status": "Fail",
       "features_required": [
         "core:sampleRateShading"
       ],
       "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_4.primitive_point_1px",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
+      "rationale": "REFUSED 2026-09-23: measured in run 20260922T232129201Z_PPSA99994_upstream-cts_0x1c24c268896f2 on payload eboot 7eed073a5e49b52e - VK_ERROR_FEATURE_NOT_PRESENT raised by the CTS itself at vkPipelineConstructionUtil.cpp:178, with the driver's own PS5VK_PIPELINE_CREATE line as its last record and no refusal marker. UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
       "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_4.primitive_triangle",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group registers the three opaque primitives whose point size is one pixel with sampleShadingEnable set at each minSampleShading value; the fourth, primitive_point, is measured out of the category because its 3.0 point size needs the largePoints feature, which this profile does not advertise (measured NotSupported at vktTestCase.cpp:1227); samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6069"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the negative control: the same quad renderer with sampleShadingEnable clear, which still has to resolve the multisampled target correctly and report one distinct shade per covered pixel; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6166"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_2.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
-    },
-    {
-      "category": "t06-sample-rate-pending",
-      "expected_status": "Pass",
-      "features_required": [
-        "core:sampleRateShading"
-      ],
-      "path": "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_4.quad",
-      "rationale": "UNMEASURED, applicable: MinSampleShadingTest is the only class in the pinned multisample module that requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING (vktPipelineMultisampleTests.cpp:1344), so these are the feature's own oracle and not a neighbouring family. Every leaf renders the multisampled colour target at the named count, resolves it into the single-sample image and then reads the multisampled colour back once per sample through subpassLoad(imageMS, sampleNdx), comparing each per-sample plane against the resolved value: a build that shades once per pixel cannot produce the per-sample planes, so the leaf cannot pass at 1x. This group is the same renderer on an opaque quad with sampleShadingEnable set, so it isolates the enabled state from the geometry; samples_2 and samples_4 are inside the counts this profile serves with the sample-shading path (2x/4x).",
-      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:6136"
     },
     {
       "category": "host-coherent-memory-gap",

@@ -40,8 +40,21 @@ results; visual output is not the sole correctness signal.
   [API.md](API.md). Forty-one conversion cases have exact GPU readback on
   non-indexed runtime draws, including byte strides and unaligned binding
   offsets
-- One BGRA8 presentation attachment or RGBA8 off-screen color attachment,
-  plus an optional D32 depth attachment
+- One or two BGRA8/RGBA8 colour attachments in a pass - the second through the
+  independent-blend contract, each with its own clear value, blend state and
+  write mask - plus an optional D32 depth attachment
+- Fragment side effects: storage-buffer stores and atomics from a runtime
+  fragment stage, fail-closed behind `fragmentStoresAndAtomics` and witnessed
+  by an exact counter readback with its guard words intact
+- Blending across the GFX1013 `CB_BLEND0_CONTROL` space, dual-source secondary
+  exports (`dualSrcBlend`), independent per-attachment blend state and partial
+  colour write masks for `VK_FORMAT_R8G8B8A8_UNORM`
+- 2x and 4x multisampled colour attachments with per-sample fragment
+  invocation and `gl_FragCoord` at the sample (`sampleRateShading` advertised):
+  Vulkan's standard sample positions, a resolve target the driver writes, and
+  per-sample reads of the multisampled attachment as an input attachment.
+  Multisampled depth attachments, multisampled sampled images and 8x and above
+  are not served
 - 44 sampled texture formats spanning 8/16/32-bit UNORM,
   SNORM, signed/unsigned integer and floating-point families, RGBA8 sRGB,
   A8B8G8R8 packed color/integer, RGB9E5 and B10G11R11 packed floating point, with GPU
@@ -89,17 +102,19 @@ DXVK support is tracked against the immutable DXVK **v2.6.2** profile
 into a checked-in machine-readable profile and joined independently to the
 current public API, reviewed implementation, CTS and native evidence.
 
-The fail-closed matrix currently proves **15/62** requirements completely:
+The fail-closed matrix currently proves **17/62** requirements completely:
 `robustBufferAccess`, multiview and its two required limits, the three
 indirect/indexed draw features `drawIndirectFirstInstance`,
 `multiDrawIndirect` (with `maxDrawIndirectCount = 65535`) and
 `fullDrawIndexUint32`, the user-defined `shaderClipDistance` and
-`shaderCullDistance` pair, `fragmentStoresAndAtomics`, `dualSrcBlend`, and the
-four rasterization and viewport features `depthClamp`, `depthBiasClamp`,
+`shaderCullDistance` pair, `fragmentStoresAndAtomics`, `dualSrcBlend`,
+`independentBlend` and `sampleRateShading` - the first two drawing into two
+colour attachments, the last shading once per sample at 2x and 4x - and the four
+rasterization and viewport features `depthClamp`, `depthBiasClamp`,
 `fillModeNonSolid` and `multiViewport`. Multiview is queried through its
 explicit KHR route. `geometryShader` and `tessellationShader` are positive on
 the API, implementation and CTS axes but their native axis is still
-`reported-not-executed`, so they stay among the other 47 requirements that
+`reported-not-executed`, so they stay among the other 45 requirements that
 remain blockers, together with the API-version requirement. This is an
 implementation roadmap, not a DXVK compatibility claim.
 The public-SDK-only capability probe can be built with
@@ -110,9 +125,15 @@ The public-SDK-only capability probe can be built with
 ## Important boundaries
 
 This is not a Vulkan-conformant driver or ICD, and it does not yet provide WSI,
-swapchains, broad format coverage, general image transfer/blit/resolve, multiple queues,
-timeline semaphores, blending, MSAA, anisotropy or arbitrary shader
-programs. The single-queue Vulkan 1.0 profile includes binary semaphores and
+swapchains, broad format coverage, general image transfer/blit, multiple queues,
+timeline semaphores, anisotropy or arbitrary shader programs. Blending is served
+through the GFX1013 blend-control space this profile programs for its two colour
+formats, and multisampling only where it was measured: 1x/2x/4x **colour**
+attachments with per-sample shading, the resolve target the driver writes and
+per-sample input-attachment reads - a multisampled depth attachment, a
+multisampled sampled image and 8x and above are not provided, and the
+interpolation-offset limits are reported as zero. The single-queue Vulkan 1.0
+profile includes binary semaphores and
 host/device events; it does not imply multi-queue or synchronization2 support.
 Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
 backend and cached under a bounded in-memory policy. Runtime vertex/fragment

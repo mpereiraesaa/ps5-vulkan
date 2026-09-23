@@ -213,23 +213,25 @@ class NativeDiagnosticOptions(unittest.TestCase):
                       "must be 0 or 1")
 
     def test_sample_rate_diagnostic_is_graphics_only(self):
-        """The sampleRateShading measurement build is a private diagnostic.
+        """The sampleRateShading bit is SHIPPING; the switch is not its gate.
 
-        It exists so a witness payload and the focused CTS selection can
-        negotiate a multisample path the shipping console platform does not
-        advertise yet, so it is meaningless without the graphics profile API and
-        cannot carry an unknown value. The console mask stays clear otherwise;
-        the promotion is a separate, evidence-backed change."""
+        The bit was promoted on 2026-09-23, so the platform sets it
+        unconditionally and no preprocessor guard may decide it again. The
+        switch itself survives as the build option the MEASUREMENT payloads
+        need (the register survey and the sample-rate probe), which is why it
+        is still graphics-only and still bounded to 0 or 1."""
         self.rejected({"PS5VK_SAMPLE_RATE_DIAGNOSTIC": "1"},
                       "requires the graphics profile API")
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
                        "PS5VK_SAMPLE_RATE_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
         platform = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertIn("PS5VK_FEATURE_SAMPLE_RATE_SHADING", platform)
+        self.assertIn("platform->supported_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;",
+                      platform)
+        self.assertNotIn("#if defined(PS5VK_SAMPLE_RATE_DIAGNOSTIC)", platform)
         self.assertIn("PS5VK_SAMPLE_RATE_DIAGNOSTIC", platform)
-        # The switch only decides whether the private measurement build sets the
-        # internal bit; no public query is answered from the define itself.
+        # The switch only decides what a MEASUREMENT build may exercise; no
+        # public query is answered from the define itself.
         self.assertNotIn("PS5VK_FEATURE_SAMPLE_RATE_SHADING",
                          (ROOT / "tools/build_native.py").read_text())
 
@@ -237,19 +239,16 @@ class NativeDiagnosticOptions(unittest.TestCase):
         """The sample-rate measurement scene cannot ship or run half-built.
 
         It clears a multisampled colour target and reads the surface's own
-        storage back, which is only ever true in the build whose platform
-        carries the sample-rate bit; without that switch there is no count the
-        front end would accept, so the scene refuses to be built at all."""
+        storage back, and after the 2026-09-23 promotion it measures the
+        SHIPPING state: the witness oracle is compiled in unconditionally and
+        the measurement switch only selects the register survey around it. The
+        scene is still a bounded standalone one and cannot be combined with any
+        other diagnostic."""
         self.rejected({"PS5VK_SAMPLE_RATE_PROBE": "1"},
                       "requires graphics API, runtime graphics and draw")
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
                        "PS5VK_SAMPLE_RATE_PROBE": "3"},
                       "must be 0, 1 or 2")
-        self.rejected({"PS5VK_GRAPHICS_API": "unused",
-                       "PS5VK_RUNTIME_GRAPHICS": "1",
-                       "PS5VK_GRAPHICS_DRAW": "1",
-                       "PS5VK_SAMPLE_RATE_PROBE": "1"},
-                      "requires PS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
         builder = (ROOT / "tools/build_native.py").read_text()
         source = (ROOT / "native/sample_rate_probe.c").read_text()
         # The measurement is bounded to one multisampled colour target whose

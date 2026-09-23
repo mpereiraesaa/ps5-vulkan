@@ -489,7 +489,7 @@ evidence; the selected CTS leaves alone do not test the maximum instance index.
 The three corresponding profile rows were satisfied by that run; the matrix
 was **4/62 ready, 58 blockers** at the time (see
 [the DXVK v2.6.2 profile section](#dxvk-262-public-abi-capability-probe) for the current
-15/62). This does not advertise the Vulkan 1.2 aggregate query
+17/62). This does not advertise the Vulkan 1.2 aggregate query
 structures or raise `apiVersion` above 1.0. The equivalent KHR fields and the
 separate unmet API-1.3 requirement remain explicit. Raw QPA and transport logs
 remain private; sanitized identities are recorded here and in the manifest.
@@ -1943,11 +1943,12 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **15/62 satisfied and 47 blockers**. Core
+The current checked result is **17/62 satisfied and 45 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
 `fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,
-`dualSrcBlend` and the four rasterization and viewport features (`depthClamp`,
+`dualSrcBlend`, `independentBlend`, `sampleRateShading` and the four
+rasterization and viewport features (`depthClamp`,
 `depthBiasClamp`, `fillModeNonSolid`, `multiViewport`) have all four axes. See
 [their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16),
 [the fragment promotion](#fragment-stores-and-atomics-promotion-2026-09-20),
@@ -4140,3 +4141,234 @@ push-constant slots) with that bit plus `NUM_SAMPLES`, `PS_ITER_MASK`
 (`ac_get_ps_iter_mask`), `USE_QUAD_POS` and `USE_SAMPLE_MASK_IN`, so the branch
 and the hardware agree. Nothing about the rendered images above changes: they
 still show the pixel centre for every sample.
+
+## The sample positions the raster stage never had (2026-09-23)
+
+The paragraph above ends by naming the next slice as "the PS-state user SGPR
+plus `POS_FIXED_PT_ENA`". **That reading was wrong, and the measurement says
+so.** The compiler already publishes the interpolated-coordinate shape for a
+sample-shaded standalone compile, and the register that decides the answer is
+neither of the two it named. What the device was missing is on the RASTER side,
+and the pinned PAL source (`third_party/amd-pal`, `gfx9MsaaState.cpp`) names
+both halves:
+
+* `PA_SC_MODE_CNTL_0.MSAA_ENABLE` - PAL sets it whenever the stage's coverage
+  samples are more than one. This driver published the single-sample word
+  (`0x22`) for every draw, so the rasteriser had no sample locations to work
+  with.
+* the sixteen `PA_SC_AA_SAMPLE_LOCS_PIXEL_*` context words (`0x2fe..0x30d`),
+  four samples each, X in the low nibble of a byte and Y in the high one as a
+  signed offset from the pixel centre in 1/16 pixel units, all four pixels of
+  the quad sharing the pattern. They had never been written, so all sixteen read
+  zero and every sample of a pixel sat ON the pixel centre.
+
+The pixel stage's own half comes from LLPC
+(`third_party/amd-llpc/lgc/lowering/RegisterMetadataBuilder.cpp`):
+`SPI_BARYC_CNTL.POS_FLOAT_LOCATION = 2` ("calculate per-pixel floating point
+position at iterated sample number") whenever the wave iterates per sample, and
+0 otherwise. This compiler published 0.
+
+### The measurement that places it
+
+A diagnostic payload publishes those registers per draw instead of taking them
+from the compiler (`native/sample_rate_diagnostic.h`, reachable only under
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC`) and draws the `fract(gl_FragCoord.xy)` witness
+into a 4x target with per-sample shading. Payload eboot
+`bdebc7259a0bffb650e72728e7c2526e25c4f5b3253dd581b0d5f7c4b18dd7c4`, run
+`20260922T225844981Z_PPSA99994_ps5vk_0x1c10e85bc0773`, log
+`6ea767abc3ef017908d874e0dcd9e5091185393841b7a1bf5d5cad9706ea689d`, clean
+lifecycle. The census is the distinct-word count of the whole surface:
+
+```text
+default                           values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+without-msaa-enable               values=ff808000                          oracle=coordinate verdict=0
+without-sample-locations          values=ff808000                          oracle=coordinate verdict=0
+without-sample-distance           values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+without-position-location         values=ff808000                          oracle=coordinate verdict=0
+col-format-zero (control)         shaded_values=0                          oracle=coordinate verdict=0
+```
+
+`ff602000`, `ffdf6000`, `ff209f00` and `ff9fdf00` are RGBA8
+`fract(gl_FragCoord.xy)` for (0.375,0.125), (0.875,0.375), (0.125,0.625) and
+(0.625,0.875) - Vulkan's standard 4x sample locations, which is also what makes
+the 1/16-offset encoding above self-checking: the four values the hardware
+delivers are the four values the pattern asks for. `ff808000` is (0.5,0.5), the
+pixel centre, and is what every configuration produced before this fix.
+
+The three necessary elements are therefore `MSAA_ENABLE`, the sample-location
+words, and the position location; each one withdrawn collapses the census back
+to the pixel centre. Withdrawing `MAX_SAMPLE_DIST` (kept at the pattern's own
+extent, 6/16 at 4x, because PAL derives it from the pattern) does not change the
+position, and the `col-format-zero` control proves the overrides reach the
+pipeline at all. `PA_SC_MODE_CNTL_0`, the sample words and `SPI_BARYC_CNTL` are
+now published by `native/draw_state_ps5.c` for exactly this shape, only when the
+pipeline carries more than one sample, and the position location only when the
+wave really iterates per sample.
+
+### The focused selection after the fix
+
+The same 514-case measurement (the frozen acceptance selection plus the 50
+`t06-sample-rate-pending` leaves) on payload eboot
+`445c894191c4914b15119c33075af3efe9c3a3eb9e4322da6a323b0da20e500e`, run
+`20260922T230226909Z_PPSA99994_upstream-cts_0x1c142318ff862`, log
+`4706ca168f5f574f6dfb517fbecdf56dc503c754bb7106764d242594e66ebdac`, clean
+lifecycle, reports **489 Pass, 25 Fail, 0 NotSupported**. Every
+`min_sample_shading.*.primitive_triangle` leaf passes now; before the fix the
+unique-colour family failed 35 of 512 (five stable `min_sample_shading` triangle
+leaves at min 0.5, 0.75 and 1.0 at both served counts, plus the flaky `quad`
+families).
+
+What still fails, in full:
+
+* twenty leaves - `min_sample_shading.*.samples_2|samples_4.primitive_line` and
+  `...primitive_point_1px` - are the plain vertex+fragment POINT/LINE pipelines
+  this profile does not serve at all: `VK_ERROR_FEATURE_NOT_PRESENT` raised by
+  the CTS itself at `vkPipelineConstructionUtil.cpp:178`, with the driver's own
+  `PS5VK_PIPELINE_CREATE` line as the last driver record and no refusal marker.
+  That is the same scope decision the earlier runs recorded, not a
+  sample-position defect.
+* five leaves - `min_sample_shading_disabled.*.samples_4.quad` - fail inside the
+  oracle as "Invalid color" or "Did not get any covered pixel, cannot test
+  minSampleShadingDisabled". These are the `quad` family the earlier runs
+  already measured as run-to-run flaky; they are a defect of their own and would
+  fail an acceptance run whatever the score, so they are the next item, not part
+  of this fix.
+
+### The remaining flakiness was the colour-to-texture barrier (2026-09-23)
+
+That last paragraph was a prediction, not a diagnosis, and the next two runs
+replaced it with one. A repeat of the SAME payload (run
+`20260922T230750349Z`, log
+`edc244cc866c4aa6e6474c46f12852b90c7626c7b01881af39f57c21d25ea08e`, 488 Pass /
+26 Fail) failed a different set:
+one `min_sample_shading_enabled` quad and two `samples_2` quads joined the
+failing five, so no property of the *disabled* group explains it.
+
+The run's own QPA images name the defect instead. In
+`min_sample_shading_disabled.min_0_0.samples_4.quad` the oracle compares the
+resolved image against the four per-sample images:
+
+* the four per-sample images held the correct uniform `808000ff` -
+  `fract(gl_FragCoord.xy)` at the pixel centre, the value a per-pixel
+  invocation writes - over the whole 32x32, so the multisampled attachment
+  really did hold what the draw wrote;
+* the RESOLVED image held the drawn value in only a few 8x8 tiles
+  (`20200040` in one tile and `40400080` in others: one and two of four samples
+  covered) and the clear word everywhere else, while the previous run of the
+  same case resolved almost the whole target. Different tiles, different runs.
+
+That is the signature of the colour-to-texture barrier being ASYNCHRONOUS. The
+driver's `ps5vk_graphics_color_to_texture` emits the reference RELEASE_MEM
+packet (event 0x2d `FLUSH_AND_INV_CB_DATA_TS` with the GCR writeback/
+invalidation bits, `DST_SEL=TC_L2`, no completion token), and a RELEASE_MEM
+retires when the event is accepted: the writeback it starts continues behind
+it, so a draw that reads the attachment through the texture path can see
+whatever the caches had not written back yet. The pinned RADV emitter
+(`gfx10_cs_emit_cache_flush` in the gfx10 Mesa tree) uses the same event with
+the write CONFIRMED - `DST_SEL=MEM`, `INT_SEL=SEND_DATA_AFTER_WR_CONFIRM`,
+`DATA_SEL=VALUE_32BIT` towards a token - and then a `WAIT_REG_MEM` for it.
+
+`ps5vk_graphics_color_to_texture_wait` (`src/graphics_sync.c`) is that packet:
+the same CB data-flush event with the token selected (word 2 becomes
+`0x23000000`), the 32-bit token stored at the address the caller names, and a
+`PKT3_WAIT_REG_MEM` equality wait for it. Both barrier sites use it - the
+resolve draw's own boundary and the subpass boundary that publishes colour to
+the texture path - with the private token word of the arena that executes the
+wait, zeroed before the release so the equality wait cannot pass on a value a
+previous submission left behind.
+
+Measured on the same 514-case selection, payload eboot
+`7eed073a5e49b52ed9df75932b3e3b22504106e1a5d5a824b99765f89d22f27d`, three
+consecutive runs, all with a clean lifecycle:
+
+| run | log sha256 | Pass | Fail | quad failures |
+| --- | --- | ---: | ---: | ---: |
+| `20260922T231948101Z` | `ce28818943d639bca3305f2703d0aae8c4e77deda85f0196eed0052c72930027` | 494 | 20 | 0 |
+| `20260922T232046070Z` | `b078a112854bf6af369a472e50b75e7ba7e0e5a5afa7a8120d8644fb5996127f` | 494 | 20 | 0 |
+| `20260922T232129201Z` | `5c9a5863317461d4d0de756ad1efb6f9ba0e65602922f7678e3f618c1123d81c` | 494 | 20 | 0 |
+
+The twenty are the POINT/LINE refusals alone, so the 30 applicable
+`min_sample_shading*` leaves - the five min-fractions at both served counts for
+the triangle and quad geometries - pass deterministically, which is what the row
+needs and what the frozen selection cannot carry as a flaky member.
+
+## DXVK262-T06 sampleRateShading promotion (2026-09-23)
+
+T06 is complete: the four requirements of the tranche -
+`fragmentStoresAndAtomics`, `dualSrcBlend`, `independentBlend` and
+`sampleRateShading` - are satisfied on all four axes, so the live matrix reads
+**17/62 ready with 45 blockers** (from 16/62).
+
+The promotion moved the row's own oracle into the frozen selection. The
+multisample module has exactly one class whose `checkSupport` requires
+`DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING`; it registers five min-fractions at
+two served counts over five primitives. Thirty of those fifty leaves - the
+triangle and quad shapes - are the group `sample-rate-shading`, measured Pass;
+the twenty line and `primitive_point_1px` shapes moved to
+`plain-point-line-pipeline-refused`, because what refuses them is this
+profile's pipeline resolver, not this feature: `vkCreateGraphicsPipelines`
+returns `VK_ERROR_FEATURE_NOT_PRESENT` and the CTS reports it at
+`vkPipelineConstructionUtil.cpp:178` with the driver's own
+`PS5VK_PIPELINE_CREATE` line as the last record. The frozen selection is now
+494 acceptance cases and 66 diagnostics.
+
+The four axes, each with its own artifact:
+
+* **API** - the public-ABI capability probe on the promoted profile, artifact
+  SELF SHA-256
+  `439de5c96579b634bb4698adf439631dd545f9298bdccd1c5e1129f750184a07`, run
+  `20260922T234500151Z_PPSA99994_ps5vk_0x1c394a882c7bf`, log SHA-256
+  `2b04497f8ae6a8d01feb3961f2a7b724bb763c611b69b78d9f3c7b497ece8d20`
+  (rebuilt against the promoted matrix, and a first run on the same artifact,
+  `20260922T233053671Z` log
+  `93268e3d01eadd0a8d922bd7459cc3618010b2e7f03844eb50d6473ac059b13b`,
+  verified against the pre-promotion snapshot). Both strict verifications
+  reconstructed all 62 rows, observed `sampleRateShading = 1`, and derived the
+  same **19 satisfied / 43 blockers** result;
+  `framebufferColorSampleCounts` moved to 1x|2x|4x with it.
+* **CTS** - three consecutive runs of the 514-case measurement selection
+  (frozen 464 + the 50 pending leaves) reported 494 Pass / 20 Fail / 0
+  NotSupported each time, the twenty being the POINT/LINE refusals and every
+  one of the thirty applicable sample-rate leaves Pass. Payload eboot
+  `7eed073a5e49b52ed9df75932b3e3b22504106e1a5d5a824b99765f89d22f27d`
+  (measurement selection, register survey available), runs
+  `20260922T231948101Z`, `20260922T232046070Z` and `20260922T232129201Z`.
+* **Native** - the frozen acceptance selection itself, on the shipping profile
+  and without the measurement switch: payload eboot SELF SHA-256
+  `e1ed40fb0089c5a39eb0b6c333b74b9aa430d524c10d4f74220452263d40b4cb`,
+  selection SHA-256 `f6924b34930a837f88635e47cf388bf9a88fd72e1082a0f3ee9ab6bba5a540ed`,
+  run `20260922T232928853Z_PPSA99994_upstream-cts_0x1c2bbd396dece`, log SHA-256
+  `287f98ec1e81ccb09642bbf12b75062ed60bb95501d3451849d8f3d5f6633b54`: **494
+  reported, 494 Pass, 0 Fail, 0 NotSupported**, clean lifecycle. The
+  shipping witness payload (no measurement switch, eboot
+  `1ce2fe9cf7d0647535f044c69f48316272a860c2dead603ae9b2135e12a60613`, run
+  `20260922T233238023Z_PPSA99994_ps5vk_0x1c2e7dee46277`, log SHA-256
+  `0b82307d624e9adeb405e9ce93a782e577246dba50c54be894556f4f6293a570`) is the
+  row's own oracle executed directly:
+
+```text
+PS5VK_SAMPLE_RATE_SHADED extent=64x64 samples=4 words=65536 shaded_values=4 expected_values=4 matched=4 covered_words=16384 values=ff000000,ff010000,ff020000,ff030000 oracle=sample-id verdict=1
+PS5VK_SAMPLE_RATE_SHADED extent=64x64 samples=4 words=65536 shaded_values=4 expected_values=4 matched=4 covered_words=16384 values=ff602000,ffdf6000,ff209f00,ff9fdf00 oracle=coordinate verdict=1
+```
+
+One limit the promotion made applicable is NOT satisfied and is recorded rather
+than claimed. While `sampleRateShading` is unreported the CTS leaves the
+interpolation-offset limits out and this profile reports them relaxed; reporting
+the feature brings the core table's own floors (`maxInterpolationOffset >= 0.5`,
+`minInterpolationOffset <= -0.5`, `subPixelInterpolationOffsetBits >= 4`) into
+scope. This driver reports 0 for all three: no path lowers an interpolation
+offset, so they are documented as blockers in the reporting matrix
+(`tools/check_reporting_matrix.py`, `KNOWN_BLOCKERS`) instead of being raised to
+values nothing measured.
+
+The compiler half of this window is `mpereiraesaa/opengnm-psbc` PR #23
+(`codex/fragment-coord-sample-shading`, head
+`a33305201385947cb49d74b68f6311a0c2f4add7`): the unconditional fragment-coordinate
+lowering that stops the standalone compile from aborting in
+`ac_nir.c` (`assert(arg.used)`), the pipeline sample-shading state the
+standalone compile needs, and the single compile-time decision about which
+fragment coordinate the shader reads. Every payload above was built and run
+with that revision - the driver passes `sample_shading_enable` into
+`PsbcCompileOptions`, which does not exist before it - so
+`tools/prepare_compiler_deps.py` has to pin the merged commit before this
+promotion reproduces from a fresh clone. The pin still names `be4d043`.
