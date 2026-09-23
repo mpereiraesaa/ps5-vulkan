@@ -128,7 +128,10 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 || depth;
     const int cube=info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     if ((info->flags && !cube) ||
-        (attachment && (info->flags || info->imageType!=VK_IMAGE_TYPE_2D ||
+        (cube && (info->imageType!=VK_IMAGE_TYPE_2D || info->arrayLayers<6 ||
+                  info->arrayLayers%6 != 0 || info->extent.width!=info->extent.height ||
+                  info->extent.width>PS5VK_MAX_IMAGE_CUBE)) ||
+        (attachment && (info->imageType!=VK_IMAGE_TYPE_2D ||
                         !info->arrayLayers ||
                         info->arrayLayers>PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
                         info->extent.depth!=1)) ||
@@ -139,9 +142,7 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         (!attachment && info->imageType==VK_IMAGE_TYPE_2D &&
          (info->extent.depth!=1 || !info->arrayLayers ||
           info->arrayLayers>PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
-          (cube && (info->arrayLayers!=6 ||
-                    info->extent.width!=info->extent.height ||
-                    info->extent.width>PS5VK_MAX_IMAGE_CUBE)))) ||
+          (cube && info->arrayLayers%6 != 0))) ||
         (!attachment && info->imageType==VK_IMAGE_TYPE_3D &&
          (cube || info->arrayLayers!=1 || !info->extent.depth ||
           info->extent.width>PS5VK_MAX_IMAGE_3D ||
