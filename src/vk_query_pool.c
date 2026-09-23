@@ -113,10 +113,16 @@ static VkBool32 query_result_layout(const struct ps5vk_operation *op,
     size_t word = (op->query_flags & VK_QUERY_RESULT_64_BIT) ? 8u : 4u;
     size_t record = word * ((op->query_flags &
         VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ? 2u : 1u);
+    /* A zero stride is useful for copying one result at a time to adjacent
+     * offsets. The pinned CTS uses exactly that form; with one query the
+     * stride is unused. Keep multi-query zero-stride copies fail-closed since
+     * overlapping result writes are not exercised by this backend contract. */
     if (!op->query_count || (op->query_flags & ~allowed) ||
-        op->query_stride < record || op->query_stride % word ||
-        (op->query_count - 1u) >
-            (UINT64_MAX - record) / op->query_stride)
+        (op->query_stride == 0 && op->query_count != 1) ||
+        (op->query_stride != 0 &&
+            (op->query_stride < record || op->query_stride % word)) ||
+        (op->query_stride != 0 && (op->query_count - 1u) >
+            (UINT64_MAX - record) / op->query_stride))
         return VK_FALSE;
     *record_bytes = record;
     *total_bytes = (op->query_count - 1u) * op->query_stride + record;

@@ -212,6 +212,35 @@ int main(void)
         ((uint64_t *)query_copy_map)[1] == 1);
     assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
 
+    /* Pinned CTS copy-reset stride coverage uses zero stride only with one
+     * query per copy, advancing dstOffset by the packed result record. */
+    assert(ps5vk_query_publish(device, pool, 3, UINT64_C(0x0123456789abcdef))
+        == VK_SUCCESS);
+    memset(query_copy_map, 0x5a, 32);
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    vkCmdCopyQueryPoolResults(command, pool, 2, 1, query_copy_buffer, 0, 0,
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT |
+        VK_QUERY_RESULT_WAIT_BIT);
+    vkCmdCopyQueryPoolResults(command, pool, 3, 1, query_copy_buffer, 16, 0,
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT |
+        VK_QUERY_RESULT_WAIT_BIT);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 2 &&
+        command->operations[0].query_stride == 0 &&
+        command->operations[1].query_stride == 0);
+    assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    submit = (VkSubmitInfo){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &command};
+    assert(vkQueueSubmit(&device->queue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    uint64_t *packed_copy = (uint64_t *)query_copy_map;
+    assert(packed_copy[0] == UINT64_C(0x12345678abcdef01) && packed_copy[1] == 1 &&
+        packed_copy[2] == UINT64_C(0x0123456789abcdef) && packed_copy[3] == 1);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    vkCmdCopyQueryPoolResults(command, pool, 2, 2, query_copy_buffer, 0, 0,
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+    assert(command->state == PS5VK_INVALID && !command->operation_count);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
+
     /* No fake results: operations requiring a real ZPASS counter or supported
      * timestamp domain invalidate recording without consuming an op slot. */
 #define CHECK_QUERY_FAIL_CLOSED(statement) do { \
