@@ -1542,6 +1542,70 @@ static void check_sparse_layout_static_use(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+/* The original sampled-cube-array shader requires SampledCubeArray. Both
+ * that capability and ImageCubeArray are gated by the logical device feature. */
+static void check_cube_array_feature_mask(void)
+{
+    struct ps5vk_set_signature sampled={0};
+    sampled.count=1;sampled.binding[0].count=1;sampled.binding[0].first=0;
+    sampled.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sampled.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)sampled.binding[b].first=1;
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/cube_array.frag.spv"),
+        .descriptor_set_count=1,.descriptor_sets=&sampled,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    uint32_t *fragment_words=(uint32_t *)key.fragment.words;
+    unsigned sampled_cube_array=0;
+    for(size_t at=5;at<key.fragment.word_count;) {
+        unsigned count=fragment_words[at]>>16;
+        assert(count && count<=key.fragment.word_count-at);
+        if((fragment_words[at]&65535u)==17u && count==2u &&
+           fragment_words[at+1]==45u)sampled_cube_array=1;
+        at+=count;
+    }
+    assert(sampled_cube_array);
+
+    const void *out=NULL;
+    assert(!ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==
+        VK_ERROR_FEATURE_NOT_PRESENT && !out);
+
+    key.feature_mask|=PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
+    assert(ps5vk_runtime_graphics_supported(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *program=out;
+    assert(program->fragment.metadata.descriptor_set_valid[0]);
+    assert(program->arguments.fragment_descriptor_valid[0]);
+    assert(program->arguments.fragment_used_bindings[0]&UINT64_C(1));
+    ps5vk_runtime_graphics_free(NULL,out);
+
+    /* Independently check ImageCubeArray capability 34 before PSBC parsing. */
+    uint32_t *image_cube_words=malloc(key.fragment.word_count*sizeof(*image_cube_words));
+    assert(image_cube_words);
+    memcpy(image_cube_words,key.fragment.words,key.fragment.word_count*sizeof(*image_cube_words));
+    int patched=0;
+    for(size_t at=5;at<key.fragment.word_count;) {
+        unsigned count=image_cube_words[at]>>16;
+        assert(count && count<=key.fragment.word_count-at);
+        if((image_cube_words[at]&65535u)==17u && count==2u &&
+           image_cube_words[at+1]==45u) {
+            image_cube_words[at+1]=34u;patched=1;break;
+        }
+        at+=count;
+    }
+    assert(patched);
+    struct ps5vk_graphics_key image_cube_key=key;
+    image_cube_key.fragment.words=image_cube_words;
+    image_cube_key.feature_mask=0;
+    assert(!ps5vk_runtime_graphics_supported(&image_cube_key));
+    free(image_cube_words);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 static void check_descriptor_options(void)
 {
     struct ps5vk_set_signature sets[4]={0};
@@ -2172,6 +2236,7 @@ int main(void)
     check_input_attachment_probe_pipelines();
     check_fragment_store_atomic_contract();
     check_sparse_layout_static_use();
+    check_cube_array_feature_mask();
     check_view_index_builtin();
     check_clip_cull_distances();
     check_depth_only_target();
