@@ -63,7 +63,7 @@ class UboLayout(unittest.TestCase):
         source = self.directory / f"{layout}.comp"
         binary = self.directory / f"{layout}.spv"
         source.write_text(SHADER.replace("{layout}", layout))
-        subprocess.run(["glslangValidator", "-V", "--target-env", "vulkan1.2",
+        subprocess.run(["glslangValidator", "-V", "--target-env", "vulkan1.0",
                         str(source), "-o", str(binary)], check=True,
                        capture_output=True, text=True)
         data = binary.read_bytes()
