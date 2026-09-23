@@ -29,9 +29,12 @@ DEPS = [
         # PsbcCompileOptions::sample_shading_enable, which does not exist before
         # this revision, so the pin has to name it for the advertised
         # sample-rate count envelope to build at all.
+        # T08 adds independent opt-in SPIR-V physical-address and Vulkan
+        # memory-model capability handling. Driver adapters still choose which
+        # options to enable for each negotiated logical-device feature.
         # PR 25 fixes compute subgroup-ID lowering and the fixed wave32
         # compiler contract. Public subgroup reporting remains disabled.
-        "pin": "47ae2a3bc9d6951d869d4bffd5112a62329ccf04",
+        "pin": "ee8959186cfb1f5c0a574d1e2ee329aad1fe2747",
     },
     {
         "name": "opengnm",

@@ -57,6 +57,9 @@ static void release(void *ctx, void *backing)
 VkResult ps5vk_buffer_span(VkDevice d, VkBuffer b, VkDeviceSize off,
                           VkDeviceSize range, void **address, VkDeviceSize *bytes)
 { (void)d; *address = (void *)((uintptr_t)b + off); *bytes = range; return VK_SUCCESS; }
+VkResult ps5vk_image_span(VkDevice d, VkImage image, void **address,
+                          VkDeviceSize *bytes)
+{ (void)d; (void)image; (void)address; (void)bytes; return VK_ERROR_UNKNOWN; }
 VkBool32 ps5vk_buffer_usage(VkDevice d,VkBuffer b,VkBufferUsageFlags usage)
 { (void)d;(void)usage;return b!=VK_NULL_HANDLE; }
 VkResult ps5vk_buffer_cache(VkDevice d,VkBuffer b,VkDeviceSize off,
@@ -96,6 +99,26 @@ int main(void)
     set.defined[0] = VK_TRUE;
     assert(device.submit_backend.prepare(&device, &submit, &job) == VK_SUCCESS && job);
     assert(arenas == 2 && mappings == 1 && !submissions);
+    device.submit_backend.release(&device, job); clean();
+
+    /* Physical-address shaders can use push constants without any descriptor
+     * set. The native queue still needs a mapped staging-table anchor to
+     * generate the bootstrap packet template, which it then overwrites with
+     * the compiled shader's actual user-SGPR window. */
+    struct VkPipeline_T address_pipeline = *pipeline;
+    address_pipeline.program = (struct ps5vk_compiled_program){
+        .code = code, .code_words = 80, .gfx = 1013, .wave_size = 32,
+        .local_size = {1, 1, 1}, .vgprs = 16, .sgprs = 32,
+        .user_sgprs = 3, .tgid = {1, 0, 0},
+        .push_constant_size = 28, .push_constant_sgpr = 2};
+    struct VkCommandBuffer_T address_cb = {.operation_count = 1};
+    address_cb.operations[0] = (struct ps5vk_operation){
+        .type = PS5VK_DISPATCH, .pipeline = &address_pipeline,
+        .groups = {64, 1, 1}, .push_constant_size = 28};
+    struct ps5vk_submission address_submit = {
+        .serial = 2, .count = 1, .buffers = {&address_cb}};
+    assert(device.submit_backend.prepare(&device, &address_submit, &job) == VK_SUCCESS && job);
+    assert(arenas == 1 && mappings == 1 && !submissions);
     device.submit_backend.release(&device, job); clean();
 
     /* The compute backend consumes the submitted range directly. Event

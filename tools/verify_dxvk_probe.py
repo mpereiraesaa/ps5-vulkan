@@ -156,6 +156,29 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
                 standard_ubo_routes[0].get("uniformBufferStandardLayout") ==
                     str(observed[standard_ubo_id]),
                 "explicit standard UBO query route")
+    memory_model_ids = {
+        "vulkanMemoryModel": "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "vulkanMemoryModelDeviceScope":
+            "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+    }
+    memory_model_routes = [row for kind, row in messages
+                           if kind == "DXVK262_MEMORY_MODEL_QUERY"]
+    if memory_model_routes or (version < (1, 2, 0) and
+                               any(observed[i] for i in memory_model_ids.values())):
+        require(len(memory_model_routes) == 1 and
+                memory_model_routes[0].get("route") == "VK_KHR_vulkan_memory_model",
+                "explicit memory model query route")
+        for field, identifier in memory_model_ids.items():
+            require(memory_model_routes[0].get(field) == str(observed[identifier]),
+                    "memory model route value mismatch")
+    bda_id = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
+    bda_routes = [row for kind, row in messages
+                  if kind == "DXVK262_BUFFER_DEVICE_ADDRESS_QUERY"]
+    if bda_routes or (version < (1, 2, 0) and observed[bda_id]):
+        require(len(bda_routes) == 1 and
+                bda_routes[0].get("route") == "VK_KHR_buffer_device_address" and
+                bda_routes[0].get("bufferDeviceAddress") == str(observed[bda_id]),
+                "explicit buffer device address query route")
 
     total = len(expected_rows)
     blockers = total - satisfied
@@ -177,7 +200,7 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
         "artifact_eboot_sha256": digest,
         "observed": observed,
         "source_log": str(log_path),
-        "query_routes": routes + standard_ubo_routes,
+        "query_routes": routes + standard_ubo_routes + memory_model_routes + bda_routes,
         "source_matrix_sha256": dxvk["matrix_sha256"],
     }
 

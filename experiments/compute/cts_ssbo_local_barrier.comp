@@ -1,0 +1,20 @@
+#version 310 es
+// Original vktComputeBasicComputeShaderTests.cpp SSBOLocalBarrierTest shader,
+// with the multiple-groups case's local dimensions and array size substituted.
+layout(local_size_x = 3, local_size_y = 4, local_size_z = 1) in;
+layout(binding = 0) coherent buffer Output { uint values[504]; } sb_out;
+void main(void) {
+    uint localSize = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
+    uint globalNdx = gl_NumWorkGroups.x * gl_NumWorkGroups.y * gl_WorkGroupID.z +
+                     gl_NumWorkGroups.x * gl_WorkGroupID.y + gl_WorkGroupID.x;
+    uint globalOffs = localSize * globalNdx;
+    uint localOffs = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_LocalInvocationID.z +
+                     gl_WorkGroupSize.x * gl_LocalInvocationID.y + gl_LocalInvocationID.x;
+    sb_out.values[globalOffs + localOffs] = globalOffs;
+    memoryBarrierBuffer();
+    barrier();
+    sb_out.values[globalOffs + ((localOffs + 1u) % localSize)] += localOffs;
+    memoryBarrierBuffer();
+    barrier();
+    sb_out.values[globalOffs + ((localOffs + 2u) % localSize)] += localOffs;
+}

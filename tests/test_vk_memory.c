@@ -10,16 +10,44 @@ struct mock {
     VkDeviceSize offset, size;
     VkResult allocation_result, sync_result;
 };
+struct mock_gpu_address { void *backing; VkDeviceAddress address; };
+static struct mock_gpu_address gpu_addresses[128];
+static unsigned gpu_address_count;
+static VkDeviceAddress next_gpu_address = UINT64_C(0x200000000);
+static int refuse_gpu_address;
+VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out)
+{
+    if (out) *out = 0;
+    if (refuse_gpu_address || !out) return VK_ERROR_FEATURE_NOT_PRESENT;
+    for (unsigned n = 0; n < gpu_address_count; ++n)
+        if (gpu_addresses[n].backing == backing) {
+            *out = gpu_addresses[n].address;
+            return VK_SUCCESS;
+        }
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
 static VkResult allocate(void *ctx, VkDeviceSize bytes, void **address, void **backing)
 {
     struct mock *m = ctx;
     if (m->allocation_result) return m->allocation_result;
     *address = calloc(1, bytes); *backing = *address;
     if (!*address) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    assert(gpu_address_count < sizeof(gpu_addresses) / sizeof(gpu_addresses[0]));
+    gpu_addresses[gpu_address_count++] = (struct mock_gpu_address){
+        *backing, next_gpu_address};
+    next_gpu_address += UINT64_C(0x100000);
     ++m->allocations; return VK_SUCCESS;
 }
 static void release(void *ctx, void *backing)
-{ ++((struct mock *)ctx)->releases; free(backing); }
+{
+    ++((struct mock *)ctx)->releases;
+    for (unsigned n = 0; n < gpu_address_count; ++n)
+        if (gpu_addresses[n].backing == backing) {
+            gpu_addresses[n] = gpu_addresses[--gpu_address_count];
+            break;
+        }
+    free(backing);
+}
 static VkResult flush(void *ctx, void *backing, VkDeviceSize offset, VkDeviceSize size)
 {
     assert(backing);
@@ -286,10 +314,112 @@ static void test_commitment(void)
     assert(committed == 0);
     vkFreeMemory(&d, m, NULL);
 }
+
+static void test_buffer_device_address(void)
+{
+    struct mock state = {0};
+    struct VkDevice_T d = device(&state), other = device(&state);
+    VkBufferCreateInfo buffer_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 256, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkMemoryAllocateFlagsInfo flags = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+        .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT};
+    VkMemoryAllocateInfo memory_info = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = &flags, .allocationSize = 1024};
+    VkBuffer b = VK_NULL_HANDLE;
+    VkDeviceMemory m = VK_NULL_HANDLE;
+    assert(vkCreateBuffer(&d, &buffer_info, NULL, &b) == VK_ERROR_FEATURE_NOT_PRESENT && !b);
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    d.enabled_features = PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    assert(vkCreateBuffer(&d, &buffer_info, NULL, &b) == VK_SUCCESS);
+    VkBufferDeviceAddressInfo address_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = b};
+    assert(!vkGetBufferDeviceAddressKHR(&d, &address_info)); /* Unbound. */
+    VkDeviceMemory plain = memory(&d, 1024);
+    assert(vkBindBufferMemory(&d, b, plain, 256) == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!vkGetBufferDeviceAddressKHR(&d, &address_info));
+    flags.flags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    VkMemoryOpaqueCaptureAddressAllocateInfo capture = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO,
+        .opaqueCaptureAddress = 1};
+    flags.pNext = &capture;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    flags.pNext = NULL;
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT |
+                  VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR;
+    flags.deviceMask = 1;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    d.device_group_extension_enabled = VK_TRUE;
+    flags.deviceMask = 0;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    flags.deviceMask = 2;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    flags.deviceMask = 1;
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_SUCCESS);
+    vkFreeMemory(&d, m, NULL);
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    flags.deviceMask = 0;
+    refuse_gpu_address = 1;
+    unsigned releases = state.releases;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    assert(state.releases == releases + 1); /* Backend allocation was rolled back. */
+    refuse_gpu_address = 0;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &m) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, b, m, 256) == VK_SUCCESS);
+    VkDeviceAddress address = vkGetBufferDeviceAddressKHR(&d, &address_info);
+    assert(address);
+    void *cpu_map = NULL;
+    assert(vkMapMemory(&d, m, 0, VK_WHOLE_SIZE, 0, &cpu_map) == VK_SUCCESS);
+    assert(address != (VkDeviceAddress)(uintptr_t)((unsigned char *)cpu_map + 256));
+    VkDeviceAddress base = 0;
+    assert(ps5vk_memory_backend_device_address(cpu_map, &base) == VK_SUCCESS);
+    assert(address == base + 256);
+    assert(!vkGetBufferDeviceAddressKHR(&other, &address_info));
+    VkBufferDeviceAddressInfo malformed = address_info;
+    malformed.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    assert(!vkGetBufferDeviceAddressKHR(&d, &malformed));
+    VkBuffer second = VK_NULL_HANDLE;
+    assert(vkCreateBuffer(&d, &buffer_info, NULL, &second) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, second, m, 512) == VK_SUCCESS);
+    address_info.buffer = second;
+    assert(vkGetBufferDeviceAddressKHR(&d, &address_info) == base + 512);
+    assert(vkGetBufferDeviceAddressKHR(&d, &address_info) != address);
+    VkBuffer independent = VK_NULL_HANDLE;
+    VkDeviceMemory independent_memory = VK_NULL_HANDLE;
+    assert(vkCreateBuffer(&d, &buffer_info, NULL, &independent) == VK_SUCCESS);
+    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT |
+                  VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHR;
+    flags.deviceMask = 1;
+    assert(vkAllocateMemory(&d, &memory_info, NULL, &independent_memory) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, independent, independent_memory, 0) == VK_SUCCESS);
+    address_info.buffer = independent;
+    VkDeviceAddress independent_address = vkGetBufferDeviceAddressKHR(&d, &address_info);
+    assert(independent_address && independent_address != base &&
+           independent_address != base + 256 && independent_address != base + 512);
+    vkDestroyBuffer(&d, independent, NULL);
+    vkFreeMemory(&d, independent_memory, NULL);
+    vkDestroyBuffer(&d, b, NULL);
+    address_info.buffer = b;
+    assert(!vkGetBufferDeviceAddressKHR(&d, &address_info)); /* Destroyed handle. */
+    vkFreeMemory(&d, m, NULL);
+    address_info.buffer = second;
+    assert(!vkGetBufferDeviceAddressKHR(&d, &address_info)); /* Backing freed. */
+    assert(vkBindBufferMemory(&d, second, plain, 0) != VK_SUCCESS); /* No rebind. */
+    vkDestroyBuffer(&d, second, NULL);
+    vkFreeMemory(&d, plain, NULL);
+    assert(state.allocations == state.releases);
+}
 int main(void)
 {
     test_binding(); test_mapping(); test_failures_and_allocators(); test_buffer_views();
     test_commitment();
+    test_buffer_device_address();
     puts("Vulkan memory contracts: pass (host mock only, no GPU evidence)");
     return 0;
 }

@@ -78,6 +78,7 @@ struct VkPipeline_T {
     struct ps5vk_compiled_program program;
     void *cache_entry;
     VkBool32 graphics;
+    VkBool32 dispatch_base_enabled;
     VkBool32 graphics_usage_known;
     uint32_t graphics_used_set_mask;
     /* The subpass this graphics pipeline was created against. A pipeline is

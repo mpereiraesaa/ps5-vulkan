@@ -1,0 +1,22 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 1) in;
+layout(buffer_reference, std430, buffer_reference_align = 16) buffer Data {
+    uint value[];
+};
+layout(push_constant) uniform Parameters {
+    Data left;
+    Data right;
+    Data outputData;
+    uint sourceOffset;
+} params;
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+    uint leftValue = params.left.value[params.sourceOffset + index];
+    uint rightValue = params.right.value[params.sourceOffset + index];
+    params.outputData.value[index] =
+        (leftValue ^ 0xa5a55a5au) + rightValue * 3u;
+}

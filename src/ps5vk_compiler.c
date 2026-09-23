@@ -1,9 +1,34 @@
 #include "ps5vk_compiler.h"
+#include "descriptor_table_layout.h"
 #include "libpsbc/psbc_compile.h"
 #include "include/pssl_types.h"
 #include "gnm_shaderbinary.h"
 #include <stdlib.h>
 #include <string.h>
+
+/* PSBC interprets Device-scope barriers according to the enabled SPIR-V
+ * memory model. A logical device may enable VK_KHR_vulkan_memory_model while
+ * still compiling ordinary GLSL450 modules. Passing the KHR compiler option
+ * to such a module incorrectly asks SPIRV-to-NIR to apply VulkanKHR's
+ * DeviceScope capability rule to its legacy barriers. Read the module's
+ * OpMemoryModel (opcode 14) before choosing the compiler options. */
+static int module_uses_vulkan_memory_model(const uint32_t *spirv, size_t words)
+{
+    int model = -1;
+    for (size_t at = 5; at < words;) {
+        uint32_t length = spirv[at] >> 16;
+        uint32_t opcode = spirv[at] & 0xffffu;
+        if (!length || length > words - at) return -1;
+        if (opcode == 14u) {
+            if (length != 3 || model != -1) return -1;
+            model = (int)spirv[at + 2];
+        }
+        at += length;
+    }
+    /* Vulkan permits GLSL450 (1) and VulkanKHR (3) for this compute path. */
+    if (model != 1 && model != 3) return -1;
+    return model == 3;
+}
 
 VkResult ps5vk_runtime_compile_compute_features(
     const uint32_t *spirv,
@@ -45,6 +70,9 @@ VkResult ps5vk_runtime_compile_compute_features(
         offset += len;
     }
     if (!entry_found)
+        return VK_ERROR_UNKNOWN;
+    const int vulkan_memory_model = module_uses_vulkan_memory_model(spirv, spirv_words);
+    if (vulkan_memory_model < 0)
         return VK_ERROR_UNKNOWN;
 
     PsbcCompileOptions opts = {0};
@@ -136,16 +164,24 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_DUAL_SRC_BLEND |
                           PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
                           PS5VK_FEATURE_SAMPLE_RATE_SHADING |
-                          /* The UBO layout gate is checked when the shader
-                           * module is created. It changes no PSBC compute
-                           * option, but an enabled device still carries it
-                           * into every compute pipeline creation. */
+                          PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS |
+                          PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                          PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE |
                           PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
+        !(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
     opts.enable_storage_buffer_16bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_16BIT);
+    opts.enable_physical_storage_buffer_addresses =
+        !!(feature_mask & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
+    opts.enable_vulkan_memory_model =
+        vulkan_memory_model && !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL);
+    opts.enable_vulkan_memory_model_device_scope =
+        vulkan_memory_model && !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE);
 
     if (specialization) {
         if (specialization->mapEntryCount > PSBC_MAX_SPECIALIZATION_CONSTANTS ||
@@ -169,6 +205,27 @@ VkResult ps5vk_runtime_compile_compute_features(
 
     if (layout->set_count > PS5VK_MAX_SETS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Pipeline layouts built by Vulkan already have canonical prefixes. Build
+     * them here as well for callers of this adapter that supply only counts. */
+    struct ps5vk_set_signature canonical[PS5VK_MAX_SETS];
+    memset(canonical, 0, sizeof(canonical));
+    for (uint32_t set = 0; set < layout->set_count; ++set) {
+        canonical[set] = layout->sets[set];
+        uint32_t prefix = 0;
+        for (uint32_t binding = 0; binding < PS5VK_MAX_BINDINGS; ++binding) {
+            canonical[set].binding[binding].first = prefix;
+            if (!canonical[set].binding[binding].count) {
+                canonical[set].binding[binding].stages = 0;
+                canonical[set].type[binding] = 0;
+            }
+            prefix += canonical[set].binding[binding].count;
+        }
+        canonical[set].count = prefix;
+    }
+    struct ps5vk_descriptor_table_layout table_layout;
+    VkResult table_result = ps5vk_descriptor_table_layout_build(
+        layout->set_count, canonical, &table_layout);
+    if (table_result != VK_SUCCESS) return table_result;
     /* Every Vulkan set remains a distinct RADV table. Offsets are local to a
      * set, while the compiler metadata identifies its direct user-SGPR slot.
      * The layout only declares the canonical offsets here; which of these
@@ -185,6 +242,7 @@ VkResult ps5vk_runtime_compile_compute_features(
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
+                case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: type=PSBC_DESCRIPTOR_STORAGE_IMAGE;break;
                 default:
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 }
@@ -196,8 +254,8 @@ VkResult ps5vk_runtime_compile_compute_features(
                 opts.descriptor_bindings[idx].binding = b;
                 opts.descriptor_bindings[idx].type = type;
                 opts.descriptor_bindings[idx].array_size = sig->binding[b].count;
-                opts.descriptor_bindings[idx].offset = sig->binding[b].first * 16;
-                opts.descriptor_bindings[idx].stride = 16;
+                opts.descriptor_bindings[idx].offset = table_layout.binding[set][b].byte_offset;
+                opts.descriptor_bindings[idx].stride = table_layout.binding[set][b].byte_stride;
                 declared_descriptor_count += sig->binding[b].count;
             }
         }
@@ -293,7 +351,8 @@ VkResult ps5vk_runtime_compile_compute_features(
                 desc->set = set;
                 desc->binding = b;
                 desc->element = element;
-                desc->table_dword = (binding->first + element) * 4;
+                desc->table_dword = (table_layout.binding[set][b].byte_offset +
+                    element * table_layout.binding[set][b].byte_stride) / 4;
                 desc->type = sig->type[b];
             }
         }

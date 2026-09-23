@@ -23,6 +23,8 @@ UPSTREAM = ROOT / "third_party/vk-gl-cts"
 # The integration supplies the package and its leading groups; upstream supplies
 # everything below them.
 INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
+VOLATILE_ATOMIC_WRAPPER = ROOT / "cts/upstream/volatile_atomic_focus.cpp"
+BDA_BUILD_SOURCE = ROOT / "tools/build_upstream_cts.py"
 # The capabilities a selection is allowed to rely on come from the device's own
 # sources, not from the selection itself.
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
@@ -135,6 +137,63 @@ def _ubo_generated_paths(text: str) -> frozenset:
 def _format_segments(text: str) -> frozenset:
     return frozenset(token[len("VK_FORMAT_"):].lower()
                      for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text))
+
+
+@functools.lru_cache(maxsize=None)
+def _volatile_atomic_leaf_names(text: str, integration: str, wrapper: str) -> frozenset:
+    """Derive the wrapper-registered VulkanKHR volatile atomic leaves.
+
+    The pinned factory composes its group name and registers case names through
+    macros, so neither final spelling is a quoted literal. Require its exact
+    volatile/storage-buffer branch and the package's focused registration.
+    """
+    if not all(part in text for part in (
+            'std::string groupName("opatomic")',
+            'groupName += "_storage_buffer"',
+            'groupName += "_volatile"',
+            'if (volatileAtomic)',
+            'spec.requestedVulkanFeatures.extVulkanMemoryModel.vulkanMemoryModel = true;',
+            'specializations["SCOPE"]     = "%five";')):
+        return frozenset()
+    if ('createOpAtomicGroup(testCtx, true, 65535, false, true)' not in wrapper or
+            'createFocusedVolatileAtomicComputeGroup(m_testCtx)' not in integration):
+        return frozenset()
+    factory = _source_function_at_line(text, 1472)
+    return frozenset(re.findall(r'ADD_OPATOMIC_CASE_(?:1|N)\(\s*([a-z]+)\s*,', factory))
+
+
+@functools.lru_cache(maxsize=None)
+def _focused_bda_leaf_paths(text: str, integration: str, builder: str) -> frozenset[str]:
+    """Recognize only the two original BDA leaves built by the focused copy."""
+    factory = _source_function_at_line(text, 1547)
+    if not factory or not all(part in factory for part in (
+            'tcu::TestCaseGroup(testCtx, "buffer_device_address")',
+            'caseName << stageCases[stageNdx].name;',
+            'caseName << "_offset_nonzero";',
+            'new BufferAddressTestCase(testCtx, caseName.str().c_str(), c)',
+            'c.memoryOffset == OFFSET_NONZERO && c.bufType != BT_SINGLE')):
+        return frozenset()
+    choices = {"setCases": "set0", "depthCases": "depth1",
+               "baseCases": "basessbo", "cvtCases": "load",
+               "storeCases": "nostore", "btCases": "single",
+               "layoutCases": "std140", "stageCases": "comp"}
+    for name, selected in choices.items():
+        array = re.search(r"TestGroupCase " + name +
+                          r"\[\] = \{(.*?)\n    \};", factory, re.DOTALL)
+        if not array or not re.search(r'\{\s*[^,{}]+,\s*"' + selected + r'"\s*\}',
+                                       array.group(1)):
+            return frozenset()
+    if not all(part in factory for part in (
+            '{OFFSET_ZERO, "offset_zero"}',
+            '{OFFSET_NONZERO, "offset_nonzero"}')):
+        return frozenset()
+    if ('createBufferDeviceAddressTests(m_testCtx)' not in integration or
+            'write_focused_bda_source(' not in builder or
+            'focused_sources / "vktBindingBufferDeviceAddressTests.cpp"' not in builder):
+        return frozenset()
+    prefix = ("dEQP-VK.binding_model.buffer_device_address."
+              "set0.depth1.basessbo.load.nostore.single.std140.")
+    return frozenset((prefix + "comp", prefix + "comp_offset_nonzero"))
 
 
 def _memoized(function):
@@ -1602,11 +1661,25 @@ def main() -> int:
 
         text = _read_source(source_path)
 
+        if source_path.name == "vktBindingBufferDeviceAddressTests.cpp" and \
+           path.startswith("dEQP-VK.binding_model.buffer_device_address."):
+            if (source_line != 1547 or path not in _focused_bda_leaf_paths(
+                    text, integration_text, _read_source(BDA_BUILD_SOURCE))):
+                failures.append(
+                    f"{path}: not produced by the pinned focused BDA factory {source_ref}")
+            continue
+
         # Intermediate groups may come from the integration (package_ps5.cpp) or
         # from the upstream module tree rooted at the cited file's directory.
         module_root = source_path.parent
         searchable = _module_searchable(integration_text, module_root)
         generated_format_segments = _format_segments(text)
+        volatile_atomic_leaves = (
+            _volatile_atomic_leaf_names(text, integration_text,
+                VOLATILE_ATOMIC_WRAPPER.read_text(encoding="utf-8"))
+            if source_path.name == "vktSpvAsmInstructionTests.cpp" and
+               VOLATILE_ATOMIC_WRAPPER.is_file() else frozenset()
+        )
         generated_segments = (
             _dynamic_state_compute_generated_segments(text)
             if source_path.name == "vktDynamicStateComputeTests.cpp" else
@@ -1619,6 +1692,8 @@ def main() -> int:
             generated_segments |= _multisample_generated_segments(text)
         if source_path.name == "vktRenderPassTests.cpp":
             generated_segments |= _attachment_write_mask_generated_segments(text)
+        if volatile_atomic_leaves:
+            generated_segments |= {"opatomic_storage_buffer_volatile"}
         if source_path.name == "vktUniformBlockTests.cpp" and (
                 'new tcu::TestCaseGroup(m_testCtx, "single_basic_array")' in text and
                 "glu::TYPE_UINT" in text and
@@ -1702,6 +1777,10 @@ def main() -> int:
         # table-derived name, or a number produced
         # by an instance factory whose parent group is a literal in that file.
         if _quoted_in(leaf, text):
+            continue
+        if (path.startswith("dEQP-VK.spirv_assembly.instruction.compute."
+                            "opatomic_storage_buffer_volatile.") and
+                leaf in volatile_atomic_leaves):
             continue
         if path in ubo_generated_paths:
             continue

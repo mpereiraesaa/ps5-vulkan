@@ -219,6 +219,41 @@ ADVERTISED_FEATURES["uniformBufferStandardLayout"] = {
     "cts": ("dEQP-VK.ubo.single_basic_array.std430.uint.vertex",),
 }
 
+_MEMORY_MODEL_VOLATILE_CTS = tuple(
+    "dEQP-VK.spirv_assembly.instruction.compute.opatomic_storage_buffer_volatile." + operation
+    for operation in ("compex", "iadd", "idec", "iinc", "isub", "load", "store"))
+ADVERTISED_FEATURES["vulkanMemoryModel"] = {
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;"),
+        ("src/vk_device.c", "VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME"),
+        ("src/vk_pipeline.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL"),
+        ("src/ps5vk_compiler.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query and opt-in route enables VulkanKHR volatile "
+               "queue-family atomics; seven unchanged upstream atomic oracles and a bounded "
+               "GPU producer/consumer witness passed"),
+    "cts": _MEMORY_MODEL_VOLATILE_CTS,
+}
+
+ADVERTISED_FEATURES["bufferDeviceAddress"] = {
+    "citations": (
+        ("native/platform_ps5.c",
+         "platform->supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;"),
+        ("src/vk_device.c", "VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME"),
+        ("src/vk_memory.c", "vkGetBufferDeviceAddressKHR"),
+        ("src/vk_pipeline.c", "PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS"),
+        ("src/ps5vk_compiler.c", "enable_physical_storage_buffer_addresses"),
+        ("src/descriptor_encode.c", "storage_image_descriptor"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query/create route enables bounded physical "
+               "storage-buffer addressing; two unchanged original compute "
+               "CTS leaves and an independent GPU address witness passed"),
+    "cts": (
+        "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+        "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero",
+    ),
+}
+
 # DXVK262-T04. The applicable upstream oracle for both distance features is the
 # pinned clipping module's user-defined family, which the frozen selection lists
 # in full for the shapes this device can run: vertex-only, the two indexing modes
@@ -658,6 +693,15 @@ def evaluate_feature(name: str, value: bool, profile: str = "graphics") -> tuple
         return "satisfied", advertised["detail"]
     if advertised:
         return "violation", "required reviewed feature is no longer advertised"
+    if name in ("vulkanMemoryModelDeviceScope", "bufferDeviceAddress"):
+        token = ("PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE" if
+                 name == "vulkanMemoryModelDeviceScope" else
+                 "PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS")
+        source = (ROOT / "src/vk_device.c").read_text()
+        if token not in source or "return VK_ERROR_FEATURE_NOT_PRESENT;" not in source:
+            return "not-audited", "extension feature request gate citation is missing"
+        return ("satisfied", "the KHR feature query reports false on the shipping "
+                "platform and vkCreateDevice refuses a request for the unsupported bit")
     if name in FEATURE_GATES:
         where, token, reason = FEATURE_GATES[name]
         path = ROOT / where
@@ -688,10 +732,6 @@ FEATURE_ABSENT_FORMAT_FAMILY = {
     "textureCompressionETC2": ("src/graphics_formats.h", ("VK_FORMAT_ETC2", "VK_FORMAT_EAC")),
     "textureCompressionASTC_LDR": ("src/graphics_formats.h", ("VK_FORMAT_ASTC",)),
     "textureCompressionBC": ("src/graphics_formats.h", ("VK_FORMAT_BC", "VK_FORMAT_BC1")),
-    "shaderStorageImageExtendedFormats": ("src/graphics_formats.h", ("VK_IMAGE_USAGE_STORAGE_BIT",)),
-    "shaderStorageImageMultisample": ("src/graphics_formats.h", ("VK_IMAGE_USAGE_STORAGE_BIT",)),
-    "shaderStorageImageReadWithoutFormat": ("src/graphics_formats.h", ("VK_IMAGE_USAGE_STORAGE_BIT",)),
-    "shaderStorageImageWriteWithoutFormat": ("src/graphics_formats.h", ("VK_IMAGE_USAGE_STORAGE_BIT",)),
 }
 
 # Limits whose requirement depends on an advertised feature. The values are the
@@ -757,15 +797,15 @@ KNOWN_BLOCKERS = {
     "maxDescriptorSetSamplers": "compute-only build: graphics limits are not applied; graphics reports the floor of 96",
     "maxPerStageDescriptorSampledImages": "compute-only build: graphics limits are not applied; graphics reports the floor of 16",
     "maxDescriptorSetSampledImages": "compute-only build: graphics limits are not applied; graphics reports the floor of 96",
-    "maxPerStageDescriptorStorageImages": "no storage image descriptor type is accepted",
-    "maxDescriptorSetStorageImages": "no storage image descriptor type is accepted",
+    "maxPerStageDescriptorStorageImages": "bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
+    "maxDescriptorSetStorageImages": "bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
     "maxPerStageDescriptorInputAttachments": "no input attachment support (subpass dependencies rejected)",
     "maxDescriptorSetInputAttachments": "no input attachment support (subpass dependencies rejected)",
     "maxMemoryAllocationCount": "allocator policy: heap size divided by the minimum allocation charge",
     "maxSamplerLodBias": "vkCreateSampler encodes and bounds signed mipLodBias to the reported interval",
     "minTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "maxTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
-    "storageImageSampleCounts": "no storage image format is advertised",
+    "storageImageSampleCounts": "compute-only profile has no image objects; graphics supports one-sample R32_UINT storage images",
     # The four framebuffer sample-count limits follow the platform mask: the
     # 2026-09-23 sampleRateShading promotion reports 1x/2x/4x on the graphics
     # profile, so only the compute-only build (which applies no graphics
@@ -1160,11 +1200,13 @@ def main() -> int:
             verdict, detail = evaluate_feature(name, value, profile)
             features.append({"kind": "feature", "feature": name, "profile": profile,
                              "reported": value, "verdict": verdict, "detail": detail})
-        value = dump["extensionFeatures"]["uniformBufferStandardLayout"]
-        verdict, detail = evaluate_feature("uniformBufferStandardLayout", value, profile)
-        features.append({"kind": "extension-feature", "feature": "uniformBufferStandardLayout",
-                         "profile": profile, "reported": value,
-                         "verdict": verdict, "detail": detail})
+        for name in ("uniformBufferStandardLayout", "vulkanMemoryModel",
+                     "vulkanMemoryModelDeviceScope", "bufferDeviceAddress"):
+            value = dump["extensionFeatures"][name]
+            verdict, detail = evaluate_feature(name, value, profile)
+            features.append({"kind": "extension-feature", "feature": name,
+                             "profile": profile, "reported": value,
+                             "verdict": verdict, "detail": detail})
 
     formats = []
     for profile, dump in dumps.items():
@@ -1202,6 +1244,16 @@ def main() -> int:
     for row in formats:
         row["applicable_cts"] = {"cases": [], "status": "not-selected",
                                  "note": "mandatory format families are not implemented; no selected case covers them"}
+        if (row.get("format") == "VK_FORMAT_R32_UINT" and
+                row.get("feature") == "VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT" and
+                row.get("scope") == "optimalTilingFeatures" and
+                row.get("profile") == "graphics"):
+            row["applicable_cts"] = {
+                "cases": [case["path"] for case in manifest.get("cases", [])
+                          if case["category"] == "t08-buffer-device-address-base"],
+                "status": "acceptance",
+                "note": "original compute BDA leaves exercise the bounded R32_UINT storage image",
+            }
     for row in features:
         advertised = ADVERTISED_FEATURES.get(row["feature"])
         cases = list(advertised["cts"]) if advertised else []
@@ -1213,7 +1265,7 @@ def main() -> int:
         }
     for row in shaders:
         row["applicable_cts"] = {"cases": [], "status": "not-selected",
-                                 "note": "the selected storage-width cases exercise the accepted capabilities"}
+                                 "note": "no original CTS case for this capability is selected here"}
 
     matrix = {
         "schema": "ps5vk-reporting-matrix/1",
@@ -1238,7 +1290,9 @@ def main() -> int:
         "profiles": {profile: {"deviceName": dump["deviceName"], "apiVersion": dump["apiVersion"],
                                "vendorID": dump["vendorID"], "deviceID": dump["deviceID"],
                                "multiview_query": dump["multiviewQuery"],
-                               "standard_ubo_query": dump["standardUBOQuery"]}
+                               "standard_ubo_query": dump["standardUBOQuery"],
+                               "memory_model_query": dump["memoryModelQuery"],
+                               "buffer_device_address_query": dump["bufferDeviceAddressQuery"]}
                      for profile, dump in dumps.items()},
         "limits": limits,
         "features": features,
@@ -1325,7 +1379,7 @@ def _load_required_floors() -> dict[str, int]:
 REQUIRED_FLOORS = _load_required_floors()
 
 
-# SPIR-V capability enumerants handled by the narrow-storage gate. These are
+# SPIR-V capability enumerants handled by the shader feature gate. These are
 # stable SPIR-V registry values; the names are confirmed against the pinned
 # compiler header when that optional checkout is present (it is absent in CI,
 # where a hard dependency would make the gate environment-dependent).
@@ -1336,6 +1390,9 @@ SPIRV_CAPABILITY_NAMES = {
     4434: "UniformAndStorageBuffer16BitAccess",
     4448: "StorageBuffer8BitAccess",
     4449: "UniformAndStorageBuffer8BitAccess",
+    5345: "VulkanMemoryModel",
+    5346: "VulkanMemoryModelDeviceScope",
+    5347: "PhysicalStorageBufferAddresses",
 }
 
 
@@ -1354,7 +1411,7 @@ def _verify_spirv_capabilities() -> None:
 SPIRV_CAPABILITIES = dict(SPIRV_CAPABILITY_NAMES)
 _verify_spirv_capabilities()
 
-# The SPIR-V capabilities the frontend's narrow-storage gate handles, and the
+# The SPIR-V capabilities the frontend's shader feature gate handles, and the
 # advertisement each one corresponds to. Anything not listed here has no
 # frontend gate, so it is recorded as not-audited rather than assumed rejected.
 # Keyed by enumerant so registry renames of the same capability cannot silently
@@ -1366,6 +1423,9 @@ SHADER_CAPABILITY_ADVERTISEMENT = {
     39: ("core", None),
     4434: ("extension", "uniformAndStorageBuffer16BitAccess"),
     4449: ("extension", "uniformAndStorageBuffer8BitAccess"),
+    5345: ("extension", "vulkanMemoryModel"),
+    5346: ("extension", "vulkanMemoryModelDeviceScope"),
+    5347: ("extension", "bufferDeviceAddress"),
 }
 
 
@@ -1384,8 +1444,9 @@ def evaluate_shader_capabilities(dump: dict) -> list[dict]:
         if terminator == "return 0;":
             action, required = "reject", None
         else:
-            match = re.search(r"PS5VK_FEATURE_STORAGE_BUFFER_(\d+)BIT", body)
-            action, required = ("requires-extension-feature", match.group(0)) if match else ("accept", None)
+            feature_bits = list(dict.fromkeys(re.findall(r"PS5VK_FEATURE_[A-Z0-9_]+", body)))
+            action, required = (("requires-extension-feature", " | ".join(feature_bits))
+                                if feature_bits else ("accept", None))
         if advertisement is None:
             rows.append({"kind": "shader-capability", "capability": name, "number": number,
                          "action": action, "verdict": "not-audited",

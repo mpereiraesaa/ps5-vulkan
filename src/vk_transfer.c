@@ -148,12 +148,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
 {
     if(!c || c->state!=PS5VK_RECORDING || c->render_pass || count!=1 || !regions ||
         c->operation_count==PS5VK_MAX_OPERATIONS || !image || image->device!=c->pool->device ||
-        layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {invalid(c);return;}
+        (layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+         !(layout==VK_IMAGE_LAYOUT_GENERAL && ps5vk_storage_image(image)))) {invalid(c);return;}
     VkDevice d=c->pool->device;
     /* The pure transfer role is host-visible memory, so its readback is a
      * frontend copy over the same padded layout. It needs no graphics backend,
      * and it accepts the tight row description the original CTS oracle uses. */
-    if(ps5vk_pure_transfer_image(image) &&
+    if((ps5vk_pure_transfer_image(image) || ps5vk_storage_image(image)) &&
        (image->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
         void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
         if(!ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||

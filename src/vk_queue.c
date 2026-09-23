@@ -782,7 +782,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
     uint32_t records = count ? count : 1, reference_count = 0;
     for (uint32_t j = 0; j < count; ++j) {
         const VkSubmitInfo *info = &infos[j];
-        if (info->sType != VK_STRUCTURE_TYPE_SUBMIT_INFO || info->pNext ||
+        if (info->sType != VK_STRUCTURE_TYPE_SUBMIT_INFO ||
             (info->waitSemaphoreCount && (!info->pWaitSemaphores || !info->pWaitDstStageMask)) ||
             (info->signalSemaphoreCount && !info->pSignalSemaphores) ||
             (info->commandBufferCount && !info->pCommandBuffers) ||
@@ -790,6 +790,26 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
             UINT32_MAX - reference_count < info->waitSemaphoreCount ||
             UINT32_MAX - reference_count - info->waitSemaphoreCount < info->signalSemaphoreCount)
             return INVALID;
+        if (info->pNext) {
+            const VkDeviceGroupSubmitInfo *group =
+                (const VkDeviceGroupSubmitInfo *)info->pNext;
+            if (!d->device_group_extension_enabled ||
+                group->sType != VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO ||
+                group->pNext ||
+                group->waitSemaphoreCount != info->waitSemaphoreCount ||
+                group->commandBufferCount != info->commandBufferCount ||
+                group->signalSemaphoreCount != info->signalSemaphoreCount ||
+                (group->waitSemaphoreCount && !group->pWaitSemaphoreDeviceIndices) ||
+                (group->commandBufferCount && !group->pCommandBufferDeviceMasks) ||
+                (group->signalSemaphoreCount && !group->pSignalSemaphoreDeviceIndices))
+                return INVALID;
+            for (uint32_t k = 0; k < group->waitSemaphoreCount; ++k)
+                if (group->pWaitSemaphoreDeviceIndices[k]) return INVALID;
+            for (uint32_t k = 0; k < group->commandBufferCount; ++k)
+                if (group->pCommandBufferDeviceMasks[k] != 1) return INVALID;
+            for (uint32_t k = 0; k < group->signalSemaphoreCount; ++k)
+                if (group->pSignalSemaphoreDeviceIndices[k]) return INVALID;
+        }
         reference_count += info->waitSemaphoreCount + info->signalSemaphoreCount;
         for (uint32_t k = 0; k < info->waitSemaphoreCount; ++k)
             if (!info->pWaitDstStageMask[k]) return INVALID;

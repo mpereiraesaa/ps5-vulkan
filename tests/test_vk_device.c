@@ -425,7 +425,13 @@ static void lifecycle(void)
         VkResult result=vkGetPhysicalDeviceImageFormatProperties(p,image_formats[f],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,usage,0,&ip);
         if(ps5vk_graphics_image_usage(image_formats[f],usage)) {
-            assert(result==VK_SUCCESS && ip.maxExtent.width==(f==0?16383u:16384u));
+            const VkBool32 storage_image_shape =
+                image_formats[f]==VK_FORMAT_R32_UINT &&
+                usage==(VK_IMAGE_USAGE_STORAGE_BIT|
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            assert(result==VK_SUCCESS &&
+                ip.maxExtent.width==(storage_image_shape?8u:(f==0?16383u:16384u)));
             assert(ip.maxExtent.height==ip.maxExtent.width && ip.maxExtent.depth==1);
             /* Every D32 role is the tiled depth surface, including the target
              * created only as the destination of a whole-subresource depth
@@ -455,7 +461,8 @@ static void lifecycle(void)
                         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
             const uint32_t expected_layers = input_attachment_shape ?
                 PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR :
-                (attachment||transfer_only?1u:PS5VK_MAX_IMAGE_ARRAY_LAYERS);
+                (attachment||transfer_only||storage_image_shape?1u:
+                    PS5VK_MAX_IMAGE_ARRAY_LAYERS);
             assert(ip.maxMipLevels==expected_mips &&
                 ip.maxArrayLayers==expected_layers &&
                 ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT);
@@ -661,6 +668,10 @@ static void lifecycle(void)
             if(sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR)
                 expected_optimal|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
         }
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_STORAGE_IMAGE))
+            expected_optimal|=VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
         if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
             expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
@@ -1344,15 +1355,18 @@ static void negative(void)
 static void narrow_storage_features(void)
 {
     uint32_t count = 0;
-    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, NULL) == VK_SUCCESS && count == 1);
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, NULL) == VK_SUCCESS && count == 2);
     VkExtensionProperties instance_properties[2] = {0};
     count = 0;
     assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_INCOMPLETE && count == 0);
     count = 2;
-    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_SUCCESS && count == 1);
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_SUCCESS && count == 2);
     assert(!strcmp(instance_properties[0].extensionName,
                    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
     assert(instance_properties[0].specVersion == VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION);
+    assert(!strcmp(instance_properties[1].extensionName,
+                   VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME));
+    assert(instance_properties[1].specVersion == VK_KHR_DEVICE_GROUP_CREATION_SPEC_VERSION);
     assert(vkEnumerateInstanceExtensionProperties("layer", &count, NULL) == VK_ERROR_LAYER_NOT_PRESENT);
     assert(vkEnumerateInstanceExtensionProperties(NULL, NULL, NULL) == VK_ERROR_UNKNOWN);
 
@@ -1741,6 +1755,301 @@ static void tessellation_feature_negotiation(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void memory_model_feature_negotiation(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    const uint32_t baseline = p->platform.supported_features;
+    const char *extension = VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME;
+    VkPhysicalDeviceVulkanMemoryModelFeaturesKHR reported = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR};
+    VkPhysicalDeviceFeatures2 features2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &reported};
+    vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+    assert(!reported.vulkanMemoryModel && !reported.vulkanMemoryModelDeviceScope &&
+           !reported.vulkanMemoryModelAvailabilityVisibilityChains);
+
+    VkDeviceQueueCreateInfo q;
+    float priority;
+    VkDeviceCreateInfo info = device_info(&q, &priority);
+    info.enabledExtensionCount = 1;
+    info.ppEnabledExtensionNames = &extension;
+    VkDevice d = VK_NULL_HANDLE;
+    const unsigned before = opened;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT);
+    assert(!d && opened == before);
+
+    p->platform.supported_features = baseline | PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
+    vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+    assert(reported.vulkanMemoryModel && !reported.vulkanMemoryModelDeviceScope &&
+           !reported.vulkanMemoryModelAvailabilityVisibilityChains);
+    uint32_t count = 0;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS);
+    VkExtensionProperties properties[8];
+    memset(properties, 0, sizeof(properties));
+    assert(count <= 8);
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, properties) == VK_SUCCESS);
+    int found = 0;
+    for (uint32_t n = 0; n < count; ++n)
+        found |= !strcmp(properties[n].extensionName, extension);
+    assert(found);
+
+    VkPhysicalDeviceVulkanMemoryModelFeaturesKHR requested = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR};
+    info.pNext = &requested;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && !(d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL));
+    vkDestroyDevice(d, NULL);
+    requested.vulkanMemoryModel = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && (d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL) &&
+           !(d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE));
+    vkDestroyDevice(d, NULL);
+    requested.vulkanMemoryModelDeviceScope = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    p->platform.supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+    vkGetPhysicalDeviceFeatures2KHR(p, &features2);
+    assert(reported.vulkanMemoryModel && reported.vulkanMemoryModelDeviceScope);
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && (d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL) &&
+           (d->enabled_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE));
+    vkDestroyDevice(d, NULL);
+
+    requested.vulkanMemoryModel = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    requested.vulkanMemoryModel = VK_TRUE;
+    requested.vulkanMemoryModelDeviceScope = VK_FALSE;
+    requested.vulkanMemoryModelAvailabilityVisibilityChains = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    requested.vulkanMemoryModelAvailabilityVisibilityChains = 2;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
+    requested.pNext = &reported;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.pNext = NULL;
+    info.enabledExtensionCount = 0;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    p->platform.supported_features = baseline;
+    vkDestroyInstance(i, NULL);
+
+    i = instance();
+    p = physical(i);
+    p->platform.supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
+    info = device_info(&q, &priority);
+    info.enabledExtensionCount = 1;
+    info.ppEnabledExtensionNames = &extension;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+}
+
+static void single_device_group_creation(void)
+{
+    const char *extension = VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME;
+    VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 1, .ppEnabledExtensionNames = &extension};
+    VkInstance i = VK_NULL_HANDLE;
+    assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS);
+    assert(i->device_group_creation_enabled && !i->features2_extension_enabled);
+    assert(vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroupsKHR"));
+    assert(!vkGetInstanceProcAddr(NULL, "vkEnumeratePhysicalDeviceGroupsKHR"));
+    uint32_t count = 0;
+    assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, NULL) == VK_SUCCESS && count == 1);
+    VkPhysicalDeviceGroupProperties groups[2] = {
+        {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES},
+        {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES}};
+    count = 0;
+    assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, groups) == VK_INCOMPLETE && !count);
+    count = 2;
+    assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, groups) == VK_SUCCESS && count == 1);
+    assert(groups[0].physicalDeviceCount == 1 &&
+           groups[0].physicalDevices[0] == physical(i) &&
+           !groups[0].subsetAllocation);
+    assert(groups[1].physicalDeviceCount == 0);
+
+    VkDeviceQueueCreateInfo q; float priority;
+    VkDeviceCreateInfo device = device_info(&q, &priority);
+    VkPhysicalDevice member = physical(i);
+    VkDeviceGroupDeviceCreateInfo group = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO,
+        .physicalDeviceCount = 1, .pPhysicalDevices = &member};
+    device.pNext = &group;
+    VkDevice d = VK_NULL_HANDLE;
+    assert(vkCreateDevice(member, &device, NULL, &d) == VK_SUCCESS);
+    vkDestroyDevice(d, NULL);
+    group.physicalDeviceCount = 2;
+    assert(vkCreateDevice(member, &device, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    group.physicalDeviceCount = 1;
+    VkPhysicalDevice wrong = (VkPhysicalDevice)(uintptr_t)1;
+    group.pPhysicalDevices = &wrong;
+    assert(vkCreateDevice(member, &device, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    group.pPhysicalDevices = &member;
+    VkDeviceGroupDeviceCreateInfo duplicate = group;
+    group.pNext = &duplicate;
+    assert(vkCreateDevice(member, &device, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+
+    i = instance();
+    assert(!vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroupsKHR"));
+    count = 0;
+    assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, NULL) == VK_ERROR_UNKNOWN);
+    vkDestroyInstance(i, NULL);
+}
+
+static void buffer_address_command_gate(void)
+{
+    struct VkDevice_T d = {0};
+    const char *commands[] = {
+        "vkGetBufferDeviceAddressKHR",
+        "vkGetBufferOpaqueCaptureAddressKHR",
+        "vkGetDeviceMemoryOpaqueCaptureAddressKHR",
+    };
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        assert(!vkGetDeviceProcAddr(&d, commands[n]));
+    d.enabled_features = PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        assert(vkGetDeviceProcAddr(&d, commands[n]));
+    /* This device still reports Vulkan 1.0: no core-1.2 command alias. */
+    assert(!vkGetDeviceProcAddr(&d, "vkGetBufferDeviceAddress"));
+}
+
+static void device_group_dispatch_command_gate(void)
+{
+    struct VkDevice_T d = {0};
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdDispatchBaseKHR"));
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMaskKHR"));
+    assert(!vkGetDeviceProcAddr(&d, "vkGetDeviceGroupPeerMemoryFeaturesKHR"));
+    d.device_group_extension_enabled = VK_TRUE;
+    assert(vkGetDeviceProcAddr(&d, "vkCmdDispatchBaseKHR") ==
+           (PFN_vkVoidFunction)vkCmdDispatchBaseKHR);
+    assert(vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMaskKHR") ==
+           (PFN_vkVoidFunction)vkCmdSetDeviceMaskKHR);
+    assert(vkGetDeviceProcAddr(&d, "vkGetDeviceGroupPeerMemoryFeaturesKHR") ==
+           (PFN_vkVoidFunction)vkGetDeviceGroupPeerMemoryFeaturesKHR);
+    VkPeerMemoryFeatureFlags peer = ~0u;
+    vkGetDeviceGroupPeerMemoryFeaturesKHR(&d, 0, 0, 0, &peer);
+    assert(!peer);
+    /* This device still reports Vulkan 1.0: no core-1.1 command alias. */
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdDispatchBase"));
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMask"));
+}
+
+static void buffer_address_khr_device_route(void)
+{
+    const char *instance_names[] = {
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+        VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME,
+    };
+    VkInstanceCreateInfo instance_info = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 2, .ppEnabledExtensionNames = instance_names};
+    VkInstance i = VK_NULL_HANDLE;
+    assert(vkCreateInstance(&instance_info, NULL, &i) == VK_SUCCESS);
+    VkPhysicalDevice p = physical(i);
+    const uint32_t baseline = p->platform.supported_features;
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR reported = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR};
+    VkPhysicalDeviceFeatures2 query = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &reported};
+    vkGetPhysicalDeviceFeatures2KHR(p, &query);
+    assert(!reported.bufferDeviceAddress && !reported.bufferDeviceAddressCaptureReplay &&
+           !reported.bufferDeviceAddressMultiDevice);
+
+    const char *device_names[] = {
+        VK_KHR_DEVICE_GROUP_EXTENSION_NAME,
+        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+    };
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR requested = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR,
+        .bufferDeviceAddress = VK_TRUE};
+    VkDeviceGroupDeviceCreateInfo group = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO,
+        .pNext = &requested, .physicalDeviceCount = 1,
+        .pPhysicalDevices = &p};
+    VkDeviceQueueCreateInfo q;
+    float priority;
+    VkDeviceCreateInfo info = device_info(&q, &priority);
+    info.pNext = &group;
+    info.enabledExtensionCount = 2;
+    info.ppEnabledExtensionNames = device_names;
+    VkDevice d = VK_NULL_HANDLE;
+    const unsigned before = opened;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT);
+    assert(!d && opened == before);
+
+    p->platform.supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    vkGetPhysicalDeviceFeatures2KHR(p, &query);
+    assert(reported.bufferDeviceAddress && !reported.bufferDeviceAddressCaptureReplay &&
+           !reported.bufferDeviceAddressMultiDevice);
+    uint32_t count = 0;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS);
+    assert(count <= 16);
+    VkExtensionProperties properties[16] = {0};
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, properties) == VK_SUCCESS);
+    int found_group = 0, found_bda = 0;
+    for (uint32_t n = 0; n < count; ++n) {
+        found_group |= !strcmp(properties[n].extensionName, device_names[0]);
+        found_bda |= !strcmp(properties[n].extensionName, device_names[1]);
+    }
+    assert(found_group && found_bda);
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && d->device_group_extension_enabled &&
+           (d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS));
+    vkDestroyDevice(d, NULL);
+
+    requested.bufferDeviceAddress = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && d->device_group_extension_enabled &&
+           !(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS));
+    vkDestroyDevice(d, NULL);
+    requested.bufferDeviceAddress = VK_TRUE;
+    info.enabledExtensionCount = 1;
+    requested.bufferDeviceAddress = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && d->device_group_extension_enabled &&
+           !(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS));
+    vkDestroyDevice(d, NULL);
+    requested.bufferDeviceAddress = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    info.enabledExtensionCount = 2;
+    info.ppEnabledExtensionNames = &device_names[1];
+    info.enabledExtensionCount = 1;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    info.ppEnabledExtensionNames = device_names;
+    info.enabledExtensionCount = 2;
+    requested.bufferDeviceAddressCaptureReplay = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    requested.bufferDeviceAddressCaptureReplay = VK_FALSE;
+    requested.bufferDeviceAddressMultiDevice = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    requested.bufferDeviceAddressMultiDevice = 2;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.bufferDeviceAddressMultiDevice = VK_FALSE;
+    requested.bufferDeviceAddress = 2;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.bufferDeviceAddress = VK_TRUE;
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR duplicate = requested;
+    requested.pNext = &duplicate;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.pNext = NULL;
+    p->platform.supported_features = baseline;
+    vkDestroyInstance(i, NULL);
+
+    instance_info.enabledExtensionCount = 1;
+    assert(vkCreateInstance(&instance_info, NULL, &i) == VK_SUCCESS);
+    p = physical(i);
+    p->platform.supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    group.pPhysicalDevices = &p;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+
+    instance_info.ppEnabledExtensionNames = &instance_names[1];
+    assert(vkCreateInstance(&instance_info, NULL, &i) == VK_SUCCESS);
+    p = physical(i);
+    p->platform.supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    group.pPhysicalDevices = &p;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+}
 static void uniform_buffer_standard_layout_route(void)
 {
     VkInstance instance_with_features2 = features2_instance();
@@ -1812,6 +2121,11 @@ int main(void)
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     consumer_physical_queries();
     tessellation_feature_negotiation();
+    memory_model_feature_negotiation();
+    single_device_group_creation();
+    buffer_address_command_gate();
+    device_group_dispatch_command_gate();
+    buffer_address_khr_device_route();
     uniform_buffer_standard_layout_route();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

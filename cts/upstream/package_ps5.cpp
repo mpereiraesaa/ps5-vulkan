@@ -6,6 +6,7 @@
 #include "vktApiCopiesAndBlittingTests.hpp"
 #include "vktApiFillBufferTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
+#include "vktBindingBufferDeviceAddressTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktSynchronizationBasicEventTests.hpp"
 #include "vktSynchronizationBasicSemaphoreTests.hpp"
@@ -40,6 +41,14 @@
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
 #include "deUniquePtr.hpp"
+
+namespace vkt
+{
+namespace SpirVAssembly
+{
+tcu::TestCaseGroup *createFocusedVolatileAtomicComputeGroup(tcu::TestContext &testCtx);
+}
+}
 
 namespace cts
 {
@@ -139,6 +148,10 @@ void FocusedVkTestPackage::init(void)
     {
         de::MovePtr<tcu::TestCaseGroup> bindingModelGroup(new tcu::TestCaseGroup(m_testCtx, "binding_model"));
         bindingModelGroup->addChild(vkt::BindingModel::createShaderAccessTests(m_testCtx));
+        // Original BDA test body, support gate and GPU oracle. The build copy
+        // bounds registration to two base-address compute cases; cases.txt
+        // remains the execution filter for measurement versus acceptance.
+        bindingModelGroup->addChild(vkt::BindingModel::createBufferDeviceAddressTests(m_testCtx));
         addChild(bindingModelGroup.release());
     }
 
@@ -372,6 +385,7 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createWorkgroupMemoryComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocusedVolatileAtomicComputeGroup(m_testCtx));
         instructionGroup->addChild(computeGroup.release());
         spirvGroup->addChild(instructionGroup.release());
         addChild(spirvGroup.release());

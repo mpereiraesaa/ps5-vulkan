@@ -1,0 +1,15 @@
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_KHR_memory_scope_semantics : require
+layout(local_size_x=1) in;
+layout(set=0, binding=0) nonprivate buffer Data {
+    uint value[];
+} data;
+void main() {
+    data.value[0] = 7u;
+    memoryBarrier(gl_ScopeQueueFamily, gl_StorageSemanticsBuffer,
+                  gl_SemanticsRelease | gl_SemanticsMakeAvailable);
+    memoryBarrier(gl_ScopeQueueFamily, gl_StorageSemanticsBuffer,
+                  gl_SemanticsAcquire | gl_SemanticsMakeVisible);
+    data.value[1] = data.value[0];
+}

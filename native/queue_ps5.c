@@ -128,6 +128,10 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             memset(tables, 0, PS5VK_MAX_SETS * 512);
             struct ps5vk_dispatch_encoding encoding = {.program = program,
                 .addresses = {.code=(uintptr_t)p->arena,
+                    /* The bootstrap template requires a mapped table anchor
+                     * even when the compiled shader uses no descriptor set.
+                     * Its user-SGPR packet is replaced below. */
+                    .descriptor_table=(uintptr_t)tables,
                     .completion=(uintptr_t)job->command + 0x1100,
                     .readback=(uintptr_t)job->command + 0xff4},
                 .completion_value = (job->serial << 32) | job->count};
@@ -146,10 +150,9 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
                         op->descriptor_dynamic_offsets,table,128);
                     if(result!=VK_SUCCESS)goto fail;
                     encoding.descriptor_tables[set]=(uintptr_t)table;
-                    if(!encoding.addresses.descriptor_table)
-                        encoding.addresses.descriptor_table=(uintptr_t)table;
                 }
             memcpy(encoding.groups, op->groups, sizeof(encoding.groups));
+            memcpy(encoding.group_base, op->group_base, sizeof(encoding.group_base));
             /* Mesa ac_emit_cp_acquire_mem GFX10 compute form + pkt3 GCR_CNTL:
              * invalidate instruction/scalar/vector/L1/L2 caches globally.
              * No WB here: previous dispatch RELEASE_MEM already wrote back,
