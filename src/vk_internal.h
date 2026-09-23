@@ -120,8 +120,15 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_DUAL_SRC_BLEND = 1u << 17,
     PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS = 1u << 18,
     PS5VK_FEATURE_SAMPLE_RATE_SHADING = 1u << 19,
+    /* T07 feature masks follow the T06 range above. Keep these assignments
+     * stable across Part1 and Part2 so enabled logical-device features reach
+     * the image and shader execution gates without aliasing another feature. */
+    PS5VK_FEATURE_IMAGE_CUBE_ARRAY = 1u << 20,
+    PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED = 1u << 21,
+    PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE = 1u << 22,
     /* Keep this layout gate independent of the other feature bits. */
     PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
+    PS5VK_FEATURE_TEXTURE_COMPRESSION_BC = 1u << 24,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

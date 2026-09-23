@@ -32,6 +32,7 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_unorm.vert -o build/runtime-graphics/vertex_unorm.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_format.frag -o build/runtime-graphics/vertex_format.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_texture.frag -o build/runtime-graphics/texture.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_cube_array.frag -o build/runtime-graphics/cube_array.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.1 experiments/graphics/runtime_view_index.frag -o build/runtime-graphics/view_index.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_descriptor_arrays.frag -o build/runtime-graphics/descriptor_arrays.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_fragment_store.frag -o build/runtime-graphics/fragment_store.frag.spv
