@@ -666,6 +666,21 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
     return VK_SUCCESS;
 }
 
+VkResult ps5vk_runtime_graphics_t08_options(uint32_t feature_mask,
+    PsbcCompileOptions *options)
+{
+    if (!options || ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
+                     !(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL)))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    options->enable_physical_storage_buffer_addresses =
+        !!(feature_mask & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
+    options->enable_vulkan_memory_model =
+        !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL);
+    options->enable_vulkan_memory_model_device_scope =
+        !!(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE);
+    return VK_SUCCESS;
+}
+
 static int linked_parameters(PsbcLinkedStageParameters *out,
                             const struct ps5vk_graphics_module_key *module)
 {
@@ -688,6 +703,7 @@ static int apply_parameters(PsbcCompileOptions *options,
                             const struct ps5vk_graphics_key *key,VkShaderStageFlags stages)
 {
     if(module->specialization_count>PSBC_MAX_SPECIALIZATION_CONSTANTS)return 0;
+    if(ps5vk_runtime_graphics_t08_options(key->feature_mask,options)!=VK_SUCCESS)return 0;
     options->specialization_constant_count=module->specialization_count;
     for(uint32_t i=0;i<module->specialization_count;++i) {
         if(!module->specializations[i].size || module->specializations[i].size>8)return 0;

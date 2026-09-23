@@ -2164,8 +2164,35 @@ static void check_fragment_store_atomic_contract(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+static void check_t08_compiler_options(void)
+{
+    PsbcCompileOptions options = {.target = PSBC_TARGET_PS5,
+        .sample_shading_enable = true};
+    assert(ps5vk_runtime_graphics_t08_options(0, &options) == VK_SUCCESS);
+    assert(!options.enable_physical_storage_buffer_addresses &&
+           !options.enable_vulkan_memory_model &&
+           !options.enable_vulkan_memory_model_device_scope);
+    assert(ps5vk_runtime_graphics_t08_options(
+        PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE, &options) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    const uint32_t all = PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS |
+        PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+        PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+    assert(ps5vk_runtime_graphics_t08_options(all, &options) == VK_SUCCESS);
+    assert(options.enable_physical_storage_buffer_addresses &&
+           options.enable_vulkan_memory_model &&
+           options.enable_vulkan_memory_model_device_scope);
+    assert(options.target == PSBC_TARGET_PS5 && options.sample_shading_enable);
+    assert(ps5vk_runtime_graphics_t08_options(PS5VK_FEATURE_VULKAN_MEMORY_MODEL,
+                                              &options) == VK_SUCCESS);
+    assert(!options.enable_physical_storage_buffer_addresses &&
+           options.enable_vulkan_memory_model &&
+           !options.enable_vulkan_memory_model_device_scope);
+}
+
 int main(void)
 {
+    check_t08_compiler_options();
     check_flat_interfaces();
     check_descriptor_options();
     check_input_attachment_descriptors();
