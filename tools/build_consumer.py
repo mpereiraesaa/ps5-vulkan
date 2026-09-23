@@ -522,8 +522,7 @@ def main():
             "files": files,
             "ubo_standard_layout": {
                 "api": "Vulkan 1.0 KHR extension",
-                "diagnostic_features":
-                    os.environ.get("PS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC") == "1",
+                "shipping_feature": True,
                 "shader_spirv_sha256": hashlib.sha256(
                     ubo_shader_header.with_suffix(".spv").read_bytes()).hexdigest(),
                 "workgroups": 2,

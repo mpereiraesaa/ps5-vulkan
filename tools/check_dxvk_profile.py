@@ -30,6 +30,29 @@ MULTIVIEW_FIELDS = {
     "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": "maxMultiviewViewCount",
     "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": "maxMultiviewInstanceIndex",
 }
+STANDARD_UBO_ID = "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout"
+
+
+def standard_ubo_axes(row: dict, query: dict, extensions: set[str],
+                      feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    if row["id"] != STANDARD_UBO_ID:
+        return None
+    if query.get("route") != "VK_KHR_uniform_buffer_standard_layout" or (
+            "VK_KHR_uniform_buffer_standard_layout" not in extensions):
+        raise ValueError("standard UBO public query route is absent")
+    value = query.get("uniformBufferStandardLayout")
+    if not isinstance(value, bool):
+        raise ValueError("invalid standard UBO public query value")
+    report = feature_reports.get("uniformBufferStandardLayout", {})
+    implemented = (value and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if value else "blocker", "observed": value,
+             "expected": row["expected"], "via": "VK_KHR_uniform_buffer_standard_layout",
+             "detail": "Equivalent KHR field; aggregate Vulkan 1.2 structures remain unadvertised."},
+            {"state": "implemented" if implemented else "missing",
+             "refs": ["src/vk_device.c", "src/spirv_ubo_layout.c",
+                      "conformance_inventory/reporting_matrix.json"],
+             "detail": "Reviewed KHR feature query, opt-in and layout validation."})
 
 
 def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, dict] | None:
@@ -81,16 +104,9 @@ def implemented_device_extensions() -> set[str]:
     end = source_text.index("VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties", start)
     tokens = set(re.findall(r'VK_[A-Z0-9_]+_EXTENSION_NAME',
                             source_text[start:end]))
-    # A guarded device-extension route can be compiled before the native
-    # platform advertises its capability. The old probe's enumerated count
-    # remains authoritative until that platform bit is enabled and a new
-    # hardware probe is recorded. Ignore only the default-off measurement
-    # block; a shipping assignment must make the probe count fail closed.
-    platform_source = PLATFORM_SOURCE.read_text()
-    platform_source = re.sub(
-        r"#if defined\(PS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC\).*?#endif",
-        "", platform_source, flags=re.S)
-    if "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT" not in platform_source:
+    # The extension is implemented only when the native platform advertises
+    # the feature that makes its public query and device-create route usable.
+    if "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT" not in PLATFORM_SOURCE.read_text():
         tokens.discard("VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME")
     missing = sorted(token for token in tokens if token not in definitions)
     if missing:
@@ -237,6 +253,11 @@ def generate() -> dict:
             reporting["profiles"]["graphics"].get("multiview_query", {}), extensions)
         if multiview is not None:
             api, implementation = multiview
+        standard_ubo = standard_ubo_axes(requirement,
+            reporting["profiles"]["graphics"].get("standard_ubo_query", {}),
+            extensions, feature_reports)
+        if standard_ubo is not None:
+            api, implementation = standard_ubo
         cts = cts_join(related, override.get("cts"), selected_cases)
         if "native" in override:
             native = override["native"]

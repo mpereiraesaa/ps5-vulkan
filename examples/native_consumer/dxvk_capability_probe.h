@@ -164,6 +164,19 @@ static int run_dxvk262_capability_probe(void)
             "maxMultiviewViewCount=%u maxMultiviewInstanceIndex=%u",
             multiview.multiview, limits.maxMultiviewViewCount, limits.maxMultiviewInstanceIndex);
     }
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME)) {
+        VkPhysicalDeviceUniformBufferStandardLayoutFeatures standard_ubo = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &standard_ubo};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features12.uniformBufferStandardLayout = standard_ubo.uniformBufferStandardLayout;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_STANDARD_UBO_QUERY route=VK_KHR_uniform_buffer_standard_layout "
+            "uniformBufferStandardLayout=%u", standard_ubo.uniformBufferStandardLayout);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",

@@ -14,6 +14,14 @@ CTS = ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/vulkan/ubo"
 
 
 class T08UniformBufferContracts(unittest.TestCase):
+    def test_shipping_feature_retires_measurement_switch(self):
+        source = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT", source)
+        for relative in ("native/platform_ps5.c", "tools/build_sdk.py",
+                         "tools/build_upstream_cts.py"):
+            self.assertNotIn("PS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC",
+                             (ROOT / relative).read_text())
+
     def test_pinned_extension_and_original_factory(self):
         if not REGISTRY.is_file():
             self.skipTest("pinned Vulkan registry unavailable")

@@ -94,7 +94,7 @@ class UpstreamSelectionTests(unittest.TestCase):
         # that remain document refusals, capability gaps and pending
         # measurement windows. `leaves` counts every attachment_write_mask leaf
         # the pinned factory generates, wherever the manifest now keeps it.
-        self.assertEqual((494, 66, 48),
+        self.assertEqual((495, 66, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]

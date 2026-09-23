@@ -1944,11 +1944,12 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **17/62 satisfied and 45 blockers**. Core
+The current checked result is **18/62 satisfied and 44 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
 `fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,
-`dualSrcBlend`, `independentBlend`, `sampleRateShading` and the four
+`dualSrcBlend`, `independentBlend`, `sampleRateShading`,
+`uniformBufferStandardLayout` (via `VK_KHR_uniform_buffer_standard_layout`) and the four
 rasterization and viewport features (`depthClamp`,
 `depthBiasClamp`, `fillModeNonSolid`, `multiViewport`) have all four axes. See
 [their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16),
@@ -4373,3 +4374,44 @@ with that revision - the driver passes `sample_shading_enable` into
 `PsbcCompileOptions`, which does not exist before it - so
 `tools/prepare_compiler_deps.py` has to pin the merged commit before this
 promotion reproduces from a fresh clone. The pin still names `be4d043`.
+
+## Standard uniform buffer layout (2026-09-23)
+
+The public Vulkan 1.0 device advertises `VK_KHR_uniform_buffer_standard_layout`
+through the `VK_KHR_get_physical_device_properties2` query route. Device
+creation requires an explicit `VkPhysicalDeviceUniformBufferStandardLayoutFeatures`
+opt-in. The shipping compiler validates uniform-buffer offsets, array and
+matrix strides, and nested members before lowering; invalid layouts remain
+rejected. The Vulkan 1.2 aggregate feature structure and API 1.3 remain
+unadvertised. `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId`
+remain false: the former has a Vulkan 1.1 KHR dependency and incomplete
+operation/type coverage, while the latter has no Vulkan 1.0 extension alias.
+
+On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
+compute shader that reads compact scalar arrays, a row-major matrix and a
+nested struct. Two workgroups produced 64 exact values with zero mismatches and
+zero guard mismatches. Its bounded fence completed, the TCP receipt verified,
+and the title closed. Signed eboot SHA-256:
+`44eb76ca162e3c15ab35abc4bc48b0466a9144a0f28d53a5f4255a5fa337a408`;
+run `20260923T094543254Z_PPSA99994_ps5vk-ubo_0x1e45c7b386581`;
+log SHA-256 `db0771d2ec2b4aba7b56772f475bd698c8d3d095485814d43b1de7905f78c357`.
+
+The public ABI capability probe independently observed the extension and a true
+KHR feature field. It verified all 62 requirement records, with 20 reported
+satisfied and 42 reported blockers at the query layer. Signed eboot SHA-256:
+`9075c100fab8326c73b7bb458be1b560a153ebfb2eb2f8e85389303d5c431a62`;
+run `20260923T094657975Z_PPSA99994_ps5vk_0x1e46de0b656f8`;
+log SHA-256 `733e047d9014d7b5cd8481520e4a422df5bd6b6081f8182b85b156e7e9fbe4b6`.
+The four-axis DXVK matrix is 18/62 ready with 44 blockers.
+
+The unchanged original
+`dEQP-VK.ubo.single_basic_array.std430.uint.vertex` oracle passed twice in a
+495-case measurement selection and once in the promoted canonical selection.
+The canonical shipping run reported 495/495 Pass, zero missing, foreign or
+duplicate cases, zero Fail or NotSupported, verified payload identity and clean
+title closure. Signed eboot SHA-256:
+`b2dbc3f47eaabe6890e1e6a9d603c38344ad18dc011d2f5404913bbc3e9ed6f3`;
+selection SHA-256:
+`1a8f7ea9c33873abf40b7352c8ddbf3e533fd0048ebb3edc8c0bdbbc9ae695b3`;
+run `20260923T095014926Z_PPSA99994_upstream-cts_0x1e49bbbc79bac`;
+log SHA-256 `7845a522bf5040707b550a30c77d10b5e14a8868d0d888c8c83eb45613176ed1`.

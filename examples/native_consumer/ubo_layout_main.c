@@ -69,7 +69,7 @@ int main(void)
         standard.uniformBufferStandardLayout,
         features.features.robustBufferAccess);
     REQUIRE(standard.uniformBufferStandardLayout == VK_TRUE,
-            "uniformBufferStandardLayout must be reported by this diagnostic build");
+            "uniformBufferStandardLayout must be reported by the native device");
     REQUIRE(features.features.robustBufferAccess == VK_TRUE,
             "robustBufferAccess must be reported");
 

@@ -4915,6 +4915,16 @@
       "expected_status": "Pass",
       "features_required": [],
       "rationale": "Creates one fence with VK_FENCE_CREATE_SIGNALED_BIT and requires immediate signaled status and successful wait without a submission."
+    },
+    {
+      "path": "dEQP-VK.ubo.single_basic_array.std430.uint.vertex",
+      "source": "external/vulkancts/modules/vulkan/ubo/vktUniformBlockTests.cpp:593",
+      "category": "uniform-buffer-standard-layout",
+      "expected_status": "Pass",
+      "features_required": [
+        "uniformBufferStandardLayout"
+      ],
+      "rationale": "Original std430 uniform-buffer scalar-array vertex oracle passed twice with the 494-case frozen selection (eboot b2dbc3f47eaabe6890e1e6a9d603c38344ad18dc011d2f5404913bbc3e9ed6f3; runs run-531783958492360 and run-531826875967264)."
     }
   ],
   "diagnostics": [

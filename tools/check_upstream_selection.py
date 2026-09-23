@@ -1589,6 +1589,13 @@ def main() -> int:
             generated_segments |= _multisample_generated_segments(text)
         if source_path.name == "vktRenderPassTests.cpp":
             generated_segments |= _attachment_write_mask_generated_segments(text)
+        if source_path.name == "vktUniformBlockTests.cpp" and (
+                'new tcu::TestCaseGroup(m_testCtx, "single_basic_array")' in text and
+                "glu::TYPE_UINT" in text and
+                "glu::getDataTypeName(type)" in text):
+            # The pinned single_basic_array factory obtains this group name
+            # from glu::TYPE_UINT rather than a quoted string literal.
+            generated_segments.add("uint")
         for segment in segments[1:-1]:
             if (not _quoted_in(segment, searchable) and
                     segment not in generated_segments and

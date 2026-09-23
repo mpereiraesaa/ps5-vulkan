@@ -207,12 +207,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, ps5vk_compiler_adapter_compile};
     platform->supported_features = PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                    PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
-                                   PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
-#if defined(PS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC) && PS5VK_UBO_STANDARD_LAYOUT_DIAGNOSTIC
-    /* Measurement builds alone may expose this route while the compact UBO
-     * GPU and original CTS oracles are still under review. */
-    platform->supported_features |= PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
-#endif
+                                   PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
+                                   PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
 #if defined(PS5VK_GRAPHICS_API) && PS5VK_GRAPHICS_DRAW
     /* The graphics runtime path delivers the draw-parameter built-ins for the
      * direct and single-indirect contract this profile witnessed. */

@@ -148,6 +148,14 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
         for field, identifier in multiview_ids.items():
             require(routes[0].get(field) == str(observed[identifier]),
                     "multiview route value mismatch")
+    standard_ubo_id = "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout"
+    standard_ubo_routes = [row for kind, row in messages if kind == "DXVK262_STANDARD_UBO_QUERY"]
+    if standard_ubo_routes or (version < (1, 2, 0) and observed[standard_ubo_id]):
+        require(len(standard_ubo_routes) == 1 and
+                standard_ubo_routes[0].get("route") == "VK_KHR_uniform_buffer_standard_layout" and
+                standard_ubo_routes[0].get("uniformBufferStandardLayout") ==
+                    str(observed[standard_ubo_id]),
+                "explicit standard UBO query route")
 
     total = len(expected_rows)
     blockers = total - satisfied
@@ -169,7 +177,7 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
         "artifact_eboot_sha256": digest,
         "observed": observed,
         "source_log": str(log_path),
-        "query_routes": routes,
+        "query_routes": routes + standard_ubo_routes,
         "source_matrix_sha256": dxvk["matrix_sha256"],
     }
 

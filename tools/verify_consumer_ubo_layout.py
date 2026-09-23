@@ -19,12 +19,12 @@ def validate(log: bytes, receipt: dict, artifact: dict, eboot: Path) -> dict:
             artifact.get("profile") == "ubo-standard-layout-witness" and
             artifact.get("submit_enabled") is True and
             contract.get("api") == "Vulkan 1.0 KHR extension" and
-            contract.get("diagnostic_features") is True and
+            contract.get("shipping_feature") is True and
             contract.get("workgroups") == 2 and
             contract.get("values") == 64 and
             contract.get("ubo_bytes") == 136 and
             contract.get("guarded_output") is True,
-            "diagnostic UBO artifact contract")
+            "standard UBO artifact contract")
     require(isinstance(digest, str) and len(digest) == 64 and
             hashlib.sha256(eboot.read_bytes()).hexdigest() == digest,
             "eboot artifact identity")
@@ -83,7 +83,7 @@ def validate(log: bytes, receipt: dict, artifact: dict, eboot: Path) -> dict:
     require(query[0] < start[0] < result[0] < retired[0] < success[0],
             "witness lifecycle order")
     require(query[1].split()[1:] == ["supported=1", "robust=1"],
-            "enabled public feature query")
+            "public feature query")
     require(result[1].split()[1:] == [
         "workgroups=2", "values=64", "ubo_bytes=136", "mismatches=0",
         "guard_mismatches=0"], "exact GPU data and guard result")

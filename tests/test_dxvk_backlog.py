@@ -37,9 +37,9 @@ class DxvkBacklogTests(unittest.TestCase):
         # DXVK262-T06 independentBlend (2026-09-22) and then sampleRateShading
         # (2026-09-23) were promoted: each is implementation-ready and
         # profile-satisfied, so T06's four requirements are all in.
-        self.assertEqual(16, summary["implementation_ready"])
-        self.assertEqual(16, summary["profile_satisfied"])
-        self.assertEqual(45, summary["remaining_profile_blockers"])
+        self.assertEqual(17, summary["implementation_ready"])
+        self.assertEqual(17, summary["profile_satisfied"])
+        self.assertEqual(44, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,
