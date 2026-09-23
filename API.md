@@ -23,10 +23,11 @@ mean the driver advertises them; the reported device version remains Vulkan
 
 ## Core feature negotiation
 
-- `robustBufferAccess` is the one Vulkan 1.0 core feature currently reported
-  true. Device creation accepts it through either `pEnabledFeatures` or the
-  `VkPhysicalDeviceFeatures2` chain, rejects malformed booleans, and rejects
-  every unreported core feature.
+- `robustBufferAccess` is reported true. Device creation accepts it through
+  either `pEnabledFeatures` or the `VkPhysicalDeviceFeatures2` chain, rejects
+  malformed booleans, and rejects every unreported core feature. The other
+  reported core bits and their evidence are listed in
+  [the reporting matrix](conformance_inventory/reporting_matrix.json).
 - Storage and uniform buffer descriptors carry their actual byte extent and
   use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
   the bound buffer span. This is the implementation basis for the feature, not
@@ -70,7 +71,14 @@ mean the driver advertises them; the reported device version remains Vulkan
 
 ## Graphics
 
-- Exactly one vertex stage and one fragment stage per graphics pipeline.
+- A vertex and a fragment stage are required per graphics pipeline. The native
+  runtime-graphics build also supports an optional geometry stage, or paired
+  tessellation-control and tessellation-evaluation stages, including a
+  tessellation-to-geometry path. Compute-only and offline graphics builds do
+  not expose tessellation. The measured stage combinations and their limits
+  are recorded in [tessellation status](TESSELLATION_STATUS.md) and
+  [upstream CTS evidence](UPSTREAM_CTS.md); these focused results do not claim
+  full Vulkan conformance.
 - Triangle-list and triangle-strip topology, fill rasterization and line
   width 1. Triangle strips are accepted and linked with the pinned GFX1013
   primitive type 6, but no strip draw has a native witness yet; every other
@@ -101,10 +109,20 @@ mean the driver advertises them; the reported device version remains Vulkan
   including offsets and signed base vertex.
 - One viewport and scissor, supplied statically at pipeline creation or through
   `vkCmdSetViewport` / `vkCmdSetScissor` before each affected draw.
-- One BGRA8 presentation attachment or RGBA8 off-screen color attachment and
-  one sample. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
-  `DONT_CARE` store semantics are supported by the bounded native path.
-  Blending, logic ops and multisampling are unsupported.
+- The bounded color path includes BGRA8 presentation and RGBA8 off-screen
+  attachments, with up to two color targets for the reported
+  `independentBlend` feature. Color attachments support 1x, 2x and 4x sample
+  counts; per-sample fragment shading at 2x/4x requires the advertised
+  `sampleRateShading` feature to be enabled on the logical device. Multisampled
+  depth attachments and multisampled sampled images are not served. `LOAD`,
+  `CLEAR`, `DONT_CARE`, `STORE` and `DONT_CARE` store semantics are supported
+  by the bounded native path. Blending, including the gated `dualSrcBlend`
+  path, is supported for `VK_FORMAT_R8G8B8A8_UNORM`; the BGRA8 presentation
+  format does not report `COLOR_ATTACHMENT_BLEND`. Logic ops remain
+  unsupported. See [dual-source blend acceptance](VALIDATION.md#dual-source-blend-promotion),
+  [sample-rate shading acceptance](VALIDATION.md#dxvk262-t06-samplerateshading-promotion)
+  and [format reporting](conformance_inventory/reporting_matrix.json) for the
+  exact tested roles and limits.
 - One or two subpasses may be described, recorded and **executed**. The native
   two-subpass path is deliberately bounded: both subpasses use the same colour
   and optional D32 attachment with the same layouts, and accept either no
@@ -152,7 +170,7 @@ secondary export - plus the rest of what the upstream oracle needed: the whole
 GFX1013 `CB_BLEND0_CONTROL` blend space instead of the single witnessed shape,
 partial colour write masks (carried in the pipeline's render-target block, not
 the draw stream) for `VK_FORMAT_R8G8B8A8_UNORM`, and `COLOR_ATTACHMENT_BLEND` on
-the two colour formats the profile can blend into. The witness is
+that RGBA8 colour format. The witness is
 `tools/run_dual_source.py`: it draws the packaged two-output fragment module
 twice, once with blending disabled and once with the accepted equation, copies
 the colour target back through the transfer path and judges both reads on exact
@@ -321,6 +339,19 @@ layered mip selection, anisotropy, cube arrays or general descriptor arrays.
   `uniformAndStorageBuffer8BitAccess`, `storagePushConstant8`,
   `uniformAndStorageBuffer16BitAccess`, `storagePushConstant16` and
   `storageInputOutput16` remain false.
+- The Vulkan 1.0 profile reports `bufferDeviceAddress` through
+  `VK_KHR_buffer_device_address` and the base `vulkanMemoryModel` through
+  `VK_KHR_vulkan_memory_model`. Both require explicit feature opt-in at device
+  creation; Vulkan 1.2 aggregate feature structures are not advertised.
+  Buffer device addresses cover live, properly bound shader-address buffers,
+  including nonzero bind offsets. Capture replay and multiple-device addressing
+  remain false. The original BDA compute oracles use only a bounded
+  `VK_FORMAT_R32_UINT` storage-image output, not a general storage-image
+  profile. `vulkanMemoryModelDeviceScope` remains false despite a bounded
+  diagnostic GPU result; its original CTS factory requires Vulkan 1.1 before
+  querying the feature. See [memory-model evidence](VALIDATION.md#vulkan-memory-model-base),
+  [BDA promotion evidence](VALIDATION.md#buffer-device-address-khr-promotion)
+  and [the four-axis matrix](conformance_inventory/dxvk_v262_matrix.json).
 - `shaderInt8`, `shaderInt16` and float16 arithmetic are not advertised. The
   supported shaders may load, convert and store narrow scalar/vector values in
   storage buffers, but this does not expose general narrow arithmetic.
