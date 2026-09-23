@@ -94,7 +94,7 @@ class UpstreamSelectionTests(unittest.TestCase):
         # that remain document refusals, capability gaps and pending
         # measurement windows. `leaves` counts every attachment_write_mask leaf
         # the pinned factory generates, wherever the manifest now keeps it.
-        self.assertEqual((494, 66, 48),
+        self.assertEqual((498, 66, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
@@ -136,6 +136,30 @@ class UpstreamSelectionTests(unittest.TestCase):
         contract["execution_supported"] = False
         contract["supported"] = False
         self.assertEqual(1, self._gate_exit_code_for_manifest(broken))
+
+    def test_std430_ubo_generated_paths_follow_pinned_factory(self):
+        source = UPSTREAM / "external/vulkancts/modules/vulkan/ubo/vktUniformBlockTests.cpp"
+        if not source.is_file():
+            self.skipTest("pinned vk-gl-cts checkout not present")
+        text = source.read_text(encoding="utf-8", errors="replace")
+        expected = {
+            "dEQP-VK.ubo.single_basic_array.std430.mat2.vertex",
+            "dEQP-VK.ubo.single_struct.per_block_buffer.std430_vertex",
+            "dEQP-VK.ubo.2_level_struct_array.per_block_buffer.std430_vertex",
+        }
+        self.assertEqual(expected, self.gate._ubo_generated_paths(text))
+        mutations = (
+            ('glu::TYPE_FLOAT_MAT2',
+             'dEQP-VK.ubo.single_basic_array.std430.mat2.vertex'),
+            ('BlockSingleStructCase',
+             'dEQP-VK.ubo.single_struct.per_block_buffer.std430_vertex'),
+            ('Block2LevelStructArrayCase',
+             'dEQP-VK.ubo.2_level_struct_array.per_block_buffer.std430_vertex'),
+        )
+        for marker, missing in mutations:
+            with self.subTest(marker=marker):
+                altered = text.replace(marker, "REMOVED_FACTORY_MARKER")
+                self.assertNotIn(missing, self.gate._ubo_generated_paths(altered))
 
     def setUp(self):
         self.source = UPSTREAM / MODULE

@@ -35,6 +35,7 @@
 #include "vktDrawDepthClampTests.hpp"
 #include "vktFragmentOperationsTests.hpp"
 #include "vktRenderPassTests.hpp"
+#include "vktUniformBlockTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -82,6 +83,11 @@ FocusedVkTestPackage::~FocusedVkTestPackage(void)
 
 void FocusedVkTestPackage::init(void)
 {
+    // ubo: unchanged upstream standard-layout cases and their buffer oracle.
+    // The case list selects a bounded subset; registration alone changes no
+    // public feature report or frozen acceptance selection.
+    addChild(vkt::ubo::createTests(m_testCtx, "ubo"));
+
     // dynamic_state.monolithic.compute_transfer: unchanged upstream compute /
     // transfer non-interference bodies and oracles.  The outer cleanup callback
     // releases the module's singleton device helpers at the upstream lifetime.

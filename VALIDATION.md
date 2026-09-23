@@ -1944,11 +1944,12 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **17/62 satisfied and 45 blockers**. Core
+The current checked result is **18/62 satisfied and 44 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
 `fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,
-`dualSrcBlend`, `independentBlend`, `sampleRateShading` and the four
+`dualSrcBlend`, `independentBlend`, `sampleRateShading`,
+`uniformBufferStandardLayout` (via `VK_KHR_uniform_buffer_standard_layout`) and the four
 rasterization and viewport features (`depthClamp`,
 `depthBiasClamp`, `fillModeNonSolid`, `multiViewport`) have all four axes. See
 [their indirect acceptance](#indirect-and-indexed-draw-native-acceptance-2026-09-16),
@@ -4373,3 +4374,98 @@ with that revision - the driver passes `sample_shading_enable` into
 `PsbcCompileOptions`, which does not exist before it - so
 `tools/prepare_compiler_deps.py` has to pin the merged commit before this
 promotion reproduces from a fresh clone. The pin still names `be4d043`.
+
+## Standard uniform buffer layout (2026-09-23)
+
+The public Vulkan 1.0 device advertises `VK_KHR_uniform_buffer_standard_layout`
+through the `VK_KHR_get_physical_device_properties2` query route. Device
+creation requires an explicit `VkPhysicalDeviceUniformBufferStandardLayoutFeatures`
+opt-in. The shipping compiler validates uniform-buffer offsets, array and
+matrix strides, and nested members before lowering; invalid layouts remain
+rejected. The Vulkan 1.2 aggregate feature structure and API 1.3 remain
+unadvertised. `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId`
+remain false: the former has a Vulkan 1.1 KHR dependency and incomplete
+operation/type coverage, while the latter has no Vulkan 1.0 extension alias.
+
+The subgroup boundary is explicit. The shipping Vulkan 1.0 device exposes no
+subgroup stage or operation properties and rejects subgroup SPIR-V at shader
+module creation. A separate, default-off diagnostic build used Vulkan 1.2
+SPIR-V and the local PSBC candidate `bf2e00b` to measure compute behavior.
+It selected each broadcast source ID from GPU memory, used two workgroups and
+even-lane activity, checked exact outputs and untouched inactive slots, and
+completed a bounded fence with zero guard mismatches. This is compiler/GPU
+evidence, not a legal public feature or original CTS result.
+
+| Operand and operation | Stage tested | Verified state | T08 feature bit |
+| --- | --- | --- | --- |
+| 32-bit unsigned `subgroupBroadcast` with a runtime buffer source ID | Compute | Diagnostic GPU readback: 64/64 active values, 64 inactive slots untouched, guards zero; repeated | False |
+| Unsigned 8-bit, signed 16-bit, unsigned 64-bit and 16-bit float scalar `subgroupBroadcast` | Compute | Each diagnostic GPU readback: 64/64 active values, 64 inactive untouched, guards zero | False |
+| The same four operand types as two-component vectors | Compute | Both components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| The same four operand types as three- and four-component vectors | Compute | PSBC host compile and wave32 NIR only; no GPU result | False |
+| Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
+
+The diagnostic narrow-integer runs enabled compiler options and SPIR-V
+capabilities only in the private build. The shipping guards remain in place.
+The vec2 run IDs are `20260923T114013349Z`, `20260923T114102324Z`,
+`20260923T114235184Z`, and `20260923T114324202Z` for 8-bit, 16-bit,
+64-bit, and 16-bit float respectively; their signed eboot SHA-256 values are
+recorded with the private strict receipts. The pinned original dynamic
+broadcast CTS factory requires Vulkan 1.2, so no original subgroup leaf is
+eligible on this Vulkan 1.0 profile. Wider vector GPU behavior, other
+operations, and graphics stages remain unproven.
+
+On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
+compute shader that reads compact scalar arrays, a row-major matrix and a
+nested struct. Two workgroups produced 64 exact values with zero mismatches and
+zero guard mismatches. Its bounded fence completed, the TCP receipt verified,
+and the title closed. Signed eboot SHA-256:
+`44eb76ca162e3c15ab35abc4bc48b0466a9144a0f28d53a5f4255a5fa337a408`;
+run `20260923T094543254Z_PPSA99994_ps5vk-ubo_0x1e45c7b386581`;
+log SHA-256 `db0771d2ec2b4aba7b56772f475bd698c8d3d095485814d43b1de7905f78c357`.
+
+The public ABI capability probe independently observed the extension and a true
+KHR feature field. It verified all 62 requirement records, with 20 reported
+satisfied and 42 reported blockers at the query layer. Signed eboot SHA-256:
+`9075c100fab8326c73b7bb458be1b560a153ebfb2eb2f8e85389303d5c431a62`;
+run `20260923T094657975Z_PPSA99994_ps5vk_0x1e46de0b656f8`;
+log SHA-256 `733e047d9014d7b5cd8481520e4a422df5bd6b6081f8182b85b156e7e9fbe4b6`.
+The four-axis DXVK matrix is 18/62 ready with 44 blockers.
+
+The unchanged original
+`dEQP-VK.ubo.single_basic_array.std430.uint.vertex` oracle passed twice in a
+495-case measurement selection and once in the promoted canonical selection.
+The canonical shipping run reported 495/495 Pass, zero missing, foreign or
+duplicate cases, zero Fail or NotSupported, verified payload identity and clean
+title closure. Signed eboot SHA-256:
+`b2dbc3f47eaabe6890e1e6a9d603c38344ad18dc011d2f5404913bbc3e9ed6f3`;
+selection SHA-256:
+`1a8f7ea9c33873abf40b7352c8ddbf3e533fd0048ebb3edc8c0bdbbc9ae695b3`;
+run `20260923T095014926Z_PPSA99994_upstream-cts_0x1e49bbbc79bac`;
+log SHA-256 `7845a522bf5040707b550a30c77d10b5e14a8868d0d888c8c83eb45613176ed1`.
+
+Three additional unchanged original `std430` UBO oracles cover a matrix array,
+a nested struct, and a two-level struct array in the vertex stage. They passed
+twice in the 498-case measurement selection (runs `20260923T115937942Z` and
+`20260923T120049216Z`) and then passed in the promoted frozen selection. The
+strict canonical receipt reports 498/498 Pass, zero missing, foreign or
+duplicate cases, and clean title closure. Signed eboot SHA-256:
+`38a8b6e2367a45f6eeebd3043637d6d01624e71bd46f5f95a53da898058a1ec1`;
+selection SHA-256:
+`c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`;
+run `20260923T120459357Z_PPSA99994_upstream-cts_0x1ebf603188bae`;
+log SHA-256 `94669451880f9a692ca7c6b07a4e93066f100c209d8cc6ca1cd7191f095a867b`.
+
+The driver now pins merged `opengnm-psbc` PR #25 at
+`47ae2a3bc9d6951d869d4bffd5112a62329ccf04` for corrected compute
+subgroup-ID lowering. Firmware 12.02 completed the unchanged 498-case
+acceptance selection with 498/498 Pass and zero missing, foreign, or duplicate
+cases. The signed eboot SHA-256 was
+`3028ca0e478ec1af88c82799e00c15a1e2e3899833d7aa8e8148878d2e927abf`,
+selection SHA-256
+`c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`,
+run `20260923T130249414Z_PPSA99994_upstream-cts_0x1ef1deeee8764`,
+and QPA SHA-256
+`e3e87c3e8513591062c76a03797d357dc01a6bd3c9aac46b716256439abf17e8`.
+The strict verifier recorded a clean close; the accepted payload was restored
+and the title stopped. This compiler update does not change public subgroup
+feature reporting.

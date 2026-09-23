@@ -120,6 +120,8 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_DUAL_SRC_BLEND = 1u << 17,
     PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS = 1u << 18,
     PS5VK_FEATURE_SAMPLE_RATE_SHADING = 1u << 19,
+    /* Keep this layout gate independent of the other feature bits. */
+    PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

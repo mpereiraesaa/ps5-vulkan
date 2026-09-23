@@ -22,6 +22,31 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_standard_ubo_khr_route_requires_reported_feature_and_extension(self):
+        row = next(row for row in json.loads(derive.OUTPUT.read_text())["requirements"]
+                   if row["id"] == matrix.STANDARD_UBO_ID)
+        query = {"route": "VK_KHR_uniform_buffer_standard_layout",
+                 "uniformBufferStandardLayout": True}
+        reports = {"uniformBufferStandardLayout": {
+            "kind": "extension-feature", "reported": True, "verdict": "satisfied"}}
+        extensions = {"VK_KHR_uniform_buffer_standard_layout"}
+        api, implementation = matrix.standard_ubo_axes(row, query, extensions, reports)
+        self.assertEqual(("satisfied", "implemented"),
+                         (api["state"], implementation["state"]))
+        for bad in ({}, {**query, "route": "invented"},
+                    {**query, "uniformBufferStandardLayout": "1"}):
+            with self.assertRaises(ValueError):
+                matrix.standard_ubo_axes(row, bad, extensions, reports)
+        with self.assertRaises(ValueError):
+            matrix.standard_ubo_axes(row, query, set(), reports)
+        api, implementation = matrix.standard_ubo_axes(
+            row, {**query, "uniformBufferStandardLayout": False}, extensions, reports)
+        self.assertEqual(("blocker", "missing"),
+                         (api["state"], implementation["state"]))
+        api, implementation = matrix.standard_ubo_axes(row, query, extensions, {})
+        self.assertEqual(("satisfied", "missing"),
+                         (api["state"], implementation["state"]))
+
     def test_multiview_equivalence_never_invents_values_or_other_features(self):
         profile = json.loads(derive.OUTPUT.read_text())
         rows = [r for r in profile["requirements"] if r["id"] in matrix.MULTIVIEW_FIELDS]
@@ -78,8 +103,8 @@ class DxvkMatrixTests(unittest.TestCase):
         # independently witnessed fragment-storage and dual-source features, and
         # the four T05 rasterization and viewport features advance; API 1.3
         # remains a separate blocker.
-        self.assertEqual(17, document["summary"]["satisfied"])
-        self.assertEqual(45, document["summary"]["blocker"])
+        self.assertEqual(18, document["summary"]["satisfied"])
+        self.assertEqual(44, document["summary"]["blocker"])
 
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
@@ -88,8 +113,8 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(17, document["summary"]["satisfied"])
-        self.assertEqual(45, document["summary"]["blocker"])
+        self.assertEqual(18, document["summary"]["satisfied"])
+        self.assertEqual(44, document["summary"]["blocker"])
         self.assertEqual(
             [
                          "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
@@ -107,6 +132,7 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
                          "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
                          "feature:VkPhysicalDeviceVulkan11Features:multiview",
+                         "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
             ],
@@ -152,8 +178,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(17, document["summary"]["satisfied"])
-                self.assertEqual(45, document["summary"]["blocker"])
+                self.assertEqual(18, document["summary"]["satisfied"])
+                self.assertEqual(44, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 

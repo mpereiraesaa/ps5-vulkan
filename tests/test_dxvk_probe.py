@@ -178,6 +178,30 @@ class DxvkProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "explicit multiview query route"):
             fixture.validate()
 
+    def test_standard_ubo_positive_requires_matching_khr_query_route(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        identifier = "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout"
+        records = list(fixture.records)
+        index = next(i for i, record in enumerate(records) if f"id={identifier} " in record)
+        records[index] = records[index].replace("observed=0 status=blocker",
+                                                 "observed=1 status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                         "satisfied=2 blockers=60")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit standard UBO query route"):
+            fixture.validate()
+        route = ("DXVK262_STANDARD_UBO_QUERY route=VK_KHR_uniform_buffer_standard_layout "
+                 "uniformBufferStandardLayout=1")
+        records.insert(1, route)
+        fixture.write(records)
+        self.assertEqual(2, fixture.validate()["satisfied"])
+        records[1] = route.replace("uniformBufferStandardLayout=1",
+                                   "uniformBufferStandardLayout=0")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit standard UBO query route"):
+            fixture.validate()
+
     def test_historical_matrix_snapshot_remains_hash_bound(self):
         fixture = ProbeFixture()
         self.addCleanup(fixture.tmp.cleanup)

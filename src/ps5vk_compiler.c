@@ -135,7 +135,12 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_INDEPENDENT_BLEND |
                           PS5VK_FEATURE_DUAL_SRC_BLEND |
                           PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
-                          PS5VK_FEATURE_SAMPLE_RATE_SHADING))
+                          PS5VK_FEATURE_SAMPLE_RATE_SHADING |
+                          /* The UBO layout gate is checked when the shader
+                           * module is created. It changes no PSBC compute
+                           * option, but an enabled device still carries it
+                           * into every compute pipeline creation. */
+                          PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);

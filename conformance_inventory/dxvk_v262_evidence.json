@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "439de5c96579b634bb4698adf439631dd545f9298bdccd1c5e1129f750184a07",
+    "artifact_sha256": "9075c100fab8326c73b7bb458be1b560a153ebfb2eb2f8e85389303d5c431a62",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -21,13 +21,14 @@
       "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "feature:VkPhysicalDeviceFeatures:tessellationShader",
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
+      "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
     ],
     "runs": [
       {
-        "id": "20260922T234500151Z_PPSA99994_ps5vk_0x1c394a882c7bf",
-        "log_sha256": "2b04497f8ae6a8d01feb3961f2a7b724bb763c611b69b78d9f3c7b497ece8d20"
+        "id": "20260923T094657975Z_PPSA99994_ps5vk_0x1e46de0b656f8",
+        "log_sha256": "733e047d9014d7b5cd8481520e4a422df5bd6b6081f8182b85b156e7e9fbe4b6"
       }
     ],
     "transport": "ps5log/1",
@@ -38,16 +39,66 @@
         "multiview": "1",
         "maxMultiviewViewCount": "6",
         "maxMultiviewInstanceIndex": "134217727"
+      },
+      {
+        "route": "VK_KHR_uniform_buffer_standard_layout",
+        "uniformBufferStandardLayout": "1"
       }
     ],
-    "source_matrix_sha256": "9a1a8dbbe919f6eb1fab167a8338afeba830ed494660a06018e460de6c63d97e",
-    "satisfied": 19,
-    "blockers": 43,
+    "source_matrix_sha256": "8bce2535a2d02eb2d04395d6daba5a427ecce8bdb89d99facd46e361dd0637f8",
+    "satisfied": 20,
+    "blockers": 42,
     "requirements": 62,
     "device_api": "1.0.0",
-    "device_extensions": 5
+    "device_extensions": 6
   },
   "historical_capability_probes": [
+    {
+      "artifact_sha256": "439de5c96579b634bb4698adf439631dd545f9298bdccd1c5e1129f750184a07",
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260922T234500151Z_PPSA99994_ps5vk_0x1c394a882c7bf",
+          "log_sha256": "2b04497f8ae6a8d01feb3961f2a7b724bb763c611b69b78d9f3c7b497ece8d20"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "9a1a8dbbe919f6eb1fab167a8338afeba830ed494660a06018e460de6c63d97e",
+      "satisfied": 19,
+      "blockers": 43,
+      "requirements": 62,
+      "device_api": "1.0.0",
+      "device_extensions": 5
+    },
     {
       "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
       "device_api": "1.0.0",
@@ -1275,6 +1326,30 @@
           "VALIDATION.md#dxvk262-t06-samplerateshading-promotion-2026-09-23"
         ],
         "note": "Native execution: the frozen 494-case acceptance run on the shipping profile reported every selected leaf Pass with a clean lifecycle, and the shipping witness payload (no measurement switch) reported one distinct sample id per sample and one distinct fract(gl_FragCoord.xy) per sample - the four standard 4x positions - each with a clean HELLO/BYE stream. The public-ABI probe run reports the feature true."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout": {
+      "_comment": "The public Vulkan 1.0 KHR route is supported; the aggregate Vulkan 1.2 structure and API 1.3 remain unavailable.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260923T094543254Z_PPSA99994_ps5vk-ubo_0x1e45c7b386581"
+        ],
+        "artifact_sha256": "44eb76ca162e3c15ab35abc4bc48b0466a9144a0f28d53a5f4255a5fa337a408",
+        "refs": [
+          "VALIDATION.md#standard-uniform-buffer-layout"
+        ],
+        "note": "Public SDK shipping GPU witness: 64 exact output values from compact arrays, a row-major matrix and nested struct; zero value and guard mismatches, bounded fence, strict TCP receipt and clean title closure."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.ubo.single_basic_array.std430.uint.vertex"
+        ],
+        "refs": [
+          "VALIDATION.md#standard-uniform-buffer-layout"
+        ],
+        "note": "Unchanged original upstream leaf and all 494 prior acceptance cases passed twice on the same measured eboot."
       }
     }
   }

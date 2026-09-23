@@ -108,6 +108,7 @@ def main():
             (ROOT / "src/vk_memory.c", []),
             (ROOT / "src/vk_descriptor.c", []),
             (ROOT / "src/vk_pipeline.c", []),
+            (ROOT / "src/spirv_ubo_layout.c", []),
             (ROOT / "src/compilation_cache.c", []),
             (ROOT / "src/vk_pipeline_cache.c", []),
             (ROOT / "src/vk_command.c", []),
@@ -357,7 +358,7 @@ def main():
     # 4. Build host runtime library for host-test execution and CI environments
     host_sources = [
         "src/vk_alloc.c", "src/vk_memory.c", "src/vk_descriptor.c",
-        "src/vk_pipeline.c", "src/compilation_cache.c", "src/vk_pipeline_cache.c", "src/vk_command.c", "src/vk_indirect.c",
+        "src/vk_pipeline.c", "src/spirv_ubo_layout.c", "src/compilation_cache.c", "src/vk_pipeline_cache.c", "src/vk_command.c", "src/vk_indirect.c",
         "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
         # The linear staging readback copy reads the tiled colour surface
         # through the shared 64KB_R_X offset contract.

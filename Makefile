@@ -51,7 +51,7 @@ VULKAN_CFLAGS ?= -Ithird_party/vulkan-headers/include
 VK_MEMORY_SOURCES = src/vk_alloc.c src/vk_memory.c src/texture_format.c
 VK_IMAGE_TEST_SOURCES = $(VK_MEMORY_SOURCES) src/color_attachment_contract.c src/vk_image_view.c src/vk_render_pass.c src/vk_framebuffer.c
 VK_DESCRIPTOR_SOURCES = $(VK_MEMORY_SOURCES) src/vk_descriptor.c
-VK_PIPELINE_SOURCES = $(VK_DESCRIPTOR_SOURCES) src/vk_pipeline.c src/compilation_cache.c src/vk_pipeline_cache.c
+VK_PIPELINE_SOURCES = $(VK_DESCRIPTOR_SOURCES) src/vk_pipeline.c src/spirv_ubo_layout.c src/compilation_cache.c src/vk_pipeline_cache.c
 VK_COMMAND_SOURCES = $(VK_PIPELINE_SOURCES) src/vk_command.c src/vk_indirect.c
 # The command recording tests build render passes, image views and
 # framebuffers through the PUBLIC entry points rather than as structs, so the

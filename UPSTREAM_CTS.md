@@ -50,26 +50,14 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 306 acceptance cases frozen in `cts/upstream/manifest.json`
-  (the previously accepted API, synchronization, memory, compute, resource,
-  pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
-  image-copy, binding-model combined-sampler, multiview and indirect/indexed
-  draw cases, plus the 64 user-defined clip/cull distance leaves, the 29
-  geometry leaves and the two fragment `frag_side_effects` leaves promoted
-  below: 211 + 64 + 29 + 2). The 99 tessellation, tessellation clip/cull and
-  TCS/TES resource cases (67 + 16 + 16) that passed in the 403/403 default
-  tessellation candidate run recorded in
-  [TESSELLATION_STATUS.md](TESSELLATION_STATUS.md) are validated original
-  upstream cases, but they are **not** part of this frozen acceptance
-  selection. They are counted separately (306 + 99 = 405 distinct original
-  upstream cases passed across the two receipts) and never folded into the 306.
-  Only these
-  acceptance leaves are registered by
-  `cts/upstream/package_ps5.cpp`
-  and shipped in the packaged case list. The manifest also carries a
-  `diagnostics` list: upstream cases that are intentionally run separately and
-  are known not to satisfy acceptance prerequisites, including families kept as
-  blocked resource-contract targets. They are never part of strict acceptance.
+* **Selected**: the 498 original upstream acceptance cases frozen in
+  `cts/upstream/manifest.json`. This includes four standard UBO layout vertex
+  oracles and the earlier API, graphics, compute, resource and synchronization
+  cases. The strict shipping run on 2026-09-23 reported 498/498 Pass with
+  selection SHA-256 `c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`.
+  The manifest also carries 66 diagnostic paths, which remain outside strict
+  acceptance. Earlier dated sections below record the smaller selections used
+  at each promotion and preserve their historical counts.
 * **Executed**: what a given report actually contains, which the strict verifier
   checks case by case.
 
@@ -1464,3 +1452,37 @@ the shipping profile:
   different reason: it needs a stencil-bearing attachment format
   (`D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT`), which is a separate capability
   this tranche did not add.
+
+## Standard uniform buffer layout acceptance (2026-09-23)
+
+The frozen selection includes the original
+`dEQP-VK.ubo.single_basic_array.std430.uint.vertex` case from the pinned UBO
+factory. The shipping feature build passed the entire 495-case selection with
+zero missing, unexpected or duplicate results and clean title closure. Eboot
+SHA-256 `b2dbc3f47eaabe6890e1e6a9d603c38344ad18dc011d2f5404913bbc3e9ed6f3`;
+selection SHA-256 `1a8f7ea9c33873abf40b7352c8ddbf3e533fd0048ebb3edc8c0bdbbc9ae695b3`;
+run `20260923T095014926Z_PPSA99994_upstream-cts_0x1e49bbbc79bac`.
+The same signed eboot passed the identical 495-case measurement selection twice
+before promotion. The public SDK GPU and query receipts are described in
+[VALIDATION.md](VALIDATION.md#standard-uniform-buffer-layout).
+
+### Matrix and nested-layout UBO oracles
+
+Three more unchanged leaves from the pinned UBO factory passed twice in a
+498-case measurement selection: `single_basic_array.std430.mat2.vertex`,
+`single_struct.per_block_buffer.std430_vertex`, and
+`2_level_struct_array.per_block_buffer.std430_vertex` (all under `dEQP-VK.ubo`).
+These exercise matrix array strides, nested members, and two-level struct
+arrays. Both strict receipts reported 498/498 Pass with no missing, unexpected
+or duplicate cases and clean title closure; measurement selection SHA-256
+`dd211b7b2dead3852fdb904bf79a4f9458676cf6c55389c38a9160933f3f0192`,
+signed eboot SHA-256
+`38a8b6e2367a45f6eeebd3043637d6d01624e71bd46f5f95a53da898058a1ec1`,
+runs `20260923T115937942Z_PPSA99994_upstream-cts_0x1ebab2d81c02b` and
+`20260923T120049216Z_PPSA99994_upstream-cts_0x1ebbbc5bbda85`.
+
+After promotion, the frozen 498-case selection passed 498/498 with the same
+signed eboot, zero missing, unexpected or duplicate cases, and clean title
+closure. Its selection SHA-256 is
+`c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`;
+run `20260923T120459357Z_PPSA99994_upstream-cts_0x1ebf603188bae`.

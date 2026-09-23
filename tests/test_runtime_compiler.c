@@ -222,6 +222,15 @@ int main(void)
             &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);
+        /* Standard UBO layout changes SPIR-V layout validation, not PSBC's
+         * compute compilation options. A device that enables it must still
+         * compile unrelated compute shaders on the same logical device. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, graphics_device_mask | PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT,
+            &graphics_device_program, &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
         /* The four DXVK262-T05 rasterization/viewport bits are the same kind
          * of graphics-only device state. The FULL combined mask a T05 device
          * would carry is tested at once, not one bit at a time: the T04

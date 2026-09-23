@@ -102,6 +102,36 @@ def _quoted_in(needle: str, haystack: str) -> bool:
 
 
 @functools.lru_cache(maxsize=None)
+def _ubo_generated_paths(text: str) -> frozenset:
+    """Recognize the bounded std430 names composed by the pinned UBO factory."""
+    def factory_block(name: str) -> str:
+        marker = "// ubo." + name + "\n"
+        after = text.partition(marker)[2]
+        return after.partition("// ubo.")[0] if after else ""
+
+    if ('{"std430", LAYOUT_STD430}' not in text or
+            '{"per_block_buffer", UniformBlockCase::BUFFERMODE_PER_BLOCK}' not in text):
+        return frozenset()
+    paths = set()
+    basic_types = re.search(r"static const glu::DataType basicTypes\[\] = \{(.*?)\};",
+                            text, re.S)
+    basic_array = factory_block("single_basic_array")
+    if (basic_types and "glu::TYPE_FLOAT_MAT2" in basic_types.group(1) and
+            'new tcu::TestCaseGroup(m_testCtx, "single_basic_array")' in basic_array and
+            "glu::getDataTypeName(type)" in basic_array and
+            "createBlockBasicTypeCases(" in basic_array and
+            'new BlockBasicTypeCase(testCtx, "vertex"' in text):
+        paths.add("dEQP-VK.ubo.single_basic_array.std430.mat2.vertex")
+    for group, case_class in (("single_struct", "BlockSingleStructCase"),
+                              ("2_level_struct_array", "Block2LevelStructArrayCase")):
+        block = factory_block(group)
+        if (f'new tcu::TestCaseGroup(m_testCtx, "{group}")' in block and
+                case_class in block and 'baseName + "_vertex"' in block):
+            paths.add(f"dEQP-VK.ubo.{group}.per_block_buffer.std430_vertex")
+    return frozenset(paths)
+
+
+@functools.lru_cache(maxsize=None)
 def _format_segments(text: str) -> frozenset:
     return frozenset(token[len("VK_FORMAT_"):].lower()
                      for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", text))
@@ -1589,10 +1619,20 @@ def main() -> int:
             generated_segments |= _multisample_generated_segments(text)
         if source_path.name == "vktRenderPassTests.cpp":
             generated_segments |= _attachment_write_mask_generated_segments(text)
+        if source_path.name == "vktUniformBlockTests.cpp" and (
+                'new tcu::TestCaseGroup(m_testCtx, "single_basic_array")' in text and
+                "glu::TYPE_UINT" in text and
+                "glu::getDataTypeName(type)" in text):
+            # The pinned single_basic_array factory obtains this group name
+            # from glu::TYPE_UINT rather than a quoted string literal.
+            generated_segments.add("uint")
+        ubo_generated_paths = (_ubo_generated_paths(text)
+                               if source_path.name == "vktUniformBlockTests.cpp" else frozenset())
         for segment in segments[1:-1]:
             if (not _quoted_in(segment, searchable) and
                     segment not in generated_segments and
                     segment not in generated_format_segments and
+                    not (path in ubo_generated_paths and segment == "mat2") and
                     not (source_path.name == "vktMemoryMappingTests.cpp" and
                          _mapping_group_segment(text, segment))):
                 failures.append(
@@ -1662,6 +1702,8 @@ def main() -> int:
         # table-derived name, or a number produced
         # by an instance factory whose parent group is a literal in that file.
         if _quoted_in(leaf, text):
+            continue
+        if path in ubo_generated_paths:
             continue
         if leaf in _table_composed_leaf_names(text, function_text):
             continue
