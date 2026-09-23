@@ -340,8 +340,8 @@ int main(void)
             &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);
-        /* T07 adds graphics/image-only bits at 20-24. They are legal on the
-         * same logical device and must not be confused with unknown bits. */
+        /* T07 image/gather/query bits at 24-27 are legal on the same logical
+         * device and must not be confused with unknown bits. */
         const uint32_t t07_device_mask = t06_device_mask |
             PS5VK_FEATURE_IMAGE_CUBE_ARRAY |
             PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED |

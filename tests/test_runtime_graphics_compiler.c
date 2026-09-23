@@ -712,8 +712,9 @@ static void check_gather_compiler_forms(void)
             .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
             .fragment=read_module(fragments[i]),
             .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+            .color_attachment_count=1,
+            .color_format={VK_FORMAT_B8G8R8A8_UNORM},
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
             .descriptor_set_count=1,.descriptor_sets=&set};
         assert(ps5vk_spirv_graphics_interface(&key));
         const int extended=ps5vk_spirv_module_uses_extended_gather(&key.fragment);
