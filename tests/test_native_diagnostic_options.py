@@ -11,6 +11,79 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeDiagnosticOptions(unittest.TestCase):
+    def test_promoted_fragment_feature_has_no_diagnostic_switch(self):
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        builder = (ROOT / "tools/build_sdk.py").read_text()
+        self.assertIn("PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS", platform)
+        self.assertNotIn("PS5VK_T06_DIAGNOSTIC", platform)
+        self.assertNotIn("PS5VK_T06_DIAGNOSTIC", builder)
+        self.assertNotIn("PS5VK_T06_DIAGNOSTIC",
+                         (ROOT / "tools/build_native.py").read_text())
+        for public in (ROOT / "include").rglob("*.h"):
+            self.assertNotIn("PS5VK_T06_DIAGNOSTIC", public.read_text(),
+                             f"{public} must not restore a retired measurement switch")
+
+    def test_fragment_store_probe_is_bounded_and_private(self):
+        self.rejected({"PS5VK_FRAGMENT_STORE_PROBE": "2"},
+                      "must be 0 or 1")
+        self.rejected({"PS5VK_FRAGMENT_STORE_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_FRAGMENT_STORE_PROBE": "1",
+                       "PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1",
+                       "PS5VK_GRAPHICS_WITNESSES": "1"},
+                      "bounded standalone scene")
+        builder = (ROOT / "tools/build_native.py").read_text()
+        source = (ROOT / "native/fragment_store_probe.c").read_text()
+        self.assertNotIn("PS5VK_T06_DIAGNOSTIC", builder)
+        self.assertIn("control_counter=%u candidate_counter=%u", source)
+        self.assertIn("control_and_candidate_same_submit", builder)
+
+    def test_dual_source_fixture_is_owned_and_runtime_packaged(self):
+        generator = (ROOT / "tools/prepare_runtime_graphics.py").read_text()
+        self.assertIn('"experiments/graphics/runtime_dual_source.frag"', generator)
+        self.assertIn('"dual_source_fragment"', generator)
+        shader = (ROOT / "experiments/graphics/runtime_dual_source.frag").read_text()
+        self.assertIn("layout(location = 0, index = 0)", shader)
+        self.assertIn("layout(location = 0, index = 1)", shader)
+
+    def test_two_mrt_probe_is_bounded_and_private(self):
+        self.rejected({"PS5VK_TWO_MRT_PROBE": "2"}, "must be 0 or 1")
+        self.rejected({"PS5VK_TWO_MRT_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_TWO_MRT_PROBE": "1",
+                       "PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1",
+                       "PS5VK_DUAL_SOURCE_PROBE": "1"},
+                      "bounded standalone scene")
+        builder = (ROOT / "tools/build_native.py").read_text()
+        sdk = (ROOT / "tools/build_sdk.py").read_text()
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        # The two-MRT witness is still a private probe, but the capability it
+        # exercised is promoted: the platform reports independentBlend in every
+        # build, so no private gate has to reach it through either build path.
+        self.assertIn("-DPS5VK_TWO_MRT_PROBE=", builder)
+        self.assertNotIn("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC", sdk)
+        self.assertNotIn("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC", platform)
+        self.assertIn("PS5VK_FEATURE_INDEPENDENT_BLEND", platform)
+        self.assertNotIn("PS5VK_INTEGER_TARGET_DIAGNOSTIC", sdk)
+        limits = (ROOT / "src/graphics_limits.h").read_text()
+        self.assertIn("maxColorAttachments=PS5VK_MAX_COLOR_ATTACHMENTS", limits)
+        self.assertNotIn("PS5VK_INDEPENDENT_BLEND_DIAGNOSTIC", limits)
+        self.assertIn("two_mrt_probe.c", builder)
+        self.assertIn("two_mrt_oracle.c", builder)
+        source = (ROOT / "native/two_mrt_probe.c").read_text()
+        self.assertIn("PS5VK_TWO_MRT_READBACK", source)
+        self.assertIn("ps5vk_two_mrt_verdict", source)
+        generator = (ROOT / "tools/prepare_runtime_graphics.py").read_text()
+        self.assertIn('"experiments/graphics/runtime_two_mrt.frag"', generator)
+        self.assertIn('"two_mrt_fragment"', generator)
+        shader = (ROOT / "experiments/graphics/runtime_two_mrt.frag").read_text()
+        self.assertIn("layout(location = 0)", shader)
+        self.assertIn("layout(location = 1)", shader)
+
     def test_binding_diagnostic_uses_tested_workload_capacity_gate(self):
         source = (ROOT / "native/graphics_main.c").read_text()
         self.assertIn("ps5vk_graphics_vertex_bindings_available(&device_props.limits,", source)
@@ -138,6 +211,140 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
+
+    def test_sample_rate_diagnostic_is_graphics_only(self):
+        """The sampleRateShading bit is SHIPPING; the switch is not its gate.
+
+        The bit was promoted on 2026-09-23, so the platform sets it
+        unconditionally and no preprocessor guard may decide it again. The
+        switch itself survives as the build option the MEASUREMENT payloads
+        need (the register survey and the sample-rate probe), which is why it
+        is still graphics-only and still bounded to 0 or 1."""
+        self.rejected({"PS5VK_SAMPLE_RATE_DIAGNOSTIC": "1"},
+                      "requires the graphics profile API")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_SAMPLE_RATE_DIAGNOSTIC": "2"},
+                      "must be 0 or 1")
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("platform->supported_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;",
+                      platform)
+        self.assertNotIn("#if defined(PS5VK_SAMPLE_RATE_DIAGNOSTIC)", platform)
+        self.assertIn("PS5VK_SAMPLE_RATE_DIAGNOSTIC", platform)
+        # The switch only decides what a MEASUREMENT build may exercise; no
+        # public query is answered from the define itself.
+        self.assertNotIn("PS5VK_FEATURE_SAMPLE_RATE_SHADING",
+                         (ROOT / "tools/build_native.py").read_text())
+
+    def test_sample_rate_probe_is_bounded_private_and_diagnostic_only(self):
+        """The sample-rate measurement scene cannot ship or run half-built.
+
+        It clears a multisampled colour target and reads the surface's own
+        storage back, and after the 2026-09-23 promotion it measures the
+        SHIPPING state: the witness oracle is compiled in unconditionally and
+        the measurement switch only selects the register survey around it. The
+        scene is still a bounded standalone one and cannot be combined with any
+        other diagnostic."""
+        self.rejected({"PS5VK_SAMPLE_RATE_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_SAMPLE_RATE_PROBE": "3"},
+                      "must be 0, 1 or 2")
+        builder = (ROOT / "tools/build_native.py").read_text()
+        source = (ROOT / "native/sample_rate_probe.c").read_text()
+        # The measurement is bounded to one multisampled colour target whose
+        # storage is read back and judged; it is a standalone scene, so no
+        # other diagnostic may be selected with it.
+        self.assertIn("PS5VK_SAMPLE_RATE_PROBE is a bounded standalone scene", builder)
+        self.assertIn("distinct == 1u && correct == words && first == expected", source)
+        self.assertIn("PS5VK_SAMPLE_RATE_CLEAR extent=", source)
+        # Value 2 is the same witness followed by the step walk through the CTS
+        # oracle's render pass: every step is announced before it runs, so the
+        # last step in the log names the call that did not return, and a
+        # refusal names the step and the Vulkan result instead of dying.
+        self.assertIn('"PS5VK_SAMPLE_RATE_PROBE must be 0, 1 or 2"', builder)
+        self.assertIn("PS5VK_SAMPLE_RATE_SHAPE step=%s rc=%d ok=%u", source)
+        self.assertIn("step=create_pipeline subpass=%u", source)
+        header = (ROOT / "native/sample_rate_probe.h").read_text()
+        self.assertIn("ps5vk_sample_rate_shape_probe", header)
+        main = (ROOT / "native/graphics_main.c").read_text()
+        self.assertIn("#if PS5VK_SAMPLE_RATE_PROBE == 2", main)
+        self.assertIn("ps5vk_runtime_subpass_fetch_fragment", main)
+
+    def test_promoted_dual_source_has_no_measurement_switch(self):
+        """dualSrcBlend is advertised by the shipping platform now.
+
+        The capability bit, the widened blend space, the partial write masks
+        and the format blend cap all ship; the measurement switch that used to
+        gate them is retired, exactly as the fragment-storage one was, so
+        nothing can re-enable a diagnostic build of an advertised feature.
+        """
+        for source in ("native/platform_ps5.c", "native/runtime_graphics_compiler.c",
+                       "src/texture_format.c", "tools/build_sdk.py",
+                       "tools/build_native.py", "tools/build_upstream_cts.py",
+                       "Makefile"):
+            self.assertNotIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC",
+                             (ROOT / source).read_text(),
+                             f"{source} must not restore the retired switch")
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("platform->supported_features |= PS5VK_FEATURE_DUAL_SRC_BLEND;",
+                      platform)
+        for public in (ROOT / "include").rglob("*.h"):
+            self.assertNotIn("PS5VK_DUAL_SOURCE_DIAGNOSTIC", public.read_text(),
+                             f"{public} must not expose the retired gate")
+
+    def test_dual_source_witness_is_bounded_and_runnable(self):
+        """The blend witness is a standalone scene; it runs on the shipping
+        build now that the feature is advertised."""
+        self.rejected({"PS5VK_DUAL_SOURCE_PROBE": "1"},
+                      "requires graphics API, runtime graphics and draw")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_DUAL_SOURCE_PROBE": "2"},
+                      "must be 0 or 1")
+
+    def test_dual_source_witness_oracle_and_artifact_are_pinned(self):
+        probe = (ROOT / "native/dual_source_probe.c").read_text()
+        for pinned in ("PS5VK_DUAL_SOURCE_READBACK",
+                       "VK_BLEND_FACTOR_SRC1_COLOR",
+                       "ps5vk_dual_source_verdict(observed[0], observed[1])"):
+            self.assertIn(pinned, probe)
+        # The verdict is the same pure predicate the host regressions exercise.
+        oracle = (ROOT / "src/dual_source_oracle.h").read_text()
+        self.assertIn("PS5VK_DUAL_SOURCE_BLEND_R = 51", oracle)
+        self.assertIn("PS5VK_DUAL_SOURCE_MIN_DELTA", oracle)
+        self.assertTrue((ROOT / "tests/test_dual_source_oracle.c").is_file())
+        self.assertIn("tests/test_dual_source_oracle.c",
+                      (ROOT / "Makefile").read_text())
+        self.assertIn("ps5vk_dual_source_probe",
+                      (ROOT / "native/graphics_main.c").read_text())
+        builder = (ROOT / "tools/build_native.py").read_text()
+        self.assertIn("dual_source_probe=1", builder)
+        self.assertIn("dual_source_witness", builder)
+        verifier = (ROOT / "tools/verify_dual_source.py").read_text()
+        self.assertIn('"candidate_equation"', verifier)
+        self.assertIn("candidate == wanted_candidate", verifier)
+        self.assertTrue((ROOT / "tools/run_dual_source.py").is_file())
+        for public in (ROOT / "include").rglob("*.h"):
+            self.assertNotIn("PS5VK_DUAL_SOURCE_PROBE", public.read_text(),
+                             f"{public} must not expose the witness switch")
+
+    def test_dual_source_witness_recipe_links_the_sdk(self):
+        """The witness recipe must link the SDK: the direct build does not
+        define the runtime compiler, so the graphics feature block is not
+        compiled and vkCreateDevice refuses the feature before the witness
+        ever runs."""
+        witness = subprocess.run(
+            ["make", "-n", "native-dual-source", "GRAPHICS_CONTROL=fixture",
+             "GLSLANG=glslang-test"], cwd=ROOT, capture_output=True, text=True,
+            check=True)
+        for expected in ("PS5VK_RUNTIME_GRAPHICS=1", "PS5VK_SHELL_CLOSE=1",
+                         "PS5VK_GLSLANG=glslang-test", "PS5VK_GRAPHICS_DRAW=1",
+                         "PS5VK_DUAL_SOURCE_PROBE=1", "PS5VK_USE_SDK=1"):
+            self.assertIn(expected, witness.stdout)
+        # The witness is an offscreen scene: presenting would move the artifact
+        # manifest to the presentation stage, which the strict verifier refuses.
+        self.assertNotIn("PS5VK_GRAPHICS_PRESENT=1", witness.stdout)
+        verifier = (ROOT / "tools/verify_dual_source.py").read_text()
+        self.assertIn('"graphics-api-offscreen-draw"', verifier)
 
     def test_multiview_instance_probe_needs_the_view_witness(self):
         """The instance witness is the six-view scene with one instance at the

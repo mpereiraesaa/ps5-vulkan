@@ -50,11 +50,19 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 275 acceptance cases frozen in `cts/upstream/manifest.json`
+* **Selected**: the 306 acceptance cases frozen in `cts/upstream/manifest.json`
   (the previously accepted API, synchronization, memory, compute, resource,
   pipeline, push-constant, storage-width, fixed-function, buffer-transfer,
   image-copy, binding-model combined-sampler, multiview and indirect/indexed
-  draw cases, plus the 64 user-defined clip/cull distance leaves promoted below).
+  draw cases, plus the 64 user-defined clip/cull distance leaves, the 29
+  geometry leaves and the two fragment `frag_side_effects` leaves promoted
+  below: 211 + 64 + 29 + 2). The 99 tessellation, tessellation clip/cull and
+  TCS/TES resource cases (67 + 16 + 16) that passed in the 403/403 default
+  tessellation candidate run recorded in
+  [TESSELLATION_STATUS.md](TESSELLATION_STATUS.md) are validated original
+  upstream cases, but they are **not** part of this frozen acceptance
+  selection. They are counted separately (306 + 99 = 405 distinct original
+  upstream cases passed across the two receipts) and never folded into the 306.
   Only these
   acceptance leaves are registered by
   `cts/upstream/package_ps5.cpp`
@@ -204,6 +212,11 @@ that selection and copies the record into the build manifest, and
 the record into the receipt, so a measurement receipt can never be read as an
 acceptance run of the frozen selection:
 
+The build profile also records the non-secret measurement switches, including
+`PS5VK_SAMPLE_RATE_DIAGNOSTIC`: a payload built for the sample-rate line and a
+shipping payload would otherwise be indistinguishable in the receipt, and a run
+that never reached the feature would read as a driver verdict.
+
 ```sh
 python3 tools/make_measurement_manifest.py \
   --category rasterization-culling --category t05-measurement-pending \
@@ -230,6 +243,39 @@ prints the counts and the selection hash before and after. It also lists the
 tests that pin the old counts, which the same change updates. `--dry-run`
 writes nothing; `--check` runs the selection gate and the tests that read the
 manifest.
+
+The T06 `dualSrcBlend` line used the same flow before it was promoted: its 98
+`pipeline.monolithic.blend.dual_source` leaves for
+`VK_FORMAT_R8G8B8A8_UNORM` were held as diagnostics, measured under a build that
+reported the feature and opened the runtime blend space to the whole GFX1013
+`CB_BLEND0_CONTROL` contract (`PS5VK_DUAL_SOURCE_DIAGNOSTIC=1`, since retired),
+and then moved into the frozen acceptance selection unchanged - see
+[the promotion](#dual-source-blend-promotion-2026-09-21) in `VALIDATION.md`.
+
+The T06 `sampleRateShading` line holds its own leaves the same way. Measured
+from the pinned sources, `MinSampleShadingTest::checkSupport` is the only
+`requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING)` call in
+`vktPipelineMultisampleTests.cpp` (`:1344`), and `createMultisampleTests` builds
+exactly three groups from that class: `min_sample_shading` (its opaque
+primitives), `min_sample_shading_enabled` and `min_sample_shading_disabled`
+(both a quad). At the counts this profile serves, with the sparse variants
+excluded because no sparse binding is advertised here and with
+`primitive_point` excluded because its 3.0 point size needs the `largePoints`
+feature this profile does not advertise, that is 50 leaves, which the T06 line
+first held under the `t06-sample-rate-pending` diagnostic category and then
+split when the feature was promoted on 2026-09-23: the thirty triangle and quad
+shapes are the `sample-rate-shading` acceptance group and the twenty line and
+`primitive_point_1px` shapes sit in `plain-point-line-pipeline-refused`, because
+what refuses them is this profile's pipeline resolver and not the feature. Each
+of them renders the multisampled colour target,
+resolves it into the single-sample image and then reads the multisampled colour
+back once per sample through `subpassLoad(imageMS, sampleNdx)`, so a build that
+shades once per pixel cannot pass it. The category's traceability is derived by
+`_min_sample_shading_leaf_names` in `tools/check_upstream_selection.py`, which
+composes the names from the module's own sample-count array, minSampleShading
+value table and per-group constructor literals, and the `samples_<count>` group
+segment - which the factory prints rather than writes as a literal - comes from
+`_multisample_generated_segments` against the same table.
 
 To read a run, decode it rather than grepping the report:
 
@@ -1020,6 +1066,30 @@ it belongs to that feature's promotion slice, which cannot happen while
 `tessellationShader` is false - the factory gates every leaf on
 `requireFeatures(FEATURE_TESSELLATION_SHADER)`, so they would all report
 `NotSupported` the way the clip/cull leaves did before that promotion.
+## Fragment storage side effects (2026-09-20)
+
+The frozen acceptance selection now contains the two original upstream
+`rasterization.frag_side_effects` kill leaves. They are not synthetic contract
+tests: one writes the color output before the SSBO side effect and `OpKill`, the
+other places the color assignment after termination. Together their unchanged
+storage-buffer and color-image oracle checks that the side effect survives while
+the killed invocation contributes no color.
+
+Both leaves first passed in a measurement selection alongside all 304 existing
+acceptance cases. After promotion, the canonical shipping selection is **306
+cases**, and run
+`20260920T213224464Z_PPSA99994_upstream-cts_0x11f2fc5c6a394` passed **306/306**
+with zero `Fail`, zero `NotSupported`, no missing, unexpected or duplicate
+results, strict artifact/QPA identity and confirmed title closure. Its selection
+SHA-256 is
+`b456e3ca1a93119db27fd58bbf7659932d3d25cbc2e7c7336cf0bfdd58683f06` and
+its SELF SHA-256 is
+`03b52352f2ae3d073775a88b9734b8effca9538c991ce5335715bf809e79d356`.
+The native counter-and-guard witness and the public capability query are recorded
+separately in
+[VALIDATION.md](VALIDATION.md#fragment-stores-and-atomics-promotion-2026-09-20);
+the CTS run alone is not used to infer those two axes.
+
 ## Indirect and indexed draw expansion (2026-09-16)
 
 DXVK262-T03 adds 46 original upstream leaves from two draw modules, both
@@ -1143,6 +1213,12 @@ and they are **now advertised by the shipping profile**: see
 the capability probe that back it. The frozen acceptance selection carries 362
 cases, 58 of them these leaves. The paragraphs that follow describe the
 eligibility pass as it stood before that promotion, when every T05 leaf was
+and they are **now advertised by the shipping profile**: see
+[Promoted (2026-09-21)](#promoted-2026-09-21) below for the acceptance run and
+the capability probe that back it. The frozen acceptance selection carries 362
+of these leaves on `main` (462 on this branch, which also carries the T06
+fragment and dual-source promotions). The paragraphs that follow describe the
+eligibility pass as it stood before that promotion, when every T05 leaf was
 still a diagnostic and the selection was 304. What changed since the first measurement is the
 inventory: the pinned checkout `a0270c1897597e6c77679870e10415398a13001c` was
 read for every source and amber script that names one of the four features,
@@ -1251,13 +1327,13 @@ against is gone (`tests/test_upstream_selection.py`).
 | Requirement | Leaves | Category | Status |
 |---|---|---|---|
 | `fillModeNonSolid` | `rasterization.culling.*` (28, 16 of them `_line`/`_point`) | `rasterization-culling` | measured 28/28 Pass, held until the shipping bit lands |
-| `fillModeNonSolid` | `rasterization.line_continuity.polygon-mode-lines` | `t05-measurement-pending` | **measured Fail** (2026-09-21): the amber engine now exists and the leaf produces a real verdict instead of an infrastructure error |
-| `multiViewport` | `fragment_ops.scissor.multi_viewport.scissor_1..16` | `t05-measurement-pending` | **measured 16/16 Pass** (2026-09-21) |
-| `multiViewport` | `draw.renderpass.scissor.{six multi-scissor leaves}` | `t05-measurement-pending` | **measured 0/6**, refused at `vkEndCommandBuffer` (clear-through-transfer, below) |
-| `depthClamp` | `clipping.clip_volume.depth_clamp.{triangle_list,triangle_strip}` | `t05-measurement-pending` | **measured 2/2 Pass** (2026-09-21) |
+| `fillModeNonSolid` | `rasterization.line_continuity.polygon-mode-lines` | `host-coherent-memory-gap` | **measured Fail** (2026-09-21): the amber engine now exists and the leaf produces a real verdict instead of an infrastructure error; the failure is Amber's host-coherent memory selection, not the feature (below) |
+| `multiViewport` | `fragment_ops.scissor.multi_viewport.scissor_1..16` | acceptance | **16/16 Pass** (2026-09-21) |
+| `multiViewport` | `draw.renderpass.scissor.{six multi-scissor leaves}` | acceptance | **6/6 Pass** once the clear-through-transfer execution path landed (the six failed before it, below) |
+| `depthClamp` | `clipping.clip_volume.depth_clamp.{triangle_list,triangle_strip}` | acceptance | **2/2 Pass** (2026-09-21) |
 | `depthClamp` | `clipping.clip_volume.depth_clamp.{point_list,line_list,line_strip}` | `plain-point-line-pipeline-refused` | Fail at creation (profile rule, not a T05 gap) |
 | `depthClamp` | `clipping.clip_volume.depth_clamp.*_with_adjacency`, `.triangle_fan` | `primitive-topology-refused` | Fail at creation (resolver, not a T05 gap) |
-| `depthClamp`, `depthBiasClamp` | `draw.renderpass.depth_clamp.d32_sfloat{,_clamp_input_*,_depth_bias_clamp_input_*,_clamp_four_viewports}` | `t05-measurement-pending` | **measured 0/6**, refused at `vkCreateRenderPass` (depth-only pass, below). These are the only upstream oracles this profile can run for `depthBiasClamp` |
+| `depthClamp`, `depthBiasClamp` | `draw.renderpass.depth_clamp.d32_sfloat{,_clamp_input_*,_depth_bias_clamp_input_*,_clamp_four_viewports}` | acceptance | **6/6 Pass** once depth-only render passes landed (the six were refused at `vkCreateRenderPass` before that, below). These are the only upstream oracles this profile can run for `depthBiasClamp` |
 | `depthBiasClamp` | `dynamic_state.monolithic.rs_state.depth_bias_clamp` | `depth-stencil-format-gap` | NotSupported: needs `D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT` as attachment (`vktDynamicStateRSTests.cpp:133-150`); the profile offers only `D32_SFLOAT` (`src/texture_format.c:183`) |
 
 Families examined and found not applicable, recorded so they are not
@@ -1368,24 +1444,22 @@ requires each true feature bit to cite its code path **and** at least one
 accepted upstream leaf, and the DXVK profile matrix marks a row ready only with
 `cts-pass`. Against that rule:
 
-Against the 2026-09-21 measurement, no T05 requirement is promotable yet:
+All four T05 requirements cleared that rule on 2026-09-21 and are advertised by
+the shipping profile:
 
-* `fillModeNonSolid`: 28 of its 29 leaves pass. The remaining
-  `rasterization.line_continuity.polygon-mode-lines` now runs for real and
-  fails its own oracle, so the feature has a measured defect rather than an
-  unmeasured leaf.
-* `multiViewport`: 16 of 22 leaves pass. The six `draw.renderpass.scissor`
-  leaves need the clear-through-transfer execution path, which is proven to
-  hang the GPU if the barriers are merely admitted.
-* `depthClamp`: 2 of 8 applicable leaves pass. The six
-  `draw.renderpass.depth_clamp` leaves need depth-only render passes.
-* `depthBiasClamp`: **no** upstream leaf passes. Its only two applicable
-  oracles are inside those six depth-only-pass cases, so the feature is
-  blocked behind the same capability.
-  `dynamic_state.monolithic.rs_state.depth_bias_clamp` stays out for a
-  different reason: it needs a stencil-bearing attachment format
-  (`D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT`), which is a separate capability
-  this tranche did not add.
+* `fillModeNonSolid`: 28 of its 29 leaves pass; the twenty-ninth,
+  `rasterization.line_continuity.polygon-mode-lines`, is the host-coherent
+  memory gap described above rather than a defect in the feature.
+* `multiViewport`: all 22 leaves pass. The six `draw.renderpass.scissor` leaves
+  needed the clear-through-transfer execution path, which landed in
+  `src/color_clear.c` after the barrier-only attempt was measured to hang the
+  GPU.
+* `depthClamp`: all eight applicable leaves pass. The six
+  `draw.renderpass.depth_clamp` leaves needed depth-only render passes, which
+  `src/vk_render_pass.c` and the native queue now serve.
+* `depthBiasClamp`: its only two applicable oracles are the
+  `draw.renderpass.depth_clamp.d32_sfloat_depth_bias_clamp_input_*` leaves,
+  both inside the depth-only-pass group above, and both pass.
   `dynamic_state.monolithic.rs_state.depth_bias_clamp` stays out for a
   different reason: it needs a stencil-bearing attachment format
   (`D24_UNORM_S8_UINT` or `D32_SFLOAT_S8_UINT`), which is a separate capability

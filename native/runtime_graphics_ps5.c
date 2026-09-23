@@ -13,6 +13,16 @@
 #define TESS_CREATE_FAIL(stage) ((void)0)
 #endif
 
+/* Console-only marker: the front end hands every accepted pipeline to this
+ * entry, so "the case died with the create logged and no link line after it"
+ * separates a front-end acceptance from the native link that follows. */
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define CREATE_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define CREATE_MARK(...) ((void)0)
+#endif
+
 /* The tessellation ring sizing, from the pinned radv device-topology formula
  * (ac_gpu_info.c) with the GFX1013 console's measured engine topology: two
  * shader engines, one shader array each, eighteen good compute units per
@@ -122,6 +132,7 @@ static uint32_t tess_tf_param_value(const PsbcShaderMetadata *m)
 VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
     uint32_t primitive_type,void **out)
 {
+    CREATE_MARK("PS5VK_NATIVE_PIPELINE_CREATE primitive=%u", primitive_type);
     if(!out)return VK_ERROR_UNKNOWN;
     *out=NULL;
     const struct ps5vk_runtime_graphics_program *input=data;
@@ -138,6 +149,26 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
      * producer the tessellator's output topology generates and overrides the
      * linked UC primitive afterwards. */
     const int has_tessellation=input->hull.machine_code!=NULL;
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    /* DIAGNOSTIC (DXVK262-T06 sample-rate line): the fragment program this
+     * create actually links, by SIZE and fingerprint. The compiler folds the
+     * fragment coordinate at compile time for a standalone compile, and the two
+     * shapes are told apart by their length: the interpolated-coordinate shape
+     * is 48 bytes for the witness module and the pixel-centre one is 44, while
+     * the pre-fold shape that read the never-written PS-state user SGPR is 104.
+     * A survey that changes pixel-stage registers is only meaningful if the
+     * shader underneath it is the one the survey claims. */
+    {
+        uint64_t fingerprint=UINT64_C(14695981039346656037);
+        const unsigned char *code=(const unsigned char *)input->fragment.machine_code;
+        for(size_t i=0;i<input->fragment.machine_code_size;++i)
+            fingerprint=(fingerprint^(uint64_t)code[i])*
+                UINT64_C(1099511628211);
+        CREATE_MARK("PS5VK_SAMPLE_RATE_FRAGMENT_CODE bytes=%u fingerprint=%016llx",
+            (unsigned)input->fragment.machine_code_size,
+            (unsigned long long)fingerprint);
+    }
+#endif
     if(has_tessellation && (!input->patch_control_points ||
        input->patch_control_points>32u || !input->tess_output_points ||
        input->tess_output_points>32u))return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -160,6 +191,26 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
            has_tessellation?&input->domain.metadata:&input->vertex.metadata,
            &input->fragment.metadata,&arguments))
         {TESS_CREATE_FAIL("abi");return VK_ERROR_FEATURE_NOT_PRESENT;}
+    const int fragment_export=ps5vk_runtime_fragment_export(&input->fragment.metadata);
+    /* The compiler's own shape and the register class must agree, and the
+     * dual-source flag is exactly the DUAL shape: a two-colour-target pair
+     * publishes the same register pair but is not dual source, so deriving the
+     * flag from the registers alone would mislabel it (and the draw state keys
+     * its conversion on that flag). */
+    if(fragment_export<0 || input->dual_source_export>1u ||
+       input->fragment_shape>PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT ||
+       input->dual_source_export!=(uint32_t)
+           (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL) ||
+       (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE) ||
+       (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) ||
+       (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) ||
+       (input->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT &&
+        fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if(has_tessellation && ps5vk_runtime_hull_build(&hull,&input->hull))
         {TESS_CREATE_FAIL("hull");return VK_ERROR_FEATURE_NOT_PRESENT;}
     size_t vs_at=(sizeof(struct ps5vk_graphics_pair)+255u)&~(size_t)255u;
@@ -199,6 +250,8 @@ VkResult ps5vk_native_runtime_graphics_create(VkDevice d,const void *data,
     struct ps5vk_graphics_pair *pair=p->pair;
     pair->runtime_arguments=arguments;
     pair->hull_arguments=input->hull_arguments;
+    pair->dual_source_export=input->dual_source_export;
+    pair->fragment_shape=input->fragment_shape;
     if(ps5vk_runtime_shader_build(&pair->runtime_vertex,
            has_tessellation?&input->domain:&input->vertex) ||
        ps5vk_runtime_shader_build(&pair->runtime_fragment,&input->fragment)) {

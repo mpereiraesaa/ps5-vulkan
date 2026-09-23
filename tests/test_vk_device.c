@@ -139,7 +139,14 @@ static void lifecycle(void)
     assert(gl.maxDescriptorSetSamplers==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS &&
         gl.maxDescriptorSetSampledImages==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS);
     assert(gl.maxSamplerAllocationCount==PS5VK_MAX_SAMPLERS && PS5VK_MAX_SAMPLERS==4096);
-    assert(gl.maxFragmentOutputAttachments==1 && gl.maxFragmentCombinedOutputResources==1);
+    /* DXVK262-T06 independentBlend is promoted: the ABI, the render pass, the
+     * framebuffer, the pipeline key and the native per-target programming carry
+     * two colour attachments, both upstream leaves that require the feature
+     * pass on hardware, and the advertised bound is the served one. */
+    assert(gl.maxColorAttachments==PS5VK_MAX_COLOR_ATTACHMENTS &&
+           gl.maxFragmentOutputAttachments==PS5VK_MAX_COLOR_ATTACHMENTS &&
+           gl.maxFragmentCombinedOutputResources==PS5VK_MAX_COLOR_ATTACHMENTS &&
+           PS5VK_MAX_COLOR_ATTACHMENTS==2);
     const VkFormat guarantee_formats[]={VK_FORMAT_B8G8R8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_D32_SFLOAT};
     const VkImageUsageFlags guarantee_usages[]={VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
     for(unsigned f=0;f<3;++f) {
@@ -150,7 +157,7 @@ static void lifecycle(void)
         assert(image_limits.maxExtent.height>=gl.maxImageDimension2D);
     }
     assert(gl.maxFramebufferWidth==16383 && gl.maxFramebufferHeight==16383);
-    assert(gl.maxFramebufferLayers==1 && gl.maxColorAttachments==1);
+    assert(gl.maxFramebufferLayers==1);
     assert(gl.framebufferColorSampleCounts==1 && gl.framebufferDepthSampleCounts==1);
     assert(gl.sampledImageColorSampleCounts==1 &&
         gl.sampledImageIntegerSampleCounts==1 && !gl.sampledImageDepthSampleCounts);
@@ -344,6 +351,13 @@ static void lifecycle(void)
               * exists; nothing else does. */
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                      VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             /* The pinned render-pass module derives its attachment usage from
+              * the format's reported features, so its colour target - the one
+              * the two independentBlend leaves render into - adds the sampled
+              * role to that same readback shape. Served since the promotion,
+              * and nothing else gains it. */
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT) ||
              /* The pinned multiview helper's attachment: that same readback
               * shape plus an input-attachment role, and nothing else. */
              usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
@@ -419,7 +433,12 @@ static void lifecycle(void)
             const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 ||
                 image_formats[f]==VK_FORMAT_D32_SFLOAT;
-            const VkBool32 transfer_only=image_formats[f]==VK_FORMAT_R8G8B8A8_UNORM && usage &&
+            /* The query takes the padded-linear transfer branch for any row
+             * that carries the transfer-source role, which now includes the
+             * integer colour target the promotion serves; the model mirrors
+             * that predicate instead of naming one format. */
+            const VkBool32 transfer_only=ps5vk_texture_format_has(image_formats[f],
+                PS5VK_FORMAT_CAP_TRANSFER_SRC) && usage &&
                 !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                                              VK_IMAGE_USAGE_TRANSFER_DST_BIT));
             const uint32_t expected_mips=!attachment &&
@@ -528,14 +547,26 @@ static void lifecycle(void)
         if(formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
             optimal_bits=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         else if(formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
+            /* DXVK262-T06: the blend bit joins the advertised role, because
+             * the upstream blend family gates every leaf on it and all 98
+             * applicable leaves passed with it reported. */
             optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
         else if(formats[n]==VK_FORMAT_D32_SFLOAT)
             /* TRANSFER_DST is the whole-subresource depth clear and
              * TRANSFER_SRC is the whole-surface readback, which 64KB_Z_X has
              * had since its pixel addressing was implemented. */
             optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+        else if(formats[n]==VK_FORMAT_R8G8B8A8_UINT)
+            /* DXVK262-T06 independentBlend is promoted, so the integer colour
+             * target the two upstream leaves draw into reports its colour
+             * attachment role (and the transfer source its readback needs)
+             * beside the sampled and transfer-destination bits above. It has no
+             * blend bit: an integer target is never blended into. */
+            optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         /* One format publishes a linear-tiling role: RGBA8 carries the transfer
          * destination of the pinned host-readback staging image. */
@@ -632,7 +663,8 @@ static void lifecycle(void)
         }
         if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
             expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
         else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
             expected_optimal=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         assert(fp.optimalTilingFeatures==expected_optimal);
@@ -1206,6 +1238,66 @@ static void negative(void)
         vkGetPhysicalDeviceFeatures2KHR(p, &all);
         assert(all.features.depthBiasClamp && all.features.depthClamp &&
                all.features.fillModeNonSolid && all.features.multiViewport);
+        VkDeviceCreateInfo chained = info;
+        chained.pEnabledFeatures = NULL; chained.pNext = &all;
+        d=(VkDevice)(uintptr_t)1;
+        assert(vkCreateDevice(p,&chained,NULL,&d)==VK_SUCCESS && d);
+        assert(d->enabled_features == (PS5VK_FEATURE_ROBUST_BUFFER_ACCESS | all_bits));
+        vkDestroyDevice(d, NULL);
+        p->platform.supported_features = saved;
+        memset(&features, 0, sizeof(features));
+        features.robustBufferAccess = VK_TRUE;
+    }
+    /* T06 follows the same one-member/one-platform-bit contract. This test
+     * deliberately supplies the bits only through the host fixture: the host
+     * and PS5 platform defaults advertise none until native evidence promotes
+     * an individual capability. */
+    {
+        const struct { size_t offset; uint32_t bit; } t06[4] = {
+            {offsetof(VkPhysicalDeviceFeatures, independentBlend),
+             PS5VK_FEATURE_INDEPENDENT_BLEND},
+            {offsetof(VkPhysicalDeviceFeatures, dualSrcBlend),
+             PS5VK_FEATURE_DUAL_SRC_BLEND},
+            {offsetof(VkPhysicalDeviceFeatures, fragmentStoresAndAtomics),
+             PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS},
+            {offsetof(VkPhysicalDeviceFeatures, sampleRateShading),
+             PS5VK_FEATURE_SAMPLE_RATE_SHADING},
+        };
+        const uint32_t saved = p->platform.supported_features;
+        const VkBool32 yes = VK_TRUE;
+        VkPhysicalDeviceFeatures reported;
+        vkGetPhysicalDeviceFeatures(p, &reported);
+        assert(!reported.independentBlend && !reported.dualSrcBlend &&
+               !reported.fragmentStoresAndAtomics && !reported.sampleRateShading);
+        uint32_t all_bits = 0;
+        for (unsigned n = 0; n < 4; ++n) {
+            all_bits |= t06[n].bit;
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t06[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+
+            p->platform.supported_features = saved | t06[n].bit;
+            vkGetPhysicalDeviceFeatures(p, &reported);
+            for (unsigned other = 0; other < 4; ++other) {
+                VkBool32 value;
+                memcpy(&value, (unsigned char *)&reported + t06[other].offset, sizeof(value));
+                assert(value == (other == n ? VK_TRUE : VK_FALSE));
+            }
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t06[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == t06[n].bit);
+            vkDestroyDevice(d, NULL);
+            p->platform.supported_features = saved;
+        }
+
+        p->platform.supported_features = saved | all_bits;
+        VkPhysicalDeviceFeatures2 all = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        vkGetPhysicalDeviceFeatures2KHR(p, &all);
+        assert(all.features.independentBlend && all.features.dualSrcBlend &&
+               all.features.fragmentStoresAndAtomics && all.features.sampleRateShading);
         VkDeviceCreateInfo chained = info;
         chained.pEnabledFeatures = NULL; chained.pNext = &all;
         d=(VkDevice)(uintptr_t)1;

@@ -5,9 +5,49 @@
 #include "color_detile.h"
 #include "depth_detile.h"
 #include "vk_image.h"
+#include "color_attachment_contract.h"
+#include "color_barrier.h"
 #include "vk_image_transfer.h"
 
 struct ps5vk_readback_plan { VkImage image; VkBuffer buffer; VkDeviceSize layer_stride; };
+
+/* The render-pass module reads back every attachment its pass rendered, in one
+ * command buffer: one handover barrier and one whole-surface copy per target,
+ * followed by the buffer scope that publishes them. The single-copy shapes
+ * above belong to the draw module, which reads one surface back; this set
+ * carries as many targets as a subpass may name, and each target is its own
+ * surface and its own buffer. */
+struct ps5vk_readback_set {
+    struct ps5vk_readback_plan target[PS5VK_MAX_COLOR_ATTACHMENTS];
+    unsigned count;
+};
+
+struct ps5vk_readback_partition {
+    unsigned prefix_count;
+    unsigned readback_first;
+    unsigned readback_count;
+};
+
+/* A render-pass postlude may order unrelated shader writes before the fixed
+ * image readback sequence.  Locate that sequence by its single image-to-buffer
+ * copy, whose immediately preceding operation must be its image barrier.  The
+ * strict readback validator below still owns the complete four-operation
+ * suffix; this function only partitions the immutable command record and
+ * refuses ambiguous or trailing shapes. */
+static inline VkResult ps5vk_readback_partition(
+    const struct ps5vk_operation *ops,unsigned count,
+    struct ps5vk_readback_partition *out)
+{
+    if(!ops || !count || !out)return VK_ERROR_FEATURE_NOT_PRESENT;
+    unsigned copy=count,copies=0;
+    for(unsigned i=0;i<count;++i)
+        if(ops[i].type==PS5VK_COPY_IMAGE_BUFFER){copy=i;++copies;}
+    if(copies!=1 || !copy || count-copy!=3)return VK_ERROR_FEATURE_NOT_PRESENT;
+    const unsigned first=copy-1;
+    if(ops[first].type!=PS5VK_IMAGE_BARRIER)return VK_ERROR_FEATURE_NOT_PRESENT;
+    *out=(struct ps5vk_readback_partition){first,first,4};
+    return VK_SUCCESS;
+}
 
 /* The same bounded full-color readback may follow a render pass or be a
  * separate submission. This only validates and stages the layout: the caller
@@ -91,7 +131,13 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
     uint64_t plane=(uint64_t)i->extent.width*i->extent.height;
     if(!i->arrayLayers || plane>SIZE_MAX/4/i->arrayLayers)return VK_ERROR_FEATURE_NOT_PRESENT;
     uint64_t pixels=plane*i->arrayLayers;
-    if(i->format!=(depth_source?VK_FORMAT_D32_SFLOAT:VK_FORMAT_R8G8B8A8_UNORM) ||
+    /* A colour readback reads a 32-bit-per-texel surface: the normalized
+     * attachment this profile has always read back, and - only in the build
+     * that serves it - the integer one its independentBlend oracle uses. The
+     * bytes are tiled by the same 64KB_R_X equation either way. */
+    if(!(depth_source ? i->format==VK_FORMAT_D32_SFLOAT :
+          (i->format==VK_FORMAT_R8G8B8A8_UNORM ||
+           ps5vk_color_target_integer_served(i->format))) ||
        i->samples!=VK_SAMPLE_COUNT_1_BIT ||
        i->mipLevels!=1 || (i->arrayLayers!=1 && !ps5vk_array_color_image(image)) || i->extent.depth!=1 ||
        (i->usage&required)!=required || !pixels || pixels>SIZE_MAX/4 ||
@@ -132,6 +178,117 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
         if(rc!=VK_SUCCESS)return rc;
     }
     *out=(struct ps5vk_readback_plan){image,copy->copy_destination,stride};
+    return VK_SUCCESS;
+}
+
+/* The multi-target form: the pinned render-pass module's own readback command
+ * buffer. pushReadImagesToBuffers (vktRenderPassTests.cpp:3582) records ONE
+ * barrier call carrying the identity handover of every attachment it reads
+ * back, then one whole-surface copy per attachment in attachment order, then
+ * the buffer scope that publishes those copies. Each target is a separate
+ * colour attachment of the same readback role, so every per-copy check the
+ * single shape applies applies here too, once per target. */
+static inline VkResult ps5vk_readback_commands_set(VkDevice d,
+    const struct ps5vk_operation *ops,unsigned count,VkImage color,
+    struct ps5vk_layout_state *layouts,struct ps5vk_readback_set *out)
+{
+    if(!d || !ops || !layouts || !out || count<3)return VK_ERROR_FEATURE_NOT_PRESENT;
+    memset(out,0,sizeof(*out));
+    unsigned at=0;
+    /* The handover of every target, in attachment order. */
+    while(at<count && ops[at].type==PS5VK_IMAGE_BARRIER) {
+        const VkImageMemoryBarrier *b=&ops[at].image_barrier;
+        VkImage image=b->image;
+        if(out->count==PS5VK_MAX_COLOR_ATTACHMENTS ||
+           !ps5vk_colour_readback_handover_barrier(b) ||
+           !image || image->device!=d || (color && image!=color) ||
+           !ps5vk_colour_transfer_image(image))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        for(unsigned k=0;k<out->count;++k)
+            if(out->target[k].image==image)return VK_ERROR_FEATURE_NOT_PRESENT;
+        out->target[out->count].image=image;
+        out->target[out->count].buffer=VK_NULL_HANDLE;
+        out->target[out->count].layer_stride=0;
+        ++out->count;
+        if(ps5vk_layout_transition(layouts,image,b->oldLayout,b->newLayout)!=VK_SUCCESS)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        ++at;
+    }
+    if(!out->count)return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Then exactly one whole-surface copy per handed-over attachment, in the
+     * same order. */
+    const unsigned targets=out->count;
+    for(unsigned t=0;t<targets;++t) {
+        if(at>=count || ops[at].type!=PS5VK_COPY_IMAGE_BUFFER)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        const struct ps5vk_operation *copy=&ops[at];
+        VkImage image=out->target[t].image;
+        if(copy->copy_image!=image ||
+           copy->copy_layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+           !copy->copy_destination)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        const VkImageCreateInfo *i=&image->info;
+        const VkBufferImageCopy *r=&copy->copy_region;
+        const VkImageUsageFlags required=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        uint64_t plane=(uint64_t)i->extent.width*i->extent.height;
+        if(!i->arrayLayers || plane>SIZE_MAX/4/i->arrayLayers)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        uint64_t pixels=plane*i->arrayLayers;
+        /* A colour readback reads a 32-bit-per-texel surface: the normalized
+         * attachment this profile has always read back, and - only in the
+         * build that serves it - the integer one the independentBlend oracle
+         * uses. Both are tiled by the same 64KB_R_X equation. */
+        if(!(i->format==VK_FORMAT_R8G8B8A8_UNORM ||
+             ps5vk_color_target_integer_served(i->format)) ||
+           i->samples!=VK_SAMPLE_COUNT_1_BIT || i->mipLevels!=1 ||
+           i->arrayLayers!=1 || i->extent.depth!=1 ||
+           (i->usage&required)!=required || !pixels || pixels>SIZE_MAX/4 ||
+           r->bufferOffset || (r->bufferRowLength && r->bufferRowLength!=i->extent.width) ||
+           (r->bufferImageHeight && r->bufferImageHeight!=i->extent.height) ||
+           r->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
+           r->imageSubresource.mipLevel || r->imageSubresource.baseArrayLayer ||
+           r->imageSubresource.layerCount!=1 || r->imageOffset.x || r->imageOffset.y ||
+           r->imageOffset.z || r->imageExtent.width!=i->extent.width ||
+           r->imageExtent.height!=i->extent.height || r->imageExtent.depth!=1)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        void *source,*destination;VkDeviceSize source_bytes,destination_bytes;
+        const size_t tiled=ps5vk_color_64k_rx_surface_size(4,i->extent.width,i->extent.height);
+        if(tiled==SIZE_MAX ||
+           ps5vk_image_span(d,image,&source,&source_bytes)!=VK_SUCCESS ||
+           ps5vk_buffer_span(d,copy->copy_destination,0,VK_WHOLE_SIZE,
+               &destination,&destination_bytes)!=VK_SUCCESS ||
+           source_bytes<tiled || destination_bytes<pixels*4)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        const VkDeviceSize stride=source_bytes/i->arrayLayers;
+        if(source_bytes%i->arrayLayers || stride<tiled)return VK_ERROR_FEATURE_NOT_PRESENT;
+        uintptr_t src=(uintptr_t)source,dst=(uintptr_t)destination;
+        if(src<dst ? source_bytes>dst-src : pixels*4>src-dst)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        /* Two targets are two surfaces and two buffers: a repeat would read or
+         * write one of them twice, which this shape must not express. */
+        for(unsigned k=0;k<t;++k)
+            if(out->target[k].buffer==copy->copy_destination)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        out->target[t].buffer=copy->copy_destination;
+        out->target[t].layer_stride=stride;
+        ++at;
+    }
+    /* The trailing scope names every buffer the copies published into. The
+     * recorder appends one aggregate behind the named entries when a barrier
+     * call names no image, so the tail is the named buffers followed by at most
+     * that one aggregate, and it must name at least one buffer. */
+    if(at>=count || ops[at].type!=PS5VK_BARRIER)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    unsigned named=0,aggregate=0;
+    for(;at<count;++at) {
+        if(ops[at].type!=PS5VK_BARRIER)return VK_ERROR_FEATURE_NOT_PRESENT;
+        if(ops[at].buffer_barrier.buffer) {
+            if(aggregate)return VK_ERROR_FEATURE_NOT_PRESENT;
+            ++named;
+        } else if(++aggregate>1u)return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    if(!named)return VK_ERROR_FEATURE_NOT_PRESENT;
     return VK_SUCCESS;
 }
 

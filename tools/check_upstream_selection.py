@@ -185,6 +185,179 @@ def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
             for capability in capabilities for type_name in type_names}
 
 
+def _multisample_factory(text: str) -> str:
+    """Return the body of the pinned multisample factory.
+
+    The module declares several `samples[]` tables (the fragment-mask and
+    interpolation factories carry their own), so every derivation below is
+    bounded to `createMultisampleTests` instead of the whole file.
+    """
+    match = re.search(r"tcu::TestCaseGroup \*createMultisampleTests\(", text)
+    if not match:
+        return ""
+    return _source_function_at_line(text, text.count("\n", 0, match.start()) + 1)
+
+
+def _multisample_generated_segments(text: str) -> set[str]:
+    """Group segments the multisample factory composes from its sample table.
+
+    `createMultisampleTests` names every sample-count group with
+    ``caseName << "samples_" << samples[samplesNdx]``, so the segment is the
+    numeric value of the flag rather than a string literal. Bounded to that
+    module's own samples array.
+    """
+    factory = _multisample_factory(text)
+    if not factory:
+        return set()
+    samples_match = re.search(
+        r"const VkSampleCountFlagBits samples\[\]\s*=\s*\{(.*?)\};",
+        factory,
+        re.DOTALL,
+    )
+    if not samples_match or not re.search(
+            r'caseName\s*<<\s*"samples_"\s*<<\s*samples\[samplesNdx\]', factory):
+        return set()
+    return {f"samples_{value}"
+            for value in re.findall(r"VK_SAMPLE_COUNT_([0-9]+)_BIT", samples_match.group(1))}
+
+
+def _min_sample_shading_leaf_names(text: str, path: str) -> set[str]:
+    """Leaves of the pipeline module that require sampleRateShading.
+
+    `MinSampleShadingTest::checkSupport` is the only
+    requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING) call in
+    the pinned multisample module, and `createMultisampleTests` builds every
+    leaf of its three groups from three bounded tables in that file: the
+    sample-count array (whose names are the numeric flag value), the
+    minSampleShading value table, and the case literals each block passes to
+    `MinSampleShadingTest`. Membership is checked against exactly those tables
+    and registrations, per group, so a leaf moved between the enabled and
+    disabled groups - or a primitive the group does not register - stops
+    matching instead of being accepted by a literal that exists elsewhere.
+    Bounded to this one pinned module: the derived names carry the module's own
+    group and family segments, while the registered parents above them are the
+    integration gate's business.
+    """
+    if "DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING" not in text:
+        return set()
+    factory = _multisample_factory(text)
+    if not factory:
+        return set()
+    samples_match = re.search(
+        r"const VkSampleCountFlagBits samples\[\]\s*=\s*\{(.*?)\};",
+        factory,
+        re.DOTALL,
+    )
+    configs_match = re.search(
+        r"const TestConfig testConfigs\[\]\s*=\s*\{(.*?)\n\s*\};",
+        factory,
+        re.DOTALL,
+    )
+    if not (samples_match and configs_match):
+        return set()
+    if not re.search(r'caseName\s*<<\s*"samples_"\s*<<\s*samples\[samplesNdx\]', factory):
+        return set()
+    sample_counts = re.findall(r"VK_SAMPLE_COUNT_([0-9]+)_BIT", samples_match.group(1))
+    configs = re.findall(r'\{"(min_[0-9_]+)"\s*,', configs_match.group(1))
+    # Both tables are pinned: the six Vulkan counts in their declared order and
+    # the five minSampleShading values the family names.
+    if sample_counts != ["2", "4", "8", "16", "32", "64"]:
+        return set()
+    if configs != ["min_0_0", "min_0_25", "min_0_5", "min_0_75", "min_1_0"]:
+        return set()
+    markers = [(match.group(1), match.start()) for match in re.finditer(
+        r'new tcu::TestCaseGroup\(testCtx, "([a-z0-9_]+)"\)', factory)]
+    derived: set[str] = set()
+    for index, (name, start) in enumerate(markers):
+        if name not in ("min_sample_shading", "min_sample_shading_enabled",
+                        "min_sample_shading_disabled"):
+            continue
+        end = markers[index + 1][1] if index + 1 < len(markers) else len(factory)
+        block = factory[start:end]
+        cases = re.findall(
+            r"new MinSampleShadingTest\(\s*(?:\n\s*)?testCtx,\s*\"([a-z0-9_]+)\"", block)
+        if not cases:
+            return set()
+        for count in sample_counts:
+            for config in configs:
+                for case in cases:
+                    derived.add(f"{name}.{config}.samples_{count}.{case}")
+    if any(path.endswith("." + candidate) for candidate in derived):
+        return {path}
+    return set()
+
+
+def _dual_source_blend_leaf_names(text: str, leaf: str) -> set[str]:
+    """Leaves of the pipeline module's dual-source blend family.
+
+    `getBlendStateSetName` joins one fixed-length sequence of blend-state names
+    with "-", and `getBlendStateName` composes each of those from four derived
+    tables: the short factor spellings and the blend-operation names, both read
+    from the initializer in this file, around the color/alpha layout the
+    function prints. The combination space is far too large to enumerate, so
+    membership is checked structurally against exactly those tables and against
+    the registration that produces the family. Bounded to the exact
+    construction shapes in this one pinned module: a rewritten factory stops
+    matching instead of yielding invented names.
+    """
+    factor_match = re.search(
+        r"const char \*shortBlendFactorNames\[\]\s*=\s*\{(.*?)\n\s*\};",
+        text, re.DOTALL)
+    op_match = re.search(r"blendOpNames\[\]\s*=\s*\{(.*?)\n\s*\};",
+                         text, re.DOTALL)
+    if not (factor_match and op_match):
+        return set()
+    factors = re.findall(r'"([a-z0-9]+)"', factor_match.group(1))
+    ops = re.findall(r'"([a-z]+)"', op_match.group(1))
+    # Both tables are pinned: nineteen factor spellings and the five blend
+    # operations in their declared order.
+    if len(factors) != 19 or ops != ["add", "sub", "rsub", "min", "max"]:
+        return set()
+    if not re.search(r'name\s*<<\s*"-"\s*;', text):
+        return set()
+    if not re.search(r"blendStateTests->addChild\(new DualSourceBlendTest\(testCtx, "
+                     r"getBlendStateSetName\(", text):
+        return set()
+
+    def alternatives(tokens: list[str]) -> str:
+        return "|".join(sorted(map(re.escape, tokens), key=len, reverse=True))
+
+    factor = alternatives(factors)
+    operation = alternatives(ops)
+    state = re.compile(f"color_({factor})_({factor})_({operation})_"
+                       f"alpha_({factor})_({factor})_({operation})")
+    parts = leaf.split("-")
+    if len(parts) != 4 or not all(state.fullmatch(part) for part in parts):
+        return set()
+    return {leaf}
+
+
+def _two_attachment_write_mask_leaf_names(text: str, leaf: str) -> set[str]:
+    """Leaves of the render-pass module's two-attachment write-mask family.
+
+    `addAttachmentWriteMaskTests` is the only factory in the pinned tree whose
+    leaves declare DEVICE_CORE_FEATURE_INDEPENDENT_BLEND, and the DXVK262-T06
+    oracle is the pair that draws into exactly two colour attachments with a
+    different write mask each. Bounded to that factory's exact construction
+    expressions: the attachment counts it iterates, the "attachment_count_" and
+    "start_index_" naming, and the requirement entry. A rewritten factory stops
+    matching instead of yielding invented names.
+    """
+    factory = _attachment_write_mask_factory(text)
+    if "DEVICE_CORE_FEATURE_INDEPENDENT_BLEND" not in factory:
+        return set()
+    counts = re.search(r"attachmentCounts\[\]\s*=\s*\{([^}]*)\}", factory)
+    if not counts or "2" not in [part.strip() for part in counts.group(1).split(",")]:
+        return set()
+    if not re.search(r'"attachment_count_"\s*\+\s*de::toString\(attachmentCount\)', factory):
+        return set()
+    if not re.search(r'"start_index_"\s*\+\s*de::toString\(drawStartNdx\)', factory):
+        return set()
+    # `leaf` is this case's last path segment; the recognizer accepts exactly
+    # the two-attachment, two-start-index leaves of the two allocation groups.
+    return {leaf} if re.fullmatch(r"start_index_[01]", leaf) else set()
+
+
 @_memoized
 def _rasterization_culling_leaf_names(text: str, function_text: str) -> set[str]:
     """Leaves of the rasterization module's culling family.
@@ -700,6 +873,42 @@ def _dynamic_state_compute_generated_segments(text: str) -> set[str]:
         token.removeprefix("VK_DYNAMIC_STATE_").lower()
         for token in re.findall(r"\bVK_DYNAMIC_STATE_[A-Z0-9_]+\b", state_list.group(1))
     }
+
+
+def _attachment_write_mask_factory(text: str) -> str:
+    """The body of the pinned write-mask factory, and nothing else.
+
+    The module is a template-heavy file whose enclosing-function extractor
+    cannot recover this factory, so the recognizers below slice it by its own
+    definition: from the function signature to the next top-level definition.
+    """
+    start = text.find("void addAttachmentWriteMaskTests(")
+    if start < 0:
+        return ""
+    end = text.find("\nvoid ", start + 1)
+    return text[start:end if end > 0 else len(text)]
+
+
+def _attachment_write_mask_generated_segments(text: str) -> set[str]:
+    """Derive the write-mask factory's "attachment_count_<n>" group names.
+
+    `addAttachmentWriteMaskTests` composes one group per entry of its own
+    attachmentCounts[] table with `"attachment_count_" + de::toString(...)`, so
+    the segment is not a literal anywhere in the module. Accept the names only
+    while that exact construction and table are present.
+    """
+    factory = _attachment_write_mask_factory(text)
+    if not re.search(r'"attachment_count_"\s*\+\s*de::toString\(attachmentCount\)', factory):
+        return set()
+    counts = re.search(r"attachmentCounts\[\]\s*=\s*\{([^}]*)\}", factory)
+    if not counts:
+        return set()
+    names = set()
+    for part in counts.group(1).split(","):
+        part = part.strip()
+        if part.isdigit():
+            names.add(f"attachment_count_{part}")
+    return names
 
 
 @_memoized
@@ -1376,6 +1585,10 @@ def main() -> int:
             _clip_distance_generated_segments(text)
             if source_path.name == "vktClippingTests.cpp" else set()
         )
+        if source_path.name == "vktPipelineMultisampleTests.cpp":
+            generated_segments |= _multisample_generated_segments(text)
+        if source_path.name == "vktRenderPassTests.cpp":
+            generated_segments |= _attachment_write_mask_generated_segments(text)
         for segment in segments[1:-1]:
             if (not _quoted_in(segment, searchable) and
                     segment not in generated_segments and
@@ -1458,6 +1671,20 @@ def main() -> int:
         if (source_path.name == "vktRasterizationTests.cpp" and
                 leaf in _rasterization_culling_leaf_names(text, function_text)):
             continue
+        # The dual-source blend family composes its leaf names from the short
+        # factor spellings and the blend-operation table inside the cited
+        # factory. Bounded to that module's exact initializer and joining
+        # expressions.
+        if (source_path.name == "vktPipelineBlendTests.cpp" and
+                leaf in _dual_source_blend_leaf_names(text, leaf)):
+            continue
+        # The multisample module's sampleRateShading leaves: the only class in
+        # the pinned tree the feature's own oracle gates on builds three groups
+        # from the sample-count and minSampleShading tables in that file.
+        # Membership is per group, so it is checked against the whole path.
+        if (source_path.name == "vktPipelineMultisampleTests.cpp" and
+                path in _min_sample_shading_leaf_names(text, path)):
+            continue
         # The fragment_ops multi-viewport family, the clipping clip_volume groups
         # and the draw depth_clamp family compose their names from a prefix or a
         # format plus a bounded table; each recognizer is bound to its module.
@@ -1469,6 +1696,12 @@ def main() -> int:
             continue
         if (source_path.name == "vktDrawDepthClampTests.cpp" and
                 leaf in _draw_depth_clamp_leaf_names(text)):
+            continue
+        # The render-pass module's write-mask family: the only upstream leaves
+        # that REQUIRE independentBlend, and the two-attachment pair is the
+        # DXVK262-T06 oracle for it.
+        if (source_path.name == "vktRenderPassTests.cpp" and
+                leaf in _two_attachment_write_mask_leaf_names(text, leaf)):
             continue
         # The geometry input factory names its triangle-strip-adjacency leaves
         # after the vertex count it iterates, so only the prefix is a literal.

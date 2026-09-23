@@ -13,6 +13,11 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	mkdir -p build/runtime-graphics
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_dual_source.frag -o build/runtime-graphics/dual_source.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_two_mrt.frag -o build/runtime-graphics/two_mrt.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_second_mrt_only.frag -o build/runtime-graphics/second_mrt_only.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_sample_id.vert -o build/runtime-graphics/sample_id.vert.spv
+	$(GLSLANG) -V experiments/graphics/runtime_sample_id.frag -o build/runtime-graphics/sample_id.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.1 experiments/graphics/runtime_view_index.vert -o build/runtime-graphics/view_index.vert.spv
 	$(GLSLANG) -V -S vert -DTEST_VERTEX=1 experiments/graphics/runtime_flat.glsl -o build/runtime-graphics/flat.vert.spv
 	$(GLSLANG) -V -S frag experiments/graphics/runtime_flat.glsl -o build/runtime-graphics/flat.frag.spv
@@ -29,6 +34,9 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_texture.frag -o build/runtime-graphics/texture.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.1 experiments/graphics/runtime_view_index.frag -o build/runtime-graphics/view_index.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_descriptor_arrays.frag -o build/runtime-graphics/descriptor_arrays.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_fragment_store.frag -o build/runtime-graphics/fragment_store.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_fragment_coord_store.frag -o build/runtime-graphics/fragment_coord_store.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_fragment_coord_store_after_kill.frag -o build/runtime-graphics/fragment_coord_store_after_kill.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_input_attachment.frag -o build/runtime-graphics/input_attachment.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_input_attachment.vert -o build/runtime-graphics/input_attachment_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_input_attachment_pattern.frag -o build/runtime-graphics/input_attachment_pattern.frag.spv
@@ -41,20 +49,20 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	./build/runtime-graphics/inspect build/runtime-graphics/triangle.vert.spv build/runtime-graphics/triangle.frag.spv
 VULKAN_CFLAGS ?= -Ithird_party/vulkan-headers/include
 VK_MEMORY_SOURCES = src/vk_alloc.c src/vk_memory.c src/texture_format.c
-VK_IMAGE_TEST_SOURCES = $(VK_MEMORY_SOURCES) src/vk_image_view.c src/vk_render_pass.c src/vk_framebuffer.c
+VK_IMAGE_TEST_SOURCES = $(VK_MEMORY_SOURCES) src/color_attachment_contract.c src/vk_image_view.c src/vk_render_pass.c src/vk_framebuffer.c
 VK_DESCRIPTOR_SOURCES = $(VK_MEMORY_SOURCES) src/vk_descriptor.c
 VK_PIPELINE_SOURCES = $(VK_DESCRIPTOR_SOURCES) src/vk_pipeline.c src/compilation_cache.c src/vk_pipeline_cache.c
 VK_COMMAND_SOURCES = $(VK_PIPELINE_SOURCES) src/vk_command.c src/vk_indirect.c
 # The command recording tests build render passes, image views and
 # framebuffers through the PUBLIC entry points rather than as structs, so the
 # objects they record against are the ones the driver itself accepts.
-VK_COMMAND_TEST_SOURCES = $(VK_COMMAND_SOURCES) src/vk_render_pass.c \
+VK_COMMAND_TEST_SOURCES = $(VK_COMMAND_SOURCES) src/color_attachment_contract.c src/vk_render_pass.c \
         src/vk_image_view.c src/vk_framebuffer.c
 # The queue group owns the image operations: the linear staging readback copy
 # reads the tiled colour surface through the 64KB_R_X offset contract on the CPU
 # after exact GPU completion, so that helper is linked here too.
 VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_sync.c src/vk_buffer_transfer.c src/vk_image_transfer.c src/color_clear.c src/color_detile.c src/depth_detile.c src/vk_query_pool.c src/vk_queue.c src/vk_queue_router.c
-VK_GRAPHICS_SOURCES = src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c src/texture_copy.c src/texture_layout.c
+VK_GRAPHICS_SOURCES = src/color_attachment_contract.c src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c src/texture_copy.c src/texture_layout.c
 VK_DEVICE_SOURCES = $(VK_QUEUE_SOURCES) $(VK_GRAPHICS_SOURCES) src/vk_device.c src/vk_dispatch.c
 NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/queue_ps5.c src/vk_indirect.c src/descriptor_encode.c src/texture_format.c src/dispatch_encode.c src/compute_commands.c tests/test_native_prepare.c
 # graphics_pair.c reads the canonical topology -> primitive mapping from
@@ -71,6 +79,18 @@ native-runtime-graphics:
 	PS5VK_GLSLANG=$(GLSLANG) PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_PRESENT=1 PS5VK_GRAPHICS_DRAW=1 $(PYTHON) tools/build_native.py
 native-compute:
 	PS5VK_COMPUTE=1 $(PYTHON) tools/build_native.py
+.PHONY: native-dual-source upstream-cts-dual-source
+native-dual-source:
+	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
+	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_DUAL_SOURCE_PROBE=1 $(PYTHON) tools/build_native.py
+.PHONY: native-sample-rate
+native-sample-rate:
+	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
+	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_SAMPLE_RATE_DIAGNOSTIC=1 PS5VK_SAMPLE_RATE_PROBE=1 $(PYTHON) tools/build_native.py
+.PHONY: native-two-mrt
+native-two-mrt:
+	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
+	PS5VK_GLSLANG=$(GLSLANG) PS5VK_USE_SDK=1 PS5VK_RUNTIME_GRAPHICS=1 PS5VK_SHELL_CLOSE=1 PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_DRAW=1 PS5VK_TWO_MRT_PROBE=1 $(PYTHON) tools/build_native.py
 native-graphics:
 	@test -n "$(GRAPHICS_CONTROL)" || { echo "GRAPHICS_CONTROL is required" >&2; exit 2; }
 	PS5VK_GRAPHICS_API=$(GRAPHICS_CONTROL) PS5VK_GRAPHICS_CONTINUOUS=1 PS5VK_GRAPHICS_PRESENT=1 PS5VK_GRAPHICS_DRAW=1 $(PYTHON) tools/build_native.py
@@ -127,7 +147,7 @@ check-sanitize:
 	./build/tests/test_texture_copy_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_vk_image.c -o build/tests/test_vk_image_sanitized
 	./build/tests/test_vk_image_sanitized
-	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass_sanitized
 	./build/tests/test_vk_render_pass_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/multiview_witness.c tests/test_multiview_witness.c -o build/tests/test_multiview_witness_sanitized
 	./build/tests/test_multiview_witness_sanitized
@@ -267,7 +287,7 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc tests/test_draw_parameters.c -o build/tests/test_draw_parameters
 	./build/tests/test_draw_parameters
 	@mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c src/color_attachment_contract.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5
 	./build/tests/test_draw_state_ps5
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/viewport_ps5.c tests/test_viewport_ps5.c -o build/tests/test_viewport_ps5
@@ -275,7 +295,7 @@ check:
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/graphics_pipeline_ps5.c native/tess_shared_storage.c tests/test_graphics_pipeline_backend.c -pthread -o build/tests/test_graphics_pipeline_backend
 	./build/tests/test_graphics_pipeline_backend
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_PIPELINE_SOURCES) src/vk_graphics_pipeline.c src/graphics_program.c tests/test_vk_graphics_pipeline.c -o build/tests/test_vk_graphics_pipeline
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_PIPELINE_SOURCES) src/color_attachment_contract.c src/vk_graphics_pipeline.c src/graphics_program.c tests/test_vk_graphics_pipeline.c -o build/tests/test_vk_graphics_pipeline
 	./build/tests/test_vk_graphics_pipeline
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/graphics_program.c tests/test_graphics_program.c -o build/tests/test_graphics_program
 	./build/tests/test_graphics_program
@@ -287,7 +307,7 @@ check:
 	./build/tests/test_depth_layout
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_vk_image.c -o build/tests/test_vk_image
 	./build/tests/test_vk_image
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass
 	./build/tests/test_vk_render_pass
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/multiview_witness.c tests/test_multiview_witness.c -o build/tests/test_multiview_witness
 	./build/tests/test_multiview_witness
@@ -347,6 +367,8 @@ check:
 	./build/tests/test_image_copy_clear
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_cts_draw_case_trace.c -o build/tests/test_cts_draw_case_trace
 	./build/tests/test_cts_draw_case_trace
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_render_pass_initialization_trace.c -o build/tests/test_render_pass_initialization_trace
+	./build/tests/test_render_pass_initialization_trace
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_indirect_queue.c -o build/tests/test_indirect_queue
 	./build/tests/test_indirect_queue
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) tests/test_vk_indirect.c -o build/tests/test_vk_indirect
@@ -375,6 +397,16 @@ check:
 	./build/tests/test_clip_cull_witness
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/geometry_witness.c tests/test_geometry_witness.c -o build/tests/test_geometry_witness
 	./build/tests/test_geometry_witness
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/dual_source_oracle.c tests/test_dual_source_oracle.c -o build/tests/test_dual_source_oracle
+	./build/tests/test_dual_source_oracle
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/two_mrt_oracle.c tests/test_two_mrt_oracle.c -o build/tests/test_two_mrt_oracle
+	./build/tests/test_two_mrt_oracle
+	$(CC) -std=c11 -Wall -Wextra -Werror -Ithird_party/vulkan-headers/include -Isrc src/color_attachment_contract.c tests/test_color_attachment_contract.c -o build/tests/test_color_attachment_contract
+	./build/tests/test_color_attachment_contract
+	$(CC) -std=c11 -Wall -Wextra -Werror -Ithird_party/vulkan-headers/include -Isrc tests/test_sample_rate_contract.c -o build/tests/test_sample_rate_contract
+	./build/tests/test_sample_rate_contract
+	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/sample_rate_oracle.c tests/test_sample_rate_oracle.c -o build/tests/test_sample_rate_oracle
+	./build/tests/test_sample_rate_oracle
 	$(PYTHON) tools/build_sdk.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I./dist-sdk/include -I./cts cts/cts_adapter.c dist-sdk/lib/libps5vk_host.a -o build/tests/test_cts_host
 	./build/tests/test_cts_host
@@ -400,12 +432,14 @@ test-tessellation-compiler: build/libpsbc.host.a graphics-stage-shaders
 .PHONY: test-runtime-graphics-compiler
 test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
+	$(PYTHON) tools/build_resolve_shaders.py --out build/resolve/resolve_spirv.h \
+		--compiler $(GLSLANG)
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -Ibuild/resolve -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c native/resolve_program.c src/color_attachment_contract.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
 	./build/tests/test_runtime_graphics_compiler
 .PHONY: test-runtime-graphics-native
 test-runtime-graphics-native:
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c native/tess_shared_storage.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c src/color_attachment_contract.c src/spirv_graphics_interface.c native/runtime_graphics_ps5.c native/graphics_pipeline_ps5.c native/tess_shared_storage.c src/texture_format.c src/ps5_compiler_shims.c tests/test_runtime_graphics_native.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_native
 	./build/tests/test_runtime_graphics_native
 test-runtime-header:
 	mkdir -p build/tests
@@ -435,11 +469,18 @@ graphics-stage-shaders:
 	mkdir -p build/runtime-graphics
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_dual_source.frag -o build/runtime-graphics/dual_source.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_two_mrt.frag -o build/runtime-graphics/two_mrt.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_distance.vert -o build/runtime-graphics/clip_distance.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_cull_distance.vert -o build/runtime-graphics/cull_distance.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_distance.vert -o build/runtime-graphics/clip_cull_distance.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_distance_read.frag -o build/runtime-graphics/clip_distance_read.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_frag_coord.frag -o build/runtime-graphics/frag_coord.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_write.frag -o build/runtime-graphics/runtime_subpass_write.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_write_spread.frag -o build/runtime-graphics/runtime_subpass_write_spread.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_fetch.frag -o build/runtime-graphics/runtime_subpass_fetch.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_fetch_const.frag -o build/runtime-graphics/runtime_subpass_fetch_const.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_subpass_resolve.frag -o build/runtime-graphics/runtime_subpass_resolve.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_depth_only.frag -o build/runtime-graphics/depth_only.frag.spv
 	$(GLSLANG) -V -DWITH_DISTANCES=1 experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_control.vert.spv
@@ -491,6 +532,7 @@ check-upstream-cts-sink:
 check-upstream-cts: check-upstream-cts-sink
 	$(PYTHON) tools/check_upstream_selection.py
 	$(PYTHON) -m unittest tests.test_upstream_runner tests.test_upstream_run_orchestrator -v
+	$(PYTHON) -m unittest tests.test_color_attachment_offsets -v
 upstream-cts:
 	$(PYTHON) tools/build_upstream_cts.py
 # One native acceptance run against the console. Both values are lab-specific,

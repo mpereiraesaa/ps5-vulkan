@@ -404,14 +404,14 @@ int main(void)
     VkAttachmentDescription pass_attachments[1] = {
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass pass_subpasses[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = pass_attachments, .subpasses = pass_subpasses};
-    struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1,
+    struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4, .attachment_count = 1, .color_attachments = {0}, .color_count = 1,
         .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T pipeline = {.device = &d, .graphics = VK_TRUE, .viewport_count = 1, .graphics_state = &f,
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM};
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1};
     VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = &pass, .framebuffer = &fb, .renderArea = {.extent = {4,4}}};

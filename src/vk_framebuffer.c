@@ -1,5 +1,13 @@
 #include "vk_framebuffer.h"
+#include "color_attachment_contract.h"
 #include <string.h>
+
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define FB_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define FB_MARK(...) ((void)0)
+#endif
 
 /* The array layers an attachment view has to carry for a pass that uses view
  * masks: one layer per view, so the highest view index any subpass that names
@@ -13,8 +21,10 @@ static uint32_t attachment_view_count(VkRenderPass pass, uint32_t attachment)
     uint32_t views = 0;
     for (uint32_t s = 0; s < multiview->subpass_count; ++s) {
         const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, s);
-        if (subpass->color.attachment != attachment &&
-            subpass->depth.attachment != attachment) continue;
+        if (subpass->color[0].attachment != attachment &&
+            subpass->depth.attachment != attachment &&
+            !(subpass->resolve_count && subpass->resolve[0].attachment == attachment))
+            continue;
         const uint32_t mask = multiview->view_masks[s];
         /* A view mask is 32 bits wide, so a view index is a bit position. */
         for (uint32_t bit = 0; bit < 32u; ++bit)
@@ -26,6 +36,9 @@ static uint32_t attachment_view_count(VkRenderPass pass, uint32_t attachment)
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebufferCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkFramebuffer *out)
 {
+    FB_MARK("PS5VK_FRAMEBUFFER_CREATE attachments=%u extent=%ux%u layers=%u",
+        info ? info->attachmentCount : 0u, info ? info->width : 0u,
+        info ? info->height : 0u, info ? info->layers : 0u);
     if (!out) return VK_ERROR_UNKNOWN;
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO) return VK_ERROR_UNKNOWN;
@@ -70,7 +83,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
     fb->width = info->width; fb->height = info->height; fb->attachment_count = info->attachmentCount;
     /* The roles are the same in every subpass of this profile, so the first
      * one names them for the framebuffer. */
-    fb->color_attachment = ps5vk_render_pass_subpass(pass, 0)->color.attachment;
+    {
+        const struct ps5vk_subpass *first = ps5vk_render_pass_subpass(pass, 0);
+        fb->color_count = first->color_count;
+        fb->resolve_count = first->resolve_count;
+        for (uint32_t c = 0; c < first->color_count; ++c) {
+            fb->color_attachments[c] = first->color[c].attachment;
+            /* The resolve role travels with the colour role it resolves. */
+            fb->resolve_attachments[c] = first->resolve[c].attachment;
+        }
+    }
     fb->depth_attachment = ps5vk_render_pass_subpass(pass, 0)->depth.attachment;
     for (uint32_t i = 0; i < fb->attachment_count; ++i) {
         fb->attachments[i] = info->pAttachments[i]; ++fb->attachments[i]->framebuffers;

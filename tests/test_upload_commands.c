@@ -82,6 +82,42 @@ int main(void)
     assert(ps5vk_upload_commands(&device,ops+2,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
     ops[0].dst_access=VK_ACCESS_SHADER_WRITE_BIT;
     assert(ps5vk_upload_commands(&device,ops,1,NULL,&layouts,&cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT);
+    /* Exact post-render dependency from the focused upstream fragment-side-
+     * effect cases: the SSBO write must reach the host after submission
+     * completion.  The range is resolved and host cache lines are flushed
+     * before emitting the conservative graphics cache packet. */
+    struct ps5vk_operation fragment_host={.type=PS5VK_BARRIER,
+        .src_stage=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        .dst_stage=VK_PIPELINE_STAGE_HOST_BIT,
+        .src_access=VK_ACCESS_SHADER_WRITE_BIT,
+        .dst_access=VK_ACCESS_HOST_READ_BIT,
+        .buffer_barrier={.buffer=buffer,.offset=8,.size=64}};
+    struct ps5vk_operation fragment_host_pair[2]={fragment_host,
+        {.type=PS5VK_BARRIER,
+         .src_stage=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+         .dst_stage=VK_PIPELINE_STAGE_HOST_BIT}};
+    cursor=words;flushes=0;flushed=NULL;flushed_bytes=0;
+    assert(ps5vk_upload_commands(&device,fragment_host_pair,2,NULL,&layouts,
+        &cursor,words+256,flush)==VK_SUCCESS);
+    assert(cursor-words==2*PS5VK_GRAPHICS_ACQUIRE_WORDS && flushes==1 &&
+        flushed==source+8 && flushed_bytes==64);
+    /* The zero-access aggregate is meaningful only directly after the exact
+     * validated buffer dependency.  Never admit it on its own or after a
+     * different stage/access pair. */
+    cursor=words;
+    assert(ps5vk_upload_commands(&device,&fragment_host_pair[1],1,NULL,&layouts,
+        &cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && cursor==words);
+    fragment_host_pair[0].src_access=VK_ACCESS_SHADER_READ_BIT;cursor=words;
+    assert(ps5vk_upload_commands(&device,fragment_host_pair,2,NULL,&layouts,
+        &cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && cursor==words);
+    fragment_host_pair[0]=fragment_host;
+    fragment_host.dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT;cursor=words;
+    assert(ps5vk_upload_commands(&device,&fragment_host,1,NULL,&layouts,
+        &cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && cursor==words);
+    fragment_host.dst_stage=VK_PIPELINE_STAGE_HOST_BIT;
+    fragment_host.src_access=VK_ACCESS_SHADER_READ_BIT;cursor=words;
+    assert(ps5vk_upload_commands(&device,&fragment_host,1,NULL,&layouts,
+        &cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && cursor==words);
     /* A color transition must also execute without a render pass or target.
      * The real cache packet and tentative layout remain the same. */
     image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;

@@ -7,6 +7,11 @@ static unsigned created, released;
 static unsigned acquired, compiled_released, compile_fail, backend_fail;
 static unsigned expect_five_stages;
 static unsigned expect_blend_state;
+static unsigned expect_dual_blend_state;
+/* 1 = independentBlend enabled on the device, 2 = not enabled: the second
+ * colour attachment's blend state is then element zero's, by specification. */
+static unsigned expect_two_targets;
+static unsigned expect_multisample_state;
 static uint32_t reported_set_mask;
 static VkResult usage_result;
 static VkResult used_sets(VkDevice d,const void *state,uint32_t *mask)
@@ -18,15 +23,59 @@ static void release(VkDevice d,void *data) { (void)d; ++released; free(data); }
 static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const void **out)
 {
     assert(context==&acquired && key->vertex.word_count==10 && key->fragment.word_count==10);
+    if(expect_two_targets) {
+        assert(key->color_attachment_count==2);
+        assert(key->color_format[0]==VK_FORMAT_B8G8R8A8_UNORM &&
+               key->color_format[1]==VK_FORMAT_R8G8B8A8_UNORM);
+        /* The write mask is per attachment whether or not the feature is on. */
+        assert(key->color_write_mask[0]==15 && key->color_write_mask[1]==3);
+        if(expect_two_targets==1) {
+            assert(key->blend_enable[0]==VK_TRUE && key->blend_enable[1]==VK_TRUE);
+            assert(key->src_color_blend_factor[1]==VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR);
+            assert(key->dst_color_blend_factor[1]==VK_BLEND_FACTOR_DST_ALPHA);
+            assert(key->color_blend_op[1]==VK_BLEND_OP_MAX);
+        } else {
+            /* Element 1 asked for an equation the specification ignores: it
+             * carries element 0's state instead. */
+            assert(key->blend_enable[0]==VK_TRUE && key->blend_enable[1]==VK_TRUE);
+            for(unsigned a=0;a<2;++a) {
+                assert(key->src_color_blend_factor[a]==VK_BLEND_FACTOR_SRC_ALPHA);
+                assert(key->dst_color_blend_factor[a]==VK_BLEND_FACTOR_ONE);
+                assert(key->color_blend_op[a]==VK_BLEND_OP_ADD);
+                assert(key->src_alpha_blend_factor[a]==VK_BLEND_FACTOR_SRC_ALPHA);
+                assert(key->dst_alpha_blend_factor[a]==VK_BLEND_FACTOR_ONE);
+                assert(key->alpha_blend_op[a]==VK_BLEND_OP_ADD);
+            }
+        }
+    }
     if(expect_blend_state) {
-        assert(key->blend_enable==VK_TRUE);
-        assert(key->src_color_blend_factor==VK_BLEND_FACTOR_SRC_ALPHA);
-        assert(key->dst_color_blend_factor==VK_BLEND_FACTOR_ONE);
-        assert(key->color_blend_op==VK_BLEND_OP_ADD);
-        assert(key->src_alpha_blend_factor==VK_BLEND_FACTOR_CONSTANT_ALPHA);
-        assert(key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
-        assert(key->alpha_blend_op==VK_BLEND_OP_REVERSE_SUBTRACT);
+        assert(key->blend_enable[0]==VK_TRUE);
+        assert(key->src_color_blend_factor[0]==VK_BLEND_FACTOR_SRC_ALPHA);
+        assert(key->dst_color_blend_factor[0]==VK_BLEND_FACTOR_ONE);
+        assert(key->color_blend_op[0]==VK_BLEND_OP_ADD);
+        assert(key->src_alpha_blend_factor[0]==VK_BLEND_FACTOR_CONSTANT_ALPHA);
+        assert(key->dst_alpha_blend_factor[0]==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+        assert(key->alpha_blend_op[0]==VK_BLEND_OP_REVERSE_SUBTRACT);
         for(unsigned i=0;i<4;++i) assert(key->blend_constants[i]==(float)i/4.0f);
+    }
+    if(expect_dual_blend_state) {
+        assert(key->blend_enable[0]==VK_TRUE);
+        assert(key->feature_mask&PS5VK_FEATURE_DUAL_SRC_BLEND);
+        assert(key->src_color_blend_factor[0]==VK_BLEND_FACTOR_SRC1_COLOR);
+        assert(key->dst_color_blend_factor[0]==VK_BLEND_FACTOR_ZERO);
+        assert(key->color_blend_op[0]==VK_BLEND_OP_ADD);
+        assert(key->src_alpha_blend_factor[0]==VK_BLEND_FACTOR_ONE);
+        assert(key->dst_alpha_blend_factor[0]==VK_BLEND_FACTOR_ZERO);
+        assert(key->alpha_blend_op[0]==VK_BLEND_OP_ADD);
+    }
+    if(expect_multisample_state) {
+        /* The accepted multisample state reaches the compiler unchanged: the
+         * count the attachment has, the flag the application set, the fraction
+         * it asked for, and the canonical "every sample covered" mask. */
+        assert(key->samples==VK_SAMPLE_COUNT_4_BIT);
+        assert(key->sample_shading_enable==VK_TRUE);
+        assert(key->min_sample_shading==1.0f);
+        assert(key->sample_mask==0u);
     }
     if(expect_five_stages) {
         assert(key->tess_control.word_count==10 && key->tess_eval.word_count==10 &&
@@ -42,8 +91,8 @@ int main(void)
     uint32_t vs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,0,1,0x6e69616d,0};
     uint32_t fs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,4,1,0x6e69616d,0};
     struct ps5vk_graphics_program program={.key={.vertex={.words=vs,.word_count=10,.entry="main"},.fragment={.words=fs,.word_count=10,.entry="main"},
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15},.backend_data=vs};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}},.backend_data=vs};
     struct ps5vk_graphics_library library={&program,1};
     struct VkDevice_T d={.graphics_enabled=1,.graphics_library=&library,.graphics_create=backend,.graphics_release=release};
     VkShaderModule modules[2];
@@ -52,9 +101,13 @@ int main(void)
         assert(vkCreateShaderModule(&d,&mi,NULL,&modules[i])==VK_SUCCESS);
     }
     struct VkPipelineLayout_T layout={.device=&d};
-    VkAttachmentDescription pass_attachments[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM}};
+    /* The attachment's sample count is what the pipeline's multisample state
+     * has to agree with, so the fixture describes a valid 1x pass. */
+    VkAttachmentDescription pass_attachments[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass pass_subpasses[1]={
-        {.color={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},.depth={VK_ATTACHMENT_UNUSED,0}}};
+        {.color={{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},.color_count=1,
+         .depth={VK_ATTACHMENT_UNUSED,0}}};
     struct VkRenderPass_T pass={.device=&d,.attachment_count=1,.subpass_count=1,
         .attachments=pass_attachments,.subpasses=pass_subpasses};
     VkPipelineShaderStageCreateInfo stages[2]={
@@ -150,7 +203,7 @@ int main(void)
         second.renderPass=&two; second.subpass=1;
         VkPipeline later;
         assert(vkCreateGraphicsPipelines(&d,0,1,&second,NULL,&later)==VK_SUCCESS);
-        assert(later->subpass==1 && later->color_format==VK_FORMAT_B8G8R8A8_UNORM);
+        assert(later->subpass==1 && later->color_format[0]==VK_FORMAT_B8G8R8A8_UNORM);
         vkDestroyPipeline(&d,later,NULL);
         /* A subpass the pass does not have is refused rather than clamped. */
         second.subpass=2;
@@ -397,18 +450,114 @@ int main(void)
         for(unsigned i=0;i<4;++i) b.blendConstants[i]=(float)i/4.0f;
         expect_blend_state=1;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
-        assert(runtime->color_blend.blendEnable==VK_TRUE &&
-            runtime->color_blend.srcColorBlendFactor==VK_BLEND_FACTOR_SRC_ALPHA &&
-            runtime->color_blend.dstColorBlendFactor==VK_BLEND_FACTOR_ONE &&
-            runtime->color_blend.srcAlphaBlendFactor==VK_BLEND_FACTOR_CONSTANT_ALPHA &&
-            runtime->color_blend.dstAlphaBlendFactor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
-            runtime->color_blend.alphaBlendOp==VK_BLEND_OP_REVERSE_SUBTRACT);
+        assert(runtime->color_blend[0].blendEnable==VK_TRUE &&
+            runtime->color_blend[0].srcColorBlendFactor==VK_BLEND_FACTOR_SRC_ALPHA &&
+            runtime->color_blend[0].dstColorBlendFactor==VK_BLEND_FACTOR_ONE &&
+            runtime->color_blend[0].srcAlphaBlendFactor==VK_BLEND_FACTOR_CONSTANT_ALPHA &&
+            runtime->color_blend[0].dstAlphaBlendFactor==VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
+            runtime->color_blend[0].alphaBlendOp==VK_BLEND_OP_REVERSE_SUBTRACT);
         for(unsigned i=0;i<4;++i) assert(runtime->blend_constants[i]==(float)i/4.0f);
         vkDestroyPipeline(&d,runtime,NULL);
         expect_blend_state=0;
+        /* SRC1 is rejected before acquisition unless dualSrcBlend was enabled
+         * on the logical device.  With the bit enabled, the exact equation is
+         * transmitted unchanged; compiler/export validation is covered by the
+         * real-compiler test rather than this mock backend. */
+        color.srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
+        color.dstColorBlendFactor=VK_BLEND_FACTOR_ZERO;
+        color.colorBlendOp=VK_BLEND_OP_ADD;
+        color.srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE;
+        color.dstAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;
+        color.alphaBlendOp=VK_BLEND_OP_ADD;
+        const unsigned before_dual_acquire=acquired;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !runtime && acquired==before_dual_acquire);
+        d.enabled_features|=PS5VK_FEATURE_DUAL_SRC_BLEND;
+        expect_dual_blend_state=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
+        assert(runtime->color_blend[0].srcColorBlendFactor==VK_BLEND_FACTOR_SRC1_COLOR &&
+            runtime->color_blend[0].dstColorBlendFactor==VK_BLEND_FACTOR_ZERO);
+        vkDestroyPipeline(&d,runtime,NULL);
+        expect_dual_blend_state=0;
+        d.enabled_features&=~PS5VK_FEATURE_DUAL_SRC_BLEND;
         color=(VkPipelineColorBlendAttachmentState){.colorWriteMask=15};
         for(unsigned i=0;i<4;++i) b.blendConstants[i]=0;
         acquired=saved_a;compiled_released=saved_c;
+        created=saved_created;released=saved_released;
+    }
+    {
+        /* DXVK262-T06 multisample contract. The counts a pipeline may use come
+         * from the platform mask and not from a GPU name, so a device that
+         * never carried the bit serves 1x alone; per-sample shading needs the
+         * feature the application enabled on THIS logical device; and the
+         * pipeline's count has to be the one its subpass attachment carries,
+         * because a mismatch would draw with a state no attachment has. Every
+         * refusal happens before the compiler or the backend is reached. */
+        const unsigned saved_created=created,saved_released=released;
+        const unsigned saved_acquired=acquired,saved_compiled=compiled_released;
+        const VkPipelineMultisampleStateCreateInfo saved_multisample=m;
+        VkAttachmentDescription four[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_4_BIT}};
+        VkAttachmentDescription two[1]={{.format=VK_FORMAT_B8G8R8A8_UNORM,
+            .samples=VK_SAMPLE_COUNT_2_BIT}};
+        struct ps5vk_subpass multisample_subpass[1]={
+            {.color={{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},.color_count=1,
+             .depth={VK_ATTACHMENT_UNUSED,0}}};
+        struct VkRenderPass_T four_pass={.device=&d,.attachment_count=1,.subpass_count=1,
+            .attachments=four,.subpasses=multisample_subpass};
+        struct VkRenderPass_T two_pass={.device=&d,.attachment_count=1,.subpass_count=1,
+            .attachments=two,.subpasses=multisample_subpass};
+        VkGraphicsPipelineCreateInfo multi=info;
+        VkPipeline multisample=NULL;
+        multi.renderPass=&four_pass;
+        m.rasterizationSamples=VK_SAMPLE_COUNT_4_BIT;
+        m.sampleShadingEnable=VK_TRUE;
+        m.minSampleShading=1.0f;
+        /* No platform bit: the device serves 1x, so the pipeline is refused
+         * before acquisition just as it was before this slice. */
+        const unsigned before_multisample=acquired;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        /* With the platform serving the count but the application never
+         * enabling sampleRateShading, per-sample shading is still refused. */
+        d.platform_features|=PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        /* A count the attachment does not have is refused even when both the
+         * platform and the device carry the feature. */
+        d.enabled_features|=PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        multi.renderPass=&two_pass;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        /* A count outside the envelope this profile is built for, and a
+         * minSampleShading fraction outside [0,1], are equally closed. */
+        multi.renderPass=&four_pass;
+        m.rasterizationSamples=VK_SAMPLE_COUNT_8_BIT;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        m.rasterizationSamples=VK_SAMPLE_COUNT_4_BIT;
+        m.minSampleShading=1.5f;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        m.minSampleShading=1.0f;
+        /* A mask that switches off a sample this target HAS is refused rather
+         * than silently delivered as full coverage; a mask carrying only
+         * further bits - samples a 4x target does not have - and the count's
+         * own mask are the accepted shapes. */
+        VkSampleMask partial=0x5u, wide=0xffffffffu;
+        m.pSampleMask=&partial;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_ERROR_FEATURE_NOT_PRESENT && !multisample && acquired==before_multisample);
+        m.pSampleMask=&wide;
+        expect_multisample_state=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&multi,NULL,&multisample)==
+            VK_SUCCESS && multisample && acquired==before_multisample+1);
+        expect_multisample_state=0;
+        vkDestroyPipeline(&d,multisample,NULL);
+        m=(VkPipelineMultisampleStateCreateInfo)saved_multisample;
+        d.enabled_features&=~PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        d.platform_features&=~PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+        acquired=saved_acquired;compiled_released=saved_compiled;
         created=saved_created;released=saved_released;
     }
     {
@@ -631,6 +780,105 @@ int main(void)
         vkDestroyShaderModule(&d,tes_module,NULL);
     }
     created=1;released=0;
+    {
+        /* DEPTH-ONLY subpass: no colour attachment at all, and Vulkan lets the
+        * pipeline omit pColorBlendState entirely for it. The key then carries
+         * a colour count of zero and an undefined colour format, which is the
+         * shape the runtime compiler and the native path key on. A colour blend
+         * state with a non-zero count does not describe that subpass and is
+         * refused. */
+        VkAttachmentDescription depth_attachment[1]={{.format=VK_FORMAT_D32_SFLOAT}};
+        struct ps5vk_subpass depth_subpasses[1]={
+            {.color_count=0,.depth={0,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}}};
+        struct VkRenderPass_T depth_pass={.device=&d,.attachment_count=1,.subpass_count=1,
+            .attachments=depth_attachment,.subpasses=depth_subpasses};
+        VkGraphicsPipelineCreateInfo depth_info=info;
+        depth_info.renderPass=&depth_pass;
+        depth_info.pColorBlendState=NULL;
+        /* A depth-only subpass renders into the depth attachment, so the
+         * pipeline has to describe that state. */
+        VkPipelineDepthStencilStateCreateInfo depth_state={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthCompareOp=VK_COMPARE_OP_LESS_OR_EQUAL};
+        depth_info.pDepthStencilState=&depth_state;
+        /* Its own library entry: the key of a depth-only pipeline is a
+         * different identity from the ordinary colour one. */
+        struct ps5vk_graphics_program depth_program=program;
+        depth_program.key.color_attachment_count=0;
+        depth_program.key.color_format[0]=VK_FORMAT_UNDEFINED;
+        depth_program.key.color_write_mask[0]=0;
+        struct ps5vk_graphics_library depth_library={&depth_program,1};
+        d.graphics_library=&depth_library;
+        VkPipeline depth_pipeline;
+        created=0;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&depth_info,NULL,&depth_pipeline)==
+               VK_SUCCESS && depth_pipeline->color_attachment_count==0);
+        assert(depth_pipeline->color_format[0]==VK_FORMAT_UNDEFINED &&
+               !depth_pipeline->color_write_mask[0]);
+        vkDestroyPipeline(&d,depth_pipeline,NULL);
+        depth_info.pColorBlendState=&b;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&depth_info,NULL,&depth_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        d.graphics_library=&library;
+        created=1;released=0;
+    }
+    {
+        /* Two colour attachments. The pipeline carries one element per
+         * attachment, and independentBlend is what makes element i the state of
+         * attachment i: without it the specification applies element zero's
+         * blend fields to every attachment, while the write mask stays per
+         * attachment either way. */
+        VkAttachmentDescription pair_attachments[2] = {
+            {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT},
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
+        struct ps5vk_subpass pair_subpasses[1] = {
+            {.color = {{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                       {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},
+             .color_count = 2, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        struct VkRenderPass_T pair_pass = {.device = &d, .attachment_count = 2,
+            .subpass_count = 1, .attachments = pair_attachments, .subpasses = pair_subpasses};
+        VkPipelineColorBlendAttachmentState pair_state[2] = {
+            {.colorWriteMask = 15, .blendEnable = VK_TRUE,
+             .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+             .dstColorBlendFactor = VK_BLEND_FACTOR_ONE, .colorBlendOp = VK_BLEND_OP_ADD,
+             .srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+             .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE, .alphaBlendOp = VK_BLEND_OP_ADD},
+            {.colorWriteMask = 3, .blendEnable = VK_TRUE,
+             .srcColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,
+             .dstColorBlendFactor = VK_BLEND_FACTOR_DST_ALPHA, .colorBlendOp = VK_BLEND_OP_MAX,
+             .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,
+             .dstAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA, .alphaBlendOp = VK_BLEND_OP_MAX}};
+        VkPipelineColorBlendStateCreateInfo pair_blend = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount = 2, .pAttachments = pair_state};
+        VkGraphicsPipelineCreateInfo pair_info = info;
+        pair_info.renderPass = &pair_pass;
+        pair_info.pColorBlendState = &pair_blend;
+        VkPipeline pair_pipeline = NULL;
+        d.graphics_acquire = acquire;
+        d.graphics_compiled_release = compiled_release;
+        d.graphics_compiler_context = &acquired;
+        d.enabled_features = PS5VK_FEATURE_INDEPENDENT_BLEND;
+        expect_two_targets = 1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&pair_info,NULL,&pair_pipeline)==VK_SUCCESS &&
+               pair_pipeline && pair_pipeline->color_attachment_count==2);
+        assert(pair_pipeline->color_format[0]==VK_FORMAT_B8G8R8A8_UNORM &&
+               pair_pipeline->color_format[1]==VK_FORMAT_R8G8B8A8_UNORM &&
+               pair_pipeline->color_write_mask[0]==15 && pair_pipeline->color_write_mask[1]==3);
+        vkDestroyPipeline(&d,pair_pipeline,NULL);
+        /* Without the feature the second element is not the second
+         * attachment's state. */
+        expect_two_targets = 2;
+        d.enabled_features = 0;
+        pair_pipeline = NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&pair_info,NULL,&pair_pipeline)==VK_SUCCESS);
+        vkDestroyPipeline(&d,pair_pipeline,NULL);
+        expect_two_targets = 0;
+        d.graphics_acquire = NULL;
+        d.graphics_compiled_release = NULL;
+        d.graphics_compiler_context = NULL;
+        created = 1; released = 0;
+    }
     vkDestroyShaderModule(&d,modules[0],NULL); vkDestroyShaderModule(&d,modules[1],NULL);
     p->pending=1; vkDestroyPipeline(&d,p,NULL); assert(!released);
     p->pending=0; vkDestroyPipeline(&d,p,NULL); assert(released==1 && !d.pipeline_objects);

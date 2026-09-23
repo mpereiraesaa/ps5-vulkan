@@ -411,7 +411,7 @@ int main(void)
     VkAttachmentDescription bgra_attachment[1] = {
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass colour_only[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = bgra_attachment, .subpasses = colour_only};
     /* A DIFFERENT object with the same shape: compatibility is defined by
@@ -428,12 +428,12 @@ int main(void)
     struct VkRenderPass_T foreign = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = rgba_attachment, .subpasses = foreign_subpasses};
     struct VkFramebuffer_T fb = {.device = &d, .width = 4, .height = 4,
-        .attachment_count = 1, .attachments = {&view},
+        .attachment_count = 1, .color_attachments = {0}, .color_count = 1, .attachments = {&view},
         .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkFramebuffer_T other_fb = fb;
     struct VkPipeline_T graphics = {.device = &d, .graphics = VK_TRUE, .viewport_count = 1,
-        .graphics_state = &graphics, .color_format = VK_FORMAT_B8G8R8A8_UNORM};
+        .graphics_state = &graphics, .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = &pass, .framebuffer = &fb, .renderArea = {.extent = {4,4}}};
 
@@ -544,7 +544,7 @@ int main(void)
         {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT},
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass shifted_subpasses[1] = {
-        {.color = {.attachment = 1}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 1}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T shifted = {.device = &d, .attachment_count = 2, .subpass_count = 1,
         .attachments = shifted_attachments, .subpasses = shifted_subpasses};
     assert(ps5vk_render_pass_compatible(&shifted, &pass));
@@ -556,7 +556,7 @@ int main(void)
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL}};
     struct ps5vk_subpass reloaded_subpasses[1] = {
-        {.color = {.attachment = 0, .layout = VK_IMAGE_LAYOUT_GENERAL},
+        {.color[0] = {.attachment = 0, .layout = VK_IMAGE_LAYOUT_GENERAL}, .color_count = 1,
          .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T reloaded = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = reloaded_attachment, .subpasses = reloaded_subpasses};
@@ -572,7 +572,7 @@ int main(void)
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT},
         {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass depth_subpasses[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = 1}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = 1}}};
     struct VkRenderPass_T with_depth = {.device = &d, .attachment_count = 2, .subpass_count = 1,
         .attachments = depth_attachments, .subpasses = depth_subpasses};
     assert(!ps5vk_render_pass_compatible(&foreign, &pass));
@@ -641,7 +641,8 @@ int main(void)
         struct VkFramebuffer_T wrong_samples = fb;
         wrong_samples.samples[0] = VK_SAMPLE_COUNT_4_BIT;
         struct VkFramebuffer_T no_colour = fb;
-        no_colour.color_attachment = VK_ATTACHMENT_UNUSED;
+        no_colour.color_attachments[0] = VK_ATTACHMENT_UNUSED;
+        no_colour.color_count = 1;
         VkFramebuffer refused[3] = {&wrong_format, &wrong_samples, &no_colour};
         for (unsigned n = 0; n < 3; ++n) {
             VkCommandBufferInheritanceInfo mismatched = continues;
@@ -740,13 +741,17 @@ int main(void)
     }
 
     /* --- refused, each leaving the recording poisoned with no operation --- */
-    /* a PRIMARY may never claim render-pass continuation */
+    /* A PRIMARY that claims render-pass continuation is accepted: the flag is
+     * ignored there (VUID-vkBeginCommandBuffer-flags-09123) and the pinned
+     * upstream render-pass module sets it on its primary buffers. The scope
+     * members are not read, so this is an ordinary primary. */
     {
         VkCommandBuffer p2 = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
         VkCommandBufferBeginInfo bad_begin = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT};
-        assert(vkBeginCommandBuffer(p2, &bad_begin) != VK_SUCCESS);
+        assert(vkBeginCommandBuffer(p2, &bad_begin) == VK_SUCCESS);
+        assert(vkEndCommandBuffer(p2) == VK_SUCCESS);
     }
     /* a continuation child OUTSIDE a render pass: its draws have no scope */
     probe = begun_primary(&d, pool);

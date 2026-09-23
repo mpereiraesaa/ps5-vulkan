@@ -260,6 +260,52 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                     PS5VK_FEATURE_DEPTH_CLAMP |
                                     PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                                     PS5VK_FEATURE_MULTI_VIEWPORT;
+    /* DXVK262-T06 sampleRateShading, promoted on 2026-09-23. The row's four
+     * axes are measured: the device reports and accepts the feature, the pixel
+     * stage publishes the sample positions, the position at the iterated
+     * sample and the synchronous colour-to-texture barrier its leaves need, and
+     * the feature's own oracle passes. The thirty leaves whose own checkSupport
+     * requires the feature and whose shapes this profile renders are the
+     * sample-rate-shading acceptance group (5 minSampleShading values x 2
+     * served counts x the triangle and quad shapes), measured Pass three times
+     * in a row; the twenty point/line shapes the same oracle selects are
+     * refused by this profile's pipeline resolver, not by this feature, and
+     * stay diagnostics next to the rest of those refusals. The measurement
+     * switch that carried this bit before the promotion
+     * (PS5VK_SAMPLE_RATE_DIAGNOSTIC) no longer guards it, and nothing else in
+     * this file sets it. */
+    platform->supported_features |= PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+    /* DXVK262-T06 fragment storage side effects.  The public-SDK witness
+     * distinguishes a zero-write control from exactly 4096 fragment writes,
+     * preserves 30 guard words and completes its fence.  The two unchanged
+     * upstream frag_side_effects kill leaves then pass in the same 306-case
+     * run as the frozen 304-case regression set.  This shipping bit is the
+     * evidence boundary: builds without this exact path still report false
+     * and vkCreateDevice rejects a request for the feature. */
+    platform->supported_features |= PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS;
+    /* DXVK262-T06 dual-source blending, promoted on 2026-09-21. The public-SDK
+     * witness renders the packaged two-output fragment module twice - blending
+     * disabled against the accepted SRC1 equation - and judges both reads on
+     * exact bytes (control 64,128,191,255 inside one LSB, candidate
+     * 51,51,38,255 exactly) with the two required to differ, so a blender that
+     * ignored the secondary export cannot pass. The 98 applicable upstream
+     * blend.dual_source leaves then passed in one 404-case run together with
+     * the 306-case acceptance selection. This bit is the evidence boundary:
+     * the front end and the compiler still refuse a SRC1 equation without it,
+     * and without the proven secondary export. */
+    platform->supported_features |= PS5VK_FEATURE_DUAL_SRC_BLEND;
+    /* DXVK262-T06 independentBlend, promoted 2026-09-22. The two-colour-target
+     * path is built and measured end to end: the private two-MRT witness
+     * (src/two_mrt_oracle.c, native/two_mrt_probe.c) showed one draw writing
+     * two attachments with different values, and the four upstream leaves that
+     * require the feature now run on hardware - the two
+     * suballocation.attachment_write_mask leaves pass, and the two
+     * dedicated_allocation ones stay out because they need
+     * VK_KHR_dedicated_allocation, which this profile does not advertise. The
+     * advertised maxColorAttachments moves with it in src/graphics_limits.h;
+     * the front end, the pipeline key and the native per-target programming
+     * already carry the bound. */
+    platform->supported_features |= PS5VK_FEATURE_INDEPENDENT_BLEND;
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

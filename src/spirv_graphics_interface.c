@@ -1,5 +1,6 @@
 #include "spirv_graphics_interface.h"
 #include "graphics_formats.h"
+#include "color_attachment_contract.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,8 +12,9 @@ enum { MODEL_VERTEX=0, MODEL_TESS_CTRL=1, MODEL_TESS_EVAL=2, MODEL_GEOMETRY=3,
 enum { BUILTIN_POSITION=0, BUILTIN_POINT_SIZE=1, BUILTIN_CLIP_DISTANCE=3,
        BUILTIN_CULL_DISTANCE=4, BUILTIN_VERTEX_INDEX=42, BUILTIN_INSTANCE_INDEX=43,
        BUILTIN_BASE_VERTEX=4424, BUILTIN_BASE_INSTANCE=4425, BUILTIN_DRAW_INDEX=4426,
-       BUILTIN_VIEW_INDEX=4440, BUILTIN_VIEWPORT_INDEX=10,
-       BUILTIN_FRAG_COORD=15 };
+       BUILTIN_VIEW_INDEX=4440, BUILTIN_VIEWPORT_INDEX=10, BUILTIN_FRAG_COORD=15,
+       /* The sample index a per-sample shaded invocation was launched for. */
+       BUILTIN_SAMPLE_ID=18 };
 /* The tessellation built-ins the two stages exchange with the tessellator, and
  * the decorations/execution modes that describe a patch. Values are the pinned
  * SPIR-V enumerants (third_party/psbc-reference src/compiler/spirv/spirv.h). */
@@ -29,7 +31,8 @@ enum { MODE_SPACING_EQUAL=1, MODE_SPACING_FRACTIONAL_EVEN=2,
        MODE_OUTPUT_VERTICES=26, MODE_OUTPUT_POINTS=27, MODE_OUTPUT_LINE_STRIP=28,
        MODE_OUTPUT_TRIANGLE_STRIP=29 };
 struct id_info {
-    unsigned op, type, count, signedness, storage, location, builtin, forbidden, selected, flat, patch;
+    unsigned op, type, count, signedness, storage, location, builtin, index,
+        index_set, forbidden, selected, flat, patch;
     /* OpTypeStruct member type ids, for the bounded built-in block below. */
     unsigned member_types[BLOCK_MEMBERS];
 };
@@ -41,6 +44,10 @@ struct interface {
      * the primitive the pipeline assembles. */
     unsigned input_primitive;
     struct interface_slot inputs[LOCATIONS], outputs[LOCATIONS];
+    /* Fragment Location 0, Index 1 is the secondary source for MRT0 rather
+     * than MRT1.  Keep it in a distinct namespace so ordinary location
+     * collision checks remain strict and no other indexed output is widened. */
+    struct interface_slot secondary_outputs[LOCATIONS];
     /* Per-patch interface: a variable or built-in that carries the Patch
      * decoration. It lives at the same locations as the per-vertex interface,
      * so it needs its own slots to be describable at all. SPIRV-Tools #5654
@@ -326,14 +333,17 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                 unsigned *field=w[2]==30?&d->location:&d->builtin;
                 if(*field!=~0u)goto done;
                 *field=w[3];
+            } else if(w[2]==32) { /* Index */
+                if(n!=4 || d->index_set || w[3]>1u)goto done;
+                d->index=w[3];d->index_set=1;
             } else if(w[2]==14) {
                 if(n!=3)goto done;
                 d->flat=1;
             } else if(w[2]==DECORATION_PATCH) {
                 if(n!=3)goto done;
                 d->patch=1;
-            } else if(w[2]==13 || w[2]==16 || w[2]==17 ||
-                      w[2]==31 || w[2]==32) d->forbidden=1;
+            } else if(w[2]==13 || w[2]==16 || w[2]==17 || w[2]==31)
+                d->forbidden=1;
         } else if(op==43) {
             /* OpConstant: result id in operand 1, literal in operand 2. Only the
              * declared distance array length consumes one. */
@@ -510,6 +520,19 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
                 if(component->op!=22 || component->count!=32)goto done;
                 continue;
             }
+            /* gl_SampleID is the index of the sample this pixel invocation was
+             * launched for (DXVK262-T06). The hardware supplies it when the
+             * pipeline shades per sample; a fragment shader that reads it is
+             * what the sample-rate witnesses write to their target, so the
+             * interface accepts it in its one shape - a fragment Input scalar
+             * 32-bit integer, never a patch and never at a location - and
+             * leaves every other sample built-in (gl_SamplePosition,
+             * gl_SampleMaskIn) outside this profile until their own slice. */
+            if(d->builtin==BUILTIN_SAMPLE_ID) {
+                if(model!=MODEL_FRAGMENT || d->storage!=1u || d->patch ||
+                   d->location!=~0u || type->op!=21 || type->count!=32)goto done;
+                continue;
+            }
             /* Any other built-in a tessellation stage declares is outside this
              * profile: the exchange with the tessellator is exactly the set
              * above plus the position block. */
@@ -595,7 +618,16 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
         if(d->patch && model==MODEL_TESS_CTRL && d->storage==1)goto done;
         if(d->location>=LOCATIONS || occupied_count>LOCATIONS-d->location)goto done;
         struct interface_slot *locations;
-        if(d->patch)locations=d->storage==1?out->patch_inputs:out->patch_outputs;
+        if(d->index_set) {
+            /* Vulkan's dual-source form is exactly one fragment Output at
+             * Location 0, Index 1.  An explicit Index 0 is the primary source;
+             * Index on inputs, pre-raster stages, patch variables or a value
+             * spanning multiple locations remains outside this profile. */
+            if(model!=MODEL_FRAGMENT || d->storage!=3 || d->patch ||
+               d->location!=0 || occupied_count!=1)goto done;
+            locations=d->index?out->secondary_outputs:out->outputs;
+        } else if(d->patch)
+            locations=d->storage==1?out->patch_inputs:out->patch_outputs;
         else locations=d->storage==1?out->inputs:out->outputs;
         for(unsigned slot=0;slot<occupied_count;++slot) {
             if(locations[d->location+slot].components)goto done;
@@ -658,6 +690,21 @@ int ps5vk_spirv_stage_distance_reads(const struct ps5vk_graphics_module_key *mod
     if(!reflect(module,MODEL_FRAGMENT,&stage))return 0;
     if(clip_reads)*clip_reads=stage.clip_distance_reads;
     if(cull_reads)*cull_reads=stage.cull_distance_reads;
+    return 1;
+}
+
+int ps5vk_spirv_fragment_outputs(const struct ps5vk_graphics_module_key *module,
+                                 unsigned *primary_mask,int *secondary)
+{
+    struct interface stage={0};
+    if(primary_mask)*primary_mask=0;
+    if(secondary)*secondary=0;
+    if(!reflect(module,MODEL_FRAGMENT,&stage))return 0;
+    unsigned mask=0;
+    for(unsigned location=0;location<LOCATIONS;++location)
+        if(stage.outputs[location].components)mask|=(1u<<location);
+    if(primary_mask)*primary_mask=mask;
+    if(secondary)*secondary=stage.secondary_outputs[0].components?1:0;
     return 1;
 }
 
@@ -744,10 +791,35 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
      * and its program exports nothing (SPI_SHADER_COL_FORMAT zero). Requiring
      * an export that has nowhere to go, or accepting one that does, would both
      * be wrong, so the two cases are exclusive. */
-    if(key->color_format==VK_FORMAT_UNDEFINED) {
+    /* The export's numeric type follows the attachment it writes into: a
+     * normalized colour target takes the float32 vec4 the profile has always
+     * required, and an integer one - served only by the build whose
+     * independentBlend oracle needs it - takes the same four-lane unsigned
+     * vector (the pinned compiler publishes 32_ABGR for it either way). */
+    const unsigned colour_numeric[PS5VK_MAX_COLOR_ATTACHMENTS] = {
+        (unsigned)(ps5vk_color_target_integer_served(key->color_format[0]) ?
+            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT),
+        (unsigned)(ps5vk_color_target_integer_served(key->color_format[1]) ?
+            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT)};
+    /* A colour subpass wants the export that belongs to the attachment it
+     * writes: the four-component value whose numeric class follows that
+     * attachment's format. An attachment the pipeline does not write - its
+     * CB_TARGET_MASK field is zero - may legitimately have no export at all,
+     * which is what the pinned render-pass module's attachment_write_mask leaf
+     * builds when it starts at index 1: target 0's write mask is zero and the
+     * fragment stage exports Location 1 alone. Dropping the export of an
+     * attachment that IS written, or writing one whose export is absent, is the
+     * torn shape and stays refused. A DEPTH-ONLY subpass names no colour
+     * attachment, so it requires no export either. */
+    if(key->color_format[0]==VK_FORMAT_UNDEFINED) {
         if(fs.outputs[0].components)return 0;
-    } else if(fs.outputs[0].components!=4 ||
-              fs.outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT)return 0;
+    } else if(fs.outputs[0].components ?
+              (fs.outputs[0].components!=4 ||
+               fs.outputs[0].numeric!=colour_numeric[0]) :
+              key->color_write_mask[0])return 0;
+    if(fs.secondary_outputs[0].components &&
+       (fs.secondary_outputs[0].components!=4 ||
+        fs.secondary_outputs[0].numeric!=PS5VK_VERTEX_NUMERIC_FLOAT))return 0;
     /* The stage the fragment stage reads is the last pre-raster stage that runs
      * before it, and the stage a geometry stage reads is the one before that. */
     const struct interface *previous=has_geometry?&gs:(has_tessellation?&tes:&vs);
@@ -784,7 +856,17 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
          * vertex input actually reads, so an unused declaration is dropped
          * rather than fetched against a table nothing names. */
         if(vs.inputs[i].components && matched!=1)return 0;
-        if(i && fs.outputs[i].components)return 0;
+        /* The fragment stage's primary outputs are bounded to the two MRT
+         * locations the pinned compiler's export contract can describe: a
+         * whole-location float32 vec4 at Location 0 (required above) and, for
+         * the two-MRT shape, the same thing at Location 1. Nothing else is a
+         * colour export this profile can classify, and the runtime refuses the
+         * two-output pipeline while it serves one colour attachment. */
+        if(i>1 && (fs.outputs[i].components || fs.secondary_outputs[i].components))return 0;
+        if(i==1 && fs.outputs[i].components &&
+           (fs.outputs[i].components!=4 ||
+            fs.outputs[i].numeric!=colour_numeric[1]))return 0;
+        if(i && fs.secondary_outputs[i].components)return 0;
         if(fs.inputs[i].components &&
            (fs.inputs[i].components!=previous->outputs[i].components ||
             fs.inputs[i].numeric!=previous->outputs[i].numeric))return 0;

@@ -2,6 +2,8 @@
 #define PS5VK_ATTACHMENT_OPS_H
 
 #include <vulkan/vulkan.h>
+#include "color_attachment_contract.h"
+#include "sample_rate_contract.h"
 
 struct ps5vk_attachment_plan {
     VkBool32 clear;
@@ -9,24 +11,44 @@ struct ps5vk_attachment_plan {
     VkBool32 store;
 };
 
-/* Native single-sample attachment contract.  This is deliberately narrower
- * than render-pass object creation: it describes semantics the AGC queue can
- * execute without silently weakening LOAD, CLEAR, or final-layout ownership. */
+/* Native attachment contract.  This is deliberately narrower than render-pass
+ * object creation: it describes semantics the AGC queue can execute without
+ * silently weakening LOAD, CLEAR, or final-layout ownership.
+ *
+ * `readback` says the colour attachment is also read back after the pass. The
+ * pinned render-pass module reads every attachment of its pass back, and its
+ * own final layout for them is the transfer source: the pass is the transition
+ * that hands the rendered surface to its readback, which is exactly what the
+ * executor programmes for that role (one initial-to-final transition per
+ * target). Every other attachment keeps ending in its attachment layout or
+ * GENERAL.
+ *
+ * `served` is why the sample count is bounded by the mask the DEVICE's platform
+ * serves rather than by a constant here (DXVK262-T06): the front end already
+ * refused a count the platform does not report, so this bound only keeps a
+ * hand-built plan from naming a count no build serves. The colour target
+ * carries the count and is sized for it, and the queue's clear is a
+ * whole-surface fill over the image's own span, which writes every sample of
+ * every covered texel whatever order the hardware stores them in. A depth
+ * attachment stays single-sample: no multisampled depth target exists on this
+ * path. */
 static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
-    VkFormat format, VkImageLayout reference, VkBool32 depth,
-    struct ps5vk_attachment_plan *out)
+    VkFormat format, VkImageLayout reference, VkBool32 depth, VkBool32 readback,
+    VkSampleCountFlags served, struct ps5vk_attachment_plan *out)
 {
     const VkImageLayout attachment = depth ?
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL :
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    if (!a || !out || a->format != format || a->samples != VK_SAMPLE_COUNT_1_BIT ||
+    if (!a || !out || a->format != format ||
+        (depth ? a->samples != VK_SAMPLE_COUNT_1_BIT : !(served & a->samples)) ||
         (depth ? format != VK_FORMAT_D32_SFLOAT :
-         (format != VK_FORMAT_B8G8R8A8_UNORM &&
-          format != VK_FORMAT_R8G8B8A8_UNORM)) ||
+         !ps5vk_color_target_format_supported(format)) ||
         (reference != attachment && reference != VK_IMAGE_LAYOUT_GENERAL) ||
         (a->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
          a->initialLayout != attachment && a->initialLayout != VK_IMAGE_LAYOUT_GENERAL) ||
-        (a->finalLayout != attachment && a->finalLayout != VK_IMAGE_LAYOUT_GENERAL) ||
+        (a->finalLayout != attachment && a->finalLayout != VK_IMAGE_LAYOUT_GENERAL &&
+         !(readback && !depth &&
+           a->finalLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)) ||
         a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
         a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
         (a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&

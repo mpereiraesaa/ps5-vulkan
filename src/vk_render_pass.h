@@ -1,6 +1,7 @@
 #ifndef PS5VK_RENDER_PASS_H
 #define PS5VK_RENDER_PASS_H
 #include "vk_internal.h"
+#include "color_attachment_contract.h"
 
 /* Bounded multiple-subpass profile. The shape is owned data - never retained
  * create-info pointers - and a graphics-capable backend must be enabled before
@@ -10,7 +11,17 @@
  * creation so an unsupported shape is refused where the caller can see it
  * rather than accepted and failed later. */
 enum { PS5VK_MAX_SUBPASSES = 8 };
-enum { PS5VK_MAX_ATTACHMENTS = 2 };
+/* One attachment per role a pass may name, which is not the same thing as one
+ * per colour target a caller may draw into. The pinned multisample oracle's
+ * pass carries the multisampled colour attachment, its single-sample resolve
+ * target and one single-sample target per sample it fetches back
+ * (external/vulkancts/modules/vulkan/pipeline/
+ * vktPipelineMultisampleTests.cpp, MSCaseBaseResolveAndPerSampleFetch), plus
+ * the optional depth attachment at the highest count this profile serves.
+ * PS5VK_MAX_COLOR_ATTACHMENTS stays the answer to "how many targets may a draw
+ * write", and the colour contract enforces it per subpass; a pass that named
+ * more colour references than that is refused there, not here. */
+enum { PS5VK_MAX_ATTACHMENTS = PS5VK_SAMPLE_COUNT_MAX_SERVED + 3 };
 enum { PS5VK_MAX_DEPENDENCIES = 16 };
 enum { PS5VK_MAX_CORRELATION_MASKS = 4 };
 enum { PS5VK_MAX_INPUT_ATTACHMENTS = 4 };
@@ -67,19 +78,51 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
  * earlier attachment is a real structure this model has to describe honestly.
  * One measured profile of them is now consumed: native execution admits a
  * single input reference at index 0 of a later subpass when it names the
- * promoted attachment, is read in GENERAL through that attachment's own
- * framebuffer view at the resource-only record width, and is ordered by one
- * forward BY_REGION dependency (see native/input_attachment_gate.c). Every
- * broader shape - a second reference, another index, another layout, another
- * subpass pair - stays stored-only and fails closed, and no shader or
- * reporting surface claims more than that one measured read. */
+ * promoted attachment, is read through that attachment's own framebuffer view
+ * at the resource-only record width, and is ordered by the boundary transition
+ * the executor emits for the reading subpass (see
+ * native/input_attachment_gate.c). The reference and the descriptor may name
+ * either read layout this profile admits - GENERAL, which the multiview witness
+ * declares, or SHADER_READ_ONLY_OPTIMAL, which the pinned multisample oracle
+ * declares for the colour attachment its fetch subpasses read - and the queue
+ * carries the attachment through that declared layout at the boundary rather
+ * than assuming GENERAL. Every broader shape - a second reference, another
+ * index, another layout, another subpass pair - stays stored-only and fails
+ * closed, and no shader or reporting surface claims more than that one measured
+ * read. */
 struct ps5vk_subpass {
-    VkAttachmentReference color, depth;
+    /* The subpass's colour references, in attachment order. The count is the
+     * subpass's own, bounded by the colour-attachment contract; every consumer
+     * reads color[0] while that bound is one, and the shape is what the second
+     * target will need. */
+    VkAttachmentReference color[PS5VK_MAX_COLOR_ATTACHMENTS];
+    uint32_t color_count;
+    VkAttachmentReference depth;
+    /* The resolve target of each colour reference, in the same order, or
+     * VK_ATTACHMENT_UNUSED when the subpass declares none. A resolve target is
+     * a role of its own: the subpass does not render into it, it receives the
+     * sample-resolved result of the colour attachment it follows, and Vulkan
+     * requires it to be a single-sample attachment of that colour attachment's
+     * format (DXVK262-T06).
+     *
+     * resolve_count is the number of entries DECLARED: zero when the subpass
+     * supplied no pResolveAttachments, and the colour count when it did (Vulkan
+     * requires those counts to match). Declaring is therefore what the count
+     * says, and a zero-initialized subpass means "no resolve target" instead of
+     * silently naming attachment 0. */
+    uint32_t resolve_count;
+    VkAttachmentReference resolve[PS5VK_MAX_COLOR_ATTACHMENTS];
     /* Where this subpass's input references start in the pass's one owned
      * array, and how many of them there are. An index rather than a pointer
      * keeps every element in the object's single allocation at 32-bit
      * alignment, which is the rule the suballocation below depends on. */
     uint32_t input_first, input_count;
+    /* Where this subpass's preserve list starts in the pass's one owned array,
+     * and how many entries it has. A preserved attachment is not rendered into
+     * by the subpass and must come out of it unchanged, which is how the pinned
+     * multisample family keeps the resolve target and its per-sample targets
+     * alive across the fetch subpasses (DXVK262-T06). */
+    uint32_t preserve_first, preserve_count;
 };
 
 struct VkRenderPass_T {
@@ -98,6 +141,10 @@ struct VkRenderPass_T {
      * same single allocation. Never a create-info pointer. */
     VkAttachmentReference *inputs;
     uint32_t input_count;
+    /* Every subpass's preserve list, concatenated in subpass order, in the same
+     * single allocation. Never a create-info pointer. */
+    uint32_t *preserves;
+    uint32_t preserve_count;
     struct ps5vk_render_pass_multiview multiview;
 };
 
@@ -118,5 +165,81 @@ static inline const VkAttachmentReference *ps5vk_render_pass_inputs(
     VkRenderPass pass, uint32_t index)
 {
     return &pass->inputs[pass->subpasses[index].input_first];
+}
+
+/* The owned preserve list of one subpass, in the order the caller declared it. */
+static inline const uint32_t *ps5vk_render_pass_preserves(
+    VkRenderPass pass, uint32_t index)
+{
+    return &pass->preserves[pass->subpasses[index].preserve_first];
+}
+
+/* True when any subpass of this pass preserves an attachment. The object model
+ * stores and validates the list; the native queue does not carry attachment
+ * contents across a subpass boundary implicitly, so its executor refuses a pass
+ * this returns true for rather than silently dropping the promise. */
+static inline int ps5vk_render_pass_has_preserve_list(VkRenderPass pass)
+{
+    if (!pass) return 0;
+    for (uint32_t i = 0; i < pass->subpass_count; ++i)
+        if (pass->subpasses[i].preserve_count) return 1;
+    return 0;
+}
+
+/* True when any colour reference of this subpass resolves into another
+ * attachment. The object model accepts the shape - the render pass,
+ * framebuffer and pipeline frontends all describe it - while the native path
+ * cannot resolve yet, so its executor refuses a pass this returns true for.
+ * One helper decides it so the executor cannot drift from the model. */
+static inline int ps5vk_subpass_uses_resolve(const struct ps5vk_subpass *subpass)
+{
+    if (!subpass) return 0;
+    for (uint32_t c = 0; c < subpass->resolve_count; ++c)
+        if (subpass->resolve[c].attachment != VK_ATTACHMENT_UNUSED) return 1;
+    return 0;
+}
+
+/* The layout one subpass NAMES for one attachment, and whether it names it at
+ * all. A pass is therefore a sequence of layouts per attachment: the
+ * attachment's initial layout, then what each subpass declares as the pass
+ * reaches it (colour, then resolve, then an input read - the order a subpass
+ * uses them in), then the attachment's final layout. The native executor walks
+ * that sequence, because a render pass is what carries an attachment from one
+ * layout to the next at a subpass boundary: the pinned multisample oracle
+ * renders its multisampled colour attachment as colour in subpass 0 and reads
+ * it as an input attachment in SHADER_READ_ONLY_OPTIMAL in the fetch subpasses,
+ * and the identity of that read layout is exactly what the input-attachment
+ * gate checks the recorded descriptor against.
+ *
+ * A subpass that names the attachment only in its preserve list names no
+ * layout, and that is a real answer: a preserved attachment is neither read nor
+ * written by the subpass, so it carries its layout through the subpass
+ * unchanged. */
+static inline int ps5vk_render_pass_attachment_layout(VkRenderPass pass,
+    uint32_t subpass_index, uint32_t attachment, VkImageLayout *out)
+{
+    if (!pass || !out || subpass_index >= pass->subpass_count ||
+        attachment == VK_ATTACHMENT_UNUSED) return 0;
+    const struct ps5vk_subpass *subpass = &pass->subpasses[subpass_index];
+    for (uint32_t c = 0; c < subpass->color_count; ++c)
+        if (subpass->color[c].attachment == attachment) {
+            *out = subpass->color[c].layout;
+            return 1;
+        }
+    for (uint32_t r = 0; r < subpass->resolve_count; ++r)
+        if (subpass->resolve[r].attachment == attachment) {
+            *out = subpass->resolve[r].layout;
+            return 1;
+        }
+    for (uint32_t i = 0; i < subpass->input_count; ++i)
+        if (pass->inputs[subpass->input_first + i].attachment == attachment) {
+            *out = pass->inputs[subpass->input_first + i].layout;
+            return 1;
+        }
+    if (subpass->depth.attachment == attachment) {
+        *out = subpass->depth.layout;
+        return 1;
+    }
+    return 0;
 }
 #endif

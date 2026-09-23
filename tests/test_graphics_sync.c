@@ -23,6 +23,23 @@ int main(void)
         out[0]==0xc0064900 && out[1]==0x0070f52d &&
         out[2]==0x00010000 && !out[3] && !out[4] && !out[5] && !out[6] && !out[7]);
     const uint64_t address=UINT64_C(0x123456789000), serial=UINT64_C(0xfedcba9876543210);
+    /* The synchronous form of the same barrier: the CB data-flush event with the
+     * completion token selected (DST_SEL=MEM | INT_SEL=3 |
+     * DATA_SEL=VALUE_32BIT) and a WAIT_REG_MEM for it. The asynchrony of the
+     * no-token form is what let a following texture read see tiles the colour
+     * block had not written back yet. */
+    memset(out,0x5a,sizeof(out));
+    assert(!ps5vk_graphics_color_to_texture_wait(out,14,address,1) && out[0]==0x5a5a5a5a);
+    assert(!ps5vk_graphics_color_to_texture_wait(out,15,address,0));
+    assert(!ps5vk_graphics_color_to_texture_wait(out,15,address+4,1));
+    assert(!ps5vk_graphics_color_to_texture_wait(out,15,UINT64_C(1)<<48,1));
+    assert(ps5vk_graphics_color_to_texture_wait(out,15,address,7)==15 &&
+        out[0]==0xc0064900 && out[1]==0x0070f52d && out[2]==0x23000000 &&
+        out[3]==(uint32_t)address && out[4]==(uint32_t)(address>>32) &&
+        out[5]==7 && !out[6] && !out[7] &&
+        out[8]==0xc0053c00 && out[9]==0x13 && out[10]==(uint32_t)address &&
+        out[11]==(uint32_t)(address>>32) && out[12]==7 &&
+        out[13]==0xffffffff && out[14]==4);
     assert(ps5vk_graphics_release(out,8,address,serial)==8);
     assert(out[1]==0x0070f514 && out[2]==0x42010000);
     /* gfx10 VGT_EVENT_TYPE: CACHE_FLUSH_AND_INV_TS_EVENT=20, whereas

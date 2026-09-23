@@ -28,7 +28,8 @@ int main(int argc,char **argv) {
              * so the key has to name the attachment it writes into. An unset
              * format now means a depth-only pass, whose fragment stage exports
              * nothing. */
-            .color_format=VK_FORMAT_B8G8R8A8_UNORM,.color_write_mask=15};
+            .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+            .color_write_mask={15}};
         VkVertexInputBindingDescription binding={0,8,VK_VERTEX_INPUT_RATE_VERTEX};
         VkVertexInputAttributeDescription attribute={0,0,VK_FORMAT_R32G32_SFLOAT,0};
         if(getenv("TESS_VERTEX_INPUT")) {

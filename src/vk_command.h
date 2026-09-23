@@ -98,7 +98,11 @@ struct ps5vk_operation {
     };
     /* Rasterization state resolved at record time (vk_pipeline.h). */
     struct ps5vk_raster_state raster;
-    VkClearValue clears[2];
+    /* One clear value per attachment the pass may name: the pinned multisample
+     * oracle clears its whole pass in one begin, so a fixed pair of slots
+     * cannot carry the begin it records. The count is the caller's, bounded by
+     * the same attachment bound the render pass enforces (DXVK262-T06). */
+    VkClearValue clears[PS5VK_MAX_ATTACHMENTS];
     uint32_t clear_count;
     uint32_t vertex_count, instance_count, first_vertex, first_instance;
     uint32_t index_count, first_index;

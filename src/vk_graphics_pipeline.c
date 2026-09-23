@@ -2,9 +2,18 @@
 #include "vk_render_pass.h"
 #include "graphics_program.h"
 #include "vk_pipeline_cache.h"
+#include "color_attachment_contract.h"
 #if (defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE) || (defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG)
 #define PS5VK_PIPELINE_DIAGNOSTICS 1
+#endif
+/* Console-only markers: the host build has neither the transport nor the
+ * header on its include path, and a pipeline that never gets created is
+ * exactly what "the case died before it recorded anything" looks like. */
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
 #include "ps5log.h"
+#define PIPE_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define PIPE_MARK(...) ((void)0)
 #endif
 #include <float.h>
 #include <string.h>
@@ -29,6 +38,46 @@ static VkResult refuse(unsigned site)
     return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 static int finite_float(float value) { return value >= -FLT_MAX && value <= FLT_MAX; }
+/* The multisample state this profile executes (DXVK262-T06).
+ *
+ * The counts come from the platform's own mask, so a build that never measured
+ * a multisample path stays exactly as closed as it was: 1x only. The pipeline's
+ * count must also be the one the subpass it draws in uses, because a mismatch
+ * would render with a state no attachment has (VUID-VkGraphicsPipelineCreateInfo-
+ * subpass-00757).
+ *
+ * Per-sample shading additionally needs sampleRateShading enabled on the
+ * logical device: turning one fragment invocation into one per sample is the
+ * capability that feature names, and a device whose application never enabled
+ * it must not deliver the state anyway. minSampleShading is the fraction of
+ * samples the implementation may shade at, so it is bounded to [0,1] while
+ * sample shading is on and canonicalized to zero when it is off, where Vulkan
+ * leaves it ignored.
+ *
+ * pSampleMask may only ask for what this path delivers: every sample of the
+ * pipeline's count covered. An absent mask means exactly that (Vulkan defines
+ * the absent mask as all bits set), and a mask may carry further bits - those
+ * name samples this count does not have, so they are ignored. Masking off a
+ * sample the target DOES have would need per-pixel mask registers, which
+ * nothing on this path writes, so that shape is refused rather than silently
+ * delivered as full coverage. */
+static int multisample_state(VkDevice d, const VkPipelineMultisampleStateCreateInfo *m,
+                             VkSampleCountFlagBits attachment_samples, int has_attachment)
+{
+    const VkSampleCountFlags supported =
+        ps5vk_platform_sample_counts(d->platform_features);
+    if (!(supported & m->rasterizationSamples)) return 0;
+    if (has_attachment && m->rasterizationSamples != attachment_samples) return 0;
+    if (m->sampleShadingEnable) {
+        if (!(d->enabled_features & PS5VK_FEATURE_SAMPLE_RATE_SHADING)) return 0;
+        if (!finite_float(m->minSampleShading) ||
+            m->minSampleShading < 0.0f || m->minSampleShading > 1.0f) return 0;
+    }
+    const VkSampleMask used = ps5vk_sample_count_full_mask(m->rasterizationSamples);
+    if (m->pSampleMask && (m->pSampleMask[0] & used) != used)
+        return 0;
+    return 1;
+}
 /* The rasterization state's pNext chain. This profile implements no optional
  * rasterization structure, and every state that would change behaviour is
  * refused, but the pinned upstream rasterization module chains one
@@ -223,6 +272,17 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         ia->topology != VK_PRIMITIVE_TOPOLOGY_LINE_STRIP &&
         ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP)
         return refuse(14);
+    /* The multisample state is judged against the subpass this pipeline draws
+     * in: its colour attachment names the sample count the pipeline has to
+     * agree with. The COUNT decides whether there is one - a depth-only subpass
+     * declares none, and its reference array is not read - and a subpass with
+     * no colour attachment leaves the count bounded only by the platform's own
+     * mask. */
+    const struct ps5vk_subpass *multisample_subpass =
+        ps5vk_render_pass_subpass(in->renderPass, in->subpass);
+    const uint32_t multisample_attachment = multisample_subpass->color[0].attachment;
+    const int multisample_has_attachment = multisample_subpass->color_count &&
+        multisample_attachment != VK_ATTACHMENT_UNUSED;
     if (v->pNext || v->flags ||
         /* primitiveRestartEnable is accepted above for the two strip
          * topologies it can act on, and refused there for every other
@@ -249,9 +309,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          ((r->polygonMode != VK_POLYGON_MODE_LINE && r->polygonMode != VK_POLYGON_MODE_POINT) ||
           !(d->enabled_features & PS5VK_FEATURE_FILL_MODE_NON_SOLID))) ||
         r->lineWidth != 1.0f ||
-        m->pNext || m->flags || m->rasterizationSamples != VK_SAMPLE_COUNT_1_BIT ||
-        m->sampleShadingEnable || m->alphaToCoverageEnable || m->alphaToOneEnable ||
-        (m->pSampleMask && !(m->pSampleMask[0] & 1)) ||
+        m->pNext || m->flags || m->alphaToCoverageEnable || m->alphaToOneEnable ||
+        !multisample_state(d, m, multisample_has_attachment ?
+                in->renderPass->attachments[multisample_attachment].samples :
+                VK_SAMPLE_COUNT_1_BIT, multisample_has_attachment) ||
         /* Viewport arrays: the two counts must match and lie in
          * 1..PS5VK_MAX_VIEWPORTS; more than one needs multiViewport ENABLED
          * on this logical device. The count is static in this profile (no
@@ -259,8 +320,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         vp->pNext || vp->flags || !vp->viewportCount || vp->viewportCount > PS5VK_MAX_VIEWPORTS ||
         vp->scissorCount != vp->viewportCount ||
         (vp->viewportCount > 1 && !(d->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)) ||
-        (b && (b->pNext || b->flags || b->logicOpEnable || b->attachmentCount > 1)))
+        (b && !ps5vk_color_blend_state_shape_supported(b)))
         return refuse(15);
+    /* Vulkan makes pColorBlendState optional. A subpass that names no colour
+     * attachment may omit it, and then it describes exactly zero attachments,
+     * which is the same count a supplied empty state carries. */
+    const uint32_t blend_attachment_count = b ? b->attachmentCount : 0u;
     if ((!dynamic_viewport && !vp->pViewports) || (!dynamic_scissor && !vp->pScissors) ||
         (b && b->attachmentCount && !b->pAttachments)) return VK_ERROR_UNKNOWN;
     /* Every static element is validated before any is stored. */
@@ -284,12 +349,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * first one: the identity is what a draw is later checked against. */
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, in->subpass);
     if (subpass->depth.attachment != VK_ATTACHMENT_UNUSED && !depth) return VK_ERROR_UNKNOWN;
-    /* A colour subpass needs exactly one blend attachment; a depth-only one
-     * must not describe a colour attachment it does not have. */
-    const int has_colour = subpass->color.attachment != VK_ATTACHMENT_UNUSED;
-    const VkPipelineColorBlendAttachmentState *blend =
-        (b && b->attachmentCount) ? &b->pAttachments[0] : NULL;
-    if (has_colour ? !blend : (blend != NULL)) return refuse(19);
+    /* One blend attachment per colour attachment the subpass names, and none
+     * for the DEPTH-ONLY shape. The exact agreement is checked below, where the
+     * per-attachment state is read out of the subpass and the pipeline. */
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
         depth->pNext || depth->flags || depth->depthBoundsTestEnable || depth->stencilTestEnable ||
         depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
@@ -309,26 +371,75 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         .patch_control_points=tcs?in->pTessellationState->patchControlPoints:0,
         .feature_mask=d->enabled_features,
         .topology=ia->topology,
-        .color_format=has_colour ? pass->attachments[subpass->color.attachment].format :
-            VK_FORMAT_UNDEFINED,
         .samples=m->rasterizationSamples,
-        .color_write_mask=blend ? blend->colorWriteMask : 0u,
-        .blend_enable=blend ? blend->blendEnable : VK_FALSE,
+        /* Sample shading is carried exactly as the accepted state reads it:
+         * the flag, the fraction (zero while the flag is off, where Vulkan
+         * ignores it) and the mask. Zero is the canonical "every implemented
+         * sample is covered" state, which is what an absent pSampleMask means
+         * and what every mask shape this contract accepts also means, so a
+         * pipeline that spells its mask out shares one program with a pipeline
+         * that leaves it absent. */
+        .sample_shading_enable=m->sampleShadingEnable?VK_TRUE:VK_FALSE,
+        .min_sample_shading=m->sampleShadingEnable?m->minSampleShading:0.0f,
+        .sample_mask=0u,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
         .vertex_bindings=v->pVertexBindingDescriptions,.vertex_attributes=v->pVertexAttributeDescriptions,
         .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets,
         .push_constant_size=in->layout->push_constant_size};
     memcpy(key.push_constant_stages,in->layout->push_constant_stages,
            sizeof(key.push_constant_stages));
-    if(key.blend_enable) {
-        const VkPipelineColorBlendAttachmentState *a=blend;
-        key.src_color_blend_factor=a->srcColorBlendFactor;
-        key.dst_color_blend_factor=a->dstColorBlendFactor;
-        key.color_blend_op=a->colorBlendOp;
-        key.src_alpha_blend_factor=a->srcAlphaBlendFactor;
-        key.dst_alpha_blend_factor=a->dstAlphaBlendFactor;
-        key.alpha_blend_op=a->alphaBlendOp;
-        memcpy(key.blend_constants,b->blendConstants,sizeof(key.blend_constants));
+    /* One element per colour attachment the subpass names: the format comes
+     * from the pass, the blend state from the pipeline. Vulkan requires the
+     * pipeline to describe exactly as many attachments as the subpass. A
+     * subpass that names none is the DEPTH-ONLY shape: the count stays zero and
+     * every colour field keeps the value the zeroed initialiser gave it
+     * (VK_FORMAT_UNDEFINED, no write mask, no blend), which is exactly what the
+     * compiler and the native path key the depth-only case on. */
+    if (blend_attachment_count != subpass->color_count) return refuse(15);
+    key.color_attachment_count = subpass->color_count;
+    int any_blend = 0;
+    /* Vulkan's independentBlend is what makes element i of pAttachments the
+     * state of attachment i. Without it the elements past the first are not
+     * independent: the first one describes every attachment, and programming
+     * whatever the application left in the others would render with state the
+     * specification says does not apply. The write mask is different - it is
+     * per attachment either way - so only the blend fields are folded. */
+    const int independent_blend = (d->enabled_features & PS5VK_FEATURE_INDEPENDENT_BLEND) != 0;
+    for (uint32_t attachment = 0; attachment < subpass->color_count; ++attachment) {
+        const VkPipelineColorBlendAttachmentState *a =
+            &b->pAttachments[independent_blend ? attachment : 0];
+        key.color_format[attachment] =
+            pass->attachments[subpass->color[attachment].attachment].format;
+        /* An integer colour target is not blended into and its lanes are not
+         * converted, so a blend state on it describes a shape this profile
+         * cannot program. */
+        if(ps5vk_color_target_format_is_integer(key.color_format[attachment]) &&
+           b->pAttachments[attachment].blendEnable) return refuse(15);
+        key.color_write_mask[attachment] = b->pAttachments[attachment].colorWriteMask;
+        key.blend_enable[attachment] = a->blendEnable;
+        if (!a->blendEnable) continue;
+        any_blend = 1;
+        key.src_color_blend_factor[attachment] = a->srcColorBlendFactor;
+        key.dst_color_blend_factor[attachment] = a->dstColorBlendFactor;
+        key.color_blend_op[attachment] = a->colorBlendOp;
+        key.src_alpha_blend_factor[attachment] = a->srcAlphaBlendFactor;
+        key.dst_alpha_blend_factor[attachment] = a->dstAlphaBlendFactor;
+        key.alpha_blend_op[attachment] = a->alphaBlendOp;
+    }
+    if (any_blend)
+        memcpy(key.blend_constants, b->blendConstants, sizeof(key.blend_constants));
+    /* SRC1 names the fragment shader's secondary output for attachment zero.
+     * The effective state is the key's - already folded to attachment zero's
+     * element when independentBlend is not enabled - so a SRC1 equation the
+     * application left in an element the specification ignores does not refuse
+     * the pipeline. The compiler separately proves that the selected fragment
+     * module really exports the secondary value; the two checks prevent either
+     * state alone from authorizing a draw. */
+    if(!(d->enabled_features & PS5VK_FEATURE_DUAL_SRC_BLEND)) {
+        for (uint32_t attachment = 0; attachment < key.color_attachment_count; ++attachment)
+            if (ps5vk_color_attachment_uses_src1(
+                    &b->pAttachments[independent_blend ? attachment : 0]))
+                return refuse(18);
     }
     if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
        !specialization_key(fs->pSpecializationInfo,&key.fragment) ||
@@ -382,6 +493,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     p->device=d; p->allocator=saved; p->custom_allocator=custom; p->graphics=VK_TRUE;
     p->subpass=in->subpass;
+    /* The multisample state the native draw state reads (DXVK262-T06): the
+     * count the accepted state carries, and the shading flag and fraction the
+     * loader turns into pixel iterations. */
+    p->samples=key.samples;
+    p->sample_shading_enable=key.sample_shading_enable;
+    p->min_sample_shading=key.min_sample_shading;
     p->set_count=in->layout->set_count;
     if(p->set_count)memcpy(p->sets,in->layout->sets,p->set_count*sizeof(*p->sets));
     p->graphics_release=d->graphics_release;
@@ -404,9 +521,19 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     p->push_constant_size=in->layout->push_constant_size;
     memcpy(p->push_constant_stages,in->layout->push_constant_stages,
            sizeof(p->push_constant_stages));
-    p->cull_mode=r->cullMode; p->front_face=r->frontFace; p->color_format=key.color_format;
+    p->cull_mode=r->cullMode; p->front_face=r->frontFace;
+    p->color_attachment_count=key.color_attachment_count;
+    for(uint32_t attachment=0;attachment<key.color_attachment_count;++attachment) {
+        p->color_format[attachment]=key.color_format[attachment];
+        p->color_write_mask[attachment]=key.color_write_mask[attachment];
+    }
     p->primitive_restart=ia->primitiveRestartEnable;
-    p->color_blend=blend ? *blend : (VkPipelineColorBlendAttachmentState){0};
+    /* The pipeline carries one blend state per colour attachment it was
+     * created for; with none (the depth-only shape) the array keeps the zeroed
+     * value the object allocation gave it. */
+    if(p->color_attachment_count)
+        memcpy(p->color_blend,b->pAttachments,
+               p->color_attachment_count*sizeof(*p->color_blend));
     memcpy(p->blend_constants,key.blend_constants,sizeof(p->blend_constants));
     p->vertex_binding_count=key.vertex_binding_count;p->vertex_attribute_count=key.vertex_attribute_count;
     if(key.vertex_binding_count)memcpy(p->vertex_bindings,key.vertex_bindings,
@@ -429,6 +556,23 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineC
     if (!out) return VK_ERROR_UNKNOWN;
     for (uint32_t i=0;i<count;++i) out[i]=VK_NULL_HANDLE;
     if (!d || !count || !infos) return VK_ERROR_UNKNOWN;
+    for (uint32_t i=0;i<count;++i)
+        PIPE_MARK("PS5VK_PIPELINE_CREATE subpass=%u samples=%u stages=%u topology=%u vb=%u va=%u "
+            "colors=%u dyn=%u ds=%u rp=%u",
+            (unsigned)infos[i].subpass,
+            (unsigned)(infos[i].pMultisampleState ?
+                infos[i].pMultisampleState->rasterizationSamples : 0u),
+            (unsigned)infos[i].stageCount,
+            (unsigned)(infos[i].pInputAssemblyState ?
+                infos[i].pInputAssemblyState->topology : 0xffffffffu),
+            (unsigned)(infos[i].pVertexInputState ?
+                infos[i].pVertexInputState->vertexBindingDescriptionCount : 0u),
+            (unsigned)(infos[i].pVertexInputState ?
+                infos[i].pVertexInputState->vertexAttributeDescriptionCount : 0u),
+            (unsigned)(infos[i].pColorBlendState ? infos[i].pColorBlendState->attachmentCount : 0u),
+            (unsigned)(infos[i].pDynamicState != NULL),
+            (unsigned)(infos[i].pDepthStencilState != NULL),
+            (unsigned)(infos[i].renderPass != NULL));
     /* A live same-device cache is accepted and carries no portable records yet. */
     if ((cache && !ps5vk_pipeline_cache_usable(d, cache)) ||
         !d->graphics_enabled || (!d->graphics_library && !d->graphics_acquire) ||

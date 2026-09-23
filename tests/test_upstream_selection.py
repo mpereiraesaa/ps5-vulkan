@@ -72,13 +72,29 @@ class UpstreamSelectionTests(unittest.TestCase):
         # instead of being claimed as coverage.
         geometry = [c for c in manifest["cases"]
                     if "geometryShader" in " ".join(c.get("features_required", []))]
-        # 362 acceptance cases: the 304 the tranches before T05 left, plus the
-        # 58 T05 leaves measured and promoted on 2026-09-21 (28 rasterization
-        # culling, 16 fragment_ops multi_viewport, 6 draw.renderpass.scissor,
-        # 2 clip_volume.depth_clamp, 6 draw.renderpass.depth_clamp). The 44
-        # diagnostics that remain document refusals and capability gaps, and
-        # nothing is left pending a measurement window.
-        self.assertEqual((362, 44, 48),
+        # The frozen selection is the union of the two lines: the 404 acceptance
+        # cases T06 carried (including the 98 dual-source leaves and the two
+        # fragment side-effect leaves) plus the 58 T05 leaves measured and
+        # promoted on 2026-09-21 (28 rasterization culling, 16 fragment_ops
+        # multi_viewport, 6 draw.renderpass.scissor, 2 clip_volume.depth_clamp,
+        # 6 draw.renderpass.depth_clamp), plus the four render-pass
+        # attachment-write-mask leaves the T06 independentBlend line held as
+        # t06-independent-blend-pending: two of them (suballocation) are
+        # acceptance now that the promotion advertised the feature and served
+        # the integer colour target, and the two dedicated_allocation leaves
+        # stay diagnostics because they need VK_KHR_dedicated_allocation. The
+        # T06 sampleRateShading line selected 50 leaves from the only class in
+        # the pinned multisample module that requires
+        # DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING, at the 2x/4x counts this
+        # profile serves and without the point size that needs largePoints: 30
+        # of them - the triangle and quad shapes - are measured Pass and are
+        # now the sample-rate-shading acceptance group, and the 20 line and
+        # point_1px shapes moved to plain-point-line-pipeline-refused, whose
+        # pipeline shape this profile refuses at creation. The 66 diagnostics
+        # that remain document refusals, capability gaps and pending
+        # measurement windows. `leaves` counts every attachment_write_mask leaf
+        # the pinned factory generates, wherever the manifest now keeps it.
+        self.assertEqual((494, 66, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         pending = [d for d in manifest["diagnostics"]
                    if d["category"] == "t05-measurement-pending"]
@@ -91,6 +107,15 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual("Fail", amber[0]["expected_status"])
         self.assertEqual("dEQP-VK.rasterization.line_continuity.polygon-mode-lines",
                          amber[0]["path"])
+        # dualSrcBlend was promoted on 2026-09-21: its 98 applicable leaves
+        # moved from the pending diagnostics into acceptance.
+        dual_source = [c for c in manifest["cases"]
+                       if c["category"] == "dual-source-blend"]
+        self.assertEqual(98, len(dual_source))
+        self.assertTrue(all(c["expected_status"] == "Pass" for c in dual_source))
+        self.assertEqual(
+            {"dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states"},
+            {c["path"].rsplit(".", 1)[0] for c in dual_source})
         self.assertTrue(all(c["expected_status"] == "Pass" for c in leaves))
         # 29 from the geometry tranche itself, plus the 23 T05 leaves promoted on
         # 2026-09-21 that drive gl_ViewportIndex from a geometry stage: the 16
@@ -275,6 +300,34 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertTrue((UPSTREAM / "external/vulkancts/data/vulkan/amber/rasterization/"
                          "line_continuity/polygon-mode-lines.amber").is_file())
 
+    def test_t06_fragment_store_leaves_are_exact_promoted_upstream_oracles(self):
+        expected_paths = {
+            "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+            "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill",
+        }
+        selected = [case for case in self.current_manifest["cases"]
+                    if case.get("category") == "fragment-stores-and-atomics"]
+        self.assertEqual(expected_paths, {case["path"] for case in selected})
+        self.assertEqual(set(), expected_paths & {
+            case["path"] for case in self.current_manifest["diagnostics"]})
+        self.assertTrue(all(case["expected_status"] == "Pass" for case in selected))
+        self.assertTrue(all(case["features_required"] ==
+                            ["core:fragmentStoresAndAtomics"] for case in selected))
+        self.assertTrue(all(case["source"] ==
+                            "external/vulkancts/modules/vulkan/rasterization/"
+                            "vktRasterizationFragShaderSideEffectsTests.cpp:684"
+                            for case in selected))
+
+        source = (UPSTREAM / "external/vulkancts/modules/vulkan/rasterization/"
+                  "vktRasterizationFragShaderSideEffectsTests.cpp").read_text()
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn('new FragSideEffectsTestCase(testCtx, "kill", params)', source)
+        self.assertIn('{false, "color_at_beginning"}', source)
+        self.assertIn('{true, "color_at_end"}', source)
+        self.assertIn('vkt::rasterization::createTests(m_testCtx, "rasterization")', package)
+        self.assertIn("vktRasterizationFragShaderSideEffectsTests.cpp", builder)
+
     def test_device_capabilities_come_from_the_device_sources(self):
         self.assertEqual([], self.capability_failures)
         self.assertIn("VK_KHR_MULTIVIEW", self.capabilities["extensions"])
@@ -282,6 +335,116 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertFalse(self.capabilities["features"]["multiviewGeometryShader"])
         self.assertFalse(self.capabilities["features"]["multiviewTessellationShader"])
         self.assertEqual(6, self.capabilities["max_multiview_view_count"])
+
+    def test_t06_sample_rate_leaves_are_the_feature_gated_oracle(self):
+        """The leaves whose own checkSupport requires sampleRateShading are
+        exactly the feature's oracle at the counts this profile serves, wherever
+        the manifest keeps them: the shapes this profile renders are the
+        `sample-rate-shading` acceptance group, and the point and line shapes
+        whose PIPELINE SHAPE it refuses sit with the rest of those refusals. The
+        recognizer derives the leaves per group from the pinned tables, so a leaf
+        moved between the enabled and the disabled group - or a primitive the
+        group does not register - stops matching."""
+        accepted = [c for c in self.current_manifest["cases"]
+                    if c.get("category") == "sample-rate-shading"]
+        refused = [d for d in self.current_manifest["diagnostics"]
+                   if d.get("category") == "plain-point-line-pipeline-refused" and
+                   d.get("features_required") == ["core:sampleRateShading"]]
+        selected = accepted + refused
+        module_source = ("external/vulkancts/modules/vulkan/pipeline/"
+                         "vktPipelineMultisampleTests.cpp")
+        module = (UPSTREAM / module_source).read_text()
+
+        # Both halves of the gate are pinned: the only feature requirement in
+        # this module is MinSampleShadingTest's, and it is what the category is
+        # for.
+        self.assertEqual(1, module.count("DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING"))
+        self.assertIn("void MinSampleShadingTest::checkSupport(Context &context) const",
+                      module)
+
+        derived = set()
+        for diagnostic in selected:
+            path = diagnostic["path"]
+            source = diagnostic["source"]
+            self.assertTrue(source.startswith(module_source + ":"), source)
+            self.assertEqual(["core:sampleRateShading"], diagnostic["features_required"])
+            self.assertEqual({path}, self.gate._min_sample_shading_leaf_names(module, path))
+            derived.add(path)
+        # 5 minSampleShading values x 2 served counts x (3 primitives + 2 quads).
+        self.assertEqual(50, len(derived))
+        # The 30 shapes this profile serves are acceptance members, promoted with
+        # the run that measured them; the 20 whose topology it refuses are
+        # diagnostics that expect the refusal.
+        self.assertEqual(30, len(accepted))
+        self.assertEqual(20, len(refused))
+        for entry in accepted:
+            self.assertEqual("Pass", entry["expected_status"])
+            self.assertTrue(entry["path"].endswith((".primitive_triangle", ".quad")),
+                            entry["path"])
+            self.assertIn("PROMOTED", entry["rationale"])
+        for entry in refused:
+            self.assertEqual("Fail", entry["expected_status"])
+            self.assertTrue(entry["path"].endswith((".primitive_line", ".primitive_point_1px")),
+                            entry["path"])
+            self.assertIn("REFUSED", entry["rationale"])
+        self.assertTrue(all("samples_2." in p or "samples_4." in p for p in derived))
+        # The counts this profile refuses and the sparse variants it cannot bind
+        # are derived by the factory but deliberately not selected.
+        self.assertNotIn(f"dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled"
+                         f".min_0_0.samples_8.quad", derived)
+        self.assertNotIn(f"dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+                         f".min_0_0.samples_4.primitive_triangle_sparse", derived)
+        # The fourth primitive is measured out of the category: its 3.0 point
+        # size needs largePoints, which the measurement reported as a
+        # NotSupported instead of a driver defect.
+        self.assertFalse([p for p in derived if p.endswith(".primitive_point")])
+        self.assertEqual([], [p for p in derived if "_sparse" in p])
+
+        # The factory builds those wider shapes, which is why their absence is a
+        # selection decision and not a recognizer that cannot see them.
+        self.assertEqual(
+            {"dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+             ".min_0_0.samples_8.primitive_triangle"},
+            self.gate._min_sample_shading_leaf_names(module,
+                "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+                ".min_0_0.samples_8.primitive_triangle"))
+        self.assertEqual(
+            {"dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+             ".min_0_0.samples_4.primitive_triangle_sparse"},
+            self.gate._min_sample_shading_leaf_names(module,
+                "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+                ".min_0_0.samples_4.primitive_triangle_sparse"))
+
+        # The enabled and disabled groups register only the quad, and the plain
+        # group only the primitives: a leaf that swaps groups is not a leaf.
+        for path in (
+            "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading"
+            ".min_0_0.samples_2.quad",
+            "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled"
+            ".min_0_0.samples_2.primitive_triangle",
+            "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled"
+            ".min_0_0.samples_4.primitive_line",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(set(),
+                                 self.gate._min_sample_shading_leaf_names(module, path))
+
+        # A rewritten factory stops matching instead of yielding invented names.
+        self.assertEqual(set(), self.gate._min_sample_shading_leaf_names(
+            module.replace("DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING",
+                           "DEVICE_CORE_FEATURE_MULTIVIEW"), next(iter(derived))))
+        self.assertEqual(set(), self.gate._min_sample_shading_leaf_names(
+            module.replace('{"min_0_75", 0.75f}', '{"min_three_quarters", 0.75f}'),
+            next(iter(derived))))
+        self.assertEqual(set(), self.gate._min_sample_shading_leaf_names(
+            module.replace("VK_SAMPLE_COUNT_4_BIT,  VK_SAMPLE_COUNT_8_BIT",
+                           "VK_SAMPLE_COUNT_4_BIT,  VK_SAMPLE_COUNT_3_BIT"),
+            next(iter(derived))))
+        # The sample-count group segment is composed, not written as a literal,
+        # so the gate derives it from the same table.
+        self.assertEqual({"samples_2", "samples_4", "samples_8", "samples_16",
+                          "samples_32", "samples_64"},
+                         self.gate._multisample_generated_segments(module))
 
     def test_contract_is_derived_from_the_selected_factory_branches(self):
         """(1) The contract comes from the branches the selected families use,

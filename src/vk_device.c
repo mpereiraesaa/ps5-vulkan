@@ -76,6 +76,19 @@ static const struct core_feature_bit {
      PS5VK_FEATURE_FILL_MODE_NON_SOLID},
     {offsetof(VkPhysicalDeviceFeatures, multiViewport),
      PS5VK_FEATURE_MULTI_VIEWPORT},
+    /* DXVK262-T06 fragment-output capabilities. These entries only connect
+     * public reporting and logical-device enablement to platform-owned bits;
+     * they do not advertise anything by themselves. native/platform_ps5.c
+     * therefore remains false until each native contract has its own hardware
+     * witness and focused CTS result. */
+    {offsetof(VkPhysicalDeviceFeatures, independentBlend),
+     PS5VK_FEATURE_INDEPENDENT_BLEND},
+    {offsetof(VkPhysicalDeviceFeatures, dualSrcBlend),
+     PS5VK_FEATURE_DUAL_SRC_BLEND},
+    {offsetof(VkPhysicalDeviceFeatures, fragmentStoresAndAtomics),
+     PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS},
+    {offsetof(VkPhysicalDeviceFeatures, sampleRateShading),
+     PS5VK_FEATURE_SAMPLE_RATE_SHADING},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,
@@ -573,6 +586,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->physical = p; d->queue.device = d; d->queue.next_serial = 1;
     d->queue.priority_class = q->pQueuePriorities[0] >= 0.5f ? 1u : 0u;
     d->enabled_features = enabled_features;
+    d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;
     d->uniform_buffer_alignment = p->platform.properties.limits.minUniformBufferOffsetAlignment;

@@ -13,6 +13,7 @@
  * that qualify a capability for publication.
  */
 #include "texture_format.h"
+#include "color_attachment_contract.h"
 
 /* Column aliases for the table below. */
 #define GPL PS5VK_FORMAT_PROVENANCE_GPL_REFERENCE
@@ -23,12 +24,19 @@
 #define CAP_LINEAR PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR
 #define CAP_COLOR PS5VK_FORMAT_CAP_COLOR_ATTACHMENT
 #define CAP_COLOR_READBACK PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK
+#define CAP_BLEND PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND
 #define CAP_DEPTH PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT
 #define CAP_VERTEX PS5VK_FORMAT_CAP_VERTEX_BUFFER
 #define CAP_UTEXEL PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER
 
 /* Sampled row: the GFX1013 word/selectors/texel size are the pinned GPL
  * encoding. ENABLED carries additional directly qualified roles. */
+/* The DXVK262-T06 independentBlend target: the only upstream leaves that
+ * require the feature draw into R8G8B8A8_UINT plus R8G8B8A8_UNORM, so the
+ * integer colour target is part of the served capability set - it renders, it
+ * is blended-free, it clears with its raw word and it is read back. Promoted
+ * with the feature (measured 2026-09-22). */
+#define CAP_INTEGER_TARGET (CAP_COLOR | CAP_COLOR_READBACK | CAP_SRC)
 #define SAMPLED(f, bpt, word, s0, s1, s2, s3, EXTRA, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), \
@@ -71,7 +79,8 @@ static const struct ps5vk_texture_format formats[] = {
      * back; the readback pair is a separate capability from the bare
      * attachment usage. */
     SAMPLED(VK_FORMAT_R8G8B8A8_UNORM, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
-            CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK | CAP_UTEXEL, 0),
+            CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK | CAP_UTEXEL,
+            CAP_BLEND),
     SAMPLED(VK_FORMAT_R8G8B8A8_SNORM, 4, UINT32_C(0x03900000), 4, 5, 6, 7,
             CAP_LINEAR | CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R8G8B8A8_SRGB, 4, UINT32_C(0x08200000), 4, 5, 6, 7,
@@ -124,7 +133,7 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R8G8_SINT, 2, UINT32_C(0x01300000), 4, 5, 0, 1,
             CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R8G8B8A8_UINT, 4, UINT32_C(0x03c00000), 4, 5, 6, 7,
-            CAP_VERTEX | CAP_UTEXEL, 0),
+            CAP_VERTEX | CAP_UTEXEL | CAP_INTEGER_TARGET, CAP_INTEGER_TARGET),
     SAMPLED(VK_FORMAT_R8G8B8A8_SINT, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
             CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R16_UINT, 2, UINT32_C(0x00b00000), 4, 0, 0, 1,
@@ -273,6 +282,15 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         if (w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+        /* DXVK262-T06: the upstream blend factory gates every leaf on this bit
+         * (isSupportedBlendFormat), and the dual-source family it serves draws
+         * into VK_FORMAT_R8G8B8A8_UNORM - all 98 applicable leaves passed once
+         * it was reported. Only that format widens: it is the one the witness
+         * and the leaves measured, and the one whose channel order the partial
+         * write masks name directly. */
+        if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT) &&
+            format == VK_FORMAT_R8G8B8A8_UNORM)
+            properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
         if (w & PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
         if (w & PS5VK_FORMAT_CAP_STORAGE_IMAGE)
@@ -366,12 +384,28 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
                   VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
         usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return VK_TRUE;
+    /* The upstream render-pass module derives an attachment's usage from the
+     * format's own reported features, so a format that also publishes a
+     * sampled role is asked for
+     * COLOR_ATTACHMENT|TRANSFER_SRC|TRANSFER_DST|SAMPLED. The readback colour
+     * row is the one that carries all four roles (its format is sampled, it is
+     * rendered into and it is read back), so the combination is admitted for
+     * that row and for nothing else; the leaf that asks for it renders into the
+     * target and reads it back, and a sample of a tiled attachment is refused
+     * where it is actually described. */
+    if (ps5vk_color_sampled_readback_served() &&
+        (w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
+        usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT))
+        return VK_TRUE;
     /* The pinned multiview helper's attachment adds the input-attachment role
-     * to that same readback colour shape. Only a row that can already be a
-     * readback colour target has it, and only for this exact usage set, so no
-     * input-attachment support is inferred for another format, another usage
-     * combination or a row without the readback role. */
-    if ((w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
+     * to that same readback colour shape. Only the normalized row carries that
+     * role: the integer colour target served since the independentBlend
+     * promotion is a readback target but never a multiview or input-attachment
+     * backing, so a row that only inherits the readback capability must not
+     * gain the input role by accident. The usage set stays exact. */
+    if (format == VK_FORMAT_R8G8B8A8_UNORM &&
+        (w & PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK) &&
         usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                   VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
                   VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;

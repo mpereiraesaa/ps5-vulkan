@@ -8,7 +8,7 @@
  * Revisit version/options whenever the pinned compiler or supported profile
  * changes. This is not an on-disk Vulkan pipeline cache format. */
 struct pair_payload {
-    uint32_t version, reserved, primitive_type;
+    uint32_t version, fragment_shape, primitive_type;
     uint64_t vertex_bytes, fragment_bytes;
     PsbcShaderMetadata vertex, fragment;
     uint64_t hull_bytes, domain_bytes;
@@ -39,8 +39,14 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
          * and the patch control point count the control stage's output vertices
          * and the evaluation stage's input arrays are derived from. */
         TESS_WORDS=1+1+1+16+16+1+1+64*4*2+1+1,
-        BLEND_WORDS=11,
-        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS+TESS_WORDS+BLEND_WORDS };
+        /* One count word, then three words (format, write mask, blend enable)
+         * plus six equation words per attachment, then the four constants. */
+        BLEND_WORDS=1+PS5VK_MAX_COLOR_ATTACHMENTS*9+4,
+        /* The multisample state the compiled pixel program depends on
+         * (DXVK262-T06): the sample-shading flag, the minSampleShading fraction
+         * the pixel iteration count is derived from, and the sample mask. */
+        SAMPLE_WORDS=3,
+        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS+TESS_WORDS+BLEND_WORDS+SAMPLE_WORDS };
     const int has_geometry=ps5vk_graphics_has_geometry(key);
     const int has_tessellation=ps5vk_graphics_tessellation_key_valid(key);
     size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count+
@@ -52,8 +58,8 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     words[13]=PSBC_SHADER_METADATA_VERSION;
     words[1]=(uint32_t)key->vertex.word_count;
     words[2]=(uint32_t)key->fragment.word_count;
-    words[3]=key->topology;words[4]=key->color_format;
-    words[5]=key->samples;words[6]=key->color_write_mask;
+    words[3]=key->topology;words[4]=(uint32_t)key->color_format[0];
+    words[5]=key->samples;words[6]=(uint32_t)key->color_write_mask[0];
     words[7]=2; /* address32_hi */
     words[8]=1; /* optimise */
     words[9]=1; /* vertex NGG */
@@ -141,16 +147,37 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     }
     words[at++]=has_tessellation?key->patch_control_points:0u;
     words[at++]=0u; /* reserved, so the region stays a fixed size */
-    words[at++]=key->blend_enable?1u:0u;
-    if(key->blend_enable) {
-        words[at++]=key->src_color_blend_factor;
-        words[at++]=key->dst_color_blend_factor;
-        words[at++]=key->color_blend_op;
-        words[at++]=key->src_alpha_blend_factor;
-        words[at++]=key->dst_alpha_blend_factor;
-        words[at++]=key->alpha_blend_op;
+    /* The per-attachment colour state, in attachment order and padded to the
+     * same width whether or not an attachment blends: a pipeline whose second
+     * attachment differs must never reuse the first one's program. */
+    int any_blend=0;
+    words[at++]=key->color_attachment_count;
+    for(uint32_t attachment=0;attachment<PS5VK_MAX_COLOR_ATTACHMENTS;++attachment) {
+        const int live=attachment<key->color_attachment_count;
+        words[at++]=live?(uint32_t)key->color_format[attachment]:0u;
+        words[at++]=live?(uint32_t)key->color_write_mask[attachment]:0u;
+        words[at++]=live&&key->blend_enable[attachment]?1u:0u;
+        if(live&&key->blend_enable[attachment]) {
+            any_blend=1;
+            words[at++]=key->src_color_blend_factor[attachment];
+            words[at++]=key->dst_color_blend_factor[attachment];
+            words[at++]=key->color_blend_op[attachment];
+            words[at++]=key->src_alpha_blend_factor[attachment];
+            words[at++]=key->dst_alpha_blend_factor[attachment];
+            words[at++]=key->alpha_blend_op[attachment];
+        } else at+=6; /* calloc canonicalizes ignored disabled state. */
+    }
+    if(any_blend) {
         memcpy(words+at,key->blend_constants,sizeof(key->blend_constants));at+=4;
-    } else at+=10; /* calloc canonicalizes ignored disabled state. */
+    } else at+=4;
+    /* Sample shading is part of the program identity: a pair compiled for one
+     * iteration count must never satisfy a pipeline that asked for another, and
+     * the mask the draw carries travels with it. The fraction is serialized by
+     * bit pattern so two pipelines that differ only there never alias. */
+    words[at++]=key->sample_shading_enable?1u:0u;
+    { uint32_t min_bits; memcpy(&min_bits,&key->min_sample_shading,sizeof(min_bits));
+      words[at++]=min_bits; }
+    words[at++]=key->sample_mask;
     if(at!=HEADER_WORDS){free(words);return NULL;}
     memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
     memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
@@ -169,7 +196,7 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     /* The key stream changed shape with the tessellation pair, so the name that
      * identifies the layout moves with it: a cache populated by the earlier
      * layout must never be read as if it had this one. */
-    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v8",
+    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v9",
             VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|
             (has_geometry?VK_SHADER_STAGE_GEOMETRY_BIT:0)|
             (has_tessellation?(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
@@ -191,7 +218,13 @@ static struct ps5vk_cache_entry *store_pair(struct ps5vk_compilation_cache *cach
     size_t bytes=sizeof(struct pair_payload)+vs+fs+hs+ds;
     struct pair_payload *payload=calloc(1,bytes);
     if(!payload)return NULL;
-    payload->version=2;payload->vertex_bytes=vs;payload->fragment_bytes=fs;
+    /* Version 3 carries the compiler's own fragment-export SHAPE. The
+     * registers alone cannot tell a dual-source pair (0x44/0xff on one target)
+     * from a two-colour-target pair (0x99/0xff on two), so the cached payload
+     * has to record which one the pipeline key asked for instead of letting the
+     * lease re-derive it from the register class. */
+    payload->version=3;payload->fragment_shape=p->fragment_shape;
+    payload->vertex_bytes=vs;payload->fragment_bytes=fs;
     payload->primitive_type=p->primitive_type;
     payload->vertex=p->vertex.metadata;payload->fragment=p->fragment.metadata;
     payload->hull_bytes=hs;payload->domain_bytes=ds;
@@ -249,7 +282,7 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     const struct pair_payload *payload=entry->payload_copy;
     uint32_t expected_primitive=0;
     const int tess=ps5vk_graphics_has_tessellation(key);
-    if(!payload || entry->payload_bytes<sizeof(*payload) || payload->version!=2 ||
+    if(!payload || entry->payload_bytes<sizeof(*payload) || payload->version!=3 ||
        ps5vk_agc_primitive_type(key->topology,&expected_primitive) ||
        payload->primitive_type!=expected_primitive ||
        !payload->fragment_bytes || (tess ?
@@ -274,6 +307,32 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     lease->program.fragment.metadata=payload->fragment;
     lease->program.fragment.machine_code=(char *)(payload+1)+payload->vertex_bytes;
     lease->program.fragment.machine_code_size=(size_t)payload->fragment_bytes;
+    {
+        const int fragment_export=ps5vk_runtime_fragment_export(&payload->fragment);
+        if(fragment_export<0 ||
+           payload->fragment_shape>PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT) {
+            free(lease);goto failed;
+        }
+        /* The shape and the registers must agree: an unblended single target
+         * exports the single pair (or nothing), the two-target shapes publish
+         * the same register class as dual source does, and the shape that
+         * writes only the second target publishes the pair whose mask names
+         * that target. */
+        const uint32_t shape=payload->fragment_shape;
+        if((shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE) ||
+           ((shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL ||
+             shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT) &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) ||
+           (shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT &&
+            fragment_export!=PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND)) {
+            free(lease);goto failed;
+        }
+        lease->program.fragment_shape=shape;
+        lease->program.dual_source_export=
+            shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL;
+    }
     struct ps5vk_runtime_shader header;
     if(tess) {
         struct ps5vk_runtime_graphics_program *p=&lease->program;

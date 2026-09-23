@@ -36,6 +36,15 @@ def tessellation_build_profile(environment):
             "PS5VK_TESS_END_VS_FLUSH",
             "PS5VK_TESS_HULL_TRACE",
             "PS5VK_TESS_OFFCHIP_BIND",
+            "PS5VK_RASTER_DIAGNOSTIC",
+            # The sampleRateShading line's measurement builds carry this
+            # switch; without it in the record two payloads that differ only in
+            # the served sample counts would be indistinguishable in the
+            # receipt, and a run that never reached the feature would read as a
+            # driver verdict. That is not hypothetical: a payload built while a
+            # concurrent `make check` restaged the SDK without the switch
+            # reported every selected leaf NotSupported for sampleRateShading.
+            "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
         )
     }
     return {
@@ -945,6 +954,13 @@ def main(argv=None):
         # aspect, which this tranche implemented; its helpers (create-info,
         # image and buffer object utilities) are already compiled above.
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawDepthClampTests.cpp",
+        # Render-pass module: the only upstream family in the pinned tree whose
+        # leaves REQUIRE independentBlend (vktRenderPassTests.cpp:6504), under
+        # the legacy render-pass construction the profile serves. The module's
+        # factory composes all of its sibling TUs, so the whole directory is
+        # compiled; cases.txt remains the leaf filter, which keeps the
+        # extension-gated variants of those siblings out of every selection.
+        *sorted((cts_root / "external/vulkancts/modules/vulkan/renderpass").glob("vkt*.cpp")),
         cts_root / "external/vulkancts/modules/vulkan/draw/vktDrawBaseClass.cpp",
         # The base class builds its buffers, images and render pass through the
         # module's own create-info and object helpers.
@@ -959,6 +975,26 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineVertexUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineReferenceRenderer.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMakeUtil.cpp",
+        # Genuine upstream blend factory, including the dual-source family.
+        # The package registers the family under the monolithic construction
+        # group and cases.txt selects the leaves, exactly as for the other
+        # upstream groups.
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineBlendTests.cpp",
+        # Genuine upstream multisample factory, including the min_sample_shading
+        # family the sampleRateShading row is measured with. The package
+        # registers the factory under the monolithic construction group, and the
+        # factory itself composes four further upstream modules (the sampled and
+        # storage image, standard-sample-position, shader-fragment-mask, and
+        # multisampled-render-to-single-sampled groups), so all of them have to
+        # be compiled or the factory links against factories that do not exist.
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleImageTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleShaderFragmentMaskTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampledRenderToSingleSampledTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleResolveRenderAreaTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleSampleLocationsExtTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleMixedAttachmentSamplesTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineSampleLocationsUtil.cpp",
         # VK_KHR_8bit_storage / VK_KHR_16bit_storage focused groups. The build
         # generates registration-pruned copies from the pinned modules; selected
         # shader bodies, support checks and oracles remain upstream. Registering

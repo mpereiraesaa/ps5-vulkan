@@ -14,6 +14,8 @@
 #include "vktComputeIndirectComputeDispatchTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
 #include "vktPipelineCacheTests.hpp"
+#include "vktPipelineBlendTests.hpp"
+#include "vktPipelineMultisampleTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
@@ -32,6 +34,7 @@
 #include "vktDrawScissorTests.hpp"
 #include "vktDrawDepthClampTests.hpp"
 #include "vktFragmentOperationsTests.hpp"
+#include "vktRenderPassTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -84,6 +87,17 @@ void FocusedVkTestPackage::init(void)
     // releases the module's singleton device helpers at the upstream lifetime.
     addChild(vkt::createTestGroup(m_testCtx, "dynamic_state", initDynamicStateGroup,
                                   cleanupDynamicStateGroup));
+
+    // renderpass: the original upstream render-pass module, registered for the
+    // DXVK262-T06 independentBlend oracles. Its attachment_write_mask family is
+    // the only upstream coverage in the pinned tree that REQUIRES
+    // VkPhysicalDeviceFeatures.independentBlend (vktRenderPassTests.cpp:6504),
+    // and the two-attachment variants draw into two colour attachments with a
+    // different write mask each - the shape the served profile now carries.
+    // cases.txt remains the leaf filter: the registerpass2 and dynamic-rendering
+    // variants live in other modules and stay out, and only the selected leaves
+    // below execute.
+    addChild(vkt::createRenderPassTests(m_testCtx, "renderpass"));
 
     // info group: original upstream enumeration and physical-device query
     // bodies. cases.txt remains the execution filter; registering these
@@ -305,6 +319,37 @@ void FocusedVkTestPackage::init(void)
         // cases stay unselected while the D16_UNORM prerequisite is missing.
         pipelineGroup->addChild(vkt::pipeline::createCacheTests(
             m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+        /* pipeline.monolithic.blend: the upstream blend factory under the
+         * construction-type group the pinned listing names its leaves with.
+         * The dual-source family inside it is the oracle for dualSrcBlend;
+         * registering the group only makes those leaves addressable, and
+         * cases.txt remains the execution filter. */
+        {
+            de::MovePtr<tcu::TestCaseGroup> monolithicGroup(
+                new tcu::TestCaseGroup(m_testCtx, "monolithic"));
+            monolithicGroup->addChild(vkt::pipeline::createBlendTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+            /* pipeline.monolithic.multisample: the upstream multisample factory
+             * under the same construction-type group. The sampleRateShading
+             * selection lives in this family (every min_sample_shading leaf
+             * gates on DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING), and the
+             * dual-source window proved what happens without the registration:
+             * dEQP silently drops a selected leaf whose factory was never
+             * registered, and the run reports fewer cases than cases.txt holds.
+             * Registering the group only makes the leaves addressable - cases.txt
+             * remains the execution filter, so a leaf that is not selected still
+             * does not run. */
+            monolithicGroup->addChild(vkt::pipeline::createMultisampleTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC,
+                /* useFragmentShadingRate: the factory names its group
+                 * "multisample" when this is false and
+                 * "multisample_with_fragment_shading_rate" when it is true. The
+                 * pinned listing's leaves are pipeline.monolithic.multisample.*,
+                 * so registering the false form is what makes the selected
+                 * names addressable. */
+                false));
+            pipelineGroup->addChild(monolithicGroup.release());
+        }
         addChild(pipelineGroup.release());
     }
 

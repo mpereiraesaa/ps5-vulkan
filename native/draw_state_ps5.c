@@ -1,7 +1,16 @@
 #include "draw_state_ps5.h"
 #include "viewport_ps5.h"
 #include "blend_ps5.h"
+#include "runtime_fragment_shape.h"
+#include "sample_rate_diagnostic.h"
 #include <string.h>
+
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+/* The one definition of the diagnostic override, in the translation unit that
+ * READS it: the probe only ever sets it through this declaration, and a build
+ * that links the draw path without the probe archive still resolves. */
+struct ps5vk_sample_rate_diagnostic_cx ps5vk_sample_rate_diagnostic_cx;
+#endif
 #if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
 #include "ps5log.h"
 /* The complete register set a patch draw actually emits, logged once.
@@ -58,23 +67,27 @@ static void polygon_offset(const struct ps5vk_raster_state *raster, int depth_d3
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     const VkRect2D *scissor_state, uint32_t viewport_count,
     const struct ps5vk_raster_state *raster,
-    const struct ps5vk_target_registers *color,
+    const struct ps5vk_target_registers *colors, uint32_t color_count,
     const struct ps5vk_target_registers *depth, const VkRect2D *area,
     uint32_t width, uint32_t height, unsigned index_width, struct ps5vk_draw_state *out)
 {
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
     if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) return VK_ERROR_UNKNOWN;
-    /* A NULL colour target is a DEPTH-ONLY pass. The pipeline built for such a
-     * subpass records VK_FORMAT_UNDEFINED, so the two always agree: a colour
-     * target with an undefined format, or a missing one with a real format,
-     * are both refused here. */
     if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state ||
-        (color && color->count != 16) ||
         !width || !height || width > 16384 || height > 16384 ||
-        (color ? (p->color_format != VK_FORMAT_B8G8R8A8_UNORM &&
-                  p->color_format != VK_FORMAT_R8G8B8A8_UNORM)
-               : (p->color_format != VK_FORMAT_UNDEFINED || !depth)) ||
+        /* The colour targets are one per attachment the pipeline was created
+         * for. A count of zero is a DEPTH-ONLY pass: the pipeline for such a
+         * subpass records no colour attachment and an undefined colour format,
+         * so the two always agree - a colour target with an undefined format,
+         * or a missing one with a real format, are both refused here. The
+         * pointer itself carries no meaning at a count of zero (the caller
+         * hands over its prepared-target array whatever the count is), so only
+         * the count is read. */
+        (p->color_attachment_count ?
+            (!colors || colors[0].count != 16 ||
+             !ps5vk_color_target_format_supported(p->color_format[0])) :
+            (color_count || !depth || p->color_format[0] != VK_FORMAT_UNDEFINED)) ||
         (p->cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
@@ -86,6 +99,24 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if (native->device != p->device || !native->pair || !native->pair->ready) return VK_ERROR_UNKNOWN;
     struct ps5vk_graphics_pair *pair = native->pair;
     int runtime=pair->runtime_arguments.enabled!=0;
+    /* Which attachment each hardware colour target programmes. The pinned
+     * render-pass module's second-target-only shape EXPORTS INTO MRT0 while the
+     * pipeline writes only its second attachment: compiling a Location-0-only
+     * and a Location-1-only module with the pinned PSBC produces identical
+     * machine code (same exp target), and only the register pair differs
+     * (CB_SHADER_MASK 0xf0 instead of 0xf). The export instruction therefore
+     * carries no target, and the coherent programming is to renumber: the
+     * attachment the pipeline really writes takes hardware target zero with its
+     * own target block, blend control, write-mask nibble and conversion, and
+     * the slot nothing writes stays masked. Every other shape programmes the
+     * attachments positionally. */
+    uint32_t slot[PS5VK_MAX_COLOR_ATTACHMENTS];
+    for(unsigned i=0;i<PS5VK_MAX_COLOR_ATTACHMENTS;++i)slot[i]=(uint32_t)i;
+    if(runtime && pair->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT) {
+        slot[0]=1; slot[1]=0;
+    }
+    if(pair->dual_source_export>1u || (pair->dual_source_export && !runtime))
+        return VK_ERROR_UNKNOWN;
     /* A tessellation pipeline's pre-raster bank is the domain half's, and its
      * draw is a patch list; anything else is a broken pair. */
     const int has_tessellation=pair->tessellation!=0;
@@ -104,8 +135,18 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     ps5_agc_register viewport[PS5VK_VIEWPORT_REGISTERS];
     VkResult rc = ps5vk_native_viewport(viewport_state, scissor_state, area, viewport);
     if (rc != VK_SUCCESS) return rc;
+    /* The prepared colour targets, one per attachment the subpass names. The
+     * count is the pipeline's own, so a draw can never programme a target the
+     * pipeline was not created for. */
+    if (color_count > PS5VK_MAX_COLOR_ATTACHMENTS ||
+        color_count != p->color_attachment_count ||
+        (color_count && !colors)) return VK_ERROR_UNKNOWN;
     struct ps5_pipeline_registers base;
-    if (ps5_pipeline_build(&base, color ? color->registers : NULL, &pair->cx, &pair->uc,
+    /* The render-target block comes from the pipeline's colour target. At a
+     * colour count of zero - the DEPTH-ONLY shape - there is no such target
+     * and the caller's prepared array is not initialised, so the builder is
+     * handed nothing and emits the zeroed block itself. */
+    if (ps5_pipeline_build(&base, color_count ? colors[slot[0]].registers : NULL, &pair->cx, &pair->uc,
         runtime?vs->context:pair->gs.cx, runtime?fs->context:pair->ps.cx,
         runtime?vs->shader:pair->gs.sh,runtime?fs->shader:pair->ps.sh,width,height)) return VK_ERROR_UNKNOWN;
     for (unsigned j = 0; j < PS5VK_VIEWPORT_REGISTERS; ++j) {
@@ -115,6 +156,27 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             base.cx[k] = viewport[j]; ++replaced;
         }
         if (replaced != 1) return VK_ERROR_UNKNOWN;
+    }
+    /* CB_TARGET_MASK (context offset 0x08e) is the render-target register that
+     * names the colour channels target zero writes; ps5_pipeline_build places
+     * it in the RT/viewport block with all four channels enabled. Carry the
+     * pipeline's own mask, in that block and never in the per-draw stream - a
+     * draw-stream write of this register stalled the queue when it was tried.
+     * The shipping profile only ever reaches here with the all-channel mask
+     * the witnesses measured; a partial mask needs the compiler to accept it
+     * first. */
+    {
+        /* CB_TARGET_MASK carries one nibble per target: attachment zero's
+         * write mask in bits [3:0] and, once the profile serves a second
+         * target, the next attachment's in bits [7:4]. */
+        uint32_t target_mask = 0;
+        for (uint32_t attachment = 0; attachment < p->color_attachment_count; ++attachment)
+            target_mask |= (p->color_blend[slot[attachment]].colorWriteMask & 0xfu) << (4u * attachment);
+        unsigned carried = 0;
+        for (unsigned k = 16; k < 31; ++k) if (base.cx[k].offset == 0x08e) {
+            base.cx[k].value = target_mask; ++carried;
+        }
+        if (carried != 1) return VK_ERROR_UNKNOWN;
     }
     struct ps5vk_draw_state result = {0};
     memcpy(result.cx, base.cx, sizeof(base.cx)); result.cx_count = PS5_PIPELINE_CX_REGISTERS;
@@ -215,6 +277,114 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     uint32_t depth_control = depth && p->depth_test ?
         2u | (p->depth_write ? 4u : 0u) | ((uint32_t)p->depth_compare << 4) : 0u;
     result.cx[result.cx_count++] = (ps5_agc_register){0x200, depth_control};
+    /* Multisample raster state (DXVK262-T06). The colour target already states
+     * its sample geometry in CB_COLOR0_ATTRIB; these are the raster half the
+     * same draw needs, and they are written only when the pipeline carries more
+     * than one sample so every single-sample draw emits exactly the words it
+     * always did.
+     *
+     *   PA_SC_AA_CONFIG  (0x2f8) MSAA_NUM_SAMPLES[0:2] and
+     *                            MSAA_EXPOSED_SAMPLES[20:22] = log2(count),
+     *                            MAX_SAMPLE_DIST[13:16] = the largest offset
+     *                            the sample pattern asks for (6/16 at 4x,
+     *                            4/16 at 2x - PAL's ComputeMaxSampleDistance)
+     *   DB_EQAA          (0x201) MAX_ANCHOR_SAMPLES[0:2],
+     *                            PS_ITER_SAMPLES[4:6],
+     *                            MASK_EXPORT_NUM_SAMPLES[8:10] and
+     *                            ALPHA_TO_MASK_NUM_SAMPLES[12:14] =
+     *                            log2 of the count, PS_ITER_SAMPLES being the
+     *                            number of pixel iterations the shader runs
+     *   PA_SC_MODE_CNTL_1 (0x293) PS_ITER_SAMPLE[16] when per-sample shading is
+     *                            on, which forces the pixel wave to iterate per
+     *                            sample instead of once per pixel
+     *   PA_SC_MODE_CNTL_0 (0x292) MSAA_ENABLE[0] for a multisampled draw, set
+     *                            where that word is written below
+     *   PA_SC_AA_SAMPLE_LOCS_PIXEL_* (0x2fe..0x30d) the sample pattern itself
+     *   SPI_BARYC_CNTL   (0x1b8) POS_FLOAT_LOCATION[16:17] = 2 - the float
+     *                            position is computed AT THE ITERATED SAMPLE
+     *                            NUMBER - whenever the wave iterates per
+     *                            sample, and 0 (pixel centre) otherwise
+     *
+     * The last two are what the pinned min_sample_shading leaves need and what
+     * this profile did not have. Measured on the witness that colours each
+     * sample with fract(gl_FragCoord.xy): with the pattern and the location
+     * set, the four samples of a 4x draw receive exactly (0.375,0.125),
+     * (0.875,0.375), (0.125,0.625) and (0.625,0.875) - Vulkan's standard 4x
+     * locations - and without them every sample receives the pixel centre,
+     * (0.5,0.5), which is what made the oracle's unique-colour count
+     * unreachable. The registers and their encoding come from the pinned PAL
+     * source (gfx9MsaaState.cpp SetQuadSamplePattern and
+     * ComputeMaxSampleDistance): sixteen context words, four samples each, X in
+     * the low nibble of a byte and Y in the high one as a signed offset from
+     * the pixel centre in 1/16 pixel units, all four pixels of the quad sharing
+     * the same pattern. */
+    const uint32_t draw_sample_count = ps5vk_sample_count_number(p->samples);
+    {
+        const uint32_t sample_count = draw_sample_count;
+        if (sample_count > 1) {
+            const uint32_t log_samples = ps5vk_sample_count_log2(p->samples);
+            /* The fraction decides how many samples each fragment invocation
+             * covers: minSampleShading 1.0 asks for one invocation per sample,
+             * which is the shape the witness measures. */
+            uint32_t iterations = sample_count;
+            if (p->sample_shading_enable && p->min_sample_shading < 1.0f) {
+                const float wanted = (float)sample_count * p->min_sample_shading;
+                iterations = 1u;
+                while ((float)iterations < wanted) iterations <<= 1u;
+                if (iterations > sample_count) iterations = sample_count;
+            }
+            if (!p->sample_shading_enable) iterations = 0u;
+            uint32_t iterations_log = 0u;
+            while ((1u << iterations_log) < iterations) ++iterations_log;
+            /* Vulkan's standard sample locations, as signed 1/16-pixel offsets
+             * from the pixel centre, packed four samples to a word: X in the
+             * low nibble of each byte and Y in the high one. */
+            uint32_t location_word = 0u, max_sample_dist = 4u;
+            if (sample_count == 4u) {
+                /* (0.375,0.125) (0.875,0.375) (0.125,0.625) (0.625,0.875) */
+                location_word = UINT32_C(0x622ae6ae);
+                max_sample_dist = 6u;
+            } else {
+                /* (0.75,0.75) (0.25,0.25); the other two samples do not exist
+                 * at this count and their nibbles stay zero. */
+                location_word = UINT32_C(0x0000cc44);
+            }
+            const uint32_t aa_config = (log_samples & 0x7u) |
+                ((max_sample_dist & 0xfu) << 13u) | ((log_samples & 0x7u) << 20u);
+            const uint32_t db_eqaa = (log_samples & 0x7u) |
+                ((iterations_log & 0x7u) << 4u) |
+                ((log_samples & 0x7u) << 8u) |
+                ((log_samples & 0x7u) << 12u);
+            const uint32_t mode_cntl_1 =
+                p->sample_shading_enable ? (UINT32_C(1) << 16u) : 0u;
+            if (result.cx_count + 17u > PS5VK_DRAW_CX_CAPACITY) return VK_ERROR_UNKNOWN;
+            result.cx[result.cx_count++] = (ps5_agc_register){0x2f8, aa_config};
+            result.cx[result.cx_count++] = (ps5_agc_register){0x201, db_eqaa};
+            result.cx[result.cx_count++] = (ps5_agc_register){0x293, mode_cntl_1};
+            for (uint32_t i = 0; i < 16u; ++i)
+                result.cx[result.cx_count++] =
+                    (ps5_agc_register){(uint16_t)(0x2feu + i), location_word};
+            /* The position's location follows the iteration, not the API flag:
+             * a sample-shaded pipeline that asks for a fraction small enough to
+             * keep one invocation per pixel must keep the pixel-centre
+             * position, which is what the compiler's own coordinate shape was
+             * chosen for (native/runtime_graphics_compiler.c publishes the
+             * pipeline's sample-shading state to the standalone compile). */
+            {
+                const uint32_t baryc = iterations > 1u ?
+                    (UINT32_C(2) << 16u) :
+                    (UINT32_C(0) << 16u);
+                unsigned replaced = 0;
+                for (unsigned k = 0; k < result.cx_count; ++k)
+                    if (result.cx[k].offset == 0x1b8u) { result.cx[k].value = baryc; ++replaced; }
+                if (!replaced) {
+                    if (result.cx_count + 1u > PS5VK_DRAW_CX_CAPACITY) return VK_ERROR_UNKNOWN;
+                    result.cx[result.cx_count++] =
+                        (ps5_agc_register){0x1b8u, baryc};
+                }
+            }
+        }
+    }
     /* Public Mesa gfx10/RADV PA_SU_SC_MODE_CNTL: cull mode, front face,
      * first provoking vertex, the three POLY_OFFSET_*_ENABLE bits (11..13)
      * exactly when the draw's depth bias is enabled, and the polygon mode:
@@ -240,11 +410,19 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * compiler's .pa_cl_vte_cntl.vtx_w0_fmt both require this bit. w=1 tests
      * cannot distinguish the two modes. */
     result.cx[result.cx_count++] = (ps5_agc_register){0x206, 0x43f};
-    /* Explicit single-sample filled-triangle state, matching RADV gfx10:
-     * VPORT_SCISSOR_ENABLE and ALTERNATE_RBS_PER_TILE; no MSAA/line stipple.
-     * Keep the generic scissor at the target bounds and apply the Vulkan
-     * scissor/render-area intersection to viewport zero. */
-    result.cx[result.cx_count++] = (ps5_agc_register){0x292, 0x22};
+    /* PA_SC_MODE_CNTL_0, matching RADV gfx10: VPORT_SCISSOR_ENABLE and
+     * ALTERNATE_RBS_PER_TILE, no line stipple. MSAA_ENABLE is added for a
+     * multisampled draw, exactly as PAL sets it whenever the stage's coverage
+     * samples are more than one (gfx9MsaaState.cpp: "coverageSamples > 1").
+     * Without it the rasteriser has no sample locations to work with, so the
+     * pattern this draw programs at 0x2fe..0x30d never applies and every
+     * sample of a pixel keeps the pixel centre - measured: a 4x draw whose
+     * fragment colours each sample with fract(gl_FragCoord.xy) left one value
+     * (0.5,0.5) in the target until this bit was set. Keep the generic scissor
+     * at the target bounds and apply the Vulkan scissor/render-area
+     * intersection to viewport zero. */
+    result.cx[result.cx_count++] = (ps5_agc_register){0x292,
+        UINT32_C(0x22) | (draw_sample_count > 1u ? UINT32_C(1) : UINT32_C(0))};
     result.cx[result.cx_count++] = viewport[8];
     result.cx[result.cx_count++] = viewport[9];
     /* Mesa gfx10 PA_CL_CLIP_CNTL: Vulkan's default 0 <= z <= w clip volume
@@ -391,6 +569,22 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         result.sh_count=vs->header.num_sh_registers+fs->header.num_sh_registers;
         memcpy(result.sh,vs->shader,vs->header.num_sh_registers*sizeof(*result.sh));
         memcpy(result.sh+vs->header.num_sh_registers,fs->shader,fs->header.num_sh_registers*sizeof(*result.sh));
+        /* The second-target-only shape is programmed as ONE target, because its
+         * export instruction writes MRT0 (measured: the Location-1-only module
+         * compiles to the same code as the Location-0-only one, and only the
+         * register pair differs). The compiler put the export's code in the
+         * format's nibble zero and its enable in the mask's nibble ONE, because
+         * it numbers the format list by declaration order and the mask by the
+         * attachment each export targets; with the written attachment renumbered
+         * to target zero, the driver takes that code and moves the enable down
+         * beside it. Every other package is programmed exactly as the compiler
+         * published it. */
+        if(pair->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT)
+            for(unsigned i=0;i<result.cx_count;++i) {
+                if(result.cx[i].offset==0x1c5u)result.cx[i].value&=0xfu;
+                else if(result.cx[i].offset==0x08fu)
+                    result.cx[i].value=(result.cx[i].value>>4)&0xfu;
+            }
         /* The merged hull program's one shader block follows the runtime
          * pair's: its address register at the LS block and its resource pair
          * at the HS block, with the create-path address. Its VGT_TF_PARAM
@@ -452,20 +646,78 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     /* Last fixed-state writes win over inherited/linked defaults. Explicitly
      * disable blending on subsequent non-blended draws, rather than retaining
      * the previous pipeline's state. Runtime acceptance is gated separately. */
-    struct ps5vk_blend_words blend;
-    if(!ps5vk_blend_encode(&p->color_blend,p->blend_constants,&blend))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
-    if(result.cx_count+6u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
-    result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend.control};
-    result.cx[result.cx_count++]=(ps5_agc_register){0x1d8,blend.optimization};
+    struct ps5vk_blend_words blend[PS5VK_MAX_COLOR_ATTACHMENTS];
+    const VkBool32 dual_source=runtime && pair->dual_source_export?
+        VK_TRUE:VK_FALSE;
+    for(uint32_t attachment=0;attachment<color_count;++attachment)
+        if(!ps5vk_blend_encode(&p->color_blend[slot[attachment]],p->blend_constants,
+                               dual_source,&blend[attachment]))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* A DEPTH-ONLY draw programmes no colour target at all, so the blend word
+     * pair written below is the one a colour pipeline with blending off emits:
+     * explicit zeros and the same optimisation word. Writing it unconditionally
+     * is what stops CB_BLEND0_CONTROL and SX_MRT0_BLEND_OPT from carrying the
+     * previous draw's state into a pass that has no colour output. */
+    if(!color_count) {
+        const VkPipelineColorBlendAttachmentState none={0};
+        if(!ps5vk_blend_encode(&none,p->blend_constants,dual_source,&blend[0]))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    /* Attachment zero's colour block came from ps5_pipeline_build; every other
+     * attachment is appended as its own CB_COLORn block with its own blend con
+     * control and optimisation, whose offsets are the next dwords. */
+    if(result.cx_count+6u+
+       (color_count>1u?(PS5VK_COLOR_TARGET_REGISTERS+2u)*(color_count-1u):0u)
+       >PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
+    for(uint32_t attachment=1;attachment<color_count;++attachment) {
+        for(unsigned i=0;i<PS5VK_COLOR_TARGET_REGISTERS;++i)
+            result.cx[result.cx_count++]=(ps5_agc_register){
+                ps5vk_color_attachment_offsets[attachment][i],
+                colors[slot[attachment]].registers[i].value};
+        result.cx[result.cx_count++]=(ps5_agc_register){
+            PS5VK_AGC_CB_BLEND_CONTROL(attachment),blend[attachment].control};
+        result.cx[result.cx_count++]=(ps5_agc_register){
+            PS5VK_AGC_SX_MRT_BLEND_OPT(attachment),blend[attachment].optimization};
+    }
+    result.cx[result.cx_count++]=(ps5_agc_register){0x1e0,blend[0].control};
+    result.cx[result.cx_count++]=(ps5_agc_register){0x1d8,blend[0].optimization};
     for(unsigned i=0;i<4;++i)
-        result.cx[result.cx_count++]=(ps5_agc_register){0x105+i,blend.constants[i]};
+        result.cx[result.cx_count++]=(ps5_agc_register){0x105+i,blend[0].constants[i]};
     if(runtime) {
-        uint32_t spi_format=0,conversion[3];
-        for(unsigned i=0;i<fs->header.num_cx_registers;++i)
-            if(fs->context[i].offset==0x1c5)spi_format=fs->context[i].value;
-        if(!ps5vk_color_export_state(p->color_format,spi_format,
-            p->color_blend.blendEnable,conversion))return VK_ERROR_FEATURE_NOT_PRESENT;
+        uint32_t spi_format=UINT32_MAX,shader_mask=UINT32_MAX;
+        uint32_t per_target[PS5VK_MAX_COLOR_ATTACHMENTS][3],conversion[3];
+        /* Read the pair from the bank this draw programmes, after the shape's
+         * own normalisation above: what is checked here is what the hardware
+         * receives. */
+        for(unsigned i=0;i<result.cx_count;++i) {
+            if(result.cx[i].offset==0x1c5)spi_format=result.cx[i].value;
+            if(result.cx[i].offset==0x08f)shader_mask=result.cx[i].value;
+        }
+        for(uint32_t attachment=0;attachment<color_count;++attachment) {
+            if(pair->fragment_shape==PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT &&
+               !p->color_write_mask[slot[attachment]]) {
+                /* This shape's first target is the one whose export the
+                 * compiler dropped: the pinned render-pass module's
+                 * attachment_write_mask leaf writes only the second target. The
+                 * normalised pair must therefore say nothing about the target
+                 * nothing writes - that is what makes the tear a provable
+                 * absence rather than a dropped value - and it converts
+                 * nothing. Every other shape keeps its own contract, where a
+                 * zero write mask simply programmes CB_TARGET_MASK. */
+                if(((spi_format>>(4u*attachment))&0xfu) ||
+                   ((shader_mask>>(4u*attachment))&0xfu))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                per_target[attachment][0]=0;
+                per_target[attachment][1]=0;
+                per_target[attachment][2]=0;
+                continue;
+            }
+            if(!ps5vk_color_export_state(attachment,p->color_format[slot[attachment]],
+                spi_format,shader_mask,p->color_blend[slot[attachment]].blendEnable,
+                dual_source,per_target[attachment]))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
+        ps5vk_color_export_compose(per_target,color_count,conversion);
         if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
         /* Emit for unblended draws too: a previous FP16 blended draw must not
          * leave its downconversion active for the 32-bit export path. */
@@ -496,6 +748,35 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             tess_dump_bank(has_tessellation?"sh":"gsh",result.sh,result.sh_count);
             tess_dump_bank(has_tessellation?"uc":"guc",result.uc,result.uc_count);
         }
+    }
+#endif
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    /* DIAGNOSTIC (DXVK262-T06 sample-rate line): publish the pixel-context
+     * words the probe asked for instead of the ones this draw computed, so one
+     * payload can ask the hardware what each state does.
+     *
+     * The override runs HERE, at the end, and it removes every earlier entry of
+     * the same register before appending its own. Both halves matter, and the
+     * first version of this survey got the second one wrong: it replaced
+     * entries in place right after the compiled context block, and the driver's
+     * own multisample words (PA_SC_MODE_CNTL_0, PA_SC_MODE_CNTL_1, DB_EQAA,
+     * PA_SC_AA_CONFIG) are appended LATER in this function, so those overrides
+     * were silently overwritten and their measurements said the register does
+     * not matter when the register had never taken the requested value. A
+     * stream that names a register twice leaves the last write in force, which
+     * is what this makes explicit rather than accidental. Empty for every
+     * ordinary draw. */
+    for(uint32_t i=0;i<ps5vk_sample_rate_diagnostic_cx.count;++i) {
+        const uint32_t index=ps5vk_sample_rate_diagnostic_cx.index[i];
+        const uint32_t value=ps5vk_sample_rate_diagnostic_cx.value[i];
+        unsigned k=0,kept=0;
+        while(k<result.cx_count) {
+            if(result.cx[k].offset==index) { k++; continue; }
+            result.cx[kept++]=result.cx[k++];
+        }
+        result.cx_count=kept;
+        if(result.cx_count+1>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;
+        result.cx[result.cx_count++]=(ps5_agc_register){(uint16_t)index,value};
     }
 #endif
     *out = result; return VK_SUCCESS;

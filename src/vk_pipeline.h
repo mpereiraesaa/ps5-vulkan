@@ -2,6 +2,7 @@
 #define PS5VK_PIPELINE_H
 #include "vk_descriptor.h"
 #include "graphics_limits.h"
+#include "color_attachment_contract.h"
 
 struct ps5vk_program_descriptor {
     uint32_t set, binding, element, table_dword;
@@ -84,6 +85,14 @@ struct VkPipeline_T {
      * different subpass is refused rather than executed with the state of the
      * wrong one. Meaningless for a compute pipeline. */
     uint32_t subpass;
+    /* The multisample state this pipeline was created with (DXVK262-T06): the
+     * count its subpass attachment has and, when per-sample shading is on, the
+     * fraction that decides how many pixel iterations the loader runs. The
+     * native draw state programs the raster words from these; a hand-built
+     * pipeline leaves samples at zero, which every consumer reads as one. */
+    VkSampleCountFlagBits samples;
+    VkBool32 sample_shading_enable;
+    float min_sample_shading;
     void *graphics_state;
     void (*graphics_release)(VkDevice, void *);
     /* Viewport/scissor arrays, viewport_count of each (1..PS5VK_MAX_VIEWPORTS;
@@ -113,8 +122,13 @@ struct VkPipeline_T {
     VkBool32 primitive_restart;
     VkBool32 depth_test, depth_write;
     VkCompareOp depth_compare;
-    VkFormat color_format, depth_format;
-    VkPipelineColorBlendAttachmentState color_blend;
+    /* Per-attachment colour state, the subpass's count in
+     * color_attachment_count; consumers read element 0 while the profile
+     * serves one colour attachment. */
+    uint32_t color_attachment_count;
+    VkFormat color_format[PS5VK_MAX_COLOR_ATTACHMENTS], depth_format;
+    VkColorComponentFlags color_write_mask[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkPipelineColorBlendAttachmentState color_blend[PS5VK_MAX_COLOR_ATTACHMENTS];
     float blend_constants[4];
     uint32_t vertex_binding_count, vertex_attribute_count;
     union {

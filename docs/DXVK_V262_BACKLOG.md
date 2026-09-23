@@ -6,13 +6,26 @@ The exact baseline membership lives in
 `conformance_inventory/dxvk_v262_backlog.json`; this document explains how to
 execute it.
 
-Current checkpoint: T02 multiview and T03 indirect/indexed draws are
-promoted. **T04 is implemented, hardware-validated and merged into `main`**
-(PR #158): the default graphics profile exposes geometry, tessellation and
-clip/cull distances; its integrated native run passed 403/403 focused upstream
-cases, including 99 tessellation-related cases. T05's four rasterization and
-viewport features are also promoted. The ordered table preserves the original
-tranche membership.
+Current checkpoint: multiview (T02) has all three requirements satisfied by
+public KHR queries, dedicated floor witnesses and 48 passing original CTS
+leaves within a 165/165 regression; the indirect and indexed draws (T03)
+have all three requirements satisfied by core feature reports, the
+per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
+leaves within a 211/211 regression and the public-SDK indirect witness; the
+the four DXVK262-T05 rasterization and viewport features were promoted on
+2026-09-21; and DXVK262-T06 is complete, with all four of its requirements
+satisfied: `fragmentStoresAndAtomics` and `dualSrcBlend` with their four axes,
+`independentBlend` promoted on 2026-09-22, and `sampleRateShading` promoted on
+2026-09-23 - the pixel stage publishes Vulkan's standard sample positions and
+interpolates the position at the iterated sample, the colour-to-texture barrier
+waits for a confirmed writeback, and the feature's own oracle, thirty leaves at
+both served counts, passes inside the frozen acceptance selection, which now
+carries them and passes 494/494. **T04 is implemented, hardware-validated and
+merged into `main`** (PR #158): the default graphics profile exposes geometry,
+tessellation and clip/cull distances, and its integrated native run passed
+403/403 focused upstream cases, including 99 tessellation-related cases. The
+live matrix is 17/62 ready with 45 blockers. The ordered table preserves the
+original tranche membership.
 
 Tranche delivery and DXVK profile scoring are different gates. The current
 matrix still leaves `geometryShader` and `tessellationShader` as blockers:

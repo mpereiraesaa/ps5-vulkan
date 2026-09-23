@@ -99,6 +99,10 @@ def main():
     has_native_sdk = False
     if sdk and clang_wrapper and gears.is_dir() and logger.is_dir():
         print(f"PS5 toolchain detected: building native PS5 runtime archive...")
+        # The driver's own resolve stages (DXVK262-T06): one averaging fragment
+        # per served sample count, compiled into a header this archive includes.
+        subprocess.run([sys.executable, str(ROOT / "tools/build_resolve_shaders.py"),
+            "--out", str(ROOT / "build/resolve/resolve_spirv.h")], check=True)
         native_sources = [
             (ROOT / "src/vk_alloc.c", []),
             (ROOT / "src/vk_memory.c", []),
@@ -166,7 +170,9 @@ def main():
             "native/targets_ps5.c", "native/runtime_shader.c", "native/runtime_graphics_compiler.c",
             "native/runtime_graphics_cache.c", "native/runtime_graphics_ps5.c",
             "src/spirv_graphics_interface.c", "src/clip_cull_witness.c",
-            "src/geometry_witness.c")
+            "src/geometry_witness.c", "src/dual_source_oracle.c",
+            "src/two_mrt_oracle.c", "src/color_attachment_contract.c",
+            "native/resolve_program.c")
         native_sources += [(ROOT / source, []) for source in graphics_sources]
         native_sources += [(gears / "src" / source, []) for source in (
             "ps5_shader_header.c", "ps5_pipeline.c", "ps5_color_target.c", "ps5_depth_target.c")]
@@ -186,6 +192,7 @@ def main():
             "-I" + str(ROOT / "third_party/psbc-reference/src"),
             "-I" + str(ROOT / "third_party/psbc-reference/libpsbc"),
             "-I" + str(ROOT / "third_party/opengnm/include"),
+            "-I" + str(ROOT / "build/resolve"),
             "-DPS5VK_RUNTIME_COMPILER=1",
             "-DPS5VK_TARGET_PS5=1",
             "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
@@ -233,6 +240,16 @@ def main():
         # and viewport features are advertised by the shipping platform on
         # physical-console evidence, so there is no diagnostic build that
         # reports them ahead of it.
+        # Private measurement build (DXVK262-T06 sampleRateShading): report the
+        # multisample capability so a witness payload and the focused CTS
+        # selection can negotiate it through the public API before any shipping
+        # platform advertises it. Off by default, and never set in the shipping
+        # build; the promotion is a separate, evidence-backed change.
+        sample_rate_diagnostic = os.environ.get("PS5VK_SAMPLE_RATE_DIAGNOSTIC", "0")
+        if sample_rate_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC must be 0 or 1")
+        if sample_rate_diagnostic == "1":
+            native_cflags.append("-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:
@@ -343,9 +360,11 @@ def main():
         "src/vk_pipeline.c", "src/compilation_cache.c", "src/vk_pipeline_cache.c", "src/vk_command.c", "src/vk_indirect.c",
         "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
         # The linear staging readback copy reads the tiled colour surface
+        # through the shared 64KB_R_X offset contract.
         # through the shared 64KB_R_X offset contract, and a depth readback
         # reads its own surface through the 64KB_Z_X one.
         "src/color_detile.c", "src/depth_detile.c",
+        "src/color_attachment_contract.c",
         "src/vk_image_view.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/graphics_program.c",
         "src/vk_transfer.c", "src/texture_copy.c", "src/texture_format.c", "src/texture_layout.c", "src/color_clear.c",

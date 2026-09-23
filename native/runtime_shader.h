@@ -5,6 +5,7 @@
 #include "libpsbc/psbc_compile.h"
 #include "runtime_draw_abi.h"
 #include "runtime_shader_storage.h"
+#include "runtime_fragment_shape.h"
 
 /* Separate arena for compiler output; the frozen Gears arena stays unchanged.
  * All pointers in an uncreated header are field-relative, as required by AGC.
@@ -12,6 +13,25 @@
 _Static_assert(PS5VK_RUNTIME_CX_MAX >= PSBC_MAX_CONTEXT_REGISTERS,"compiler CX capacity");
 _Static_assert(PS5VK_RUNTIME_SH_MAX >= PSBC_MAX_SHADER_REGISTERS,"compiler SH capacity");
 _Static_assert(PS5VK_RUNTIME_SEMANTICS_MAX >= PSBC_MAX_SEMANTICS,"compiler semantics capacity");
+
+enum ps5vk_runtime_fragment_export {
+    PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE=0,
+    PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE=1,
+    PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL=2,
+    /* One export, and the shader mask says it targets the SECOND colour
+     * target: the fragment stage exports Location 1 only, which is what the
+     * pinned render-pass module's attachment_write_mask leaf builds when the
+     * first target's write mask is zero. The compiler publishes that shape as
+     * SPI_SHADER_COL_FORMAT=0x9 with CB_SHADER_MASK=0xf0: the format nibbles
+     * follow the module's outputs in DECLARATION order while the mask follows
+     * the attachment each export targets (measured on the pinned PSBC). */
+    PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND=3
+};
+/* Classify the exact compiler-produced fragment export register pair. Returns
+ * -1 for a torn/unknown pair. This is metadata validation, not device feature
+ * authorization: a DUAL result still cannot reach SRC1 blend state until the
+ * pipeline carries the enabled dualSrcBlend contract. */
+int ps5vk_runtime_fragment_export(const PsbcShaderMetadata *metadata);
 
 /* Header construction only. Code upload, cache publication, AGC creation and
  * linking remain caller responsibilities. The bounded profile permits the

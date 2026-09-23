@@ -280,7 +280,7 @@ static void primary_only_commands_poison_a_secondary(void)
     VkAttachmentDescription pass_attachments[1] = {
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT}};
     struct ps5vk_subpass pass_subpasses[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = pass_attachments, .subpasses = pass_subpasses};
     VkCommandBufferInheritanceInfo scoped = inheritance();
@@ -298,7 +298,10 @@ static void primary_only_commands_poison_a_secondary(void)
                            &scoped) == VK_SUCCESS);
     assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->state == PS5VK_EXECUTABLE);
     assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
-    /* The level is what forbids it: a PRIMARY may not claim continuation. */
+    /* VUID-vkBeginCommandBuffer-flags-09123 IGNORES the continuation flag on a
+     * primary - the inherited-scope members are not read for one - and the
+     * pinned upstream render-pass module does set it on its primary buffers, so
+     * the call is accepted and the buffer records as an ordinary primary. */
     {
         VkCommandBuffer parent;
         assert(allocate_level(&d, p, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1,
@@ -306,8 +309,9 @@ static void primary_only_commands_poison_a_secondary(void)
         VkCommandBufferBeginInfo pb = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT};
-        assert(vkBeginCommandBuffer(parent, &pb) != VK_SUCCESS);
-        assert(parent->state == PS5VK_INITIAL);
+        assert(vkBeginCommandBuffer(parent, &pb) == VK_SUCCESS);
+        assert(parent->state == PS5VK_RECORDING && !parent->render_pass_inherited);
+        assert(vkEndCommandBuffer(parent) == VK_SUCCESS);
         vkFreeCommandBuffers(&d, p, 1, &parent);
     }
 

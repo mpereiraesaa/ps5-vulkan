@@ -108,7 +108,10 @@ static void report_physical_device_contract(VkInstance instance,
                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
                  VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                  VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
-                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT) &&
+                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                 /* DXVK262-T06: the blend role the upstream dual-source
+                  * family gates every leaf on, witnessed on hardware. */
+                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) &&
             !depth.linearTilingFeatures && !depth.bufferFeatures &&
             /* TRANSFER_DST is the whole-subresource vkCmdClearDepthStencilImage
              * this profile executes, and TRANSFER_SRC is the whole-surface

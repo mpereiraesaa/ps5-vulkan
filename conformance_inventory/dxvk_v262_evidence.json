@@ -1,35 +1,22 @@
 {
+  "schema": "ps5vk-dxvk-evidence/1",
+  "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "6c49df2e42461249b9bbfd65530d17381428bdb5f1bdeb1d1b895b7aa68d28c5",
-    "blockers": 47,
-    "device_api": "1.0.0",
-    "device_extensions": 5,
-    "query_routes": [
-      {
-        "maxMultiviewInstanceIndex": "134217727",
-        "maxMultiviewViewCount": "6",
-        "multiview": "1",
-        "route": "VK_KHR_multiview"
-      }
-    ],
-    "requirements": 62,
-    "runs": [
-      {
-        "id": "20260921T163032548Z_PPSA99994_ps5vk_0x15d4b1d4b89b8",
-        "log_sha256": "f5382499a26f1f145208e82ee98195ffb4ea2e2538f7f87bf39da662a32554ce"
-      }
-    ],
-    "satisfied": 15,
+    "artifact_sha256": "439de5c96579b634bb4698adf439631dd545f9298bdccd1c5e1129f750184a07",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
       "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+      "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
       "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+      "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
       "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
       "feature:VkPhysicalDeviceFeatures:geometryShader",
+      "feature:VkPhysicalDeviceFeatures:independentBlend",
       "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
       "feature:VkPhysicalDeviceFeatures:multiViewport",
       "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+      "feature:VkPhysicalDeviceFeatures:sampleRateShading",
       "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
       "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
       "feature:VkPhysicalDeviceFeatures:tessellationShader",
@@ -37,32 +24,79 @@
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
     ],
-    "source_matrix_sha256": "09bb1f0eeddd59a398148bb93bf08bdb5f08418a4018ddadd30308fe81216177",
+    "runs": [
+      {
+        "id": "20260922T234500151Z_PPSA99994_ps5vk_0x1c394a882c7bf",
+        "log_sha256": "2b04497f8ae6a8d01feb3961f2a7b724bb763c611b69b78d9f3c7b497ece8d20"
+      }
+    ],
     "transport": "ps5log/1",
-    "verifier": "tools/verify_dxvk_probe.py"
+    "verifier": "tools/verify_dxvk_probe.py",
+    "query_routes": [
+      {
+        "route": "VK_KHR_multiview",
+        "multiview": "1",
+        "maxMultiviewViewCount": "6",
+        "maxMultiviewInstanceIndex": "134217727"
+      }
+    ],
+    "source_matrix_sha256": "9a1a8dbbe919f6eb1fab167a8338afeba830ed494660a06018e460de6c63d97e",
+    "satisfied": 19,
+    "blockers": 43,
+    "requirements": 62,
+    "device_api": "1.0.0",
+    "device_extensions": 5
   },
   "historical_capability_probes": [
     {
-      "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
-      "blockers": 52,
+      "artifact_sha256": "549184cdd050d5f9349534a65c7ab59ac5d3afaf959293c19fd4b50697a20cc0",
       "device_api": "1.0.0",
       "device_extensions": 5,
-      "query_routes": [
-        {
-          "maxMultiviewInstanceIndex": "134217727",
-          "maxMultiviewViewCount": "6",
-          "multiview": "1",
-          "route": "VK_KHR_multiview"
-        }
-      ],
       "requirements": 62,
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
       "runs": [
         {
-          "id": "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305",
-          "log_sha256": "944e1d9e5d712c20228748e537ea50453abac933dc0ca5dd540ca2fa6463e18e"
+          "id": "20260922T014635022Z_PPSA99994_ps5vk_0x17ba2d04ef50c",
+          "log_sha256": "86e945042300b4acdf78c141af6ff0a78f122c496d640faa4ceb3035151e2225"
         }
       ],
-      "satisfied": 10,
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "406be4ddc26df256dfebf1ed822ad1c8a6d70e1d83b28bccfbbdbf20854c5e04",
+      "satisfied": 17,
+      "blockers": 45
+    },
+    {
+      "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
+      "device_api": "1.0.0",
+      "device_extensions": 5,
+      "requirements": 62,
       "satisfied_ids": [
         "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
         "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
@@ -75,22 +109,932 @@
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
       ],
-      "source_matrix_sha256": "10da3d8a500250bd6197d4502dfa26419b45f6fcf8ab612bd10ed5b6e780ce4b",
+      "runs": [
+        {
+          "id": "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305",
+          "log_sha256": "944e1d9e5d712c20228748e537ea50453abac933dc0ca5dd540ca2fa6463e18e"
+        }
+      ],
       "transport": "ps5log/1",
-      "verifier": "tools/verify_dxvk_probe.py"
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "10da3d8a500250bd6197d4502dfa26419b45f6fcf8ab612bd10ed5b6e780ce4b",
+      "satisfied": 10,
+      "blockers": 52
+    },
+    {
+      "artifact_sha256": "49a4bd87dfa31e014c635323a82795eea8d0e39abad822669a9aa920ec03c361",
+      "device_api": "1.0.0",
+      "device_extensions": 5,
+      "requirements": 62,
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260920T124837807Z_PPSA99994_ps5vk_0x1029ac900abe2",
+          "log_sha256": "02d9105b99a6039b63fb43885d871fc47916d5aa738b1bfe8439644f9a796f15"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "49f7fbf9719e1b70f22b09bce2bef58d856045daf16c86d2e354c81df0ba53df",
+      "satisfied": 11,
+      "blockers": 51
+    },
+    {
+      "artifact_sha256": "c438a98123c86925d62b6627b7b640734930dbcae5b8af6f88a4ed0dc61e8201",
+      "device_api": "1.0.0",
+      "device_extensions": 5,
+      "requirements": 62,
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260922T103414212Z_PPSA99994_ps5vk_0x1986df1aeed66",
+          "log_sha256": "3fa5f0c0049890f2c2679889616f2d0ccaa303d36a9f62ac9a19e0ba0aba6c62"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        }
+      ],
+      "source_matrix_sha256": "fe47a07725b126ac55e29cb178c1176696de8d59098de969789fce85978bbe12",
+      "satisfied": 18,
+      "blockers": 44
     }
   ],
-  "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "requirements": {
+    "feature:VkPhysicalDeviceVulkan11Features:multiview": {
+      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2",
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
+        ],
+        "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
+        "refs": [
+          "VALIDATION.md#dxvk-262-multiview-six-view-witness",
+          "VALIDATION.md#dxvk-262-multiview-instance-floor"
+        ],
+        "artifact_sha256_refs": {
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da"
+        },
+        "note": "Two strict private runs. Six-view: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard, strict_verified=1. Instance floor: the same scene with exactly one instance at firstInstance=0x07ffffff, both built-in slots present (view_index_slot and start_instance_slot), instance_witness=1, instance_failed=0 in all six layers, strict_verified=1."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
+        ],
+        "refs": [
+          "VALIDATION.md#multiview-native-acceptance"
+        ],
+        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor."
+      }
+    },
+    "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": {
+      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
+        ],
+        "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
+        "refs": [
+          "VALIDATION.md#dxvk-262-multiview-six-view-witness"
+        ],
+        "note": "One strict six-view run witnesses a view count of at least 6 (mask 0x3f, six ordered layers, strict_verified=1)."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
+        ],
+        "refs": [
+          "VALIDATION.md#multiview-native-acceptance"
+        ],
+        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor."
+      }
+    },
+    "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": {
+      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
+        ],
+        "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
+        "refs": [
+          "VALIDATION.md#dxvk-262-multiview-instance-floor"
+        ],
+        "note": "One strict run with instance_count=1 and firstInstance=0x07ffffff witnesses an instance index of at least 134217727, with instance_witness=1, instance_failed=0 in all six layers and strict_verified=1."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
+          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
+        ],
+        "refs": [
+          "VALIDATION.md#multiview-native-acceptance"
+        ],
+        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indirect",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed_indirect",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect"
+        ],
+        "refs": [
+          "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "The eight applicable leaves: the four base_vertex and the four non-first-instance base_instance cases. The two FIRST_INSTANCE leaves need drawIndirectFirstInstance and the four draw_index leaves need multiDrawIndirect, both of which this profile reports false, so they are excluded rather than reported as NotSupported."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260915T210924328Z_PPSA99994_ps5vk_0xf8fa8f2840e9"
+        ],
+        "artifact_sha256": "69ef5b3fa83641febbaad2edd477664135c108cd336c895cf335d1c4dbe77fab",
+        "refs": [
+          "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15"
+        ],
+        "note": "The public-SDK witness covers direct, indexed, indirect and instanced draws with pinned BaseVertex/BaseInstance/DrawIndex=0 triples in the colour attachment, and the same frames copied into the linear staging image and read back through vkGetImageSubresourceLayout, plus the transfer-destination clear/upload witness."
+      }
+    },
     "api-version:apiVersion": {
       "native": {
-        "note": "The public native query path reports Vulkan 1.0; this is evidence of the current blocker, not evidence for the 1.3 requirement.",
+        "state": "witnessed-blocker",
         "observed": "1.0.0",
         "refs": [
           "VALIDATION.md#vulkan-10-device-reporting-audit-2026-09-13",
           "examples/native_consumer/physical_device_contract.h"
         ],
-        "state": "witnessed-blocker"
+        "note": "The public native query path reports Vulkan 1.0; this is evidence of the current blocker, not evidence for the 1.3 requirement."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:robustBufferAccess": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.info.device_mandatory_features",
+          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_1_byte",
+          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_1_byte",
+          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_1_byte"
+        ],
+        "refs": [
+          "VALIDATION.md#mandatory-core-feature-reporting",
+          "VALIDATION.md#executable-buffer-robustness"
+        ],
+        "note": "Representative reporting plus executable scalar R32_UINT OOB coverage; this is not every robustness permutation."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260913T183926998Z_PPSA99994_upstream-cts_0x53a3233107e6",
+          "20260913T183952333Z_PPSA99994_upstream-cts_0x53a909315ae1"
+        ],
+        "artifact_sha256": "43dd8803a47028ac5086434771d668e119aa662b4483581e72bc3e7ce571a175",
+        "refs": [
+          "VALIDATION.md#executable-buffer-robustness",
+          "UPSTREAM_CTS.md#executable-robust-buffer-expansion"
+        ]
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance": {
+      "_comment": "Non-zero firstInstance in indirect and indexed indirect commands, delivered to the start-instance user SGPR; judged by the unchanged upstream image oracles and by the public-SDK per-cell readback.",
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip"
+        ],
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "22 original upstream leaves whose indirect commands carry firstInstance 1, 2 or 3 (single, multi-command and four-instance shapes, non-indexed and uint32-indexed with bind/allocation offsets) passed unchanged in the combined 211/211 strict run."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
+        ],
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
+        ],
+        "note": "Combined strict CTS run (211/211 Pass, exit 0, verified Close Game) plus the public-SDK indirect witness: indirect firstInstance 5 over three instances and indexed indirect firstInstance 200 over two instances landed in exactly their instance cells with the delivered gl_InstanceIndex encoded, no wrong or stray cell, strict_verified=1."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:multiDrawIndirect": {
+      "_comment": "Every command of a multi-command vkCmdDraw*Indirect call executes in order with DrawIndex = command index over the bounded arena chain; maxDrawIndirectCount reports the core floor 65535 and the floor itself was executed.",
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip"
+        ],
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "34 original upstream leaves issuing one vkCmdDraw*Indirect call with drawCount 2 or 3 (junk-strided and packed, non-indexed and indexed, single and four-instance, with and without firstInstance) passed unchanged in the combined 211/211 strict run; the four draw_index leaves judge DrawIndex 0..2 through the pinned DrawIndex shader."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
+        ],
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
+        ],
+        "note": "Combined strict CTS run plus the public-SDK indirect witness: strided and packed multi-draw with a zero-primitive command keeping DrawIndex 1 and 2, GPU-generated arguments consumed behind a compute -> indirect barrier, and 65535 packed commands rendering 65535 distinct pixels (commands=65535 drawing=65535 draws=65535) over a 66-arena chain, every cell matched, strict_verified=1."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32": {
+      "_comment": "uint32 index buffers are fetched at 32 bits with 64-bit host range arithmetic and a 32-bit BaseVertex add; maxDrawIndexedIndexValue reports 2^32-1 and the range was executed at bit 31 and at the 2^24 boundary.",
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
+          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
+          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced"
+        ],
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "35 original upstream leaves drawing through uint32 index buffers (indexed multi-command, firstInstance and instanced indirect shapes with bind and allocation offsets, and the uint32-indexed draw-parameter leaves) passed unchanged in the combined 211/211 strict run; upstream has no leaf that places an index above 2^24, so the range witness is the public-SDK one."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
+        ],
+        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
+        "artifact_sha256_refs": {
+          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
+          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
+        },
+        "refs": [
+          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
+        ],
+        "note": "Combined strict CTS run plus the public-SDK indirect witness: indices 0x80000000..0x8000000b with vertexOffset INT32_MIN (direct and indexed indirect), 0x01000000..0x0100000b with vertexOffset -16777216 and a uint16 control each landed in cells 0..3 by gl_VertexIndex/3 with no wrong or stray cell, so the fetched 32-bit index and the signed BaseVertex add are exact at bit 31 and at the 2^24 boundary; strict_verified=1."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:shaderClipDistance": {
+      "_comment": "Pre-raster export, dynamically indexed write and fragment-stage read of gl_ClipDistance. The device advertises the feature and reports maxClipDistances, maxCullDistances and maxCombinedClipAndCullDistances at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65"
+        ],
+        "artifact_sha256": "e1cc26816aec34eed6e8f83e76cab5d695e748957a1765eb72e4aeb022ce9412",
+        "refs": [
+          "VALIDATION.md#clip-cull-native-acceptance"
+        ],
+        "note": "Eleven-case clip/cull witness: the packed export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance all verify on hardware - case 10 with expected=4096 covered=4096 foreign=0 wrong_color=0 and digest f50dd9368fee6cc9, the acceptance run strict_verified with the pixel-read digest differing from the control's."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.1",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.2",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.3",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.4",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.5",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.6",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.7",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8_fragmentshader_read"
+        ],
+        "refs": [
+          "VALIDATION.md#clip-cull-native-acceptance",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "All 64 selected clipping leaves passed in the 275/275 acceptance run (selection hash 3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d, eboot b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7, title closed). The family exercises clip counts 1..8 (the reported maxClipDistances floor), the combined clip+cull budget, the non-constant write and the fragment-stage read. The complementarity and misc leaves stay diagnostics: the pinned binary does not report them when filtered by the name the module's construction implies, measured twice, so they are not claimed here."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:shaderCullDistance": {
+      "_comment": "The same path for gl_CullDistance; the cull rule is per half-space, not per vertex. The device advertises the feature and reports maxClipDistances, maxCullDistances and maxCombinedClipAndCullDistances at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against.",
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65"
+        ],
+        "artifact_sha256": "e1cc26816aec34eed6e8f83e76cab5d695e748957a1765eb72e4aeb022ce9412",
+        "refs": [
+          "VALIDATION.md#clip-cull-native-acceptance"
+        ],
+        "note": "Eleven-case clip/cull witness: the packed export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance all verify on hardware - case 10 with expected=4096 covered=4096 foreign=0 wrong_color=0 and digest f50dd9368fee6cc9, the acceptance run strict_verified with the pixel-read digest differing from the control's."
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.1",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.2",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.3",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.4",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.5",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.6",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.7",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_distance.vert.8_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7_fragmentshader_read",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8",
+          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8_fragmentshader_read"
+        ],
+        "refs": [
+          "VALIDATION.md#clip-cull-native-acceptance",
+          "UPSTREAM_CTS.md"
+        ],
+        "note": "All 64 selected clipping leaves passed in the 275/275 acceptance run (selection hash 3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d, eboot b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7, title closed). The family exercises clip counts 1..8 (the reported maxClipDistances floor), the combined clip+cull budget, the non-constant write and the fragment-stage read. The complementarity and misc leaves stay diagnostics: the pinned binary does not report them when filtered by the name the module's construction implies, measured twice, so they are not claimed here."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+          "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill"
+        ],
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#fragment-stores-and-atomics-promotion-2026-09-20"
+        ],
+        "note": "Both unchanged upstream fragment-side-effect kill leaves pass on the exact integrated shipping candidate together with the frozen 304-case regression selection: 306/306 Pass, zero Fail or NotSupported, strict artifact and QPA identity, and clean title closure."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260920T181405989Z_PPSA99994_ps5vk_0x1145d7afedfdc"
+        ],
+        "artifact_sha256": "e83cac3dad67b48880409a4ba6874954e325881d71cc8ff835b06ca4a1b4b295",
+        "refs": [
+          "VALIDATION.md#fragment-stores-and-atomics-promotion-2026-09-20"
+        ],
+        "note": "Deterministic public-path SSBO witness: control_counter=0, candidate_counter=4096, 30 trailing guard words intact, fence success, strict_verified=1 and clean lifecycle. The separate public-ABI probe reports fragmentStoresAndAtomics=1 on the promotion candidate."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:geometryShader": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.geometry.basic.output_0_and_128",
+          "dEQP-VK.geometry.basic.output_10",
+          "dEQP-VK.geometry.basic.output_100_and_10",
+          "dEQP-VK.geometry.basic.output_10_and_100",
+          "dEQP-VK.geometry.basic.output_128",
+          "dEQP-VK.geometry.basic.output_128_and_0",
+          "dEQP-VK.geometry.basic.output_vary_by_attribute",
+          "dEQP-VK.geometry.basic.output_vary_by_attribute_instancing",
+          "dEQP-VK.geometry.input.basic_primitive.triangles",
+          "dEQP-VK.geometry.input.conversion.triangles_to_lines",
+          "dEQP-VK.geometry.input.conversion.triangles_to_points"
+        ],
+        "refs": [
+          "cts/upstream/manifest.json",
+          "private-captures/t04/cts-geometry-acceptance.json"
+        ],
+        "note": "The promoted geometry leaves run in the frozen selection and pass their own upstream oracles in the strict acceptance run 20260917T190009Z-class run of the advertised profile (286/286 Pass, zero Fail, title closed); the leaves whose shapes the merged pre-raster program does not deliver yet - the uniform/sampled descriptor variants and the varying crosses - were measured as Fail in the preceding promotion run and are kept as diagnostics instead of being claimed here."
+      },
+      "native": {
+        "state": "reported-not-executed",
+        "run_ids": [
+          "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305"
+        ],
+        "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
+        "refs": [
+          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+        ],
+        "note": "The probe reports geometryShader=1; it executes capability queries, not geometry draws."
+      }
+    },
+    "feature:VkPhysicalDeviceFeatures:dualSrcBlend": {
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mcc_max_alpha_1mca_ca_min-color_1mca_sa_rsub_alpha_s1a_dc_add-color_1mca_1mcc_min_alpha_1msa_1ms1a_add-color_s1c_da_max_alpha_dc_1msc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mdc_min_alpha_ca_1ms1a_min-color_o_s1a_add_alpha_s1a_ca_add-color_sas_1mca_add_alpha_1msc_sa_sub-color_sc_1msc_max_alpha_1msc_sas_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mdc_rsub_alpha_da_1ms1c_add-color_cc_ca_add_alpha_da_sas_max-color_z_1mcc_min_alpha_o_z_min-color_ca_s1c_add_alpha_1msc_s1a_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1msc_sub_alpha_s1c_s1a_sub-color_cc_cc_max_alpha_sc_1msc_add-color_z_sas_sub_alpha_cc_sc_sub-color_z_1msa_min_alpha_z_dc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_ca_max_alpha_sa_cc_add-color_o_cc_min_alpha_1mda_1ms1c_max-color_z_1msa_max_alpha_1mda_da_rsub-color_sc_1mca_add_alpha_sc_1mca_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_cc_max_alpha_sas_cc_add-color_dc_1ms1a_rsub_alpha_sa_1mca_sub-color_1msc_cc_rsub_alpha_cc_o_sub-color_s1c_1msa_rsub_alpha_1mda_ca_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_da_min_alpha_1ms1c_1mda_sub-color_dc_s1a_add_alpha_ca_sas_min-color_da_1mca_rsub_alpha_da_ca_min-color_o_cc_rsub_alpha_1mca_sc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_s1c_rsub_alpha_1mca_o_rsub-color_1msc_s1a_rsub_alpha_da_cc_max-color_o_1msc_sub_alpha_sas_da_max-color_z_o_min_alpha_cc_dc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_cc_rsub_alpha_1mdc_s1a_add-color_1msa_1msa_sub_alpha_1ms1a_ca_min-color_z_s1c_rsub_alpha_s1c_ca_sub-color_1ms1c_s1c_min_alpha_1mcc_1mdc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_da_sub_alpha_s1a_z_sub-color_sas_da_max_alpha_z_1mcc_add-color_sas_da_rsub_alpha_sc_1ms1c_min-color_da_1mdc_sub_alpha_1ms1c_1msa_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_s1c_max_alpha_da_sc_add-color_dc_1mcc_sub_alpha_s1a_o_sub-color_1ms1a_da_sub_alpha_cc_da_max-color_1msa_s1a_max_alpha_ca_s1a_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1mdc_rsub_alpha_sc_da_max-color_sa_sc_rsub_alpha_sc_1ms1a_sub-color_1ms1a_sc_add_alpha_1ms1a_o_add-color_1mca_1ms1a_max_alpha_sa_1mca_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1mdc_sub_alpha_s1a_1ms1c_rsub-color_1mca_o_rsub_alpha_1mca_ca_min-color_ca_s1c_add_alpha_dc_1ms1c_sub-color_ca_1ms1a_min_alpha_sc_sc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1ms1a_add_alpha_1mcc_1mca_max-color_sc_dc_sub_alpha_1msc_1ms1a_max-color_1ms1a_sa_max_alpha_da_1ms1c_add-color_1ms1a_dc_max_alpha_1ms1c_s1c_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1msa_max_alpha_1mca_z_sub-color_da_1msc_rsub_alpha_1mda_1ms1c_add-color_1msa_1mdc_max_alpha_da_sas_min-color_cc_dc_sub_alpha_1mda_sas_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_da_sub_alpha_sc_ca_add-color_1msa_z_min_alpha_1mca_1mcc_min-color_o_sa_add_alpha_1mda_dc_rsub-color_sc_1mcc_min_alpha_s1a_z_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_s1a_min_alpha_1msa_sc_sub-color_1msa_o_rsub_alpha_da_z_add-color_1msc_s1c_rsub_alpha_1mda_s1a_max-color_s1c_cc_add_alpha_sas_ca_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_sa_sub_alpha_1ms1c_1mdc_sub-color_o_1mca_add_alpha_cc_cc_add-color_s1a_cc_sub_alpha_ca_cc_min-color_cc_sas_min_alpha_sa_z_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_sc_rsub_alpha_s1c_o_max-color_da_ca_add_alpha_z_1msc_add-color_1mca_1ms1a_add_alpha_o_1mda_max-color_1ms1a_1msc_rsub_alpha_dc_sas_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_z_add_alpha_sas_1mca_min-color_cc_s1c_add_alpha_sc_o_sub-color_z_1mda_min_alpha_1mda_s1a_sub-color_s1c_sc_min_alpha_o_o_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mdc_1mda_rsub_alpha_1mca_1mcc_min-color_dc_o_rsub_alpha_sa_z_add-color_1msc_da_max_alpha_1mca_1mca_sub-color_sa_1ms1a_sub_alpha_1msa_sc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_ca_add_alpha_1msa_cc_max-color_s1c_z_sub_alpha_sa_sc_add-color_da_da_max_alpha_s1c_cc_rsub-color_da_s1a_max_alpha_da_o_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_cc_max_alpha_1msa_1mca_sub-color_o_1mdc_max_alpha_1mda_1ms1c_rsub-color_sas_da_max_alpha_1msa_1msc_add-color_sc_1msc_add_alpha_sas_1ms1a_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_o_rsub_alpha_o_sas_max-color_z_1msa_min_alpha_dc_sc_rsub-color_sc_1mda_add_alpha_1ms1c_cc_max-color_s1a_1ms1c_max_alpha_1mca_o_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_o_sub_alpha_sc_z_min-color_da_o_add_alpha_1msc_sa_min-color_1mdc_1mda_sub_alpha_sas_1mdc_max-color_1mdc_1msa_max_alpha_o_1msc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_sa_add_alpha_o_1ms1a_max-color_sa_1ms1c_add_alpha_s1a_s1c_max-color_sc_1mdc_add_alpha_1ms1a_1mdc_sub-color_da_sa_sub_alpha_1mcc_sc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_sa_max_alpha_sas_sas_min-color_1ms1c_1msa_sub_alpha_1msc_o_add-color_sa_sa_rsub_alpha_cc_cc_add-color_da_da_add_alpha_s1c_da_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_z_sub_alpha_1mdc_s1a_min-color_1mda_1mcc_max_alpha_1msc_o_max-color_1ms1a_1mcc_min_alpha_1mcc_s1c_max-color_1mcc_1ms1a_add_alpha_sa_1mca_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_1mda_add_alpha_cc_1mca_min-color_da_o_sub_alpha_da_1mda_max-color_z_1mcc_sub_alpha_sc_cc_sub-color_1mca_1ms1a_max_alpha_cc_dc_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_1ms1c_max_alpha_1mdc_z_sub-color_sc_z_max_alpha_1ms1c_sas_sub-color_1msc_1msc_min_alpha_s1a_ca_min-color_1msc_1msc_add_alpha_ca_da_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_s1c_min_alpha_1ms1c_cc_add-color_sas_sas_max_alpha_1mca_dc_min-color_1msc_1ms1c_min_alpha_dc_1mdc_add-color_1mdc_s1a_rsub_alpha_o_1mda_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_sa_rsub_alpha_1mda_s1c_sub-color_o_ca_min_alpha_sa_da_add-color_sa_da_min_alpha_s1c_s1c_max-color_z_s1a_max_alpha_1msa_cc_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mca_add_alpha_da_dc_min-color_1msa_cc_rsub_alpha_1msa_1mcc_max-color_dc_dc_add_alpha_dc_dc_min-color_1mda_1ms1a_add_alpha_sc_sa_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mca_add_alpha_dc_1ms1c_max-color_1msc_sc_sub_alpha_sa_s1c_rsub-color_o_1mcc_rsub_alpha_1mdc_s1c_rsub-color_ca_1mcc_sub_alpha_sas_1mca_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mda_max_alpha_1ms1c_o_rsub-color_1mda_s1a_rsub_alpha_1mca_sas_add-color_s1c_1mca_add_alpha_cc_ca_max-color_s1c_1mcc_max_alpha_s1a_o_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mdc_max_alpha_s1a_ca_max-color_1mda_cc_min_alpha_sas_dc_sub-color_1ms1a_sc_sub_alpha_z_dc_max-color_sc_dc_sub_alpha_s1c_o_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1a_add_alpha_1mdc_1msa_sub-color_dc_1ms1c_rsub_alpha_z_1mdc_sub-color_ca_1ms1c_min_alpha_sas_ca_rsub-color_1ms1c_s1c_add_alpha_z_1mda_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1a_sub_alpha_1mda_1mda_sub-color_1ms1a_ca_min_alpha_o_s1a_max-color_s1c_da_add_alpha_1ms1a_ca_max-color_sc_sa_add_alpha_z_o_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1c_sub_alpha_da_z_min-color_sa_cc_max_alpha_sc_sa_min-color_o_s1c_sub_alpha_1msa_sa_add-color_sa_1mda_rsub_alpha_cc_sc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_sas_sub_alpha_s1a_1mda_add-color_sa_1mcc_min_alpha_cc_1mcc_sub-color_dc_1ms1a_sub_alpha_1mca_z_max-color_1msc_1msa_max_alpha_sc_s1c_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_max_alpha_da_1mda_sub-color_dc_ca_max_alpha_1msc_1msa_add-color_1mdc_1ms1a_min_alpha_1mda_1mda_min-color_1ms1c_1msc_max_alpha_1mca_1msc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_sub_alpha_1msa_1mca_sub-color_1msc_da_max_alpha_o_da_add-color_s1c_s1a_max_alpha_dc_1ms1a_sub-color_s1a_z_sub_alpha_1msa_1msc_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_sub_alpha_1msa_1mdc_sub-color_1mda_sas_add_alpha_o_ca_add-color_sa_1mdc_sub_alpha_o_1mca_rsub-color_s1c_1msa_rsub_alpha_1msa_1mca_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1msa_add_alpha_dc_1ms1a_add-color_da_cc_rsub_alpha_1ms1a_s1a_max-color_sas_z_min_alpha_1mca_da_add-color_1msc_ca_min_alpha_1mdc_sc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1msa_max_alpha_s1a_1mda_sub-color_s1a_sc_add_alpha_dc_1mca_max-color_sas_s1a_add_alpha_1msa_sas_min-color_1ms1c_1msc_sub_alpha_sc_sas_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_ca_rsub_alpha_1msa_s1c_rsub-color_dc_1ms1a_min_alpha_1ms1a_cc_rsub-color_ca_ca_add_alpha_s1c_sc_add-color_o_1ms1c_sub_alpha_z_1mda_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mca_add_alpha_o_1ms1a_sub-color_1mcc_1msc_max_alpha_1mdc_sas_sub-color_ca_1mdc_min_alpha_z_1mdc_max-color_1ms1c_1mdc_min_alpha_dc_o_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mcc_max_alpha_z_o_add-color_sa_s1a_max_alpha_1msa_dc_min-color_sc_cc_add_alpha_dc_1msa_sub-color_1ms1a_o_max_alpha_1ms1a_sc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mcc_sub_alpha_z_1mca_sub-color_sa_da_min_alpha_s1c_ca_add-color_1ms1a_sa_max_alpha_1ms1a_cc_sub-color_dc_ca_add_alpha_cc_1ms1a_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mdc_add_alpha_sc_1mda_add-color_sc_1mca_rsub_alpha_z_1mdc_max-color_sa_1mca_sub_alpha_sc_s1c_max-color_sas_s1a_min_alpha_da_1ms1c_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1msc_rsub_alpha_sc_1mdc_sub-color_1ms1c_sas_sub_alpha_s1c_sas_max-color_dc_sa_sub_alpha_sa_1msa_add-color_s1c_sc_add_alpha_z_o_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1msc_sub_alpha_z_1mcc_min-color_1msc_1ms1c_add_alpha_1mda_1mdc_sub-color_ca_sas_rsub_alpha_cc_1ms1c_max-color_1ms1c_1ms1c_rsub_alpha_da_s1a_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_ca_sub_alpha_1ms1c_da_add-color_ca_dc_sub_alpha_s1c_sc_add-color_sc_sa_min_alpha_1ms1c_1mda_min-color_1ms1c_dc_rsub_alpha_1msc_1msc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_sa_sub_alpha_z_dc_rsub-color_s1a_1mdc_sub_alpha_1msc_1mdc_min-color_1mcc_ca_sub_alpha_ca_z_min-color_1mdc_s1c_min_alpha_s1c_1mdc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_1ms1a_rsub_alpha_da_s1a_max-color_o_sc_max_alpha_1mcc_1msc_sub-color_1msc_1mcc_max_alpha_s1c_1mca_sub-color_ca_1mcc_max_alpha_s1a_dc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_ca_max_alpha_da_1mdc_rsub-color_sa_1msc_sub_alpha_sc_1mca_sub-color_1ms1c_s1c_add_alpha_s1c_dc_rsub-color_da_1mda_add_alpha_s1c_1msa_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_o_add_alpha_1msa_1mca_sub-color_cc_1msc_min_alpha_1msa_s1a_add-color_1mca_sc_min_alpha_1msc_1ms1c_add-color_1ms1c_1mcc_add_alpha_1mdc_o_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_z_rsub_alpha_s1a_s1a_rsub-color_s1c_1msa_rsub_alpha_1mda_sc_add-color_cc_1mcc_min_alpha_sas_da_add-color_1mcc_1msc_sub_alpha_da_z_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_1mca_min_alpha_1msa_1msc_sub-color_s1a_1msc_rsub_alpha_dc_dc_max-color_sa_1mda_sub_alpha_z_da_max-color_dc_sc_max_alpha_dc_1ms1c_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_1msa_sub_alpha_1mca_da_rsub-color_z_cc_add_alpha_sa_dc_add-color_s1a_1ms1a_rsub_alpha_1mca_s1c_min-color_1mdc_z_min_alpha_sc_1mcc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_ca_rsub_alpha_dc_s1a_rsub-color_cc_da_min_alpha_ca_1ms1a_max-color_1msc_1mdc_max_alpha_cc_sa_rsub-color_da_o_sub_alpha_z_dc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_1mdc_rsub_alpha_1mca_1mcc_rsub-color_1mcc_1ms1a_add_alpha_1msa_1ms1c_rsub-color_1msa_1mda_max_alpha_1msc_sa_min-color_1ms1a_sc_max_alpha_1mca_cc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_1msc_max_alpha_1ms1a_1mca_add-color_1mdc_s1c_min_alpha_ca_dc_sub-color_1mdc_s1c_sub_alpha_z_sc_min-color_ca_1mca_rsub_alpha_s1a_1ms1a_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_ca_add_alpha_z_1msa_sub-color_z_1mcc_add_alpha_1mcc_1mca_sub-color_1msa_da_rsub_alpha_cc_1ms1a_add-color_cc_1mcc_sub_alpha_1mda_1ms1c_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_add_alpha_o_s1c_add-color_1mdc_1mcc_min_alpha_1ms1a_1mcc_sub-color_sas_1msa_sub_alpha_1ms1c_1mda_add-color_1msa_o_add_alpha_dc_sc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_min_alpha_da_sc_max-color_1mda_s1a_add_alpha_da_1mda_rsub-color_dc_s1a_rsub_alpha_da_1mcc_rsub-color_cc_dc_min_alpha_1msa_sas_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_min_alpha_sas_o_min-color_o_1msa_add_alpha_1mdc_s1a_max-color_1ms1a_1msc_add_alpha_cc_1mcc_max-color_1msa_cc_max_alpha_sas_da_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_sa_max_alpha_da_ca_add-color_z_1ms1c_add_alpha_sc_sas_rsub-color_1mdc_cc_min_alpha_dc_ca_min-color_1ms1a_1msc_max_alpha_1msa_ca_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_sas_rsub_alpha_1msc_1mcc_rsub-color_z_s1a_sub_alpha_da_s1c_add-color_1mda_sc_add_alpha_z_z_rsub-color_1ms1a_sc_sub_alpha_sa_1msa_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1mda_max_alpha_s1c_1msa_rsub-color_ca_1ms1a_add_alpha_1mda_1msc_min-color_z_s1a_add_alpha_1mdc_1mcc_add-color_s1c_1mda_add_alpha_1ms1a_o_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1ms1a_rsub_alpha_sc_dc_rsub-color_1msa_dc_sub_alpha_sc_z_min-color_da_z_add_alpha_1mdc_ca_max-color_1mcc_s1c_rsub_alpha_1ms1a_dc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1ms1c_add_alpha_1mcc_1mda_sub-color_ca_1ms1a_max_alpha_1ms1c_s1c_min-color_da_sc_sub_alpha_sc_1mcc_min-color_1mda_dc_max_alpha_ca_s1c_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_cc_rsub_alpha_1msc_1mcc_min-color_sc_1mdc_add_alpha_da_ca_min-color_1mcc_1mda_max_alpha_1ms1c_s1a_min-color_s1c_cc_sub_alpha_ca_1mda_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_da_min_alpha_1msa_1msa_min-color_da_s1a_rsub_alpha_1msc_z_add-color_ca_sc_sub_alpha_cc_s1a_max-color_1mca_1mcc_add_alpha_1msa_s1c_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_s1a_sub_alpha_sc_1msa_rsub-color_sc_1mcc_add_alpha_s1a_1ms1c_rsub-color_1mdc_ca_rsub_alpha_1mda_1ms1c_rsub-color_1ms1a_1msc_min_alpha_o_sas_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_s1c_rsub_alpha_sa_sas_max-color_z_1msa_min_alpha_sas_s1c_rsub-color_1mdc_1msa_rsub_alpha_sc_s1a_min-color_1mdc_sa_min_alpha_1mca_1mcc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_1mda_add_alpha_s1c_ca_add-color_1mca_z_max_alpha_dc_1mcc_max-color_sa_dc_max_alpha_1ms1c_o_sub-color_1mcc_1msc_rsub_alpha_da_1mcc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_1msa_rsub_alpha_ca_z_rsub-color_1ms1c_s1a_max_alpha_z_1msc_add-color_1mda_1mcc_add_alpha_1msc_1mda_max-color_1ms1c_o_max_alpha_s1a_1msc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_sa_min_alpha_1msc_dc_min-color_1mdc_1mca_sub_alpha_s1a_1msc_max-color_sas_ca_max_alpha_1ms1c_sas_sub-color_1msc_sas_max_alpha_1mcc_da_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_sc_rsub_alpha_1msc_1ms1a_max-color_1ms1c_1mda_rsub_alpha_z_1mcc_max-color_z_sas_sub_alpha_1ms1c_s1c_sub-color_1mdc_s1c_min_alpha_sa_1mdc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_1mdc_add_alpha_cc_1ms1c_sub-color_1msa_z_max_alpha_da_1mda_rsub-color_1msa_1msc_rsub_alpha_1mcc_o_min-color_1ms1c_cc_add_alpha_dc_da_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_1mdc_rsub_alpha_1mda_cc_sub-color_1msc_z_max_alpha_o_s1c_sub-color_1ms1a_1msc_sub_alpha_ca_sa_sub-color_ca_ca_max_alpha_cc_s1a_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_cc_add_alpha_sc_sc_add-color_dc_da_max_alpha_dc_s1a_max-color_sa_1mca_sub_alpha_1mca_1ms1c_add-color_1msa_1msa_rsub_alpha_1mda_1mcc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_cc_rsub_alpha_o_1msa_max-color_1ms1c_dc_sub_alpha_1msa_o_min-color_sc_cc_min_alpha_sc_1msc_min-color_1msc_sa_rsub_alpha_o_z_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_1mdc_rsub_alpha_s1a_z_sub-color_1msc_sc_min_alpha_s1a_sc_sub-color_sas_z_max_alpha_1msc_da_min-color_s1c_dc_rsub_alpha_o_1mcc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_1ms1c_sub_alpha_1mda_cc_add-color_da_cc_rsub_alpha_z_1ms1a_add-color_s1c_1mcc_max_alpha_1mca_s1a_rsub-color_cc_dc_max_alpha_1mcc_s1a_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_s1a_add_alpha_sas_1ms1a_max-color_1msa_sas_rsub_alpha_s1a_1mca_sub-color_1mcc_1ms1a_add_alpha_sc_s1a_min-color_ca_1ms1c_max_alpha_1mca_1mcc_add",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_s1c_add_alpha_1mca_1mca_sub-color_1mdc_sc_max_alpha_1msa_s1c_rsub-color_1msa_1mdc_max_alpha_1mca_1mdc_max-color_s1c_ca_min_alpha_1ms1c_1msc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_z_max_alpha_1mcc_1msc_min-color_1msa_1msc_min_alpha_ca_s1a_add-color_1mda_1msc_max_alpha_dc_s1a_rsub-color_s1c_s1c_add_alpha_s1c_z_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_1mca_max_alpha_1ms1c_1mdc_sub-color_ca_1mda_sub_alpha_ca_o_rsub-color_cc_dc_add_alpha_ca_1msa_min-color_1ms1c_1mcc_max_alpha_sas_1mdc_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_1ms1c_rsub_alpha_1msc_s1a_rsub-color_1ms1a_1msc_max_alpha_1mda_sc_sub-color_1msa_dc_min_alpha_1msa_1mca_add-color_da_1mcc_rsub_alpha_1ms1c_sa_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_sa_min_alpha_cc_sc_rsub-color_1mcc_1ms1a_add_alpha_sa_da_rsub-color_1mda_sa_min_alpha_s1a_dc_sub-color_sa_z_min_alpha_sc_1mcc_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_sc_add_alpha_cc_cc_add-color_1ms1c_ca_sub_alpha_1msa_1mda_max-color_da_1mdc_sub_alpha_1mdc_1mda_rsub-color_1msa_1msa_min_alpha_1mca_1ms1c_rsub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_1mcc_sub_alpha_1mdc_sa_sub-color_s1a_s1a_rsub_alpha_cc_z_add-color_s1c_s1a_rsub_alpha_dc_1mca_add-color_1mdc_1ms1c_max_alpha_s1a_dc_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_1msa_rsub_alpha_1msc_z_add-color_s1c_1ms1c_min_alpha_s1a_dc_max-color_1ms1a_o_max_alpha_1mca_dc_rsub-color_sc_dc_min_alpha_sas_1ms1a_max",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_s1c_min_alpha_1mcc_s1c_rsub-color_ca_1mca_add_alpha_cc_1ms1a_min-color_ca_1ms1c_rsub_alpha_sa_sas_min-color_1ms1c_s1a_add_alpha_1mda_1ms1a_min",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_sa_rsub_alpha_o_1ms1a_sub-color_1ms1c_1ms1c_min_alpha_sa_s1a_max-color_sa_cc_sub_alpha_sc_1mdc_min-color_o_1mca_add_alpha_da_ca_sub",
+          "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_sc_add_alpha_1ms1c_sa_min-color_dc_1mca_add_alpha_z_1mca_max-color_1ms1c_sa_max_alpha_1mcc_sc_sub-color_s1c_1mda_add_alpha_s1c_1mda_add"
+        ],
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#dual-source-blend-promotion-2026-09-21"
+        ],
+        "note": "All 98 applicable upstream blend.dual_source leaves are acceptance cases now and passed twice on hardware: once in the 404-case measurement run on the gated candidate and again in the canonical acceptance run 20260921T160602225Z_PPSA99994_upstream-cts_0x15bf4c85ab360 on the promoted shipping payload 0bbd6679da721eac7f750b7bbea5041bac974ac8f42a9a94ff5a755caff0b3a7 (log sha256 30a0a14af266cc4d65943644eaa2c9ca9afe349e4f8c7ebbb7cad22627f57922), which reports 404 Pass, zero Fail, zero NotSupported with strict artifact and lifecycle identity and a clean title closure. The leaves exercised every factor and operation pair the family generates."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260921T131810348Z_PPSA99994_ps5vk_0x152cbc5ead555"
+        ],
+        "artifact_sha256": "027a43032361f818e4caf314f55557727eff6bb812a44c2a757fcc4e26779d7b",
+        "refs": [
+          "VALIDATION.md#dual-source-blend-promotion-2026-09-21"
+        ],
+        "note": "Deterministic public-path blend witness: control RGBA 64,128,191,255 inside one LSB of the primary export with blending disabled, candidate 51,51,38,255 exactly for color=SRC1_COLOR*ZERO+ADD and alpha=ONE*ZERO+ADD, the two required to differ, fence success, strict_verified=1 and a clean lifecycle. The separate public-ABI probe reports dualSrcBlend=1 on the promotion candidate."
       }
     },
     "feature:VkPhysicalDeviceFeatures:depthBiasClamp": {
@@ -143,57 +1087,6 @@
         "state": "native-evidence"
       }
     },
-    "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance": {
-      "_comment": "Non-zero firstInstance in indirect and indexed indirect commands, delivered to the start-instance user SGPR; judged by the unchanged upstream image oracles and by the public-SDK per-cell readback.",
-      "cts": {
-        "cases": [
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect_first_instance",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip"
-        ],
-        "note": "22 original upstream leaves whose indirect commands carry firstInstance 1, 2 or 3 (single, multi-command and four-instance shapes, non-indexed and uint32-indexed with bind/allocation offsets) passed unchanged in the combined 211/211 strict run.",
-        "refs": [
-          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
-          "UPSTREAM_CTS.md"
-        ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
-        "artifact_sha256_refs": {
-          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
-          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
-        },
-        "note": "Combined strict CTS run (211/211 Pass, exit 0, verified Close Game) plus the public-SDK indirect witness: indirect firstInstance 5 over three instances and indexed indirect firstInstance 200 over two instances landed in exactly their instance cells with the delivered gl_InstanceIndex encoded, no wrong or stray cell, strict_verified=1.",
-        "refs": [
-          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
-        ],
-        "run_ids": [
-          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
-          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
-        ],
-        "state": "native-evidence"
-      }
-    },
     "feature:VkPhysicalDeviceFeatures:fillModeNonSolid": {
       "_comment": "POLYMODE_FRONT/BACK_PTYPE plus DUAL_MODE and KEEP_TOGETHER_ENABLE program the LINE and POINT polygon modes. All twenty-eight rasterization culling leaves pass. The twenty-ninth, the amber line_continuity.polygon-mode-lines leaf, is not runnable here and not a defect in this feature: Amber's backend demands host-coherent memory this profile does not advertise (cts/upstream/manifest.json, host-coherent-memory-gap).",
       "cts": {
@@ -242,167 +1135,6 @@
         "state": "native-evidence"
       }
     },
-    "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32": {
-      "_comment": "uint32 index buffers are fetched at 32 bits with 64-bit host range arithmetic and a 32-bit BaseVertex add; maxDrawIndexedIndexValue reports 2^32-1 and the range was executed at bit 31 and at the 2^24 boundary.",
-      "cts": {
-        "cases": [
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect_first_instance",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced"
-        ],
-        "note": "35 original upstream leaves drawing through uint32 index buffers (indexed multi-command, firstInstance and instanced indirect shapes with bind and allocation offsets, and the uint32-indexed draw-parameter leaves) passed unchanged in the combined 211/211 strict run; upstream has no leaf that places an index above 2^24, so the range witness is the public-SDK one.",
-        "refs": [
-          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
-          "UPSTREAM_CTS.md"
-        ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
-        "artifact_sha256_refs": {
-          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
-          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
-        },
-        "note": "Combined strict CTS run plus the public-SDK indirect witness: indices 0x80000000..0x8000000b with vertexOffset INT32_MIN (direct and indexed indirect), 0x01000000..0x0100000b with vertexOffset -16777216 and a uint16 control each landed in cells 0..3 by gl_VertexIndex/3 with no wrong or stray cell, so the fetched 32-bit index and the signed BaseVertex add are exact at bit 31 and at the 2^24 boundary; strict_verified=1.",
-        "refs": [
-          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
-        ],
-        "run_ids": [
-          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
-          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
-        ],
-        "state": "native-evidence"
-      }
-    },
-    "feature:VkPhysicalDeviceFeatures:geometryShader": {
-      "cts": {
-        "cases": [
-          "dEQP-VK.geometry.basic.output_0_and_128",
-          "dEQP-VK.geometry.basic.output_10",
-          "dEQP-VK.geometry.basic.output_100_and_10",
-          "dEQP-VK.geometry.basic.output_10_and_100",
-          "dEQP-VK.geometry.basic.output_128",
-          "dEQP-VK.geometry.basic.output_128_and_0",
-          "dEQP-VK.geometry.basic.output_vary_by_attribute",
-          "dEQP-VK.geometry.basic.output_vary_by_attribute_instancing",
-          "dEQP-VK.geometry.input.basic_primitive.triangles",
-          "dEQP-VK.geometry.input.conversion.triangles_to_lines",
-          "dEQP-VK.geometry.input.conversion.triangles_to_points"
-        ],
-        "note": "The promoted geometry leaves run in the frozen selection and pass their own upstream oracles in the strict acceptance run 20260917T190009Z-class run of the advertised profile (286/286 Pass, zero Fail, title closed); the leaves whose shapes the merged pre-raster program does not deliver yet - the uniform/sampled descriptor variants and the varying crosses - were measured as Fail in the preceding promotion run and are kept as diagnostics instead of being claimed here.",
-        "refs": [
-          "cts/upstream/manifest.json",
-          "private-captures/t04/cts-geometry-acceptance.json"
-        ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
-        "note": "The probe reports geometryShader=1; it executes capability queries, not geometry draws.",
-        "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
-        ],
-        "run_ids": [
-          "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305"
-        ],
-        "state": "reported-not-executed"
-      }
-    },
-    "feature:VkPhysicalDeviceFeatures:multiDrawIndirect": {
-      "_comment": "Every command of a multi-command vkCmdDraw*Indirect call executes in order with DrawIndex = command index over the bounded arena chain; maxDrawIndirectCount reports the core floor 65535 and the floor itself was executed.",
-      "cts": {
-        "cases": [
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_instanced",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.draw_index.draw_indexed_instanced",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.no_first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.sequential.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_list",
-          "dEQP-VK.draw.renderpass.indirect_draw.indexed_bind_offset_16_alloc_offset_16.indirect_draw_instanced.first_instance.triangle_strip"
-        ],
-        "note": "34 original upstream leaves issuing one vkCmdDraw*Indirect call with drawCount 2 or 3 (junk-strided and packed, non-indexed and indexed, single and four-instance, with and without firstInstance) passed unchanged in the combined 211/211 strict run; the four draw_index leaves judge DrawIndex 0..2 through the pinned DrawIndex shader.",
-        "refs": [
-          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16",
-          "UPSTREAM_CTS.md"
-        ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a",
-        "artifact_sha256_refs": {
-          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458": "fb8836a18de9c2900cf842a88eef6c72e0537bc87e4e57471cb3d8b36865f2d6",
-          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a": "779e882aac0f4eec5276e3b5149cc2e2633a204ee739ddb7eb558f8a2e906b3a"
-        },
-        "note": "Combined strict CTS run plus the public-SDK indirect witness: strided and packed multi-draw with a zero-primitive command keeping DrawIndex 1 and 2, GPU-generated arguments consumed behind a compute -> indirect barrier, and 65535 packed commands rendering 65535 distinct pixels (commands=65535 drawing=65535 draws=65535) over a 66-arena chain, every cell matched, strict_verified=1.",
-        "refs": [
-          "VALIDATION.md#indirect-and-indexed-draw-native-acceptance-2026-09-16"
-        ],
-        "run_ids": [
-          "20260916T235354084Z_PPSA99994_upstream-cts_0x15088ceacb458",
-          "20260916T235643977Z_PPSA99994_ps5vk_0x150b05cf0227a"
-        ],
-        "state": "native-evidence"
-      }
-    },
     "feature:VkPhysicalDeviceFeatures:multiViewport": {
       "_comment": "Sixteen viewport and scissor banks are written per draw and selected by gl_ViewportIndex from a geometry stage. All twenty-two applicable upstream leaves pass: the sixteen fragment_ops multi_viewport scissors and the six draw.renderpass.scissor multi-scissor leaves, which clear their target through the transfer destination and read the rendered result back from the same image.",
       "cts": {
@@ -445,460 +1177,105 @@
         "state": "native-evidence"
       }
     },
-    "feature:VkPhysicalDeviceFeatures:robustBufferAccess": {
+    "feature:VkPhysicalDeviceFeatures:independentBlend": {
       "cts": {
+        "state": "cts-pass",
         "cases": [
-          "dEQP-VK.info.device_mandatory_features",
-          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_read.range_1_byte",
-          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_storage_write.range_1_byte",
-          "dEQP-VK.robustness.buffer_access.compute.scalar_copy.r32_uint.oob_uniform_read.range_1_byte"
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+          "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1"
         ],
-        "note": "Representative reporting plus executable scalar R32_UINT OOB coverage; this is not every robustness permutation.",
         "refs": [
-          "VALIDATION.md#mandatory-core-feature-reporting",
-          "VALIDATION.md#executable-buffer-robustness"
-        ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "43dd8803a47028ac5086434771d668e119aa662b4483581e72bc3e7ce571a175",
-        "refs": [
-          "VALIDATION.md#executable-buffer-robustness",
-          "UPSTREAM_CTS.md#executable-robust-buffer-expansion"
-        ],
-        "run_ids": [
-          "20260913T183926998Z_PPSA99994_upstream-cts_0x53a3233107e6",
-          "20260913T183952333Z_PPSA99994_upstream-cts_0x53a909315ae1"
-        ],
-        "state": "native-evidence"
-      }
-    },
-    "feature:VkPhysicalDeviceFeatures:shaderClipDistance": {
-      "_comment": "Pre-raster export, dynamically indexed write and fragment-stage read of gl_ClipDistance. The device advertises the feature and reports maxClipDistances, maxCullDistances and maxCombinedClipAndCullDistances at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against.",
-      "cts": {
-        "cases": [
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.1",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.1_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.2",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.2_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.3",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.3_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.4",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.4_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.5",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.5_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.6",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.6_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.7",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.7_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.8",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.8_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8_fragmentshader_read"
-        ],
-        "note": "All 64 selected clipping leaves passed in the 275/275 acceptance run (selection hash 3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d, eboot b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7, title closed). The family exercises clip counts 1..8 (the reported maxClipDistances floor), the combined clip+cull budget, the non-constant write and the fragment-stage read. The complementarity and misc leaves stay diagnostics: the pinned binary does not report them when filtered by the name the module's construction implies, measured twice, so they are not claimed here.",
-        "refs": [
-          "VALIDATION.md#clip-cull-native-acceptance",
+          "cts/upstream/manifest.json",
           "UPSTREAM_CTS.md"
         ],
-        "state": "cts-pass"
+        "note": "Both leaves in the pinned tree that REQUIRE independentBlend pass. They are the attachment_write_mask attachment_count_2 pair of the render-pass module (vktRenderPassTests.cpp:6504), which draws into two colour attachments - R8G8B8A8_UINT and R8G8B8A8_UNORM - with their own write masks and reads each attachment back. The promoted candidate passed the frozen 464-case acceptance run 20260922T103049552Z_PPSA99994_upstream-cts_0x1983e4b36fa05 (payload 713150da, selection 91c37ed0), and the two dedicated_allocation siblings of the same factory stay diagnostics with a measured NotSupported: they need VK_KHR_dedicated_allocation, which this profile does not advertise."
       },
       "native": {
-        "artifact_sha256": "e1cc26816aec34eed6e8f83e76cab5d695e748957a1765eb72e4aeb022ce9412",
-        "note": "Eleven-case clip/cull witness: the packed export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance all verify on hardware - case 10 with expected=4096 covered=4096 foreign=0 wrong_color=0 and digest f50dd9368fee6cc9, the acceptance run strict_verified with the pixel-read digest differing from the control's.",
-        "refs": [
-          "VALIDATION.md#clip-cull-native-acceptance"
-        ],
+        "state": "native-evidence",
         "run_ids": [
-          "20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65"
+          "20260922T083110494Z_PPSA99994_upstream-cts_0x191b6cf7742e3",
+          "20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1"
         ],
-        "state": "native-evidence"
+        "artifact_sha256": "a664299c6be988bbe1ff74a5888360d900301793fef39d3e04ee98e51aca30f4",
+        "refs": [
+          "VALIDATION.md#independentblend-promotion-2026-09-22"
+        ],
+        "note": "Two colour targets in one pass with their own clear, their own CB_TARGET_MASK nibble and their own readback into separate buffers, and a fragment stage that exports both (start_index_0) or only the second target (start_index_1, which the driver programmes by renumbering the written attachment to hardware target zero - measured: the pinned compiler's export instruction carries no target). The private two-MRT witness (src/two_mrt_oracle.c, native/two_mrt_probe.c) and its oracle recorded one draw writing two attachments with different values before the upstream leaves were selected."
       }
     },
-    "feature:VkPhysicalDeviceFeatures:shaderCullDistance": {
-      "_comment": "The same path for gl_CullDistance; the cull rule is per half-space, not per vertex. The device advertises the feature and reports maxClipDistances, maxCullDistances and maxCombinedClipAndCullDistances at the Vulkan floor of eight, the width of the two packed position registers the stage interface bounds a declaration against.",
-      "cts": {
-        "cases": [
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.1_7_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.2_6_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.3_5_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.4_4_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.5_3_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.6_2_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.7_1_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance.vert.8_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.1_7_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.2_6_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.3_5_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.4_4_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.5_3_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.6_2_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.7_1_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8",
-          "dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.vert.8_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.1",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.1_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.2",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.2_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.3",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.3_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.4",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.4_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.5",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.5_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.6",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.6_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.7",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.7_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.8",
-          "dEQP-VK.clipping.user_defined.clip_distance.vert.8_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.1_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.2_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.3_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.4_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.5_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.6_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.7_fragmentshader_read",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8",
-          "dEQP-VK.clipping.user_defined.clip_distance_dynamic_index.vert.8_fragmentshader_read"
-        ],
-        "note": "All 64 selected clipping leaves passed in the 275/275 acceptance run (selection hash 3067f94c99fcfb5047e2ac4f7fa009caa898fbe55c62829ea10ccf6d71cb463d, eboot b58d88149e623adc5cd9d75dcb19d87bd4e6774c43f494093d0ea3c1d5bd3bc7, title closed). The family exercises clip counts 1..8 (the reported maxClipDistances floor), the combined clip+cull budget, the non-constant write and the fragment-stage read. The complementarity and misc leaves stay diagnostics: the pinned binary does not report them when filtered by the name the module's construction implies, measured twice, so they are not claimed here.",
+    "feature:VkPhysicalDeviceFeatures:sampleRateShading": {
+      "_comment": "Per-sample shading executes: the raster stage publishes Vulkan's standard sample positions and the pixel stage interpolates the position at the iterated sample, so fract(gl_FragCoord.xy) is each sample's own; the colour-to-texture barrier waits for a confirmed writeback, which is what made the resolved images stable.",
+      "api": {
+        "state": "satisfied",
+        "observed": true,
+        "expected": true,
         "refs": [
-          "VALIDATION.md#clip-cull-native-acceptance",
-          "UPSTREAM_CTS.md"
+          "conformance_inventory/reporting_matrix.json",
+          "VALIDATION.md#dxvk262-t06-samplerateshading-promotion-2026-09-23"
+        ]
+      },
+      "implementation": {
+        "state": "implemented",
+        "refs": [
+          "native/draw_state_ps5.c",
+          "src/graphics_sync.c",
+          "src/sample_rate_contract.h"
         ],
-        "state": "cts-pass"
+        "detail": "the draw programs PA_SC_MODE_CNTL_0.MSAA_ENABLE, the sixteen PA_SC_AA_SAMPLE_LOCS_PIXEL_* words with Vulkan's standard 2x/4x pattern and PA_SC_AA_CONFIG MAX_SAMPLE_DIST, and publishes SPI_BARYC_CNTL POS_FLOAT_LOCATION=2 whenever the wave iterates per sample; the barrier that publishes a colour attachment to the texture path stores a completion token and waits for it; a pipeline asking for a count outside the 2x/4x envelope is refused (src/sample_rate_contract.h)"
+      },
+      "cts": {
+        "state": "cts-pass",
+        "cases": [
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_2.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_4.primitive_triangle",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_4.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_2.quad",
+          "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_4.quad"
+        ],
+        "refs": [
+          "VALIDATION.md#the-sample-positions-the-raster-stage-never-had-2026-09-23",
+          "VALIDATION.md#dxvk262-t06-samplerateshading-promotion-2026-09-23"
+        ],
+        "note": "The feature's own oracle - the leaves whose checkSupport requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING - at both served counts, for the triangle and quad shapes this profile renders. Three consecutive 514-case measurement runs reported all thirty Pass with zero quad failures, and the 494-case frozen acceptance selection that now carries them reported 494 Pass / 0 Fail / 0 NotSupported on the shipping profile."
       },
       "native": {
-        "artifact_sha256": "e1cc26816aec34eed6e8f83e76cab5d695e748957a1765eb72e4aeb022ce9412",
-        "note": "Eleven-case clip/cull witness: the packed export (static and dynamically indexed), the per-half-space cull rule and the fragment stage's read of the interpolated distance all verify on hardware - case 10 with expected=4096 covered=4096 foreign=0 wrong_color=0 and digest f50dd9368fee6cc9, the acceptance run strict_verified with the pixel-read digest differing from the control's.",
-        "refs": [
-          "VALIDATION.md#clip-cull-native-acceptance"
-        ],
+        "state": "native-evidence",
+        "artifact_sha256": "e1ed40fb0089c5a39eb0b6c333b74b9aa430d524c10d4f74220452263d40b4cb",
         "run_ids": [
-          "20260917T104552228Z_PPSA99994_ps5vk_0x102afbaa5b65"
+          "20260922T232928853Z_PPSA99994_upstream-cts_0x1c2bbd396dece",
+          "20260922T233238023Z_PPSA99994_ps5vk_0x1c2e7dee46277",
+          "20260922T233053671Z_PPSA99994_ps5vk_0x1c2cf9301e254"
         ],
-        "state": "native-evidence"
-      }
-    },
-    "feature:VkPhysicalDeviceVulkan11Features:multiview": {
-      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
-      "cts": {
-        "cases": [
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.masks.get_query_pool_results.15",
-          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
-        ],
-        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor.",
         "refs": [
-          "VALIDATION.md#multiview-native-acceptance"
+          "VALIDATION.md#dxvk262-t06-samplerateshading-promotion-2026-09-23"
         ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
-        "artifact_sha256_refs": {
-          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
-          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da"
-        },
-        "note": "Two strict private runs. Six-view: mask 0x3f, six ordered layers, detiled colour per layer, counted depth footprint, intact trailing guard, strict_verified=1. Instance floor: the same scene with exactly one instance at firstInstance=0x07ffffff, both built-in slots present (view_index_slot and start_instance_slot), instance_witness=1, instance_failed=0 in all six layers, strict_verified=1.",
-        "refs": [
-          "VALIDATION.md#dxvk-262-multiview-six-view-witness",
-          "VALIDATION.md#dxvk-262-multiview-instance-floor"
-        ],
-        "run_ids": [
-          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2",
-          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
-        ],
-        "state": "native-evidence"
-      }
-    },
-    "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
-      "cts": {
-        "cases": [
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indirect",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_vertex.draw_indexed_indirect",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indirect",
-          "dEQP-VK.draw.renderpass.shader_draw_parameters.base_instance.draw_indexed_indirect"
-        ],
-        "note": "The eight applicable leaves: the four base_vertex and the four non-first-instance base_instance cases. The two FIRST_INSTANCE leaves need drawIndirectFirstInstance and the four draw_index leaves need multiDrawIndirect, both of which this profile reports false, so they are excluded rather than reported as NotSupported.",
-        "refs": [
-          "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15",
-          "UPSTREAM_CTS.md"
-        ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "69ef5b3fa83641febbaad2edd477664135c108cd336c895cf335d1c4dbe77fab",
-        "note": "The public-SDK witness covers direct, indexed, indirect and instanced draws with pinned BaseVertex/BaseInstance/DrawIndex=0 triples in the colour attachment, and the same frames copied into the linear staging image and read back through vkGetImageSubresourceLayout, plus the transfer-destination clear/upload witness.",
-        "refs": [
-          "VALIDATION.md#shader-draw-parameters-promotion-2026-09-15"
-        ],
-        "run_ids": [
-          "20260915T210924328Z_PPSA99994_ps5vk_0xf8fa8f2840e9"
-        ],
-        "state": "native-evidence"
-      }
-    },
-    "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": {
-      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
-      "cts": {
-        "cases": [
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.masks.get_query_pool_results.15",
-          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
-        ],
-        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor.",
-        "refs": [
-          "VALIDATION.md#multiview-native-acceptance"
-        ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "0d2654c10fd727a2a63b5e3ae23e42a94b83529d4abc6ffe3dde7653411cc1da",
-        "note": "One strict run with instance_count=1 and firstInstance=0x07ffffff witnesses an instance index of at least 134217727, with instance_witness=1, instance_failed=0 in all six layers and strict_verified=1.",
-        "refs": [
-          "VALIDATION.md#dxvk-262-multiview-instance-floor"
-        ],
-        "run_ids": [
-          "20260916T061619722Z_PPSA99994_ps5vk_0x116d2e36312a6"
-        ],
-        "state": "native-evidence"
-      }
-    },
-    "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": {
-      "_comment": "Public KHR query, native floor witnesses and original upstream multiview execution now agree. Historical witness identities are preserved; API 1.3 and aggregate Vulkan11 structures are not advertised.",
-      "cts": {
-        "cases": [
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.clear_attachments.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.clear_attachments.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.masks.get_query_pool_results.15",
-          "dEQP-VK.multiview.masks.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.masks.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.masks.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.masks.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.masks.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.masks.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.vertex_shader.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.vertex_shader.cmd_copy_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.fragment_shader.get_query_pool_results.max_multi_view_view_count",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.1_2_4_8",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.15_15_15_15",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.8_1_1_8",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.5_10_5_10",
-          "dEQP-VK.multiview.index.fragment_shader.cmd_copy_query_pool_results.max_multi_view_view_count"
-        ],
-        "note": "All 48 original multiview leaves passed in a combined 165/165 run. The maximum instance-index floor is additionally evidenced by the dedicated firstInstance=0x07ffffff native witness; the selected CTS leaves alone do not measure that floor.",
-        "refs": [
-          "VALIDATION.md#multiview-native-acceptance"
-        ],
-        "state": "cts-pass"
-      },
-      "native": {
-        "artifact_sha256": "92a4073e227f28028e6a57a4a8d14f8e829bdc25c21e7e3ceb5a3c42f33c3c01",
-        "note": "One strict six-view run witnesses a view count of at least 6 (mask 0x3f, six ordered layers, strict_verified=1).",
-        "refs": [
-          "VALIDATION.md#dxvk-262-multiview-six-view-witness"
-        ],
-        "run_ids": [
-          "20260916T050841017Z_PPSA99994_ps5vk_0x11321e8ad91f2"
-        ],
-        "state": "native-evidence"
+        "note": "Native execution: the frozen 494-case acceptance run on the shipping profile reported every selected leaf Pass with a clean lifecycle, and the shipping witness payload (no measurement switch) reported one distinct sample id per sample and one distinct fract(gl_FragCoord.xy) per sample - the four standard 4x positions - each with a clean HELLO/BYE stream. The public-ABI probe run reports the feature true."
       }
     }
-  },
-  "schema": "ps5vk-dxvk-evidence/1"
+  }
 }

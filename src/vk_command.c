@@ -1,4 +1,15 @@
 #include "vk_command.h"
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#endif
+/* Recorder step markers. The host build has no console transport, so they
+ * compile to nothing there; on the console they are what turns "a case died
+ * while recording" into the call it died in. */
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#define CMD_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define CMD_MARK(...) ((void)0)
+#endif
 #include "vk_indirect.h"
 #include "vk_query_pool.h"
 #include "vk_image.h"
@@ -342,8 +353,20 @@ VkBool32 ps5vk_render_pass_compatible(VkRenderPass a, VkRenderPass b)
     for (uint32_t i = 0; i < a->subpass_count; ++i) {
         const struct ps5vk_subpass *left = ps5vk_render_pass_subpass(a, i);
         const struct ps5vk_subpass *right = ps5vk_render_pass_subpass(b, i);
-        if (!reference_compatible(a, &left->color, b, &right->color) ||
-            !reference_compatible(a, &left->depth, b, &right->depth)) return VK_FALSE;
+        /* Two render passes are compatible only when their subpasses agree on
+         * every colour reference they carry, on the resolve target each colour
+         * reference names, and on the depth one. */
+        if (left->color_count != right->color_count) return VK_FALSE;
+        for (uint32_t c = 0; c < left->color_count; ++c)
+            if (!reference_compatible(a, &left->color[c], b, &right->color[c]))
+                return VK_FALSE;
+        /* A resolve array is part of the subpass's shape: one pass declaring
+         * one and the other not is a different subpass, not a compatible one. */
+        if (left->resolve_count != right->resolve_count) return VK_FALSE;
+        for (uint32_t c = 0; c < left->resolve_count; ++c)
+            if (!reference_compatible(a, &left->resolve[c], b, &right->resolve[c]))
+                return VK_FALSE;
+        if (!reference_compatible(a, &left->depth, b, &right->depth)) return VK_FALSE;
     }
     return VK_TRUE;
 }
@@ -397,14 +420,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer c, const VkC
     if (!c || !info || info->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO || info->pNext ||
         c->state == PS5VK_PENDING || c->state == PS5VK_RECORDING ||
         /* VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT is meaningful only
-         * for a secondary; VUID-vkBeginCommandBuffer-flags-09123 ignores it
-         * for a primary, but this driver refuses it there rather than
-         * accepting a flag that would describe a scope a primary cannot be
-         * executed in. */
+         * for a secondary. For a primary VUID-vkBeginCommandBuffer-flags-09123
+         * makes it IGNORED - and the pinned upstream render-pass module does
+         * set it on its primary buffers - so it is accepted there and never
+         * consulted: the inheritance info is not read for a primary either. */
         (info->flags & ~(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
                          VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
-                         (c->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY ?
-                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : 0u))) ||
+                         VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)) ||
         /* VUID-vkBeginCommandBuffer-commandBuffer-02840 makes the two usage
          * flags mutually exclusive for a PRIMARY only. A secondary may set
          * both, so refusing the pair there would reject a conformant call. */
@@ -450,6 +472,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer c)
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(VkCommandBuffer c, VkPipelineBindPoint point, VkPipeline p)
 {
+    CMD_MARK("PS5VK_CMD_BIND_PIPELINE subpass=%u samples=%u",
+        p ? (unsigned)p->subpass : 0xffffffffu,
+        p ? (unsigned)p->samples : 0u);
     if (!c || c->state != PS5VK_RECORDING || !p || p->device != c->pool->device) { invalid(c); return; }
     if (point == VK_PIPELINE_BIND_POINT_GRAPHICS && p->graphics && c->pool->device->graphics_enabled) {
         c->graphics_pipeline = p; return;
@@ -701,6 +726,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(VkCommandBuffer c,VkBuffer buff
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRenderPassBeginInfo *info,
     VkSubpassContents contents)
 {
+    /* Announced before the call decides anything: a case that dies while
+     * recording leaves the begin as the last thing the log names, which is how
+     * a crash in the recorder is told from one in the objects it is handed. */
+    CMD_MARK("PS5VK_CMD_BEGIN_RENDER_PASS clear_values=%u",
+        info ? info->clearValueCount : 0u);
     /* Primary-only: a secondary inherits a render pass, it never begins one. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         !c->pool->device->graphics_enabled || c->render_pass ||
@@ -709,17 +739,32 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
          contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
         !info->renderPass || !info->framebuffer ||
         info->renderPass->device != c->pool->device || info->framebuffer->device != c->pool->device ||
-        info->clearValueCount > 2 || (info->clearValueCount && !info->pClearValues) ||
+        /* One value per attachment the pass may name, which is the bound the
+         * begin's own pass carries: the pinned multisample oracle clears four
+         * attachments in one begin. */
+        info->clearValueCount > PS5VK_MAX_ATTACHMENTS ||
+        (info->clearValueCount && !info->pClearValues) ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;
+    /* Every colour role the subpass names must be the one the framebuffer
+     * carries, in order, and the depth role after them. A subpass that names
+     * no colour role at all - the DEPTH-ONLY shape - has an empty list on both
+     * sides, so the loop below simply does not run. A resolve role is part of
+     * the executing framebuffer contract too: when the subpass declares one,
+     * the framebuffer has to carry it at the same index (DXVK262-T06). */
+    const struct ps5vk_subpass *first=ps5vk_render_pass_subpass(pass, 0);
     if (fb->attachment_count != pass->attachment_count ||
-        fb->color_attachment != ps5vk_render_pass_subpass(pass, 0)->color.attachment ||
-        fb->depth_attachment != ps5vk_render_pass_subpass(pass, 0)->depth.attachment ||
+        fb->color_count != first->color_count ||
+        fb->resolve_count != first->resolve_count ||
+        (fb->resolve_count && fb->resolve_attachments[0] != first->resolve[0].attachment) ||
+        fb->depth_attachment != first->depth.attachment ||
         area.offset.x < 0 || area.offset.y < 0 ||
         !area.extent.width || !area.extent.height || (uint32_t)area.offset.x > fb->width ||
         (uint32_t)area.offset.y > fb->height || area.extent.width > fb->width - (uint32_t)area.offset.x ||
         area.extent.height > fb->height - (uint32_t)area.offset.y) { invalid(c); return; }
+    for (uint32_t role = 0; role < first->color_count; ++role)
+        if (fb->color_attachments[role] != first->color[role].attachment) { invalid(c); return; }
     for (uint32_t j = 0; j < pass->attachment_count; ++j) {
         const VkAttachmentDescription *a = &pass->attachments[j];
         if (fb->formats[j] != a->format || fb->samples[j] != a->samples ||
@@ -905,6 +950,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(VkCommandBuffer c,VkBuffer buffe
 VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint32_t instances,
     uint32_t first_vertex, uint32_t first_instance)
 {
+    CMD_MARK("PS5VK_CMD_DRAW vertices=%u instances=%u",
+        vertices,instances);
     if (!c || c->state != PS5VK_RECORDING || !c->render_pass || !c->graphics_pipeline ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkPipeline p = c->graphics_pipeline;
@@ -948,14 +995,19 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, c->subpass);
     VkFormat depth = subpass->depth.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
         pass->attachments[subpass->depth.attachment].format;
-    /* A depth-only subpass has no colour attachment, and its pipeline records
-     * VK_FORMAT_UNDEFINED for the colour format, so the two still have to
-     * agree exactly. */
-    VkFormat colour = subpass->color.attachment == VK_ATTACHMENT_UNUSED ? VK_FORMAT_UNDEFINED :
-        pass->attachments[subpass->color.attachment].format;
-    if (p->color_format != colour || p->depth_format != depth) {
+    /* A depth-only subpass has no colour reference at all, and its pipeline
+     * records a colour count of zero with an undefined colour format, so the
+     * two still have to agree exactly; the loop below then compares every
+     * colour format the subpass does name, one per attachment. */
+    if (p->color_attachment_count != subpass->color_count ||
+        p->depth_format != depth) {
         invalid(c); return;
     }
+    for (uint32_t attachment = 0; attachment < subpass->color_count; ++attachment)
+        if (p->color_format[attachment] !=
+            pass->attachments[subpass->color[attachment].attachment].format) {
+            invalid(c); return;
+        }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_DRAW,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
     if(!op)return;
@@ -1068,13 +1120,33 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
          * The pinned upstream depth clamp module hands its cleared depth
          * target to the draw with this mask. */
         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
+        /* The profile serves compute as well - the packaged compute selections
+         * run on it - and the pinned render-pass module's common stage pair
+         * (getAllPipelineStageFlags, vktRenderPassTests.cpp:494) names every
+         * stage it can run, starting with the compute shader, when it orders
+         * an attachment against the engine that reads it back. Naming the
+         * stage does not make this a compute dependency: the per-access rules
+         * below still decide which accesses this scope can order, and a
+         * dependency the compute scope alone can carry is left to it. */
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    /* INDEX_READ, UNIFORM_READ and INPUT_ATTACHMENT_READ are accesses this
+     * profile really serves in a graphics command: the promoted index path
+     * reads the index buffer, descriptors feed uniform buffers to the vertex
+     * and fragment stages, and subpassLoad reads the input attachments of the
+     * promoted subpass chain. They were missing here only because no earlier
+     * accepted case named them in a barrier; the pinned upstream render-pass
+     * module does, because it initializes an attachment with a destination
+     * scope of every memory read (vktRenderPassTests.cpp:457). Their stage
+     * rules below keep each one tied to the stage that performs it. */
     const VkAccessFlags supported=VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT |
         VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
         VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
         VK_ACCESS_SHADER_WRITE_BIT |
         VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
+        VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT |
+        VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
         VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
@@ -1084,6 +1156,24 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         !(stages & VK_PIPELINE_STAGE_HOST_BIT))return 0;
     if((access & VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* An index read happens in the vertex input stage, exactly where an
+     * attribute read happens. */
+    if((access & VK_ACCESS_INDEX_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* A uniform buffer read happens in a shader stage; this scope's stage mask
+     * names the two the profile compiles, and the compute scope carries the
+     * compute one. */
+    if((access & VK_ACCESS_UNIFORM_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    /* Vulkan reads an input attachment with subpassLoad, which exists only in
+     * the fragment shader, so an input-attachment read cannot be ordered by a
+     * stage mask that leaves the fragment shader out. ALL_GRAPHICS stands for
+     * the whole graphics pipeline and contains it. */
+    if((access & VK_ACCESS_INPUT_ATTACHMENT_READ_BIT) &&
+        !(stages & (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                    VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & (VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & (VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
@@ -1096,6 +1186,9 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
      * compute stage. The bit selects which writes become visible; it does not
      * authorize a shader to write anything. */
     if((access & (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)) &&
+        !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+    if((access & VK_ACCESS_SHADER_WRITE_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & VK_ACCESS_INDIRECT_COMMAND_READ_BIT) &&
@@ -1238,15 +1331,29 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          * vkCmdClearColorImage: the image is acquired as a transfer
          * destination from UNDEFINED, and handed to the colour attachment
          * stage afterwards with the helper's own destination access, which is
-         * SHADER_WRITE for the tcu::Vec4 overload the draw module calls. Both
-         * are accepted exactly as the helper writes them. */
-        (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
-         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
-        (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-         b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
-         b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT);
+         * SHADER_WRITE for the tcu::Vec4 overload the draw module calls.
+         *
+         * The pinned render-pass module records the same two transitions for
+         * the same image shape, but names a whole read scope in the
+         * destination instead of one write
+         * (pushImageInitializationCommands, vktRenderPassTests.cpp:3150):
+         * every memory read the module can later perform on that attachment,
+         * plus the write the clear performs, for the acquire; and the same
+         * read scope for the handover, naming the access the helper hands the
+         * cleared image to: the colour attachment's own access for the
+         * render-pass module, SHADER_WRITE for the draw module's clear helper
+         * (vkImageUtil.cpp clearColorImage), which is also what the two
+         * transitions above accepted before. Both are accepted with the write
+         * the transition really needs and the destination bounded to that read
+         * scope plus those access flags, so an empty destination, a read-only
+         * one, or any foreign access bit still refuses the barrier. */
+        (ps5vk_attachment_initialization_acquire_barrier(b) ||
+         ps5vk_attachment_initialization_handover_barrier(b)) ||
+        /* Handing a rendered attachment to its readback, bounded to exactly
+         * the barrier the pinned module records (see
+         * ps5vk_colour_readback_handover_barrier, src/color_barrier.h). */
+        ((usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+         ps5vk_colour_readback_handover_barrier(b));
     /* The linear staging image the pinned draw module reads back through gets
      * exactly the two transitions that module records
      * (vktDrawImageObjectUtil.cpp:415-443): UNDEFINED to GENERAL for the

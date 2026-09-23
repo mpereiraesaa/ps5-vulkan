@@ -143,6 +143,65 @@ rather than by the driver.
 Nothing here should be read as these features being usable by an application
 today.
 
+DXVK262-T06 finished at the other end: `dualSrcBlend` **is advertised** by the
+shipping platform. The path is the one described above - exact `SRC1` register
+encodings, the compiler's `0x44`/`0xff` two-output proof, and the front-end and
+compiler gates that still refuse a `SRC1` equation unless the logical device
+enabled the feature *and* the selected fragment module carries the proven
+secondary export - plus the rest of what the upstream oracle needed: the whole
+GFX1013 `CB_BLEND0_CONTROL` blend space instead of the single witnessed shape,
+partial colour write masks (carried in the pipeline's render-target block, not
+the draw stream) for `VK_FORMAT_R8G8B8A8_UNORM`, and `COLOR_ATTACHMENT_BLEND` on
+the two colour formats the profile can blend into. The witness is
+`tools/run_dual_source.py`: it draws the packaged two-output fragment module
+twice, once with blending disabled and once with the accepted equation, copies
+the colour target back through the transfer path and judges both reads on exact
+bytes, so a blender that ignored the secondary export could not pass.
+
+The other half of the T06 fragment-output tranche, `sampleRateShading`, is
+**advertised** since 2026-09-23: the platform sets
+`PS5VK_FEATURE_SAMPLE_RATE_SHADING`, `vkGetPhysicalDeviceFeatures` reports it
+true and `vkCreateDevice` accepts a request for it. `src/sample_rate_contract.h`
+is the one definition of the counts this profile is built for (1x, 2x and 4x -
+`8x` and above are not claimed) and of the CB_COLOR0_ATTRIB sample field they
+encode; the reported `framebufferColorSampleCounts` follows the platform mask
+rather than the envelope, so a build or device that does not carry the bit still
+reports 1x. The render pass and framebuffer object model accept a count only
+when the device serves it and require every attachment of a pass to agree on it
+(a multisampled **depth** attachment stays unserved, and so do multisampled
+sampled images: `sampledImage*SampleCounts` remain 1x, because this profile
+reads a multisampled attachment only as an input attachment). The graphics
+pipeline accepts `rasterizationSamples` from that same set together with
+`sampleShadingEnable` only when the application enabled `sampleRateShading` on
+the logical device, with `minSampleShading` bounded to `[0,1]` and
+`pSampleMask` restricted to the count's own full mask; the compiled program
+identity and the compile cache both carry the flag, the fraction and the
+canonical mask.
+
+What the draw programs is the capability itself. The raster stage publishes
+`PA_SC_MODE_CNTL_0.MSAA_ENABLE`, the sixteen `PA_SC_AA_SAMPLE_LOCS_PIXEL_*`
+context words carrying Vulkan's standard 2x/4x sample positions in 1/16-pixel
+units and `PA_SC_AA_CONFIG.MAX_SAMPLE_DIST` for that pattern, and
+`SPI_BARYC_CNTL.POS_FLOAT_LOCATION = 2` whenever the wave iterates per sample,
+so `gl_FragCoord.xy` is the sample's own position and a fragment that colours
+each sample sees one value per sample. A pass that names a resolve target
+executes one: the single-sample attachment receives the average of the samples
+through a draw the driver generates and carries
+(`tools/build_resolve_shaders.py`), and a subpass that reads the colour
+attachment as an input attachment can name any sample of it. Both boundaries
+publish the colour attachment to the texture path with a completion token and
+wait for it, because the colour block writes back asynchronously and a read
+issued behind the bare event saw only some tiles of the target.
+
+Two things this profile does not claim. The interpolation-offset limits
+(`maxInterpolationOffset`, `minInterpolationOffset`,
+`subPixelInterpolationOffsetBits`) are reported as 0: no path lowers an
+interpolation offset, so they are documented blockers in
+`conformance_inventory/reporting_matrix.json` rather than values nothing
+measured. And the multisampled attachment is only served as a colour
+attachment and a per-sample input attachment - not as a sampled texture, not as
+a storage or transfer-only image.
+
 ## Images and sampling
 
 The GFX1013 texture-format table records exact descriptor encodings, Vulkan

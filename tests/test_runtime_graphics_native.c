@@ -64,8 +64,8 @@ int main(void)
 {
     struct ps5vk_graphics_key key={.vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
         .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     const void *compiled=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&compiled)==VK_SUCCESS);
     struct VkDevice_T device={.memory={NULL,allocate,release_memory,flush,flush}};
@@ -143,8 +143,8 @@ int main(void)
         .geometry=read_module("build/runtime-graphics/geometry_probe.geom.spv"),
         .fragment=read_module("build/runtime-graphics/tess.frag.spv"),
         .topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,.patch_control_points=3,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,.samples=VK_SAMPLE_COUNT_1_BIT,
-        .color_write_mask=15,.feature_mask=PS5VK_FEATURE_TESSELLATION_SHADER|
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,.samples=VK_SAMPLE_COUNT_1_BIT,
+        .color_write_mask={15},.feature_mask=PS5VK_FEATURE_TESSELLATION_SHADER|
             PS5VK_FEATURE_GEOMETRY_SHADER};
     const void *tess_program=NULL;void *tess_first=NULL,*tess_second=NULL;
     assert(ps5vk_runtime_graphics_compile(NULL,&tess,&tess_program)==VK_SUCCESS);

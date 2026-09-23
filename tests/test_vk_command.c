@@ -49,7 +49,7 @@ static void operation_reservation_contract(void)
     source[0]=0;
     assert(((const uint32_t *)owned->owned_payload)[0]==0x11223344u);
 
-    struct ps5vk_subpass scope_subpasses[1]={{.color={.attachment=0},
+    struct ps5vk_subpass scope_subpasses[1]={{.color[0]={.attachment=0},.color_count=1,
         .depth={.attachment=VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass={.device=&d,.subpass_count=1,.subpasses=scope_subpasses};
     c->render_pass=&pass;
@@ -197,6 +197,18 @@ static void recording_and_invalidation(void)
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,
         0,0,NULL,1,&bb,0,NULL);
     assert(vkEndCommandBuffer(c)==VK_SUCCESS && c->operations[0].buffer_barrier.buffer==buffer);
+    /* Fragment stores use the same core shader-write access bit as compute.
+     * The focused CTS records this exact SSBO-to-host dependency after its
+     * render pass; accepting compute but rejecting fragment made the valid
+     * void command poison the buffer and surface only at EndCommandBuffer. */
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,
+        0,0,NULL,1,&bb,0,NULL);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==2);
+    assert(c->operations[0].src_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+    assert(c->operations[0].src_access==VK_ACCESS_SHADER_WRITE_BIT);
+    assert(vkEndCommandBuffer(c)==VK_SUCCESS);
     c->state=PS5VK_PENDING;
     vkDestroyBuffer(&d,buffer,NULL); assert(d.buffers==buffer);
     c->state=PS5VK_EXECUTABLE;
@@ -368,12 +380,12 @@ static void subpass_transitions(void)
     assert(vkCreateFramebuffer(&d, &fbi, NULL, &fb) == VK_SUCCESS);
     assert(ps5vk_framebuffer_compatible(fb, two) &&
            ps5vk_framebuffer_compatible(fb, one) &&
-           !fb->color_attachment && fb->depth_attachment == VK_ATTACHMENT_UNUSED);
+           !fb->color_attachments[0] && fb->depth_attachment == VK_ATTACHMENT_UNUSED);
 
     /* One pipeline per subpass. Creation is exercised publicly in
      * tests/test_vk_graphics_pipeline.c; here the identity is what matters. */
     struct VkPipeline_T first = {.device = &d, .graphics = VK_TRUE, .subpass = 0,
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM,
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1,
         .viewport_count=1, .viewport={0,0,8,8,0,1}, .scissor = {{0,0},{8,8}}};
     struct VkPipeline_T second = first; second.subpass = 1;
     VkClearValue value = {.color = {.float32 = {0, 0, 0, 1}}};
@@ -538,14 +550,14 @@ static void graphics_recording(void)
         {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR}};
     struct ps5vk_subpass pass_subpasses[1] = {
-        {.color = {.attachment = 0}, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        {.color[0] = {.attachment = 0}, .color_count = 1, .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
     struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1, .subpass_count = 1,
         .attachments = pass_attachments, .subpasses = pass_subpasses};
-    struct VkFramebuffer_T fb = {.device = &d, .width = 100, .height = 100, .attachment_count = 1,
+    struct VkFramebuffer_T fb = {.device = &d, .width = 100, .height = 100, .attachment_count = 1, .color_attachments = {0}, .color_count = 1,
         .attachments = {&view}, .formats = {VK_FORMAT_B8G8R8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
         .depth_attachment = VK_ATTACHMENT_UNUSED};
     struct VkPipeline_T pipeline = {.device = &d, .graphics = VK_TRUE,
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM,
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1,
         .viewport_count=1, .viewport={0,0,100,100,0,1}, .scissor = {{0,0},{100,100}}};
     VkClearValue value = {.color = {.float32 = {0.25f, 0, 0, 1}}};
     VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -835,7 +847,64 @@ static void graphics_recording(void)
     vkCmdDrawIndexed(c,2,1,UINT32_MAX,0,0);
     assert(c->state==PS5VK_INVALID && c->operation_count==1);
     vkDestroyBuffer(&d,indices[1],NULL);vkFreeMemory(&d,memory,NULL);
+
+    /* The pinned multisample oracle clears the whole pass in one begin: one
+     * clear value per attachment, four of them (DXVK262-T06). The record
+     * carries every value, and a begin that clears an attachment it handed no
+     * value for still poisons the recording. */
+    {
+        VkAttachmentDescription oracle_attachments[4] = {
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_4_BIT,
+             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR},
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR},
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR},
+            {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR}};
+        struct ps5vk_subpass oracle_subpasses[1] = {
+            {.color[0] = {.attachment = 0}, .color_count = 1,
+             .resolve_count = 1, .resolve[0] = {.attachment = 1},
+             .depth = {.attachment = VK_ATTACHMENT_UNUSED}}};
+        struct VkRenderPass_T oracle_pass = {.device = &d, .attachment_count = 4,
+            .subpass_count = 1, .attachments = oracle_attachments,
+            .subpasses = oracle_subpasses};
+        struct VkFramebuffer_T oracle_fb = {.device = &d, .width = 100, .height = 100,
+            .attachment_count = 4, .color_attachments = {0}, .color_count = 1,
+            .resolve_count = 1, .resolve_attachments = {1},
+            .attachments = {&view, &view, &view, &view},
+            .formats = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
+                        VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM},
+            .samples = {VK_SAMPLE_COUNT_4_BIT, VK_SAMPLE_COUNT_1_BIT,
+                        VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_1_BIT},
+            .depth_attachment = VK_ATTACHMENT_UNUSED};
+        VkClearValue oracle_values[4];
+        for (unsigned i = 0; i < 4; ++i)
+            oracle_values[i] = (VkClearValue){.color = {.float32 = {0.25f * (float)i, 0, 0, 1}}};
+        VkRenderPassBeginInfo oracle_begin = ri;
+        oracle_begin.renderPass = &oracle_pass;
+        oracle_begin.framebuffer = &oracle_fb;
+        oracle_begin.clearValueCount = 4;
+        oracle_begin.pClearValues = oracle_values;
+        vkResetCommandBuffer(c, 0);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        vkCmdBeginRenderPass(c, &oracle_begin, VK_SUBPASS_CONTENTS_INLINE);
+        assert(c->state == PS5VK_RECORDING);
+        assert(c->operations[0].clear_count == 4 &&
+               c->operations[0].clears[3].color.float32[0] == 0.75f);
+        vkCmdEndRenderPass(c);
+        assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+        /* One value short of what the pass clears is a malformed begin. */
+        vkResetCommandBuffer(c, 0);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        oracle_begin.clearValueCount = 2;
+        vkCmdBeginRenderPass(c, &oracle_begin, VK_SUBPASS_CONTENTS_INLINE);
+        assert(c->state == PS5VK_INVALID);
+        oracle_begin.clearValueCount = 4;
+    }
+
     vkDestroyCommandPool(&d, p, NULL);
+
 }
 static void dynamic_descriptor_recording(void)
 {

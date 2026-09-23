@@ -4,6 +4,7 @@
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
 #include "graphics_limits.h"
+#include "sample_rate_contract.h"
 
 /* Legacy private diagnostic override, OFF unless a probe asks for it.
  * It changes no public query. Normal builds use the platform capability and
@@ -43,6 +44,13 @@ VkResult ps5vk_native_image_requirements(VkDevice, const VkImageCreateInfo *, Vk
  * reproduces the single-layer requirements exactly. */
 VkResult ps5vk_native_layered_storage(VkFormat, uint32_t width, uint32_t height,
     uint64_t layers, VkDeviceSize *stride, VkDeviceSize *alignment, VkDeviceSize *bytes);
+/* The same per-layer footprint with the surface's own sample count: a
+ * multisampled colour surface stores one sample plane per sample, so the
+ * layer's bytes scale with the count before the same alignment (DXVK262-T06,
+ * native/image_ps5.c). 1x reproduces ps5vk_native_layered_storage exactly. */
+VkResult ps5vk_native_layered_storage_samples(VkFormat, uint32_t width, uint32_t height,
+    uint64_t layers, VkSampleCountFlagBits samples, VkDeviceSize *stride,
+    VkDeviceSize *alignment, VkDeviceSize *bytes);
 struct ps5vk_native_memory_budget { uint64_t limit, used; };
 void ps5vk_native_queue_configure(VkDevice device);
 struct ps5vk_compiled_program;
@@ -101,6 +109,17 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_FILL_MODE_NON_SOLID = 1u << 14,
     /* multiViewport: viewport/scissor arrays up to maxViewports. */
     PS5VK_FEATURE_MULTI_VIEWPORT = 1u << 15,
+    /* Fragment output, blending and multisampling (DXVK262-T06). These bits
+     * describe four independent contracts. A platform advertises one only
+     * after its complete native path has been measured; until then the core
+     * feature table reports false and device creation refuses the request.
+     * Keeping them separate is important: supporting ordinary per-target
+     * blending does not imply a second fragment output, and accepting a
+     * multisample create-info does not prove per-sample shader execution. */
+    PS5VK_FEATURE_INDEPENDENT_BLEND = 1u << 16,
+    PS5VK_FEATURE_DUAL_SRC_BLEND = 1u << 17,
+    PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS = 1u << 18,
+    PS5VK_FEATURE_SAMPLE_RATE_SHADING = 1u << 19,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table
@@ -122,6 +141,20 @@ static inline uint32_t ps5vk_platform_max_viewports(uint32_t supported_features)
 {
     return (supported_features & PS5VK_FEATURE_MULTI_VIEWPORT) ?
         (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT : 1u;
+}
+
+/* The sample counts a platform commits to: the envelope in
+ * src/sample_rate_contract.h once the platform carries
+ * PS5VK_FEATURE_SAMPLE_RATE_SHADING, and the single-sample baseline otherwise.
+ * One helper decides it so the reported framebuffer sample limits, the render
+ * pass and framebuffer object model, the graphics pipeline's multisample state
+ * and the native attachment plan cannot disagree (DXVK262-T06). A device that
+ * never measured a multisample path therefore keeps every one of them at 1x. */
+static inline VkSampleCountFlags ps5vk_platform_sample_counts(
+    uint32_t supported_features)
+{
+    return (supported_features & PS5VK_FEATURE_SAMPLE_RATE_SHADING) ?
+        ps5vk_sample_count_mask() : VK_SAMPLE_COUNT_1_BIT;
 }
 
 /* The measured multiview floors: six views rendered into six ordered array
@@ -217,6 +250,13 @@ struct VkDevice_T {
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
+    /* The capability mask the platform reported when this device was created.
+     * State that is not a Vulkan feature the application enables - the sample
+     * counts a framebuffer may use, for one - is gated on this mask, so the
+     * object frontends and the physical limits are derived from one source
+     * (DXVK262-T06). A hand-built device leaves it zero, which is the
+     * single-sample baseline. */
+    uint32_t platform_features;
     struct VkDeviceMemory_T *memories;
     struct VkBuffer_T *buffers;
     struct VkBufferView_T *buffer_views;

@@ -3,9 +3,9 @@
  * The bounded one-input subpass-read admission rule: exactly the shape the
  * native oracle executes is admitted, and every neighbouring shape - a
  * combined record's width, a vertex-visible declaration, a missing or UNUSED
- * input reference, another view or layer, another layout, a missing or
- * mismatched dependency, a second input binding and a read in subpass 0 - is
- * refused before any packet could be emitted. */
+ * input reference, another view or layer, a layout that is not one of the two
+ * read layouts, a missing or mismatched dependency, a second input binding and
+ * a read in subpass 0 - is refused before any packet could be emitted. */
 #include "input_attachment_gate.h"
 #include "descriptor_table_layout.h"
 #include <assert.h>
@@ -78,14 +78,16 @@ static void fixture_init(struct gate_fixture *f)
     f->framebuffer.width = f->framebuffer.height = 64;
     f->framebuffer.attachment_count = 1;
     f->framebuffer.attachments[0] = &f->attachment_view;
-    f->framebuffer.color_attachment = 0;
+    f->framebuffer.color_attachments[0] = 0;
+    f->framebuffer.color_count = 1;
     f->framebuffer.depth_attachment = VK_ATTACHMENT_UNUSED;
 
     f->attachments[0] = (VkAttachmentDescription){
         .format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_GENERAL, .finalLayout = VK_IMAGE_LAYOUT_GENERAL};
-    f->subpasses[0].color = (VkAttachmentReference){0, VK_IMAGE_LAYOUT_GENERAL};
+    f->subpasses[0].color[0] = (VkAttachmentReference){0, VK_IMAGE_LAYOUT_GENERAL};
+    f->subpasses[0].color_count = 1;
     f->subpasses[0].depth = (VkAttachmentReference){VK_ATTACHMENT_UNUSED,
         VK_IMAGE_LAYOUT_UNDEFINED};
     f->subpasses[1] = f->subpasses[0];
@@ -169,6 +171,29 @@ int main(void)
     struct gate_fixture f;
 #define MUTATE(statement) do { fixture_clone(&f, &base); statement; \
         assert(gate(&f) == VK_ERROR_FEATURE_NOT_PRESENT); } while (0)
+    /* The pinned multisample oracle's read layout is the second shape this gate
+     * serves: its fetch subpass declares pInputAttachments[0] in
+     * SHADER_READ_ONLY_OPTIMAL and writes the input-attachment descriptor with
+     * the same layout
+     * (external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp,
+     * MSCaseBaseResolveAndPerSampleFetch), which is the shape the native walk
+     * reproduces. Each side is constrained by its OWN pinned rule - the
+     * reference by the layouts an input reference may name (VUID 06912 excludes
+     * the attachment layouts) and the descriptor record by the input-attachment
+     * layout list - so either read layout is admitted on either side, and the
+     * boundary transition is what carries the attachment into the layout the
+     * READING subpass declares. */
+    {
+        static const VkImageLayout read_layouts[2] = {
+            VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        for (unsigned r = 0; r < 2; ++r)
+            for (unsigned d = 0; d < 2; ++d) {
+                fixture_clone(&f, &base);
+                f.pass.inputs[0].layout = read_layouts[r];
+                f.set.images[GATE_ELEMENT].imageLayout = read_layouts[d];
+                assert(gate(&f) == VK_SUCCESS);
+            }
+    }
     MUTATE(f.set.signature.binding[GATE_BINDING].stages = VK_SHADER_STAGE_VERTEX_BIT);
     MUTATE(f.set.signature.binding[GATE_BINDING].stages =
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -193,33 +218,72 @@ int main(void)
     MUTATE(f.pass.input_count = 0);
     MUTATE(f.pass.inputs[0].attachment = VK_ATTACHMENT_UNUSED);
     MUTATE(f.pass.inputs[0].attachment = 1);
-    MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_UNDEFINED);
+    MUTATE(f.pass.inputs[0].layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     /* The descriptor must BE that framebuffer view, recorded in GENERAL. */
     MUTATE(f.framebuffer.attachment_count = 0);
     MUTATE(f.framebuffer.attachments[0] = NULL);
     MUTATE(f.framebuffer.attachments[0] = &f.other_view);
     MUTATE(f.set.image_resources[GATE_ELEMENT] = &f.other_image);
     MUTATE(f.set.images[GATE_ELEMENT].imageView = &f.other_view);
-    MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_UNDEFINED);
+    MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    MUTATE(f.set.images[GATE_ELEMENT].imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     MUTATE(f.set.defined[GATE_ELEMENT] = VK_FALSE);
-    /* The transition that makes the pixels visible has to be in the pass. */
-    MUTATE(f.pass.dependency_count = 0);
-    MUTATE(f.dependencies[0].dstSubpass = 0);
-    MUTATE(f.dependencies[0].srcStageMask = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
-    MUTATE(f.dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-    MUTATE(f.dependencies[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT);
-    MUTATE(f.dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
-    MUTATE(f.dependencies[0].dependencyFlags = 0);
-    MUTATE(f.dependencies[0].srcStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
-    MUTATE(f.dependencies[0].dstAccessMask =
-        VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-    /* The measured dependency is BY_REGION and nothing else: an extra flag is a
-     * different transition than the one that was witnessed. */
-    MUTATE(f.dependencies[0].dependencyFlags =
-        VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_VIEW_LOCAL_BIT);
+    /* A pass that declares NO dependency is still served (DXVK262-T06): the
+     * executor emits the colour-to-texture barrier around every subpass change
+     * that reads an input attachment, and Vulkan gives an attachment read by a
+     * later subpass its implicit dependency, so an explicit forward dependency
+     * is not what makes the read ordered. Every MALFORMED dependency is still
+     * refused. */
+    {
+        struct gate_fixture none;
+        fixture_clone(&none, &base);
+        none.pass.dependency_count = 0;
+        assert(gate(&none) == VK_SUCCESS);
+    }
+    /* The second served shape (DXVK262-T06): the multisampled, single-layer
+     * colour attachment the oracle's fetch subpass reads once per sample. It is
+     * the same record with the sample geometry in its LEVEL fields, and a count
+     * this profile does not implement stays refused. */
+    {
+        struct gate_fixture ms;
+        fixture_clone(&ms, &base);
+        ms.attachment_image.info.samples = VK_SAMPLE_COUNT_4_BIT;
+        ms.attachment_image.info.arrayLayers = 1;
+        ms.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        assert(gate(&ms) == VK_SUCCESS);
+        fixture_clone(&ms, &base);
+        ms.attachment_image.info.samples = VK_SAMPLE_COUNT_8_BIT;
+        ms.attachment_image.info.arrayLayers = 1;
+        ms.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        assert(gate(&ms) == VK_ERROR_FEATURE_NOT_PRESENT);
+        /* A multisampled attachment with more than one layer is not the shape
+         * this profile serves either. */
+        fixture_clone(&ms, &base);
+        ms.attachment_image.info.samples = VK_SAMPLE_COUNT_2_BIT;
+        ms.attachment_image.info.arrayLayers = 2;
+        ms.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        assert(gate(&ms) == VK_ERROR_FEATURE_NOT_PRESENT);
+    }
+    /* The gate does NOT decide dependencies at all: the executor's own
+     * boundary barrier orders the read, and a pass whose dependencies are
+     * structurally invalid is refused by the render pass model long before a
+     * draw reaches here. The multiview witness still declares its forward
+     * BY_REGION dependency and that remains accepted. */
+    {
+        struct gate_fixture any;
+        fixture_clone(&any, &base);
+        any.dependencies[0].dependencyFlags = 0;
+        assert(gate(&any) == VK_SUCCESS);
+        fixture_clone(&any, &base);
+        any.dependencies[0].dstSubpass = 0;
+        assert(gate(&any) == VK_SUCCESS);
+    }
     /* The promoted resource shape itself: the exact image and the exact
      * layer-0 view, one field at a time. */
     MUTATE(f.attachment_image.info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |

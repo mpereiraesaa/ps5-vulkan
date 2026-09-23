@@ -10,6 +10,10 @@
 #include "graphics_limits.h"
 #include "targets_ps5.h"
 #include "input_attachment_probe.h"
+#include "fragment_store_probe.h"
+#include "dual_source_probe.h"
+#include "two_mrt_probe.h"
+#include "sample_rate_probe.h"
 #include "input_attachment_gate.h"
 #include "multiview_witness.h"
 #include "clip_cull_witness.h"
@@ -80,6 +84,18 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #endif
 #ifndef PS5VK_INPUT_ATTACHMENT_PROBE
 #define PS5VK_INPUT_ATTACHMENT_PROBE 0
+#endif
+#ifndef PS5VK_FRAGMENT_STORE_PROBE
+#define PS5VK_FRAGMENT_STORE_PROBE 0
+#endif
+#ifndef PS5VK_DUAL_SOURCE_PROBE
+#define PS5VK_DUAL_SOURCE_PROBE 0
+#endif
+#ifndef PS5VK_SAMPLE_RATE_PROBE
+#define PS5VK_SAMPLE_RATE_PROBE 0
+#endif
+#ifndef PS5VK_TWO_MRT_PROBE
+#define PS5VK_TWO_MRT_PROBE 0
 #endif
 #ifndef PS5VK_CLIP_CULL_PROBE
 #define PS5VK_CLIP_CULL_PROBE 0
@@ -4377,6 +4393,17 @@ int main(void)
      * otherwise. A report of one without the feature is the shipping state;
      * either value with the other feature state is a profile inconsistency. */
     VkPhysicalDeviceFeatures device_features;vkGetPhysicalDeviceFeatures(physical,&device_features);
+#if PS5VK_SAMPLE_RATE_PROBE
+    /* The measurement reports the surface count the query path answers with
+     * before the scene runs; the scene itself is dispatched after the device
+     * exists, like every other probe. */
+    if(!device_features.sampleRateShading)
+        fail("sample-rate-diagnostic-feature",-1);
+#endif
+#if PS5VK_FRAGMENT_STORE_PROBE
+    if(!device_features.fragmentStoresAndAtomics)
+        fail("fragment-store-diagnostic-feature",-1);
+#endif
     const uint32_t expected_viewports=device_features.multiViewport?
         (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT:1u;
     if(device_props.limits.maxImageDimension1D<PS5VK_MAX_IMAGE_1D ||
@@ -4386,7 +4413,12 @@ int main(void)
        device_props.limits.maxImageArrayLayers<PS5VK_MAX_IMAGE_ARRAY_LAYERS ||
        !ps5vk_graphics_vertex_bindings_available(&device_props.limits,
            PS5VK_GRAPHICS_SCISSOR_PROBE==13?16u:1u) ||
-       device_props.limits.maxViewports!=expected_viewports || device_props.limits.maxColorAttachments!=1 ||
+       /* The colour-attachment bound is the profile's own, not a literal: the
+        * independentBlend promotion raised it to the two targets the MRT path
+        * serves (DXVK262-T06), and a payload gate pinned to the old single
+        * target made every probe fail closed at boot on the merged branch. */
+       device_props.limits.maxViewports!=expected_viewports ||
+       device_props.limits.maxColorAttachments!=PS5VK_MAX_COLOR_ATTACHMENTS ||
        /* Floors, not equalities. The sampled-descriptor limits were promoted to
         * the witnessed 16 per stage and 96 per set; pinning this gate to the
         * old single-descriptor profile made the graphics payload fail closed at
@@ -4412,9 +4444,40 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE || PS5VK_SAMPLE_RATE_PROBE
+    VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
-    VkPhysicalDeviceFeatures indirect_features={.drawIndirectFirstInstance=VK_TRUE};
-    di.pEnabledFeatures=&indirect_features;
+    requested_features.drawIndirectFirstInstance=VK_TRUE;
+#endif
+#if PS5VK_FRAGMENT_STORE_PROBE
+    requested_features.fragmentStoresAndAtomics=VK_TRUE;
+#endif
+#if PS5VK_DUAL_SOURCE_PROBE
+    /* The witness exists to execute the SRC1 equation, so it must enable the
+     * capability on the logical device.  The front end still refuses the
+     * equation on a build whose platform does not report the feature, which is
+     * the fail-closed evidence for every build that is not the measurement
+     * one. */
+    requested_features.dualSrcBlend=VK_TRUE;
+#endif
+#if PS5VK_TWO_MRT_PROBE
+    /* The witness exists to write two colour attachments, which this profile
+     * only serves when the independentBlend capability is enabled on the
+     * logical device: the front end and the runtime compiler keep refusing the
+     * two-target shape on a build whose platform does not report the feature,
+     * which is the fail-closed evidence for every build that is not the
+     * measurement one. */
+    requested_features.independentBlend=VK_TRUE;
+#endif
+#if PS5VK_SAMPLE_RATE_PROBE
+    /* The measurement scene exists to exercise the multisample path a device
+     * reports, so it enables sampleRateShading on the logical device: the
+     * platform bit is what makes the query report it, this is what makes
+     * vkCreateDevice accept a request for it, and the front end refuses the
+     * state on a build whose platform reports no such capability. */
+    requested_features.sampleRateShading=VK_TRUE;
+#endif
+    di.pEnabledFeatures=&requested_features;
 #endif
     VkDevice device; CHECK(vkCreateDevice(physical,&di,NULL,&device));
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_DEVICE_CREATED");
@@ -4451,6 +4514,266 @@ int main(void)
         .transform_fragment = ps5vk_runtime_input_attachment_transform,
         .transform_fragment_words = sizeof(ps5vk_runtime_input_attachment_transform) / 4};
     CHECK(ps5vk_input_attachment_probe(device, &input_modules));
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_TWO_MRT_PROBE
+    /* The witness is the whole run: one fragment module that writes two colour
+     * attachments, drawn once into a two-target framebuffer, with BOTH targets
+     * read back from that single draw and judged by the pure oracle before
+     * anything is reported. */
+    const struct ps5vk_two_mrt_probe_modules two_mrt_modules = {
+        .vertex = ps5vk_runtime_vertex,
+        .vertex_words = sizeof(ps5vk_runtime_vertex) / 4,
+        .two_mrt_fragment = ps5vk_runtime_two_mrt_fragment,
+        .two_mrt_fragment_words = sizeof(ps5vk_runtime_two_mrt_fragment) / 4};
+    CHECK(ps5vk_two_mrt_probe(device, &two_mrt_modules));
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_SAMPLE_RATE_PROBE
+    /* The measurement is the whole run: a multisampled colour target is
+     * created, cleared through the native path, submitted, and read back from
+     * its own storage. The oracle - one distinct 32-bit value across a span
+     * that is the sample count times the single-sample footprint - cannot pass
+     * on a surface sized for one sample. */
+    {
+        struct ps5vk_sample_rate_probe_params sample_rate_params = {
+            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 64u,
+            .clear = {0.25f, 0.5f, 0.75f, 1.0f},
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .fragment = ps5vk_runtime_sample_id_fragment,
+            .fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4};
+        CHECK(ps5vk_sample_rate_probe(device, &sample_rate_params));
+    }
+    /* The feature's own oracle shape: the pinned min_sample_shading leaves
+     * colour each sample with fract(gl_FragCoord.xy) and require as many
+     * distinct values as the sample count, so a 4x draw whose pixel stage
+     * publishes the sample positions and interpolates the position at the
+     * iterated sample leaves one value per sample and the pixel centre cannot
+     * pass it. This is the shipping witness for the row: no diagnostic
+     * register override is involved. */
+    {
+        struct ps5vk_sample_rate_probe_params frag_coord_params = {
+            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 64u,
+            .clear = {0.25f, 0.5f, 0.75f, 1.0f},
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .fragment = ps5vk_runtime_frag_coord_xy_fragment,
+            .fragment_words = sizeof(ps5vk_runtime_frag_coord_xy_fragment) / 4,
+            .coordinate_oracle = 1u};
+        CHECK(ps5vk_sample_rate_probe(device, &frag_coord_params));
+    }
+#if PS5VK_SAMPLE_RATE_DIAGNOSTIC
+    /* The same witness with a fragment that colours each sample with
+     * fract(gl_FragCoord.xy) - the pinned min_sample_shading leaves' own
+     * oracle, judged here by the rule that oracle uses (as many distinct
+     * shaded values as the sample count).
+     *
+     * The sweep is the NECESSITY TABLE for the pixel-stage state this draw now
+     * publishes: the corrected state first, then one element withdrawn at a
+     * time. A withdrawn element that does not change the census is an element
+     * that does not carry the behaviour and does not belong in the shipping
+     * state; one that collapses the census back to the pixel centre is what the
+     * fixed row rests on. The registers are published by the draw instead of
+     * the compiler for exactly these probes (native/sample_rate_diagnostic.h),
+     * and the override runs last, after every word this draw computes, because
+     * the first version of this survey applied it before the driver's own
+     * multisample words and silently measured its own overwritten values.
+     *
+     * The census - not the verdict alone - is the answer here, so a
+     * configuration that still sees one value is a measurement and not a
+     * failure, and every result is logged before the sweep continues. */
+    {
+        static const struct {
+            const char *name;
+            uint32_t count;
+            uint32_t index[24], value[24];
+        } sweep[] = {
+            /* The corrected draw state, which is now what the driver publishes
+             * by itself: MSAA_ENABLE, the standard sample locations, the sample
+             * distance they ask for and POS_FLOAT_LOCATION at the iterated
+             * sample. Expected: one distinct fract(gl_FragCoord.xy) per sample,
+             * Vulkan's standard 4x locations. */
+            {"default", 0u, {0u}, {0u}},
+            /* ... and one element withdrawn at a time. Each of these must
+             * collapse the census back to the pixel centre, otherwise the
+             * element is not what carries the behaviour and would not belong in
+             * the shipping state. */
+            {"without-msaa-enable", 1u, {0x292u}, {0x22u}},
+            {"without-sample-locations", 16u,
+                {0x2feu, 0x2ffu, 0x300u, 0x301u, 0x302u, 0x303u, 0x304u, 0x305u,
+                 0x306u, 0x307u, 0x308u, 0x309u, 0x30au, 0x30bu, 0x30cu, 0x30du},
+                {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u}},
+            {"without-sample-distance", 1u, {0x2f8u}, {0x00202002u}},
+            {"without-position-location", 1u, {0x1b8u}, {0u}},
+            /* The control that proves an override reaches the pipeline this
+             * probe records at all: a draw with no colour format exports
+             * nothing and cannot leave a shaded word anywhere. */
+            {"col-format-zero", 1u, {0x1c5u}, {0u}},
+            {"full-state-repeated", 19u,
+                {0x292u, 0x1b8u, 0x2f8u, 0x2feu, 0x2ffu, 0x300u, 0x301u, 0x302u,
+                 0x303u, 0x304u, 0x305u, 0x306u, 0x307u, 0x308u, 0x309u, 0x30au,
+                 0x30bu, 0x30cu, 0x30du},
+                {0x23u, 2u << 16u, 0x0020c002u,
+                 0x622ae6aeu, 0x622ae6aeu, 0x622ae6aeu, 0x622ae6aeu,
+                 0x622ae6aeu, 0x622ae6aeu, 0x622ae6aeu, 0x622ae6aeu,
+                 0x622ae6aeu, 0x622ae6aeu, 0x622ae6aeu, 0x622ae6aeu,
+                 0x622ae6aeu, 0x622ae6aeu, 0x622ae6aeu, 0x622ae6aeu}},
+        };
+        for (unsigned i = 0; i < sizeof(sweep) / sizeof(sweep[0]); ++i) {
+            struct ps5vk_sample_rate_probe_params frag_coord_params = {
+                .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 64u,
+                .clear = {0.25f, 0.5f, 0.75f, 1.0f},
+                .vertex = ps5vk_runtime_sample_id_vertex,
+                .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+                .fragment = ps5vk_runtime_frag_coord_xy_fragment,
+                .fragment_words = sizeof(ps5vk_runtime_frag_coord_xy_fragment) / 4,
+                .diagnostic_cx_count = sweep[i].count,
+                .coordinate_oracle = 1u};
+            for (unsigned k = 0; k < sweep[i].count; ++k) {
+                frag_coord_params.diagnostic_cx_index[k] = sweep[i].index[k];
+                frag_coord_params.diagnostic_cx_value[k] = sweep[i].value[k];
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_SAMPLE_RATE_CONFIG name=%s cx=%03x value=%08x", sweep[i].name,
+                    sweep[i].index[k], sweep[i].value[k]);
+            }
+            if (!sweep[i].count)
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_SAMPLE_RATE_CONFIG name=%s cx=none value=compiled", sweep[i].name);
+            const VkResult sweep_rc = ps5vk_sample_rate_probe(device, &frag_coord_params);
+            ps5log_printf(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_CONFIG_RESULT name=%s rc=%d",
+                sweep[i].name, (int)sweep_rc);
+        }
+        /* The sample-id witness under the same two questions: does it still see
+         * one value per sample, and does turning the rasteriser's per-sample
+         * iteration OFF collapse it to one value? That is what says whether the
+         * four values the first witness reports are four invocations per pixel
+         * or something else that happens to vary across the surface. */
+        static const struct {
+            const char *name;
+            uint32_t count;
+            uint32_t index[2], value[2];
+        } sample_id_pass[] = {
+            {"sample-id-default", 0u, {0u, 0u}, {0u, 0u}},
+            {"sample-id-iteration-off", 2u, {0x201u, 0x293u}, {0u, 0u}},
+        };
+        for (unsigned i = 0; i < sizeof(sample_id_pass) / sizeof(sample_id_pass[0]); ++i) {
+            struct ps5vk_sample_rate_probe_params sample_id_params = {
+                .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 64u,
+                .clear = {0.25f, 0.5f, 0.75f, 1.0f},
+                .vertex = ps5vk_runtime_sample_id_vertex,
+                .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+                .fragment = ps5vk_runtime_sample_id_fragment,
+                .fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4,
+                .diagnostic_cx_count = sample_id_pass[i].count};
+            for (unsigned k = 0; k < sample_id_pass[i].count; ++k) {
+                sample_id_params.diagnostic_cx_index[k] = sample_id_pass[i].index[k];
+                sample_id_params.diagnostic_cx_value[k] = sample_id_pass[i].value[k];
+                ps5log_printf(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_CONFIG name=%s cx=%03x value=%08x",
+                    sample_id_pass[i].name, sample_id_pass[i].index[k],
+                    sample_id_pass[i].value[k]);
+            }
+            if (!sample_id_pass[i].count)
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_SAMPLE_RATE_CONFIG name=%s cx=none value=compiled",
+                    sample_id_pass[i].name);
+            const VkResult sid_rc = ps5vk_sample_rate_probe(device, &sample_id_params);
+            ps5log_printf(PS5LOG_MARK, "PS5VK_SAMPLE_RATE_CONFIG_RESULT name=%s rc=%d",
+                sample_id_pass[i].name, (int)sid_rc);
+        }
+    }
+#endif
+#if PS5VK_SAMPLE_RATE_PROBE == 2
+    /* The same run then walks the CTS oracle's render pass one step at a time:
+     * the multisampled attachment with the usage that oracle builds, the
+     * resolve and per-sample targets, the input-attachment descriptor set, the
+     * pass with its resolve and preserve lists, the two pipelines and the
+     * submission. The last step in the log is the step that did not return. */
+    {
+        struct ps5vk_sample_rate_shape_params shape_params = {
+            .samples = VK_SAMPLE_COUNT_4_BIT, .extent = 32u, .sample_shading_min = 1.0f,
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .write_fragment = ps5vk_runtime_subpass_write_fragment,
+            .write_fragment_words = sizeof(ps5vk_runtime_subpass_write_fragment) / 4,
+            .spread_fragment = ps5vk_runtime_subpass_write_spread_fragment,
+            .spread_fragment_words = sizeof(ps5vk_runtime_subpass_write_spread_fragment) / 4,
+            .fetch_fragment = ps5vk_runtime_subpass_fetch_fragment,
+            .fetch_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_fragment) / 4,
+            .sample_fragment = ps5vk_runtime_sample_id_fragment,
+            .sample_fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4,
+            .fetch_const_fragment = ps5vk_runtime_subpass_fetch_const_fragment,
+            .fetch_const_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_const_fragment) / 4,
+            .resolve_fragment = ps5vk_runtime_subpass_resolve_fragment,
+            .resolve_fragment_words = sizeof(ps5vk_runtime_subpass_resolve_fragment) / 4};
+        CHECK(ps5vk_sample_rate_shape_probe(device, &shape_params));
+    }
+    /* The same walk at the OTHER served count. The focused CTS selection's
+     * first sample-rate leaf that reaches execution is
+     * min_sample_shading.min_0_0.samples_2.primitive_triangle, and the payload
+     * process dies inside it - so the 2x shape is the one this run has to walk,
+     * step by step, for the failure to name itself the way the 4x walk did. */
+    {
+        struct ps5vk_sample_rate_shape_params shape_params = {
+            /* min_sample_shading 0.0 is the state the crashing leaf asks for. */
+            .samples = VK_SAMPLE_COUNT_2_BIT, .extent = 32u, .sample_shading_min = 0.0f,
+            .vertex = ps5vk_runtime_sample_id_vertex,
+            .vertex_words = sizeof(ps5vk_runtime_sample_id_vertex) / 4,
+            .write_fragment = ps5vk_runtime_subpass_write_fragment,
+            .write_fragment_words = sizeof(ps5vk_runtime_subpass_write_fragment) / 4,
+            .spread_fragment = ps5vk_runtime_subpass_write_spread_fragment,
+            .spread_fragment_words = sizeof(ps5vk_runtime_subpass_write_spread_fragment) / 4,
+            .fetch_fragment = ps5vk_runtime_subpass_fetch_fragment,
+            .fetch_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_fragment) / 4,
+            .sample_fragment = ps5vk_runtime_sample_id_fragment,
+            .sample_fragment_words = sizeof(ps5vk_runtime_sample_id_fragment) / 4,
+            .fetch_const_fragment = ps5vk_runtime_subpass_fetch_const_fragment,
+            .fetch_const_fragment_words = sizeof(ps5vk_runtime_subpass_fetch_const_fragment) / 4,
+            .resolve_fragment = ps5vk_runtime_subpass_resolve_fragment,
+            .resolve_fragment_words = sizeof(ps5vk_runtime_subpass_resolve_fragment) / 4};
+        CHECK(ps5vk_sample_rate_shape_probe(device, &shape_params));
+    }
+#endif
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_FRAGMENT_STORE_PROBE
+    const struct ps5vk_fragment_store_probe_modules fragment_store_modules = {
+        .vertex = ps5vk_runtime_input_attachment_vertex,
+        .vertex_words = sizeof(ps5vk_runtime_input_attachment_vertex) / 4,
+        .control_fragment = ps5vk_runtime_fragment_store_control,
+        .control_fragment_words = sizeof(ps5vk_runtime_fragment_store_control) / 4,
+        .atomic_fragment = ps5vk_runtime_fragment_store_atomic,
+        .atomic_fragment_words = sizeof(ps5vk_runtime_fragment_store_atomic) / 4};
+    CHECK(ps5vk_fragment_store_probe(device, &fragment_store_modules));
+    vkDestroyDevice(device,NULL);
+    vkDestroyInstance(instance,NULL);
+    ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
+    ps5log_close("graphics-api-end");
+    return 0;
+#endif
+#if PS5VK_DUAL_SOURCE_PROBE
+    /* The witness is the whole run: one fragment module that exports both
+     * sources of attachment zero, drawn once with blending disabled and once
+     * with the accepted SRC1 equation, each judged on its own readback before
+     * anything is reported. */
+    const struct ps5vk_dual_source_probe_modules dual_source_modules = {
+        .vertex = ps5vk_runtime_vertex,
+        .vertex_words = sizeof(ps5vk_runtime_vertex) / 4,
+        .dual_fragment = ps5vk_runtime_dual_source_fragment,
+        .dual_fragment_words = sizeof(ps5vk_runtime_dual_source_fragment) / 4};
+    CHECK(ps5vk_dual_source_probe(device, &dual_source_modules));
     vkDestroyDevice(device,NULL);
     vkDestroyInstance(instance,NULL);
     ps5log_line(PS5LOG_MARK,"PS5VK_GRAPHICS_API_CLEANUP_COMPLETE");
@@ -4532,8 +4855,9 @@ int main(void)
                 (PS5VK_GRAPHICS_SCISSOR_PROBE==8?ps5vk_runtime_vertex_format_fragment:ps5vk_runtime_fragment),
             .word_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?sizeof(ps5vk_runtime_texture_fragment)/4:
                 (PS5VK_GRAPHICS_SCISSOR_PROBE==8?sizeof(ps5vk_runtime_vertex_format_fragment)/4:sizeof(ps5vk_runtime_fragment)/4),.entry="main"},
-        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
         .vertex_binding_count=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?1:0,
         .vertex_attribute_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?2:(PS5VK_GRAPHICS_SCISSOR_PROBE==8?1:0),
         .vertex_bindings=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?&runtime_binding:NULL,

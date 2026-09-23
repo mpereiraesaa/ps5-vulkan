@@ -32,6 +32,18 @@ static void free_module(struct ps5vk_graphics_module_key *m)
 static uint32_t *mutable_words(const struct ps5vk_graphics_module_key *m)
 { return (uint32_t *)m->words; }
 
+static void patch_index(struct ps5vk_graphics_module_key *m,unsigned from,unsigned to)
+{
+    uint32_t *words=mutable_words(m);size_t patched=0;
+    for(size_t at=5;at<m->word_count;at+=words[at]>>16) {
+        uint32_t *w=words+at;
+        if((w[0]&65535u)==71u && (w[0]>>16)==4u && w[2]==32u && w[3]==from) {
+            w[3]=to;++patched;
+        }
+    }
+    assert(patched==1);
+}
+
 /* Rewrite the literal length of the single OpTypeArray whose length constant is
  * `from`. glslang emits one float[N] type shared by every distance array of
  * that width, so this changes the declared width of each array that uses it and
@@ -144,8 +156,8 @@ static struct ps5vk_graphics_key staged_key(struct ps5vk_graphics_module_key ver
 {
     return (struct ps5vk_graphics_key){.vertex=vertex,.fragment=fragment,
         .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .color_format=VK_FORMAT_B8G8R8A8_UNORM,
-        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask=15};
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
 }
 
 int main(void)
@@ -154,6 +166,13 @@ int main(void)
         read_module("build/runtime-graphics/triangle.frag.spv");
     struct ps5vk_graphics_module_key triangle=
         read_module("build/runtime-graphics/triangle.vert.spv");
+    struct ps5vk_graphics_module_key dual_source=
+        read_module("build/runtime-graphics/dual_source.frag.spv");
+    struct ps5vk_graphics_key dual=staged_key(triangle,dual_source);
+    assert(ps5vk_spirv_graphics_interface(&dual));
+    patch_index(&dual_source,1u,2u);
+    assert(!ps5vk_spirv_graphics_interface(&dual));
+    patch_index(&dual_source,2u,1u);
     uint32_t module_words[MODULE_WORDS],other_words[MODULE_WORDS],
         fragment_words[MODULE_WORDS],swapped_words[MODULE_WORDS],
         export_words[MODULE_WORDS];
@@ -311,7 +330,8 @@ int main(void)
     }
     free_module(&frag_coord);
 
-    free_module(&plain_fragment);free_module(&triangle);free_module(&clip_module);
+    free_module(&plain_fragment);free_module(&triangle);free_module(&dual_source);
+    free_module(&clip_module);
     free_module(&cull_module);free_module(&both_module);
     puts("Graphics stages: clip/cull exports and pixel reads bounded, a read past the export refused, gl_FragCoord accepted as a fragment input, unusable modules report no counts");
     return 0;

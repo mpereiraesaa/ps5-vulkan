@@ -12,6 +12,8 @@
 #include "spirv_graphics_interface.h"
 #include "descriptor_table_layout.h"
 #include "graphics_descriptor_profile.h"
+#include "blend_ps5.h"
+#include "color_attachment_contract.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -171,10 +173,36 @@ int ps5vk_runtime_graphics_distance_reads_described(const PsbcShaderMetadata *pr
     return named!=0;
 }
 
+static int fragment_memory_write_state(const PsbcShaderMetadata *fragment)
+{
+    /* GFX10.3 DB_SHADER_CONTROL.  PSBC derives these two bits from
+     * nir_shader::info.writes_memory: ordinary fragment shaders clear both,
+     * while a fragment store/atomic needs both EXEC_ON_HIER_FAIL and
+     * EXEC_ON_NOOP so helper/early-Z outcomes cannot suppress the side effect.
+     * A torn pair is neither contract and is refused rather than guessed. */
+    /* Pre-raster-only contract tests use an all-zero placeholder because they
+     * are checking a linked stage before a pixel half exists.  That is the one
+     * representation of "no fragment stage"; a real non-pixel or malformed
+     * pixel record still fails closed. */
+    if(!fragment->version && fragment->hardware_stage==PSBC_HW_STAGE_UNKNOWN)
+        return 0;
+    if(fragment->hardware_stage!=PSBC_HW_STAGE_PIXEL)return -1;
+    for(uint32_t i=0;i<fragment->context_register_count;++i) {
+        const PsbcRegisterWrite *reg=&fragment->context_registers[i];
+        if(reg->offset!=0x203u)continue;
+        const uint32_t execution=reg->value&UINT32_C(0x600);
+        if(!execution)return 0;
+        return execution==UINT32_C(0x600)?1:-1;
+    }
+    return -1;
+}
+
 int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
     const PsbcShaderMetadata *fragment,uint32_t feature_mask)
 {
     if(!pre_raster || !fragment)return 0;
+    const int fragment_writes=fragment_memory_write_state(fragment);
+    if(fragment_writes<0)return 0;
 #if PS5VK_OPTIONAL_STAGE_DIAGNOSTIC
     /* The witness builds exist to measure these capabilities before any of them
      * is advertised, so they skip the negotiation gate the shipping build
@@ -201,6 +229,8 @@ int ps5vk_runtime_graphics_feature_use_ok(const PsbcShaderMetadata *pre_raster,
     if(pre_raster->merged_geometry &&
        pre_raster->merged_es_source_stage==PSBC_STAGE_TESS_EVAL &&
        !(feature_mask & PS5VK_FEATURE_TESSELLATION_SHADER))return 0;
+    if(fragment_writes &&
+       !(feature_mask & PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS))return 0;
     return 1;
 #endif
 }
@@ -275,8 +305,8 @@ static int ps5vk_reject(const struct ps5vk_graphics_key *key,unsigned site){
         key->vertex_attribute_count>0u?key->vertex_attributes[0].location:0u,
         key->vertex_attribute_count>1u?(unsigned)key->vertex_attributes[1].format:0u,
         key->vertex_attribute_count>1u?key->vertex_attributes[1].location:0u,
-        (unsigned)key->color_format,(unsigned)key->samples,(unsigned)key->color_write_mask,
-        (unsigned)key->blend_enable,key->descriptor_set_count,key->push_constant_size,
+        (unsigned)key->color_format[0],(unsigned)key->samples,(unsigned)key->color_write_mask[0],
+        (unsigned)key->blend_enable[0],key->descriptor_set_count,key->push_constant_size,
         (unsigned)ps5vk_graphics_has_geometry(key),
         (unsigned)ps5vk_graphics_has_tessellation(key),key->feature_mask);
 #else
@@ -285,38 +315,148 @@ static int ps5vk_reject(const struct ps5vk_graphics_key *key,unsigned site){
     return 0;
 }
 
-/* A DEPTH-ONLY pass names no colour attachment, so the pipeline records an
- * undefined colour format, writes no channel and cannot blend. The three
- * travel together: any other combination is a colour target this profile does
- * not implement, and stays refused. */
+/* The sample-rate contract this adapter compiles for (DXVK262-T06).
+ *
+ * The count is the one the front end already accepted: the pipeline and the
+ * subpass it draws in agree on it, and the platform mask is what bounds both
+ * (src/sample_rate_contract.h). This adapter is not a feature-promotion gate,
+ * so it repeats only the two facts it can see for itself: a count this profile
+ * does not implement is refused, and per-sample shading - the state that turns
+ * one fragment invocation into one per sample - needs sampleRateShading
+ * enabled on the logical device the application created, with a fraction
+ * bounded to [0,1]. The accepted count then rides into PSBC's
+ * rasterization_samples option, which is what the pinned compiler turns into
+ * the per-sample pixel ABI. */
+static int sample_rate_key_supported(const struct ps5vk_graphics_key *key)
+{
+    if (!ps5vk_sample_count_implemented(key->samples)) return 0;
+    if (!key->sample_shading_enable) return 1;
+    if (!(key->feature_mask & PS5VK_FEATURE_SAMPLE_RATE_SHADING)) return 0;
+    return key->min_sample_shading >= 0.0f && key->min_sample_shading <= 1.0f;
+}
+static int blend_factor_uses_src1(VkBlendFactor factor)
+{
+    return factor==VK_BLEND_FACTOR_SRC1_COLOR ||
+        factor==VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR ||
+        factor==VK_BLEND_FACTOR_SRC1_ALPHA ||
+        factor==VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
+}
+static int blend_state_uses_src1(const struct ps5vk_graphics_key *key)
+{
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment)
+        if (key->blend_enable[attachment] &&
+            (blend_factor_uses_src1(key->src_color_blend_factor[attachment]) ||
+             blend_factor_uses_src1(key->dst_color_blend_factor[attachment]) ||
+             blend_factor_uses_src1(key->src_alpha_blend_factor[attachment]) ||
+             blend_factor_uses_src1(key->dst_alpha_blend_factor[attachment])))
+            return 1;
+    return 0;
+}
+/* The GFX1013 CB_BLEND0_CONTROL contract encodes the whole Vulkan 1.0 blend
+ * space: native/blend_ps5.h ps5vk_blend_factor names all nineteen factors and
+ * ps5vk_blend_equation names the in-register conversion for all five
+ * operations. The profile serves that whole space now. The 98 applicable
+ * upstream blend.dual_source leaves drew every factor and operation pair the
+ * family generates and passed in one run; the native witness pinned the
+ * acceptance rule for the SRC1 shape, so a SRC1 equation still needs the
+ * logical-device feature and the compiler-proven secondary export before it is
+ * served. */
+/* Colour write mask. The upstream blend family paints each quad with a partial
+ * mask (R&G, G&B, B&A) through CB_TARGET_MASK, and the profile serves those for
+ * VK_FORMAT_R8G8B8A8_UNORM, whose channel order is the shader's and therefore
+ * the one CB_TARGET_MASK names directly. A BGRA target keeps the all-channel
+ * mask because its export applies a channel swap the mask cannot express. The
+ * mask is carried in the pipeline's render-target block, never the draw
+ * stream. */
+static int color_write_mask_supported(const struct ps5vk_graphics_key *key)
+{
+    /* CB_TARGET_MASK carries one four-bit field per target, so every value the
+     * register can hold is a shape this profile can programme - including
+     * zero, which writes no channel of that target while the render pass's own
+     * load or clear still writes the whole surface. The pinned render-pass
+     * module's attachment_write_mask leaves are built on exactly that
+     * (vktRenderPassTests.cpp:2912: with start_index_1 the first target's mask
+     * is zero and the second's is fifteen). Every other served target keeps
+     * the full mask it was measured with whenever it is written at all, and a
+     * mask wider than the field stays refused. */
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment) {
+        const uint32_t mask = key->color_write_mask[attachment];
+        if (mask > 0xfu) return 0;
+        if (key->color_format[attachment] == VK_FORMAT_R8G8B8A8_UNORM) continue;
+        if (mask && mask != 0xfu) return 0;
+    }
+    return 1;
+}
+static int blend_profile_supported_one(const struct ps5vk_graphics_key *);
+/* A DEPTH-ONLY pass names no colour attachment, so the pipeline records a
+ * colour count of zero with an undefined colour format, writes no channel and
+ * cannot blend. The four travel together: any other combination is a colour
+ * target this profile does not implement, and stays refused. */
 static int depth_only_target(const struct ps5vk_graphics_key *key)
 {
-    return key->color_format==VK_FORMAT_UNDEFINED && !key->color_write_mask &&
-        !key->blend_enable;
+    return !key->color_attachment_count &&
+        key->color_format[0]==VK_FORMAT_UNDEFINED &&
+        !key->color_write_mask[0] && !key->blend_enable[0];
+}
+/* The colour shapes this profile serves, one gate for both the colour and the
+ * depth-only case: every named attachment must be a format this profile can
+ * render into and carry a write-mask shape the render-target register can
+ * express, and a subpass that names none must be the complete depth-only
+ * shape. */
+static int color_target_supported(const struct ps5vk_graphics_key *key)
+{
+    if (!key->color_attachment_count) return depth_only_target(key);
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment) {
+        if (!ps5vk_color_target_format_supported(key->color_format[attachment]))
+            return 0;
+        /* An integer target is not blended into and its export is not
+         * converted, so a blend state on it is not a shape this profile can
+         * program. */
+        if (ps5vk_color_target_format_is_integer(key->color_format[attachment]) &&
+            key->blend_enable[attachment])
+            return 0;
+    }
+    return color_write_mask_supported(key);
 }
 static int blend_profile_supported(const struct ps5vk_graphics_key *key)
 {
-    if(!key->blend_enable)return 1;
+    /* Every attachment's own equation must be one the register contract can
+     * encode; a disabled attachment contributes nothing. */
+    for (uint32_t attachment = 0; attachment < key->color_attachment_count; ++attachment) {
+        struct ps5vk_graphics_key one = *key;
+        one.blend_enable[0] = key->blend_enable[attachment];
+        one.src_color_blend_factor[0] = key->src_color_blend_factor[attachment];
+        one.dst_color_blend_factor[0] = key->dst_color_blend_factor[attachment];
+        one.color_blend_op[0] = key->color_blend_op[attachment];
+        one.src_alpha_blend_factor[0] = key->src_alpha_blend_factor[attachment];
+        one.dst_alpha_blend_factor[0] = key->dst_alpha_blend_factor[attachment];
+        one.alpha_blend_op[0] = key->alpha_blend_op[attachment];
+        one.color_format[0] = key->color_format[attachment];
+        one.color_write_mask[0] = key->color_write_mask[attachment];
+        if (!blend_profile_supported_one(&one)) return 0;
+    }
+    return 1;
+}
+static int blend_profile_supported_one(const struct ps5vk_graphics_key *key)
+{
+    if(!key->blend_enable[0])return 1;
 #if defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE && defined(PS5VK_TESS_VARIANT) && (PS5VK_TESS_VARIANT==20 || PS5VK_TESS_VARIANT==21)
     const VkBlendFactor source=PS5VK_TESS_VARIANT==21?VK_BLEND_FACTOR_CONSTANT_ALPHA:VK_BLEND_FACTOR_SRC_ALPHA;
-    return key->blend_enable==VK_TRUE &&
-        key->src_color_blend_factor==source &&
-        key->dst_color_blend_factor==VK_BLEND_FACTOR_ZERO &&
-        key->color_blend_op==VK_BLEND_OP_ADD &&
-        key->src_alpha_blend_factor==source &&
-        key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ZERO &&
-        key->alpha_blend_op==VK_BLEND_OP_ADD;
+    return key->blend_enable[0]==VK_TRUE &&
+        key->src_color_blend_factor[0]==source &&
+        key->dst_color_blend_factor[0]==VK_BLEND_FACTOR_ZERO &&
+        key->color_blend_op[0]==VK_BLEND_OP_ADD &&
+        key->src_alpha_blend_factor[0]==source &&
+        key->dst_alpha_blend_factor[0]==VK_BLEND_FACTOR_ZERO &&
+        key->alpha_blend_op[0]==VK_BLEND_OP_ADD;
 #endif
-    /* The fractional-alpha overlap witness measured this additive shape.
-     * The integrated TES/GS upstream cases require it on the normal path too.
-     * Other blend factors/operations remain unsupported. */
-    return key->blend_enable==VK_TRUE &&
-        key->src_color_blend_factor==VK_BLEND_FACTOR_SRC_ALPHA &&
-        key->dst_color_blend_factor==VK_BLEND_FACTOR_ONE &&
-        key->color_blend_op==VK_BLEND_OP_ADD &&
-        key->src_alpha_blend_factor==VK_BLEND_FACTOR_SRC_ALPHA &&
-        key->dst_alpha_blend_factor==VK_BLEND_FACTOR_ONE &&
-        key->alpha_blend_op==VK_BLEND_OP_ADD;
+    uint32_t s,d,fn,sa,da,fna;
+    if(blend_state_uses_src1(key) &&
+       !(key->feature_mask & PS5VK_FEATURE_DUAL_SRC_BLEND))return 0;
+    return ps5vk_blend_equation(key->color_blend_op[0],key->src_color_blend_factor[0],
+               key->dst_color_blend_factor[0],&s,&d,&fn) &&
+           ps5vk_blend_equation(key->alpha_blend_op[0],key->src_alpha_blend_factor[0],
+               key->dst_alpha_blend_factor[0],&sa,&da,&fna);
 }
 int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
 {
@@ -337,11 +477,8 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
         if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,5);
         uint32_t patch_type=0;
         if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
-        if(!depth_only_target(key) &&
-           key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
-           key->color_format!=VK_FORMAT_R8G8B8A8_UNORM)return ps5vk_reject(key,7);
-        if(key->samples!=VK_SAMPLE_COUNT_1_BIT ||
-           (depth_only_target(key) ? 0 : key->color_write_mask!=15) ||
+        if(!sample_rate_key_supported(key) ||
+           !color_target_supported(key) ||
            !blend_profile_supported(key))return ps5vk_reject(key,8);
         if(!descriptor_profile_supported(key))return ps5vk_reject(key,9);
         return 1;
@@ -406,11 +543,8 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
          * measures, and a plain point/line pipeline stays fail-closed. */
     if(!ps5vk_graphics_has_geometry(key) && ps5vk_agc_primitive_needs_geometry(primitive_type))
         return ps5vk_reject(key,22);
-    if((!depth_only_target(key) &&
-        ((key->color_format!=VK_FORMAT_B8G8R8A8_UNORM &&
-          key->color_format!=VK_FORMAT_R8G8B8A8_UNORM) ||
-         key->color_write_mask!=15)) ||
-       key->samples!=VK_SAMPLE_COUNT_1_BIT ||
+    if(!color_target_supported(key) ||
+       !sample_rate_key_supported(key) ||
        !blend_profile_supported(key))return ps5vk_reject(key,23);
     /* Binding counts/pointers were checked above. Keep every remaining
      * refusal observable, including the non-tessellated CTS reference path. */
@@ -618,12 +752,33 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     VkResult failure=VK_ERROR_FEATURE_NOT_PRESENT;
     PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
         .entrypoint=key->fragment.entry,.optimise=true,.address32_hi=2,
-        .primitive_type=0,.rasterization_samples=1};
+        /* The pixel stage compiles for the sample count the pipeline carries:
+         * the pinned compiler turns it into the per-sample ABI (screen position
+         * per sample, sample-rate interpolation and the sample id), which is
+         * what makes sampleRateShading executable rather than merely accepted
+         * (DXVK262-T06). A single-sample pipeline passes 1, exactly as every
+         * earlier build did. */
+        .primitive_type=0,
+        .rasterization_samples=ps5vk_sample_count_number(key->samples),
+        /* The pipeline's sample-shading state reaches the compiler: the
+         * fragment-coordinate lowering decides between the per-sample position
+         * path and the pixel-centre one from it, and the runtime selection it
+         * would otherwise emit reads a PS state user SGPR this driver does not
+         * supply (DXVK262-T06). */
+        .sample_shading_enable=key->sample_shading_enable!=0};
     /* Mesa ac_choose_spi_color_formats: RGBA8 UNORM blending uses FP16_ABGR,
-     * paired with matching SX conversion at draw time. Keep the established
-     * unblended 32_ABGR path; blend state is already part of the cache key. */
-    if(key->blend_enable) {
-        options.spi_shader_col_format=4;
+     * paired with matching SX conversion at draw time; unblended keeps 32_ABGR.
+     * The option is one nibble per colour attachment, so it is derived from the
+     * attachment's own blend state rather than from the pipeline as a whole:
+     * the pinned compiler drops a second export whose nibble is not declared
+     * (measured), which is what makes the derivation the honest form even
+     * while this profile serves one target. */
+    {
+        unsigned char blending[PS5VK_MAX_COLOR_ATTACHMENTS]={0};
+        for(uint32_t attachment=0;attachment<key->color_attachment_count;++attachment)
+            blending[attachment]=key->blend_enable[attachment]?1u:0u;
+        options.spi_shader_col_format=
+            ps5vk_color_export_format_option(blending,key->color_attachment_count);
         options.color_is_int8=0;
     }
     /* A patch-list draw feeds the patch assembler the pinned gfx103 register
@@ -649,6 +804,72 @@ VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphic
     options.fragment_clip_distance_count=producer_clip_count;
     result=psbc_compile_shader(key->fragment.words,key->fragment.word_count*4u,&options,&p->fragment);
     if(result!=PSBC_RESULT_OK)goto failed;
+    {
+        const int fragment_export=ps5vk_runtime_fragment_export(&p->fragment.metadata);
+        if(fragment_export<0)goto failed;
+        unsigned primary_mask=0;
+        int secondary=0;
+        if(!ps5vk_spirv_fragment_outputs(&key->fragment,&primary_mask,&secondary))
+            goto failed;
+        p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_SINGLE;
+        p->dual_source_export=0;
+        if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_NONE) {
+            /* A stage that reaches no colour store exports nothing. Two legal
+             * shapes: the DEPTH-ONLY pass, whose stage declares no output at
+             * all, and the ordinary colour pass whose only reachable side
+             * effect is an SSBO store - the pinned frag_side_effects kill
+             * leaves, where glslang keeps the Output in the entry point but
+             * removes the unreachable store. The interface policy already ties
+             * the declaration to the key, so the export has to agree with it
+             * and carry no secondary. */
+            const unsigned expected=key->color_attachment_count?1u:0u;
+            if(secondary || primary_mask!=expected)goto failed;
+        } else if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) {
+            /* The pinned compiler publishes 0x44/0xff for both shapes. The
+             * interface decides which one this is; a package whose registers
+             * and interface disagree is torn and fails. */
+            if(secondary && primary_mask==1u) {
+                p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_DUAL;
+                p->dual_source_export=1u;
+            } else if(primary_mask==3u && !secondary) {
+                /* Two MRTs, proven against the pinned compiler. The pipeline
+                 * only carries this shape when the logical device enabled
+                 * independentBlend AND the subpass names exactly the two
+                 * colour attachments the export writes: the register pair and
+                 * the interface agree on the count, and the native path
+                 * programmes one CB_COLORn block per attachment. A two-output
+                 * stage on a one-target pipeline, or on a device without the
+                 * capability, is torn and stays refused - which is also what
+                 * keeps a second export from being dropped silently. */
+                p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_TWO_MRT;
+                if(!(key->feature_mask & PS5VK_FEATURE_INDEPENDENT_BLEND) ||
+                   key->color_attachment_count!=PS5VK_MAX_COLOR_ATTACHMENTS)goto failed;
+            } else goto failed;
+        } else if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_SINGLE_SECOND) {
+            /* One export that this profile programmes into the second colour
+             * target: the pinned render-pass module's attachment_write_mask
+             * leaf whose first target is unwritten. The pipeline carries the
+             * shape only when the interface says exactly that (the only
+             * declared output is at Location 1), the subpass names the two
+             * colour attachments the target words describe, and the first one
+             * is not written at all - so the export the compiler dropped is
+             * the one nothing writes. */
+            if(secondary || primary_mask!=2u)goto failed;
+            p->fragment_shape=PS5VK_RUNTIME_FRAGMENT_SHAPE_SECOND_MRT;
+            if(!(key->feature_mask & PS5VK_FEATURE_INDEPENDENT_BLEND) ||
+               key->color_attachment_count!=PS5VK_MAX_COLOR_ATTACHMENTS ||
+               key->color_write_mask[0] ||
+               !key->color_write_mask[1])goto failed;
+        } else if(secondary || primary_mask!=1u) {
+            /* A secondary or a second location without its register pair is a
+             * torn package. */
+            goto failed;
+        }
+        /* A SRC1 equation consumes the secondary export.  Device enablement
+         * alone cannot manufacture it: ordinary and torn fragment packages
+         * must fail before a native pair can be allocated. */
+        if(blend_state_uses_src1(key) && !p->dual_source_export)goto failed;
+    }
     /* Compile FS first so its actual metadata can prove PrimitiveID is unused. */
     if(p->fragment.metadata.input_semantic_count>PSBC_MAX_SEMANTICS)goto failed;
     for(unsigned i=0;i<p->fragment.metadata.input_semantic_count;++i)

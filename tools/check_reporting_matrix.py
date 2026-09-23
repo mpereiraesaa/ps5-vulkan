@@ -56,15 +56,12 @@ DUMP_BINARY = ROOT / "build/tests/dump_device_reporting"
 FEATURE_GATES = {
     "imageCubeArray": ("src/vk_memory.c", "info->imageType != VK_IMAGE_TYPE_2D",
                        "only 2D images are created"),
-    # A depth-only subpass has no colour attachment at all, so the gate is no
-    # longer "exactly one": it is "never more than one". Either way a pipeline
-    # can never describe per-attachment blending, which is what independentBlend
-    # would mean.
-    "independentBlend": ("src/vk_graphics_pipeline.c", "b->attachmentCount > 1",
-                         "at most one color attachment per pipeline"),
+    # independentBlend was promoted on 2026-09-22: the platform reports the bit,
+    # the profile advertises two colour attachments, and both upstream leaves
+    # that require the feature pass, so it is no longer a gated VK_FALSE report.
     "sampleRateShading": ("src/vk_graphics_pipeline.c", "m->sampleShadingEnable",
                           "sample shading state is rejected"),
-    "logicOp": ("src/vk_graphics_pipeline.c", "b->logicOpEnable",
+    "logicOp": ("src/color_attachment_contract.c", "state->logicOpEnable",
                 "logicOpEnable is rejected"),
     "depthClamp": ("src/vk_graphics_pipeline.c", "r->depthClampEnable",
                    "depthClampEnable is rejected"),
@@ -324,6 +321,235 @@ ADVERTISED_FEATURES["shaderCullDistance"] = {
                "components"),
     "cts": _CLIP_DISTANCE_CTS,
 }
+ADVERTISED_FEATURES["fragmentStoresAndAtomics"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS"),
+        ("native/runtime_graphics_compiler.c", "fragment store/atomic needs both EXEC_ON_HIER_FAIL"),
+        ("native/upload_commands_ps5.h", "VK_ACCESS_SHADER_WRITE_BIT"),
+        ("native/fragment_store_probe.c", "PS5VK_FRAGMENT_STORE_READBACK"),
+    ),
+    "detail": ("fragment-stage storage writes and atomics are compiled and delivered through "
+               "the descriptor table; the deterministic native witness separates a zero-write "
+               "control from exactly 4096 fragment writes with 30 guard words intact, and both "
+               "unchanged upstream frag_side_effects kill oracles pass in the integrated "
+               "306-case hardware run"),
+    "cts": (
+        "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
+        "dEQP-VK.rasterization.frag_side_effects.color_at_end.kill",
+    ),
+}
+
+ADVERTISED_FEATURES["dualSrcBlend"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_DUAL_SRC_BLEND"),
+        ("native/runtime_graphics_compiler.c", "ps5vk_blend_equation(key->color_blend_op"),
+        ("native/draw_state_ps5.c", "0x08e"),
+        ("src/texture_format.c", "PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND"),
+        ("native/dual_source_probe.c", "PS5VK_DUAL_SOURCE_READBACK"),
+    ),
+    "detail": ("the fragment module's secondary export is packaged as the exact 0x44/0xff "
+               "pair, the front end and the compiler refuse a SRC1 equation without the enabled "
+               "feature and the proven export, the runtime serves the whole GFX1013 blend "
+               "contract with partial colour write masks carried in the render-target block, and "
+               "the deterministic native witness separates the primary export from the blended "
+               "value; all 98 applicable upstream dual-source blend leaves passed in the "
+               "404-case hardware run"),
+    "cts": (
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mcc_max_alpha_1mca_ca_min-color_1mca_sa_rsub_alpha_s1a_dc_add-color_1mca_1mcc_min_alpha_1msa_1ms1a_add-color_s1c_da_max_alpha_dc_1msc_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mdc_min_alpha_ca_1ms1a_min-color_o_s1a_add_alpha_s1a_ca_add-color_sas_1mca_add_alpha_1msc_sa_sub-color_sc_1msc_max_alpha_1msc_sas_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1mdc_rsub_alpha_da_1ms1c_add-color_cc_ca_add_alpha_da_sas_max-color_z_1mcc_min_alpha_o_z_min-color_ca_s1c_add_alpha_1msc_s1a_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_1msc_sub_alpha_s1c_s1a_sub-color_cc_cc_max_alpha_sc_1msc_add-color_z_sas_sub_alpha_cc_sc_sub-color_z_1msa_min_alpha_z_dc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_ca_max_alpha_sa_cc_add-color_o_cc_min_alpha_1mda_1ms1c_max-color_z_1msa_max_alpha_1mda_da_rsub-color_sc_1mca_add_alpha_sc_1mca_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_cc_max_alpha_sas_cc_add-color_dc_1ms1a_rsub_alpha_sa_1mca_sub-color_1msc_cc_rsub_alpha_cc_o_sub-color_s1c_1msa_rsub_alpha_1mda_ca_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_da_min_alpha_1ms1c_1mda_sub-color_dc_s1a_add_alpha_ca_sas_min-color_da_1mca_rsub_alpha_da_ca_min-color_o_cc_rsub_alpha_1mca_sc_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mca_s1c_rsub_alpha_1mca_o_rsub-color_1msc_s1a_rsub_alpha_da_cc_max-color_o_1msc_sub_alpha_sas_da_max-color_z_o_min_alpha_cc_dc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_cc_rsub_alpha_1mdc_s1a_add-color_1msa_1msa_sub_alpha_1ms1a_ca_min-color_z_s1c_rsub_alpha_s1c_ca_sub-color_1ms1c_s1c_min_alpha_1mcc_1mdc_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_da_sub_alpha_s1a_z_sub-color_sas_da_max_alpha_z_1mcc_add-color_sas_da_rsub_alpha_sc_1ms1c_min-color_da_1mdc_sub_alpha_1ms1c_1msa_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mcc_s1c_max_alpha_da_sc_add-color_dc_1mcc_sub_alpha_s1a_o_sub-color_1ms1a_da_sub_alpha_cc_da_max-color_1msa_s1a_max_alpha_ca_s1a_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1mdc_rsub_alpha_sc_da_max-color_sa_sc_rsub_alpha_sc_1ms1a_sub-color_1ms1a_sc_add_alpha_1ms1a_o_add-color_1mca_1ms1a_max_alpha_sa_1mca_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1mdc_sub_alpha_s1a_1ms1c_rsub-color_1mca_o_rsub_alpha_1mca_ca_min-color_ca_s1c_add_alpha_dc_1ms1c_sub-color_ca_1ms1a_min_alpha_sc_sc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1ms1a_add_alpha_1mcc_1mca_max-color_sc_dc_sub_alpha_1msc_1ms1a_max-color_1ms1a_sa_max_alpha_da_1ms1c_add-color_1ms1a_dc_max_alpha_1ms1c_s1c_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_1msa_max_alpha_1mca_z_sub-color_da_1msc_rsub_alpha_1mda_1ms1c_add-color_1msa_1mdc_max_alpha_da_sas_min-color_cc_dc_sub_alpha_1mda_sas_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_da_sub_alpha_sc_ca_add-color_1msa_z_min_alpha_1mca_1mcc_min-color_o_sa_add_alpha_1mda_dc_rsub-color_sc_1mcc_min_alpha_s1a_z_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_s1a_min_alpha_1msa_sc_sub-color_1msa_o_rsub_alpha_da_z_add-color_1msc_s1c_rsub_alpha_1mda_s1a_max-color_s1c_cc_add_alpha_sas_ca_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_sa_sub_alpha_1ms1c_1mdc_sub-color_o_1mca_add_alpha_cc_cc_add-color_s1a_cc_sub_alpha_ca_cc_min-color_cc_sas_min_alpha_sa_z_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_sc_rsub_alpha_s1c_o_max-color_da_ca_add_alpha_z_1msc_add-color_1mca_1ms1a_add_alpha_o_1mda_max-color_1ms1a_1msc_rsub_alpha_dc_sas_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mda_z_add_alpha_sas_1mca_min-color_cc_s1c_add_alpha_sc_o_sub-color_z_1mda_min_alpha_1mda_s1a_sub-color_s1c_sc_min_alpha_o_o_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1mdc_1mda_rsub_alpha_1mca_1mcc_min-color_dc_o_rsub_alpha_sa_z_add-color_1msc_da_max_alpha_1mca_1mca_sub-color_sa_1ms1a_sub_alpha_1msa_sc_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_ca_add_alpha_1msa_cc_max-color_s1c_z_sub_alpha_sa_sc_add-color_da_da_max_alpha_s1c_cc_rsub-color_da_s1a_max_alpha_da_o_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_cc_max_alpha_1msa_1mca_sub-color_o_1mdc_max_alpha_1mda_1ms1c_rsub-color_sas_da_max_alpha_1msa_1msc_add-color_sc_1msc_add_alpha_sas_1ms1a_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_o_rsub_alpha_o_sas_max-color_z_1msa_min_alpha_dc_sc_rsub-color_sc_1mda_add_alpha_1ms1c_cc_max-color_s1a_1ms1c_max_alpha_1mca_o_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_o_sub_alpha_sc_z_min-color_da_o_add_alpha_1msc_sa_min-color_1mdc_1mda_sub_alpha_sas_1mdc_max-color_1mdc_1msa_max_alpha_o_1msc_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_sa_add_alpha_o_1ms1a_max-color_sa_1ms1c_add_alpha_s1a_s1c_max-color_sc_1mdc_add_alpha_1ms1a_1mdc_sub-color_da_sa_sub_alpha_1mcc_sc_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_sa_max_alpha_sas_sas_min-color_1ms1c_1msa_sub_alpha_1msc_o_add-color_sa_sa_rsub_alpha_cc_cc_add-color_da_da_add_alpha_s1c_da_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1a_z_sub_alpha_1mdc_s1a_min-color_1mda_1mcc_max_alpha_1msc_o_max-color_1ms1a_1mcc_min_alpha_1mcc_s1c_max-color_1mcc_1ms1a_add_alpha_sa_1mca_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_1mda_add_alpha_cc_1mca_min-color_da_o_sub_alpha_da_1mda_max-color_z_1mcc_sub_alpha_sc_cc_sub-color_1mca_1ms1a_max_alpha_cc_dc_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_1ms1c_max_alpha_1mdc_z_sub-color_sc_z_max_alpha_1ms1c_sas_sub-color_1msc_1msc_min_alpha_s1a_ca_min-color_1msc_1msc_add_alpha_ca_da_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_s1c_min_alpha_1ms1c_cc_add-color_sas_sas_max_alpha_1mca_dc_min-color_1msc_1ms1c_min_alpha_dc_1mdc_add-color_1mdc_s1a_rsub_alpha_o_1mda_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1ms1c_sa_rsub_alpha_1mda_s1c_sub-color_o_ca_min_alpha_sa_da_add-color_sa_da_min_alpha_s1c_s1c_max-color_z_s1a_max_alpha_1msa_cc_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mca_add_alpha_da_dc_min-color_1msa_cc_rsub_alpha_1msa_1mcc_max-color_dc_dc_add_alpha_dc_dc_min-color_1mda_1ms1a_add_alpha_sc_sa_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mca_add_alpha_dc_1ms1c_max-color_1msc_sc_sub_alpha_sa_s1c_rsub-color_o_1mcc_rsub_alpha_1mdc_s1c_rsub-color_ca_1mcc_sub_alpha_sas_1mca_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mda_max_alpha_1ms1c_o_rsub-color_1mda_s1a_rsub_alpha_1mca_sas_add-color_s1c_1mca_add_alpha_cc_ca_max-color_s1c_1mcc_max_alpha_s1a_o_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msa_1mdc_max_alpha_s1a_ca_max-color_1mda_cc_min_alpha_sas_dc_sub-color_1ms1a_sc_sub_alpha_z_dc_max-color_sc_dc_sub_alpha_s1c_o_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1a_add_alpha_1mdc_1msa_sub-color_dc_1ms1c_rsub_alpha_z_1mdc_sub-color_ca_1ms1c_min_alpha_sas_ca_rsub-color_1ms1c_s1c_add_alpha_z_1mda_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1a_sub_alpha_1mda_1mda_sub-color_1ms1a_ca_min_alpha_o_s1a_max-color_s1c_da_add_alpha_1ms1a_ca_max-color_sc_sa_add_alpha_z_o_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_1ms1c_sub_alpha_da_z_min-color_sa_cc_max_alpha_sc_sa_min-color_o_s1c_sub_alpha_1msa_sa_add-color_sa_1mda_rsub_alpha_cc_sc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_1msc_sas_sub_alpha_s1a_1mda_add-color_sa_1mcc_min_alpha_cc_1mcc_sub-color_dc_1ms1a_sub_alpha_1mca_z_max-color_1msc_1msa_max_alpha_sc_s1c_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_max_alpha_da_1mda_sub-color_dc_ca_max_alpha_1msc_1msa_add-color_1mdc_1ms1a_min_alpha_1mda_1mda_min-color_1ms1c_1msc_max_alpha_1mca_1msc_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_sub_alpha_1msa_1mca_sub-color_1msc_da_max_alpha_o_da_add-color_s1c_s1a_max_alpha_dc_1ms1a_sub-color_s1a_z_sub_alpha_1msa_1msc_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1ms1a_sub_alpha_1msa_1mdc_sub-color_1mda_sas_add_alpha_o_ca_add-color_sa_1mdc_sub_alpha_o_1mca_rsub-color_s1c_1msa_rsub_alpha_1msa_1mca_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1msa_add_alpha_dc_1ms1a_add-color_da_cc_rsub_alpha_1ms1a_s1a_max-color_sas_z_min_alpha_1mca_da_add-color_1msc_ca_min_alpha_1mdc_sc_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_1msa_max_alpha_s1a_1mda_sub-color_s1a_sc_add_alpha_dc_1mca_max-color_sas_s1a_add_alpha_1msa_sas_min-color_1ms1c_1msc_sub_alpha_sc_sas_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_ca_ca_rsub_alpha_1msa_s1c_rsub-color_dc_1ms1a_min_alpha_1ms1a_cc_rsub-color_ca_ca_add_alpha_s1c_sc_add-color_o_1ms1c_sub_alpha_z_1mda_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mca_add_alpha_o_1ms1a_sub-color_1mcc_1msc_max_alpha_1mdc_sas_sub-color_ca_1mdc_min_alpha_z_1mdc_max-color_1ms1c_1mdc_min_alpha_dc_o_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mcc_max_alpha_z_o_add-color_sa_s1a_max_alpha_1msa_dc_min-color_sc_cc_add_alpha_dc_1msa_sub-color_1ms1a_o_max_alpha_1ms1a_sc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mcc_sub_alpha_z_1mca_sub-color_sa_da_min_alpha_s1c_ca_add-color_1ms1a_sa_max_alpha_1ms1a_cc_sub-color_dc_ca_add_alpha_cc_1ms1a_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1mdc_add_alpha_sc_1mda_add-color_sc_1mca_rsub_alpha_z_1mdc_max-color_sa_1mca_sub_alpha_sc_s1c_max-color_sas_s1a_min_alpha_da_1ms1c_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1msc_rsub_alpha_sc_1mdc_sub-color_1ms1c_sas_sub_alpha_s1c_sas_max-color_dc_sa_sub_alpha_sa_1msa_add-color_s1c_sc_add_alpha_z_o_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_1msc_sub_alpha_z_1mcc_min-color_1msc_1ms1c_add_alpha_1mda_1mdc_sub-color_ca_sas_rsub_alpha_cc_1ms1c_max-color_1ms1c_1ms1c_rsub_alpha_da_s1a_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_ca_sub_alpha_1ms1c_da_add-color_ca_dc_sub_alpha_s1c_sc_add-color_sc_sa_min_alpha_1ms1c_1mda_min-color_1ms1c_dc_rsub_alpha_1msc_1msc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_cc_sa_sub_alpha_z_dc_rsub-color_s1a_1mdc_sub_alpha_1msc_1mdc_min-color_1mcc_ca_sub_alpha_ca_z_min-color_1mdc_s1c_min_alpha_s1c_1mdc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_1ms1a_rsub_alpha_da_s1a_max-color_o_sc_max_alpha_1mcc_1msc_sub-color_1msc_1mcc_max_alpha_s1c_1mca_sub-color_ca_1mcc_max_alpha_s1a_dc_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_ca_max_alpha_da_1mdc_rsub-color_sa_1msc_sub_alpha_sc_1mca_sub-color_1ms1c_s1c_add_alpha_s1c_dc_rsub-color_da_1mda_add_alpha_s1c_1msa_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_o_add_alpha_1msa_1mca_sub-color_cc_1msc_min_alpha_1msa_s1a_add-color_1mca_sc_min_alpha_1msc_1ms1c_add-color_1ms1c_1mcc_add_alpha_1mdc_o_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_da_z_rsub_alpha_s1a_s1a_rsub-color_s1c_1msa_rsub_alpha_1mda_sc_add-color_cc_1mcc_min_alpha_sas_da_add-color_1mcc_1msc_sub_alpha_da_z_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_1mca_min_alpha_1msa_1msc_sub-color_s1a_1msc_rsub_alpha_dc_dc_max-color_sa_1mda_sub_alpha_z_da_max-color_dc_sc_max_alpha_dc_1ms1c_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_1msa_sub_alpha_1mca_da_rsub-color_z_cc_add_alpha_sa_dc_add-color_s1a_1ms1a_rsub_alpha_1mca_s1c_min-color_1mdc_z_min_alpha_sc_1mcc_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_dc_ca_rsub_alpha_dc_s1a_rsub-color_cc_da_min_alpha_ca_1ms1a_max-color_1msc_1mdc_max_alpha_cc_sa_rsub-color_da_o_sub_alpha_z_dc_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_1mdc_rsub_alpha_1mca_1mcc_rsub-color_1mcc_1ms1a_add_alpha_1msa_1ms1c_rsub-color_1msa_1mda_max_alpha_1msc_sa_min-color_1ms1a_sc_max_alpha_1mca_cc_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_1msc_max_alpha_1ms1a_1mca_add-color_1mdc_s1c_min_alpha_ca_dc_sub-color_1mdc_s1c_sub_alpha_z_sc_min-color_ca_1mca_rsub_alpha_s1a_1ms1a_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_ca_add_alpha_z_1msa_sub-color_z_1mcc_add_alpha_1mcc_1mca_sub-color_1msa_da_rsub_alpha_cc_1ms1a_add-color_cc_1mcc_sub_alpha_1mda_1ms1c_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_add_alpha_o_s1c_add-color_1mdc_1mcc_min_alpha_1ms1a_1mcc_sub-color_sas_1msa_sub_alpha_1ms1c_1mda_add-color_1msa_o_add_alpha_dc_sc_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_min_alpha_da_sc_max-color_1mda_s1a_add_alpha_da_1mda_rsub-color_dc_s1a_rsub_alpha_da_1mcc_rsub-color_cc_dc_min_alpha_1msa_sas_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_cc_min_alpha_sas_o_min-color_o_1msa_add_alpha_1mdc_s1a_max-color_1ms1a_1msc_add_alpha_cc_1mcc_max-color_1msa_cc_max_alpha_sas_da_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_sa_max_alpha_da_ca_add-color_z_1ms1c_add_alpha_sc_sas_rsub-color_1mdc_cc_min_alpha_dc_ca_min-color_1ms1a_1msc_max_alpha_1msa_ca_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_o_sas_rsub_alpha_1msc_1mcc_rsub-color_z_s1a_sub_alpha_da_s1c_add-color_1mda_sc_add_alpha_z_z_rsub-color_1ms1a_sc_sub_alpha_sa_1msa_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1mda_max_alpha_s1c_1msa_rsub-color_ca_1ms1a_add_alpha_1mda_1msc_min-color_z_s1a_add_alpha_1mdc_1mcc_add-color_s1c_1mda_add_alpha_1ms1a_o_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1ms1a_rsub_alpha_sc_dc_rsub-color_1msa_dc_sub_alpha_sc_z_min-color_da_z_add_alpha_1mdc_ca_max-color_1mcc_s1c_rsub_alpha_1ms1a_dc_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_1ms1c_add_alpha_1mcc_1mda_sub-color_ca_1ms1a_max_alpha_1ms1c_s1c_min-color_da_sc_sub_alpha_sc_1mcc_min-color_1mda_dc_max_alpha_ca_s1c_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_cc_rsub_alpha_1msc_1mcc_min-color_sc_1mdc_add_alpha_da_ca_min-color_1mcc_1mda_max_alpha_1ms1c_s1a_min-color_s1c_cc_sub_alpha_ca_1mda_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_da_min_alpha_1msa_1msa_min-color_da_s1a_rsub_alpha_1msc_z_add-color_ca_sc_sub_alpha_cc_s1a_max-color_1mca_1mcc_add_alpha_1msa_s1c_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_s1a_sub_alpha_sc_1msa_rsub-color_sc_1mcc_add_alpha_s1a_1ms1c_rsub-color_1mdc_ca_rsub_alpha_1mda_1ms1c_rsub-color_1ms1a_1msc_min_alpha_o_sas_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1a_s1c_rsub_alpha_sa_sas_max-color_z_1msa_min_alpha_sas_s1c_rsub-color_1mdc_1msa_rsub_alpha_sc_s1a_min-color_1mdc_sa_min_alpha_1mca_1mcc_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_1mda_add_alpha_s1c_ca_add-color_1mca_z_max_alpha_dc_1mcc_max-color_sa_dc_max_alpha_1ms1c_o_sub-color_1mcc_1msc_rsub_alpha_da_1mcc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_1msa_rsub_alpha_ca_z_rsub-color_1ms1c_s1a_max_alpha_z_1msc_add-color_1mda_1mcc_add_alpha_1msc_1mda_max-color_1ms1c_o_max_alpha_s1a_1msc_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_sa_min_alpha_1msc_dc_min-color_1mdc_1mca_sub_alpha_s1a_1msc_max-color_sas_ca_max_alpha_1ms1c_sas_sub-color_1msc_sas_max_alpha_1mcc_da_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_s1c_sc_rsub_alpha_1msc_1ms1a_max-color_1ms1c_1mda_rsub_alpha_z_1mcc_max-color_z_sas_sub_alpha_1ms1c_s1c_sub-color_1mdc_s1c_min_alpha_sa_1mdc_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_1mdc_add_alpha_cc_1ms1c_sub-color_1msa_z_max_alpha_da_1mda_rsub-color_1msa_1msc_rsub_alpha_1mcc_o_min-color_1ms1c_cc_add_alpha_dc_da_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_1mdc_rsub_alpha_1mda_cc_sub-color_1msc_z_max_alpha_o_s1c_sub-color_1ms1a_1msc_sub_alpha_ca_sa_sub-color_ca_ca_max_alpha_cc_s1a_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_cc_add_alpha_sc_sc_add-color_dc_da_max_alpha_dc_s1a_max-color_sa_1mca_sub_alpha_1mca_1ms1c_add-color_1msa_1msa_rsub_alpha_1mda_1mcc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sa_cc_rsub_alpha_o_1msa_max-color_1ms1c_dc_sub_alpha_1msa_o_min-color_sc_cc_min_alpha_sc_1msc_min-color_1msc_sa_rsub_alpha_o_z_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_1mdc_rsub_alpha_s1a_z_sub-color_1msc_sc_min_alpha_s1a_sc_sub-color_sas_z_max_alpha_1msc_da_min-color_s1c_dc_rsub_alpha_o_1mcc_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_1ms1c_sub_alpha_1mda_cc_add-color_da_cc_rsub_alpha_z_1ms1a_add-color_s1c_1mcc_max_alpha_1mca_s1a_rsub-color_cc_dc_max_alpha_1mcc_s1a_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_s1a_add_alpha_sas_1ms1a_max-color_1msa_sas_rsub_alpha_s1a_1mca_sub-color_1mcc_1ms1a_add_alpha_sc_s1a_min-color_ca_1ms1c_max_alpha_1mca_1mcc_add",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_s1c_add_alpha_1mca_1mca_sub-color_1mdc_sc_max_alpha_1msa_s1c_rsub-color_1msa_1mdc_max_alpha_1mca_1mdc_max-color_s1c_ca_min_alpha_1ms1c_1msc_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sas_z_max_alpha_1mcc_1msc_min-color_1msa_1msc_min_alpha_ca_s1a_add-color_1mda_1msc_max_alpha_dc_s1a_rsub-color_s1c_s1c_add_alpha_s1c_z_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_1mca_max_alpha_1ms1c_1mdc_sub-color_ca_1mda_sub_alpha_ca_o_rsub-color_cc_dc_add_alpha_ca_1msa_min-color_1ms1c_1mcc_max_alpha_sas_1mdc_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_1ms1c_rsub_alpha_1msc_s1a_rsub-color_1ms1a_1msc_max_alpha_1mda_sc_sub-color_1msa_dc_min_alpha_1msa_1mca_add-color_da_1mcc_rsub_alpha_1ms1c_sa_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_sa_min_alpha_cc_sc_rsub-color_1mcc_1ms1a_add_alpha_sa_da_rsub-color_1mda_sa_min_alpha_s1a_dc_sub-color_sa_z_min_alpha_sc_1mcc_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_sc_sc_add_alpha_cc_cc_add-color_1ms1c_ca_sub_alpha_1msa_1mda_max-color_da_1mdc_sub_alpha_1mdc_1mda_rsub-color_1msa_1msa_min_alpha_1mca_1ms1c_rsub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_1mcc_sub_alpha_1mdc_sa_sub-color_s1a_s1a_rsub_alpha_cc_z_add-color_s1c_s1a_rsub_alpha_dc_1mca_add-color_1mdc_1ms1c_max_alpha_s1a_dc_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_1msa_rsub_alpha_1msc_z_add-color_s1c_1ms1c_min_alpha_s1a_dc_max-color_1ms1a_o_max_alpha_1mca_dc_rsub-color_sc_dc_min_alpha_sas_1ms1a_max",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_s1c_min_alpha_1mcc_s1c_rsub-color_ca_1mca_add_alpha_cc_1ms1a_min-color_ca_1ms1c_rsub_alpha_sa_sas_min-color_1ms1c_s1a_add_alpha_1mda_1ms1a_min",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_sa_rsub_alpha_o_1ms1a_sub-color_1ms1c_1ms1c_min_alpha_sa_s1a_max-color_sa_cc_sub_alpha_sc_1mdc_min-color_o_1mca_add_alpha_da_ca_sub",
+        "dEQP-VK.pipeline.monolithic.blend.dual_source.format.r8g8b8a8_unorm.states.color_z_sc_add_alpha_1ms1c_sa_min-color_dc_1mca_add_alpha_z_1mca_max-color_1ms1c_sa_max_alpha_1mcc_sc_sub-color_s1c_1mda_add_alpha_s1c_1mda_add",
+    ),
+}
+
+# DXVK262-T05, promoted 2026-09-21 on physical-console evidence. Each feature
+# DXVK262-T06 independentBlend, promoted 2026-09-22. The two upstream leaves
+# that require it both pass; the citations name the per-attachment contract end
+# to end.
+ADVERTISED_FEATURES["independentBlend"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_INDEPENDENT_BLEND"),
+        ("native/runtime_graphics_compiler.c", "key->color_attachment_count!=PS5VK_MAX_COLOR_ATTACHMENTS"),
+        ("native/draw_state_ps5.c", "ps5vk_color_attachment_offsets[attachment]"),
+        ("src/color_attachment_contract.h", "PS5VK_MAX_COLOR_ATTACHMENTS = 2"),
+        ("src/graphics_limits.h", "limits->maxColorAttachments=PS5VK_MAX_COLOR_ATTACHMENTS"),
+        ("native/two_mrt_probe.c", "PS5VK_TWO_MRT_READBACK"),
+    ),
+    "detail": ("the render pass, the framebuffer, the pipeline key and the native "
+               "per-target programming each carry one colour target per attachment with its "
+               "own CB_COLORn block, its own blend control and its own CB_TARGET_MASK nibble, "
+               "and the readback copies every attachment into its own buffer; the runtime "
+               "compiler admits a two-target pipeline only when the device carries the "
+               "capability, and the private two-MRT witness recorded one draw writing two "
+               "attachments with different values before the upstream leaves were selected. "
+               "Both attachment_write_mask attachment_count_2 suballocation leaves passed in "
+               "the 464-case hardware run"),
+    "cts": (
+        "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+        "dEQP-VK.renderpass.suballocation.attachment_write_mask.attachment_count_2.start_index_1",
+    ),
+}
+
+# DXVK262-T06 sampleRateShading, promoted 2026-09-23 on physical-console
+# evidence. The pixel stage publishes the sample positions and the position at
+# the iterated sample, the barrier that publishes colour to the texture path
+# waits for a confirmed writeback, and the feature's own oracle passes at both
+# served counts for the shapes this profile renders.
+ADVERTISED_FEATURES["sampleRateShading"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_SAMPLE_RATE_SHADING"),
+        ("native/draw_state_ps5.c", "PA_SC_AA_SAMPLE_LOCS_PIXEL"),
+        ("native/draw_state_ps5.c", "POS_FLOAT_LOCATION"),
+        ("src/graphics_sync.c", "ps5vk_graphics_color_to_texture_wait"),
+        ("src/sample_rate_contract.h", "VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT"),
+        ("native/runtime_graphics_compiler.c", "sample_shading_enable"),
+    ),
+    "detail": ("the raster stage programs MSAA_ENABLE, the sixteen "
+               "PA_SC_AA_SAMPLE_LOCS_PIXEL_* words carrying Vulkan's standard 4x pattern and "
+               "the sample distance that pattern asks for, and the pixel stage publishes "
+               "SPI_BARYC_CNTL POS_FLOAT_LOCATION=2 whenever the wave iterates per sample, so "
+               "fract(gl_FragCoord.xy) is the SAMPLE's position and every sample of a pixel "
+               "receives a different one; the barrier that publishes a colour attachment to the "
+               "texture path stores a completion token and waits for it, because the colour "
+               "block writes back asynchronously and a read issued behind the bare event saw "
+               "tiles it had not written yet"),
+    # DXVK262-T06, promoted 2026-09-23. The feature's own oracle - the leaves whose
+    # checkSupport requires DEVICE_CORE_FEATURE_SAMPLE_RATE_SHADING - passes for the
+    # triangle and quad shapes at both served counts, three measured runs in a row
+    # inside the 494-case acceptance selection; the point and line shapes the same
+    # oracle selects are refused by this profile's pipeline resolver and stay
+    # diagnostics (plain-point-line-pipeline-refused).
+    "cts": tuple(sorted([
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_0.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_25.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_5.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_0_75.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_2.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading.min_1_0.samples_4.primitive_triangle",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_0.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_25.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_5.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_0_75.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_disabled.min_1_0.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_0.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_25.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_5.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_0_75.samples_4.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_2.quad",
+        "dEQP-VK.pipeline.monolithic.multisample.min_sample_shading_enabled.min_1_0.samples_4.quad",
+    ])),
+}
 
 # DXVK262-T05, promoted 2026-09-21 on physical-console evidence. Each feature
 # names the state its draw programs and the upstream leaves that exercise it,
@@ -476,6 +702,9 @@ CTS_GATED_OFF_REQUIREMENT = {
     "maxGeometryOutputComponents": ("geometryShader", 0),
     "maxGeometryOutputVertices": ("geometryShader", 0),
     "maxGeometryTotalOutputComponents": ("geometryShader", 0),
+    # While dualSrcBlend is not advertised the limit may be 0; once it is
+    # advertised the core table's own floor of 1 applies (see the promotion of
+    # 2026-09-21, which reports 1 on the graphics profile).
     "maxFragmentDualSrcAttachments": ("dualSrcBlend", 0),
     "maxDrawIndexedIndexValue": ("fullDrawIndexUint32", (1 << 24) - 1),
     "maxDrawIndirectCount": ("multiDrawIndirect", 1),
@@ -502,8 +731,12 @@ CTS_GATED_OFF_REQUIREMENT = {
 # than a claim. A violation that is not in this table fails the gate.
 KNOWN_BLOCKERS = {
     "maxImageDimension1D": "compute-only build: graphics limits are not applied to this profile",
-    "maxColorAttachments": "one color attachment per render pass",
-    "maxFragmentOutputAttachments": "one color attachment per render pass",
+    # DXVK262-T06 independentBlend describes two colour attachments through the
+    # whole ABI and programmes one CB_COLORn block per target, but the profile
+    # does not advertise the second one until a native witness writes and reads
+    # back two targets; the DXVK profile asks for four either way.
+    "maxColorAttachments": "one color attachment per render pass; a second needs the native witness",
+    "maxFragmentOutputAttachments": "one color attachment per render pass; a second needs the native witness",
     "maxFragmentCombinedOutputResources": "one color attachment plus the single sampled descriptor",
     "maxVertexInputBindings": "compute-only build: graphics limits are not applied; graphics supports 16 bindings (VERTEX_INPUT.md)",
     # The graphics profile reports the Vulkan 1.0 floors for these four; only the
@@ -521,10 +754,25 @@ KNOWN_BLOCKERS = {
     "minTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "maxTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "storageImageSampleCounts": "no storage image format is advertised",
-    "framebufferColorSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
-    "framebufferDepthSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
-    "framebufferStencilSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
-    "framebufferNoAttachmentsSampleCounts": "single-sample rendering only: MSAA (4 samples) is not supported",
+    # The four framebuffer sample-count limits follow the platform mask: the
+    # 2026-09-23 sampleRateShading promotion reports 1x/2x/4x on the graphics
+    # profile, so only the compute-only build (which applies no graphics
+    # limits) stays at the single-sample value.
+    "framebufferColorSampleCounts": "compute-only build: the graphics profile reports 1x/2x/4x",
+    "framebufferDepthSampleCounts": "compute-only build: the graphics profile reports 1x/2x/4x",
+    "framebufferStencilSampleCounts": "compute-only build: the graphics profile reports 1x/2x/4x",
+    "framebufferNoAttachmentsSampleCounts": "compute-only build: the graphics profile reports 1x/2x/4x",
+    # The interpolation-offset limits are the CTS-gated half of
+    # sampleRateShading: while the feature is unreported the CTS leaves them out
+    # and the relaxed floor applies, and the 2026-09-23 promotion brings the
+    # core table's own floors (+/-0.5 and 4 bits) into scope. This profile
+    # reports 0: no path lowers an interpolation offset - the fragment
+    # interface declares position, sample id and the per-sample read, not an
+    # offset - so the value is not inflated and the gap is named here rather
+    # than hidden behind the feature's promotion.
+    "maxInterpolationOffset": "no interpolation-offset path is implemented or measured",
+    "minInterpolationOffset": "no interpolation-offset path is implemented or measured",
+    "subPixelInterpolationOffsetBits": "no interpolation-offset path is implemented or measured",
     "sampledImageColorSampleCounts": "single-sample sampling only: multisampled sampled images are not supported",
     "sampledImageDepthSampleCounts": "single-sample sampling only: multisampled sampled images are not supported",
     "sampledImageStencilSampleCounts": "single-sample sampling only: multisampled sampled images are not supported",

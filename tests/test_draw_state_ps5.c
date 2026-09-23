@@ -1,4 +1,5 @@
 #include "draw_state_ps5.h"
+#include "blend_ps5.h"
 #include <assert.h>
 #include <math.h>
 #include <string.h>
@@ -23,6 +24,19 @@ static void check_polygon_offset(const struct ps5vk_draw_state *out, unsigned at
 }
 int main(void)
 {
+    /* The three SX words are GLOBAL registers with per-MRT fields, so a second
+     * target's conversion is composed into the same words: each target's state
+     * lands in its own field, and one target reproduces the values the profile
+     * has always emitted. */
+    {
+        const uint32_t per_target[PS5VK_MAX_COLOR_ATTACHMENTS][3] = {{5, 6, 0}, {5, 6, 0}};
+        uint32_t words[3];
+        ps5vk_color_export_compose(per_target, 1, words);
+        assert(words[0] == 5u && words[1] == 6u && words[2] == 0u);
+        ps5vk_color_export_compose(per_target, PS5VK_MAX_COLOR_ATTACHMENTS, words);
+        assert(words[0] == 0x55u && words[1] == 0x66u && words[2] == 0u);
+    }
+
     /* Register-only fixture. No native shader objects or GPU execution. */
     struct VkDevice_T device = {0};
     struct ps5vk_graphics_pair pair = {.ready = 1, .vertex_quantization=0x2d};
@@ -32,7 +46,7 @@ int main(void)
     struct ps5vk_native_graphics_pipeline native = {.device = &device, .pair = &pair};
     struct VkPipeline_T p = {.device = &device, .graphics = 1, .graphics_state = &native,
         .viewport_count=1, .viewport={0,0,640,480,0,1}, .scissor = {{0,0},{640,480}},
-        .color_format = VK_FORMAT_B8G8R8A8_UNORM, .cull_mode = VK_CULL_MODE_BACK_BIT,
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1, .cull_mode = VK_CULL_MODE_BACK_BIT,
         .front_face = VK_FRONT_FACE_CLOCKWISE};
     /* The snapshot a draw carries: the disabled form first. */
     struct ps5vk_raster_state raster = {0};
@@ -42,7 +56,7 @@ int main(void)
     for (unsigned i = 0; i < 16; ++i) color.registers[i].offset = offsets[i];
     VkRect2D area = {{0,0},{640,480}};
     struct ps5vk_draw_state out;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, NULL, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, NULL, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx_count == 109 && out.modifier == 5 && out.uc_count == 4);
     /* Primitive restart (DXVK262-T04): the reset index is written after the
      * raster block on every draw and stays clear for a pipeline that never
@@ -50,18 +64,21 @@ int main(void)
     assert(out.cx[102].offset==0x103 && out.cx[102].value==0);
     assert(last_cx(&out,0x1e0)==0 && last_cx(&out,0x1d8)==0x00770077u);
     for(unsigned i=0;i<4;++i)assert(last_cx(&out,0x105+i)==0);
-    p.color_blend=(VkPipelineColorBlendAttachmentState){.blendEnable=VK_TRUE,
+    p.color_blend[0]=(VkPipelineColorBlendAttachmentState){.blendEnable=VK_TRUE,
         .srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA,.dstColorBlendFactor=VK_BLEND_FACTOR_ONE,
         .srcAlphaBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA,.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE};
     p.blend_constants[0]=0.5f;
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,NULL,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1e0)==0x40000104u && last_cx(&out,0x105)==0x3f000000u);
-    p.color_blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
-    p.color_blend.blendEnable=VK_FALSE;
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480,0,&out)==VK_SUCCESS);
+    p.color_blend[0].srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,NULL,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.dual_source_export=1;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,NULL,&area,640,480,0,&out)==VK_ERROR_UNKNOWN && !out.cx_count);
+    pair.dual_source_export=0;
+    p.color_blend[0].blendEnable=VK_FALSE;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,NULL,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1e0)==0 && last_cx(&out,0x105)==0);
-    p.color_blend=(VkPipelineColorBlendAttachmentState){0};p.blend_constants[0]=0;
+    p.color_blend[0]=(VkPipelineColorBlendAttachmentState){0};p.blend_constants[0]=0;
     assert(out.uc[3].offset==0x24b && out.uc[3].value==0);
     /* Point/line rasterization words follow the polygon offset block. */
     assert(out.cx[98].offset==0x280 && out.cx[98].value==((8u<<16)|8u));
@@ -80,9 +97,9 @@ int main(void)
     check_polygon_offset(&out, 92, 0, 0.0f, 0.0f, 0.0f);
     float scale; memcpy(&scale, &out.cx[18].value, sizeof(scale)); assert(scale == 240);
     /* A missing snapshot is a caller bug, not a default. */
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,NULL,&color,NULL,&area,640,480, 0, &out)!=VK_SUCCESS && !out.cx_count);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,NULL,&color,1,NULL,&area,640,480, 0, &out)!=VK_SUCCESS && !out.cx_count);
     p.scissor=(VkRect2D){{100,50},{128,128}};
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480, 0, &out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,NULL,&area,640,480, 0, &out)==VK_SUCCESS);
     assert(out.cx[28].offset==0x090 && out.cx[28].value==0x80000000u);
     assert(out.cx[29].offset==0x091 && out.cx[29].value==(640u|(480u<<16)));
     assert(out.cx[88].value==(0x80000000u|100u|(50u<<16)));
@@ -91,13 +108,13 @@ int main(void)
      * (that is the state the application asked for), the factors stay zero,
      * and the format word is zero because there is no depth representation. */
     raster.depth_bias_enable=VK_TRUE;
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,NULL,&area,640,480, 0, &out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,NULL,&area,640,480, 0, &out)==VK_SUCCESS);
     assert(out.cx[85].value == (0x246u | (7u << 11)));
     check_polygon_offset(&out, 92, 0, 0.0f, 0.0f, 0.0f);
     raster.depth_bias_enable=VK_FALSE;
     p.depth_format = VK_FORMAT_D32_SFLOAT; p.depth_test = p.depth_write = VK_TRUE;
     p.depth_compare = VK_COMPARE_OP_LESS;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx_count == 131 && out.cx_count<=PS5VK_DRAW_CX_CAPACITY && out.cx[106].value == 0x16);
     assert(out.cx[112].offset==0x204 && out.cx[112].value==0x01080000);
     assert(out.cx[113].offset==0x2f9 && out.cx[113].value==0x2d);
@@ -110,11 +127,11 @@ int main(void)
      * Negative and NaN values are bit patterns, not rejected inputs. */
     raster=(struct ps5vk_raster_state){.depth_bias_enable=VK_TRUE,
         .depth_bias_constant=-3.5f,.depth_bias_clamp=-0.003f,.depth_bias_slope=1.25f};
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[107].value==(0x246u | (7u << 11)));
     check_polygon_offset(&out, 114, 1, -0.003f, 1.25f, -3.5f);
     raster.depth_bias_clamp=NAN;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[115].value==bits(raster.depth_bias_clamp));
     /* depthClampEnable disables the near and far z clip planes in
      * PA_CL_CLIP_CNTL and leaves everything else in the word alone; the clamp
@@ -122,7 +139,7 @@ int main(void)
      * which a reversed viewport keeps ordered. */
     raster.depth_clamp=VK_TRUE;
     p.viewport=(VkViewport){0,0,640,480,0.9f,0.1f};
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[112].offset==0x204 && out.cx[112].value==(0x01080000u | (1u<<26) | (1u<<27)));
     assert(out.cx[22].offset==0x0b4 && out.cx[22].value==bits(0.1f));
     assert(out.cx[23].offset==0x0b5 && out.cx[23].value==bits(0.9f));
@@ -130,7 +147,7 @@ int main(void)
     assert(out.cx[21].offset==0x114 && out.cx[21].value==bits(0.9f));
     raster.depth_clamp=VK_FALSE;
     p.viewport=(VkViewport){0,0,640,480,0,1};
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[112].value==0x01080000u);
     /* Polygon modes in PA_SU_SC_MODE_CNTL: FILL keeps PTYPE = triangles with
      * POLY_MODE clear; LINE and POINT set PTYPE for both faces, POLY_MODE
@@ -138,62 +155,98 @@ int main(void)
      * A mode outside the three core values is refused, not mapped. */
     raster.depth_bias_enable=VK_FALSE;
     raster.polygon_mode=VK_POLYGON_MODE_LINE;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[107].offset==0x205 && out.cx[107].value==0x0100012eu);
     /* The offset enables and the polygon mode are independent bits. */
     raster.depth_bias_enable=VK_TRUE;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[107].value==(0x0100012eu | (7u << 11)));
     raster.depth_bias_enable=VK_FALSE;
     raster.polygon_mode=VK_POLYGON_MODE_POINT;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[107].value==0x0100000eu);
     raster.polygon_mode=VK_POLYGON_MODE_FILL_RECTANGLE_NV;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) != VK_SUCCESS && !out.cx_count);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) != VK_SUCCESS && !out.cx_count);
     raster.polygon_mode=VK_POLYGON_MODE_FILL;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[107].value==0x246u);
     raster=(struct ps5vk_raster_state){0};
     p.depth_test = VK_FALSE;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx[106].value == 0);
     pair.ready = 0;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) != VK_SUCCESS && !out.cx_count);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) != VK_SUCCESS && !out.cx_count);
     pair.ready = 1; color.registers[0].offset = 0;
-    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, &depth, &area, 640, 480,  0, &out) != VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, &depth, &area, 640, 480,  0, &out) != VK_SUCCESS);
     color.registers[0].offset=offsets[0];pair.vertex_quantization=0;
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480, 0, &out)!=VK_SUCCESS && !out.cx_count);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480, 0, &out)!=VK_SUCCESS && !out.cx_count);
     pair.vertex_quantization=0x2d;
     pair.runtime_arguments=(struct ps5vk_runtime_draw_abi){.enabled=1,.vertex_count=2,
         .fragment_count=2,.base_vertex_slot=0,.start_instance_slot=UINT32_MAX,.lds_slot=1,
         .vertex_push_slot=UINT32_MAX,.fragment_push_slot=UINT32_MAX};
     pair.runtime_vertex.header.num_cx_registers=11;
     pair.runtime_fragment.header.num_cx_registers=9;
-    p.color_format=VK_FORMAT_R8G8B8A8_UNORM;
+    p.color_format[0]=VK_FORMAT_R8G8B8A8_UNORM;
     pair.runtime_fragment.context[0]=(ps5_agc_register){0x1c5,9};
+    pair.runtime_fragment.context[1]=(ps5_agc_register){0x08f,15};
     pair.runtime_vertex.header.num_sh_registers=6;
     pair.runtime_fragment.header.num_sh_registers=4;
     pair.runtime_vertex.context[10]=(ps5_agc_register){0x2ab,1};
     pair.runtime_vertex.shader[5]=(ps5_agc_register){0x81,0xffff};
     pair.runtime_fragment.shader[3]=(ps5_agc_register){0xb,4};
     pair.runtime_vertex.specials.draw_modifier=7;
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     assert(out.cx_count==135 && out.cx[75].offset==0x2ab && out.cx[75].value==1);
     assert(out.sh_count==10 && out.sh[5].offset==0x81 && out.sh[9].offset==0xb);
     assert(out.modifier==5 && out.runtime.enabled && out.runtime.base_vertex_slot==0);
     assert(last_cx(&out,0x1d5)==1 && last_cx(&out,0x1d6)==0 && last_cx(&out,0x1d7)==0);
-    p.color_blend=(VkPipelineColorBlendAttachmentState){.blendEnable=VK_TRUE,
+    p.color_blend[0]=(VkPipelineColorBlendAttachmentState){.blendEnable=VK_TRUE,
         .srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA,.dstColorBlendFactor=VK_BLEND_FACTOR_ONE,
         .srcAlphaBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA,.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE};
     /* Reject the mismatched export; changing only blend factors is not enough. */
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
     pair.runtime_fragment.context[0].value=4;
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1d5)==5 && last_cx(&out,0x1d6)==6 && last_cx(&out,0x1d7)==0);
-    p.color_blend.blendEnable=VK_FALSE;
+    /* The pair flag and exact compiler registers must agree.  Neither side on
+     * its own can authorize a dual-source draw. */
+    p.color_blend[0].srcColorBlendFactor=VK_BLEND_FACTOR_SRC1_COLOR;
+    pair.dual_source_export=1;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.runtime_fragment.context[0].value=0x44;
+    pair.runtime_fragment.context[1].value=0xff;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(last_cx(&out,0x1e0)==0x6104010fu);
+    assert(last_cx(&out,0x1d5)==5 && last_cx(&out,0x1d6)==6);
+    pair.dual_source_export=0;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.runtime_fragment.context[0].value=4;
+    pair.runtime_fragment.context[1].value=15;
+    p.color_blend[0].srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;
+    p.color_blend[0].blendEnable=VK_FALSE;
     pair.runtime_fragment.context[0].value=9;
-    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1e0)==0 && last_cx(&out,0x1d5)==1 && last_cx(&out,0x1d6)==0 && last_cx(&out,0x1d7)==0);
+    /* A fragment stage with an SSBO side effect before OpKill can have no
+     * reachable colour export.  The compiler contract is the paired zero
+     * values, not either register in isolation; blending remains impossible
+     * without a source export. */
+    pair.runtime_fragment.context[0].value=0;
+    pair.runtime_fragment.context[1].value=0;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(last_cx(&out,0x1d5)==0 && last_cx(&out,0x1d6)==0 && last_cx(&out,0x1d7)==0);
+    pair.runtime_fragment.context[1].value=15;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.runtime_fragment.context[0].value=9;
+    pair.runtime_fragment.context[1].value=0;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    pair.runtime_fragment.context[0].value=0;
+    p.color_blend[0].blendEnable=VK_TRUE;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out.cx_count);
+    p.color_blend[0].blendEnable=VK_FALSE;
+    pair.runtime_fragment.context[0].value=9;
+    pair.runtime_fragment.context[1].value=15;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     /* The runtime path appends the same polygon-offset block after 0x2f9. */
     assert(out.cx[114].offset==0x2f9 && out.cx[115].offset==0x2de && out.cx[120].offset==0x2e3);
     assert(out.cx[121].offset==0x280 && out.cx[124].offset==0x2f7);
@@ -207,7 +260,7 @@ int main(void)
         viewports[i]=(VkViewport){(float)(i*40),(float)(i*30),40,30,0,1};
         scissors[i]=(VkRect2D){{(int32_t)(i*40),(int32_t)(i*30)},{40,30}};
     }
-    assert(ps5vk_native_draw_state(&p,viewports,scissors,3,&raster,&color,&depth,&area,640,480, 0, &out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,viewports,scissors,3,&raster,&color,1,&depth,&area,640,480, 0, &out)==VK_SUCCESS);
     assert(out.cx_count==135+20 && out.cx_count<=PS5VK_DRAW_CX_CAPACITY);
     assert(out.cx[16].offset==0x10f && bits(20.0f)==out.cx[16].value); /* bank 0 in place */
     assert(out.cx[111].offset==0x094 && out.cx[111].value==0x80000000u &&
@@ -219,7 +272,7 @@ int main(void)
     assert(out.cx[135].offset==0x11b && out.cx[143].offset==0x098 &&
         out.cx[143].value==(0x80000000u|80u|(60u<<16)) && out.cx[144].value==(120u|(90u<<16)));
     /* The last bank the pipeline can name, and the capacity it needs. */
-    assert(ps5vk_native_draw_state(&p,viewports,scissors,PS5VK_MAX_VIEWPORTS,&raster,&color,&depth,&area,640,480, 0, &out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,viewports,scissors,PS5VK_MAX_VIEWPORTS,&raster,&color,1,&depth,&area,640,480, 0, &out)==VK_SUCCESS);
     assert(out.cx_count==135+15*10 && out.cx_count<=PS5VK_DRAW_CX_CAPACITY);
     /* The primitive-restart index is the one register written after the last
      * bank, so the bank's ten words end one slot before the tail. */
@@ -227,13 +280,13 @@ int main(void)
         out.cx[out.cx_count-12].offset==0x0b2 && out.cx[out.cx_count-11].offset==0x0b3);
     /* A bank whose scissor lies outside the render area clips everything. */
     scissors[5]=(VkRect2D){{2000,2000},{8,8}};
-    assert(ps5vk_native_draw_state(&p,viewports,scissors,6,&raster,&color,&depth,&area,640,480, 0, &out)==VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,viewports,scissors,6,&raster,&color,1,&depth,&area,640,480, 0, &out)==VK_SUCCESS);
     assert(out.cx[125+40+8].offset==0x09e && (out.cx[125+40+8].value&0x7fff)==(out.cx[125+40+9].value&0x7fff));
-    assert(ps5vk_native_draw_state(&p,viewports,scissors,0,&raster,&color,&depth,&area,640,480, 0, &out)!=VK_SUCCESS && !out.cx_count);
-    assert(ps5vk_native_draw_state(&p,viewports,scissors,PS5VK_MAX_VIEWPORTS+1,&raster,&color,&depth,&area,640,480, 0, &out)!=VK_SUCCESS && !out.cx_count);
+    assert(ps5vk_native_draw_state(&p,viewports,scissors,0,&raster,&color,1,&depth,&area,640,480, 0, &out)!=VK_SUCCESS && !out.cx_count);
+    assert(ps5vk_native_draw_state(&p,viewports,scissors,PS5VK_MAX_VIEWPORTS+1,&raster,&color,1,&depth,&area,640,480, 0, &out)!=VK_SUCCESS && !out.cx_count);
     /* An invalid element anywhere in the array fails the whole state. */
     viewports[2].height=NAN;
-    assert(ps5vk_native_draw_state(&p,viewports,scissors,3,&raster,&color,&depth,&area,640,480, 0, &out)!=VK_SUCCESS);
+    assert(ps5vk_native_draw_state(&p,viewports,scissors,3,&raster,&color,1,&depth,&area,640,480, 0, &out)!=VK_SUCCESS);
     /* Primitive restart (DXVK262-T04, preserved across the raster/viewport
      * merge): the pipeline declares the state and the draw's index width
      * decides the reset value the front end compares against. The pair is
@@ -242,31 +295,32 @@ int main(void)
     raster=(struct ps5vk_raster_state){0};
     struct VkPipeline_T restart_pipeline = p;
     restart_pipeline.primitive_restart = VK_TRUE;
-    assert(ps5vk_native_draw_state(&restart_pipeline,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,
+    assert(ps5vk_native_draw_state(&restart_pipeline,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,
         640,480,2,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x103)==0xffffu);
     assert(last_cx(&out,0x2a4)==38u);
     assert(out.uc[3].offset==0x24b && out.uc[3].value==1u);
-    assert(ps5vk_native_draw_state(&restart_pipeline,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,
+    assert(ps5vk_native_draw_state(&restart_pipeline,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,
         640,480,4,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x103)==0xffffffffu && out.uc[3].value==1u);
     /* A non-indexed draw cannot carry a restart index, so the enable stays clear
      * even on a pipeline that declared the state. */
-    assert(ps5vk_native_draw_state(&restart_pipeline,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,
+    assert(ps5vk_native_draw_state(&restart_pipeline,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,
         640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x103)==0u);
     assert(out.uc[3].value==0u);
     /* An index width neither 2 nor 4 is not a form this path can program. */
-    assert(ps5vk_native_draw_state(&restart_pipeline,&p.viewport,&p.scissor,1,&raster,&color,&depth,&area,
+    assert(ps5vk_native_draw_state(&restart_pipeline,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,
         640,480,3,&out)!=VK_SUCCESS && !out.cx_count);
     /* The restart pair also survives a multi-viewport draw: the banks are
      * written between the raster block and the pair, never over it. */
-    assert(ps5vk_native_draw_state(&restart_pipeline,viewports,scissors,2,&raster,&color,&depth,&area,
+    assert(ps5vk_native_draw_state(&restart_pipeline,viewports,scissors,2,&raster,&color,1,&depth,&area,
         640,480,2,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x103)==0xffffu && last_cx(&out,0x2a4)==38u);
 
-    /* DEPTH-ONLY: no colour target at all. The pipeline records an undefined
-     * colour format and the state builds against a depth target alone. */
+    /* DEPTH-ONLY: no colour target at all. The pipeline records a colour count
+     * of zero and an undefined colour format, and the state builds against a
+     * depth target alone. */
     {
         /* Its own pair: a depth-only pixel program exports nothing, so
          * SPI_SHADER_COL_FORMAT (0x1c5) reads zero rather than the colour
@@ -277,12 +331,13 @@ int main(void)
         depth_native.pair = &depth_pair;
         struct VkPipeline_T depth_only = p;
         depth_only.graphics_state = &depth_native;
-        depth_only.color_format = VK_FORMAT_UNDEFINED;
+        depth_only.color_format[0] = VK_FORMAT_UNDEFINED;
+        depth_only.color_attachment_count = 0;
         depth_only.depth_format = VK_FORMAT_D32_SFLOAT;
-        depth_only.color_blend = (VkPipelineColorBlendAttachmentState){0};
+        depth_only.color_blend[0] = (VkPipelineColorBlendAttachmentState){0};
         struct ps5vk_draw_state only;
         assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
-            &raster,NULL,&depth,&area,640,480,0,&only)==VK_SUCCESS);
+            &raster,NULL,0,&depth,&area,640,480,0,&only)==VK_SUCCESS);
         /* The colour block is still emitted, and every one of its registers
          * reads zero: CB_COLOR0_INFO.FORMAT (0x31c) is COLOR_INVALID, and
          * CB_TARGET_MASK (0x08e) writes no channel. */
@@ -292,17 +347,19 @@ int main(void)
         }
         assert(last_cx(&only,0x08e)==0u);
 
-        /* The two facts travel together in both directions. */
+        /* The two facts travel together in both directions: a colour target
+         * handed to a depth-only pipeline, and a colour pipeline given no
+         * target at all, are both refused. */
         struct ps5vk_draw_state rejected;
         assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
-            &raster,&color,&depth,&area,640,480,0,&rejected)==VK_ERROR_FEATURE_NOT_PRESENT);
+            &raster,&color,1,&depth,&area,640,480,0,&rejected)!=VK_SUCCESS && !rejected.cx_count);
         struct VkPipeline_T coloured = p;
         coloured.graphics_state = &depth_native;
         coloured.depth_format = VK_FORMAT_D32_SFLOAT;
         assert(ps5vk_native_draw_state(&coloured,&coloured.viewport,&coloured.scissor,1,
-            &raster,NULL,&depth,&area,640,480,0,&rejected)==VK_ERROR_FEATURE_NOT_PRESENT);
+            &raster,NULL,0,&depth,&area,640,480,0,&rejected)!=VK_SUCCESS && !rejected.cx_count);
         /* A depth-only draw still needs a depth target. */
         assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
-            &raster,NULL,NULL,&area,640,480,0,&rejected)==VK_ERROR_FEATURE_NOT_PRESENT);
+            &raster,NULL,0,NULL,&area,640,480,0,&rejected)!=VK_SUCCESS && !rejected.cx_count);
     }
 }

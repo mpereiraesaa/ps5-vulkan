@@ -1,6 +1,7 @@
 #ifndef PS5VK_GRAPHICS_LIMITS_H
 #define PS5VK_GRAPHICS_LIMITS_H
 #include <vulkan/vulkan_core.h>
+#include "color_attachment_contract.h"
 /* Execution envelope derived from native viewport/target/layout/fetch code.
  * Not Vulkan minimum-limit compliance or validation at maximum dimensions.
  * Texture precision/inter-stage limits are not inferred from GPU branding. */
@@ -56,9 +57,21 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxImageDimension3D=PS5VK_MAX_IMAGE_3D;
     limits->maxImageDimensionCube=PS5VK_MAX_IMAGE_CUBE;
     limits->maxImageArrayLayers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
-    limits->maxColorAttachments=1;
-    limits->maxFragmentOutputAttachments=1;
-    limits->maxFragmentCombinedOutputResources=1;
+    /* DXVK262-T06 independentBlend (promoted 2026-09-22): the ABI, the render
+     * pass, the framebuffer, the pipeline key and the native per-target
+     * programming all carry two colour attachments, and the feature's only
+     * upstream oracle refuses a subpass whose colour count exceeds
+     * maxColorAttachments (vktRenderPassTests.cpp:5796), so the bound the
+     * profile SERVES is the bound it advertises. A subpass that names no colour
+     * target at all (the DEPTH-ONLY shape) renders either way. */
+    limits->maxColorAttachments=PS5VK_MAX_COLOR_ATTACHMENTS;
+    limits->maxFragmentOutputAttachments=PS5VK_MAX_COLOR_ATTACHMENTS;
+    limits->maxFragmentCombinedOutputResources=PS5VK_MAX_COLOR_ATTACHMENTS;
+    /* DXVK262-T06: the secondary source of attachment zero is the one extra
+     * fragment output the promoted dualSrcBlend path consumes, and no more;
+     * the value is only meaningful on a platform that advertises the feature,
+     * which is the shipping graphics profile since 2026-09-21. */
+    limits->maxFragmentDualSrcAttachments=1;
     /* The sampled descriptor limits are the qualified minima from the shared
      * constants above, not independent report literals: one set carries the
      * whole descriptor table the runtime draw ABI addresses, and the stage
@@ -73,6 +86,11 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
     limits->maxFramebufferWidth=PS5VK_MAX_COLOR_DIMENSION;
     limits->maxFramebufferHeight=PS5VK_MAX_COLOR_DIMENSION;
     limits->maxFramebufferLayers=1;
+    /* The single-sample baseline every frontend honours. A platform that
+     * carries PS5VK_FEATURE_SAMPLE_RATE_SHADING reports the multisample
+     * envelope instead; src/device_profile_report.h derives the reported set
+     * from the platform mask, so the reported limit and the accepted pipeline
+     * state cannot disagree (DXVK262-T06). */
     limits->framebufferColorSampleCounts=VK_SAMPLE_COUNT_1_BIT;
     limits->framebufferDepthSampleCounts=VK_SAMPLE_COUNT_1_BIT;
     limits->sampledImageColorSampleCounts=VK_SAMPLE_COUNT_1_BIT;

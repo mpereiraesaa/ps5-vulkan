@@ -161,6 +161,9 @@ int main(void)
             VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT};
         for (unsigned i = 0; i < sizeof(rejected)/sizeof(rejected[0]); ++i)
             assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM, rejected[i]));
+        /* The integer colour target served since the independentBlend promotion
+         * is a readback target, not a multiview or input-attachment backing:
+         * that shape stays the normalized row's, so UINT is refused here. */
         const VkFormat other[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM,
                                   VK_FORMAT_R8G8B8A8_UINT};
         for (unsigned i = 0; i < sizeof(other)/sizeof(other[0]); ++i)
@@ -437,12 +440,16 @@ int main(void)
     /* --- published properties for the advertised rows --------------------- */
     VkFormatProperties properties;
     ps5vk_texture_format_properties(VK_FORMAT_R8G8B8A8_UNORM, &properties);
+    /* DXVK262-T06: the blend bit is part of the advertised role now. The
+     * upstream blend factory gates every leaf on it, and all 98 applicable
+     * blend.dual_source leaves passed once it was reported. */
     assert(properties.optimalTilingFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
          VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
          VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
-         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT));
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT));
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
                                VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
@@ -668,7 +675,11 @@ int main(void)
         VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
+    /* The upstream render-pass module adds the sampled role to that same
+     * attachment because the format publishes it; that combination is served
+     * now that independentBlend and the integer target it needs are promoted,
+     * and it is what the two leaves that require the feature create. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
     /* The combination is the readback row's alone: the other colour format

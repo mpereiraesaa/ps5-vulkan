@@ -1,0 +1,128 @@
+#ifndef PS5VK_SAMPLE_RATE_CONTRACT_H
+#define PS5VK_SAMPLE_RATE_CONTRACT_H
+#include <vulkan/vulkan_core.h>
+
+/* The multisample counts this profile's native path is built for (DXVK262-T06).
+ *
+ * Vulkan 1.0 only requires one sample, so a device that claims more has to
+ * rasterize, resolve and read back at those counts. 2x and 4x are the counts
+ * this frontend and its CB_COLOR0 target are written for: the pinned gfx103
+ * register table carries NUM_SAMPLES/NUM_FRAGMENTS in CB_COLOR0_ATTRIB, the
+ * pinned compiler accepts 2 and 4 as rasterization_samples, and the applicable
+ * focused CTS leaves exist for both. 8x and above are NOT claimed - nothing on
+ * this path measured them, and the sample-count limits are reported from the
+ * platform mask rather than from this envelope.
+ *
+ * This mask is the compile-time envelope only. What a live device reports and
+ * accepts is ps5vk_platform_sample_counts(supported_features) in
+ * src/vk_internal.h, which is exactly this mask when the platform carries
+ * PS5VK_FEATURE_SAMPLE_RATE_SHADING and 1x otherwise, so no build can advertise
+ * a count whose native path does not exist. */
+static inline VkSampleCountFlags ps5vk_sample_count_mask(void)
+{
+    return VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT;
+}
+
+/* The highest sample count this envelope carries, as a number rather than as a
+ * flag. The pinned multisample oracle renders into a multisampled colour
+ * attachment, resolves it and then names one single-sample target per sample it
+ * reads back, so the render pass's attachment bound derives from this and not
+ * from how many colour targets a caller may draw into. */
+enum { PS5VK_SAMPLE_COUNT_MAX_SERVED = 4 };
+
+/* The number of samples a flag names, or 0 when this profile does not
+ * implement that count. Every consumer that has to size storage, index sample
+ * data or build a mask derives the count from here instead of repeating the
+ * switch. */
+static inline uint32_t ps5vk_sample_count_number(VkSampleCountFlagBits samples)
+{
+    switch (samples) {
+    case VK_SAMPLE_COUNT_1_BIT: return 1u;
+    case VK_SAMPLE_COUNT_2_BIT: return 2u;
+    case VK_SAMPLE_COUNT_4_BIT: return 4u;
+    default: return 0u;
+    }
+}
+
+static inline int ps5vk_sample_count_implemented(VkSampleCountFlagBits samples)
+{
+    return ps5vk_sample_count_number(samples) != 0u;
+}
+
+/* CB_COLOR0_ATTRIB's NUM_SAMPLES and NUM_FRAGMENTS fields carry log2 of the
+ * sample count, not the count: the pinned Mesa source writes
+ * S_028C74_NUM_SAMPLES(util_logbase2(num_samples)) for a colour surface
+ * (src/amd/common/ac_descriptors.c). The register's field positions are pinned
+ * by tests/test_sample_count_registers.py against the same table. */
+static inline uint32_t ps5vk_sample_count_log2(VkSampleCountFlagBits samples)
+{
+    switch (samples) {
+    case VK_SAMPLE_COUNT_2_BIT: return 1u;
+    case VK_SAMPLE_COUNT_4_BIT: return 2u;
+    default: return 0u;
+    }
+}
+
+/* The sample mask that covers every implemented sample of a count. A pipeline
+ * whose pSampleMask asks for bits beyond this count is refused rather than
+ * silently masked, because no register on this path carries it. */
+static inline VkSampleMask ps5vk_sample_count_full_mask(VkSampleCountFlagBits samples)
+{
+    const uint32_t count = ps5vk_sample_count_number(samples);
+    return count ? (VkSampleMask)((UINT32_C(1) << count) - 1u) : 0u;
+}
+
+/* CB_COLOR0_ATTRIB (AGC context offset 0x31d) carries the target's sample
+ * geometry as two log2 fields: NUM_SAMPLES in bits [12,14] and NUM_FRAGMENTS
+ * in bits [15,16] (pinned gfx103 register table; tests/
+ * test_sample_count_registers.py recomputes both from it). The pinned Mesa
+ * colour-descriptor builder writes
+ * S_028C74_NUM_SAMPLES(util_logbase2(state->num_samples)) and the same for
+ * NUM_FRAGMENTS from the number of STORAGE samples, so a single-sample target
+ * leaves both zero - which is what the shared colour-target builder emits
+ * today, and what this helper reproduces for 1x. This profile serves no EQAA,
+ * so the number of stored and of exposed samples is the same and both fields
+ * carry log2 of the one count. */
+enum {
+    PS5VK_COLOR_ATTRIB_NUM_SAMPLES_SHIFT = 12,
+    PS5VK_COLOR_ATTRIB_NUM_FRAGMENTS_SHIFT = 15
+};
+#define PS5VK_COLOR_ATTRIB_SAMPLE_FIELDS_MASK UINT32_C(0x0001f000)
+static inline uint32_t ps5vk_color_attrib_sample_fields(VkSampleCountFlagBits samples)
+{
+    const uint32_t log2 = ps5vk_sample_count_log2(samples);
+    return (log2 << PS5VK_COLOR_ATTRIB_NUM_SAMPLES_SHIFT) |
+           (log2 << PS5VK_COLOR_ATTRIB_NUM_FRAGMENTS_SHIFT);
+}
+
+/* The role combinations a multisampled colour attachment is created with.
+ *
+ * The pinned multisample module builds its multisampled colour image with
+ * COLOR_ATTACHMENT | TRANSFER_SRC and adds INPUT_ATTACHMENT only for the
+ * render type that reads that image back once per sample
+ * (external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp:
+ * 3368-3371, `imageUsageFlags`). Those are the multisampled shapes this
+ * profile's CTS axis asks for, so they are the ones admitted: a multisampled
+ * image naming any other role stays refused rather than creating a resource no
+ * path serves. The bare colour-attachment form is what this line's own witness
+ * uses, so the earlier contract is unchanged.
+ *
+ * The per-format query is sample-agnostic (VkImageFormatProperties carries one
+ * sampleCounts set for a format/type/tiling/usage question), so it does not yet
+ * report the multisampled role at all: this helper is consumed only by the
+ * count-aware sites in vkCreateImage and ps5vk_native_image_requirements, both
+ * of which run behind the platform's served-count mask. Making the query
+ * answer for that role is a promotion-slice change, because it has to be
+ * measured through the public ABI before the row is advertised - the
+ * unadvertised measurement build is the only build that reaches these
+ * combinations today. */
+static inline VkBool32 ps5vk_multisampled_color_usage(VkImageUsageFlags usage)
+{
+    const VkImageUsageFlags attachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    return usage == attachment ||
+           usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+           usage == (attachment | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+}
+
+#endif
