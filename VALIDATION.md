@@ -4390,8 +4390,8 @@ operation/type coverage, while the latter has no Vulkan 1.0 extension alias.
 
 The subgroup boundary is explicit. The shipping Vulkan 1.0 device exposes no
 subgroup stage or operation properties and rejects subgroup SPIR-V at shader
-module creation. A separate, default-off diagnostic build used Vulkan 1.2
-SPIR-V and the local PSBC candidate `bf2e00b` to measure compute behavior.
+module creation. Separate, default-off diagnostic builds used Vulkan 1.2
+SPIR-V and the merged PSBC revision `47ae2a3` to measure compute behavior.
 It selected each broadcast source ID from GPU memory, used two workgroups and
 even-lane activity, checked exact outputs and untouched inactive slots, and
 completed a bounded fence with zero guard mismatches. This is compiler/GPU
@@ -4402,9 +4402,16 @@ evidence, not a legal public feature or original CTS result.
 | 32-bit unsigned `subgroupBroadcast` with a runtime buffer source ID | Compute | Diagnostic GPU readback: 64/64 active values, 64 inactive slots untouched, guards zero; repeated | False |
 | Unsigned 8-bit, signed 16-bit, unsigned 64-bit and 16-bit float scalar `subgroupBroadcast` | Compute | Each diagnostic GPU readback: 64/64 active values, 64 inactive untouched, guards zero | False |
 | The same four operand types as two-component vectors | Compute | Both components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
-| Unsigned 8-bit three-component vector | Compute | All three components checked on GPU: 64/64 active values, 64 inactive untouched, guards zero | False |
-| Other three-component and all four-component vectors | Compute | PSBC host compile and wave32 NIR only; no GPU result | False |
-| Any subgroup operation in graphics stages | None | No reviewed stage exposure or GPU oracle | False |
+| All four extended operand types as three-component vectors | Compute | All three components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| All four extended operand types as four-component vectors | Compute | All four components checked on GPU: 64/64 active values per type, 64 inactive untouched, guards zero | False |
+| 32-bit unsigned `subgroupBroadcast` with all runtime source IDs 0–31 | Compute | 4,096 GPU values checked across four wave32 groups; zero mismatches and intact guards | False |
+| 32-bit unsigned `subgroupBroadcast` in an upper-half active-lane branch | Compute | 128 all-lane control and 64 branch values checked; 64 inactive slots untouched, guards zero | False |
+| Unsigned Int8, signed Int16, unsigned Int64 and Float16 scalar through vec4 `subgroupBroadcastFirst` | Compute | 16 exact typed SPIR-V modules compiled to nonempty machine code; GPU evidence below covers unsigned Int64 vec4 only | False |
+| Unsigned Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | All eight high/low component words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
+| Opposite integer signedness in scalar through vec4 `subgroupBroadcast` and `subgroupBroadcastFirst` | Compute | Signed Int8, unsigned Int16 and signed Int64: 24 typed SPIR-V modules compiled to nonempty machine code; GPU proof below covers signed Int64 vec4 BroadcastFirst only | False |
+| Negative signed Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | Distinct negative high and positive low words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
+| 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Vertex | Private GPU color readback: 160/160 rendered pixels matched source lane 7; a lane-ID control on the same draw differed at all 160 pixels. The diagnostic draw covered 16 of its 32 intended tile regions, so this does not establish full graphics coverage | False |
+| Other subgroup operations or graphics stages | None | No reviewed public stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
 capabilities only in the private build. The shipping guards remain in place.
@@ -4413,15 +4420,79 @@ The vec2 run IDs are `20260923T114013349Z`, `20260923T114102324Z`,
 64-bit, and 16-bit float respectively; their signed eboot SHA-256 values are
 recorded with the private strict receipts. The pinned original dynamic
 broadcast CTS factory requires Vulkan 1.2, so no original subgroup leaf is
-eligible on this Vulkan 1.0 profile. The isolated Int8 vec3 run
-`20260923T123142059Z` checked all three components, active and inactive slots,
-source IDs and guard bytes with zero mismatches and clean lifecycle. Its signed
-eboot SHA-256 is
-`77d348113b56ed23a89c04316438263bd9a17297bc09ddbcf994a1555bc7cbf1`;
-the shader SPIR-V SHA-256 is
-`8876db26030b3d9316d8498d4d20cf6bd26b4e826f62e0130aa1d64b1e1a3c92`.
-Other vec3 types, vec4 GPU behavior, other operations, and graphics stages
-remain unproven.
+eligible on this Vulkan 1.0 profile. Strict firmware 12.02 runs covered the
+four extended operand types in vec3 and vec4 forms, with separate high and low
+halves of every 64-bit component and exact binary16 bits for Float16 vec3/vec4.
+Each one-shot run checked 64 active and 64 inactive slots, all components,
+source IDs and guards, a bounded fence and clean title closure. The signed
+Int64 vec4 eboot SHA-256 was
+`dcdf2c56e5113bce00a61b6459880720419add7053dfefdee2f34d5e5c9c74c7`
+(run `20260923T132917238Z`); the exact-half Float16 vec4 eboot SHA-256 was
+`d183e93eab8daf92b325f14730266f8cda1fafd4818eb06952fc513a928061b3`
+(run `20260923T133502244Z`). Private strict receipts retain the other exact
+artifact identities. A separate shader loaded each of 32 runtime source IDs
+from GPU memory and issued 32 explicit Broadcast operations. Its strict run
+`20260923T134237991Z` checked 4,096 values over four wave32 groups with zero
+mismatches and intact source/guard bytes; signed eboot SHA-256
+`a256c635732ed4669be033c99a00fe3fa1e432730e314ce18b9e1f51ba84c06d`.
+The original nonconstant Broadcast shader also branches into only the upper
+half of each subgroup and uses an ID uniform across those active lanes. A
+separate diagnostic reproduced that shape: two workgroups checked 128 all-lane
+control values, 64 upper-half branch values, and 64 untouched inactive slots
+with zero output or guard mismatches. Strict run `20260923T140018066Z` completed
+with a bounded fence and clean title closure; signed eboot SHA-256
+`431a2ba030def9860285b3e5d67c56efab78358528a95b640798a84ee767594a`.
+The pinned compiler also produced nonempty compute machine code for all 16
+scalar through vec4 unsigned Int8, signed Int16, unsigned Int64 and Float16 `subgroupBroadcastFirst`
+variants. One separate GPU run placed full-width Int64 vec4 BroadcastFirst
+inside an odd-lane branch, making lane 1 the first active source. All four
+64-bit components matched in 64 active outputs, with 64 inactive slots and
+guards untouched. Strict run `20260923T141328523Z` completed with a bounded
+fence and clean title closure; signed eboot SHA-256
+`23848cdb5e9a260009aa6912843b06777454515b654ac47f0d2ca52514e27f1b`.
+The other 15 BroadcastFirst forms have host compiler evidence only.
+The pinned CTS format list also contains the opposite integer signedness.
+Twenty-four corresponding scalar through vec4 Broadcast/BroadcastFirst modules
+compiled on the host. A signed Int64 vec4 odd-lane GPU run then checked each
+component's distinct negative high word and positive low word, with 64 active
+outputs, 64 untouched inactive slots, zero guard mismatches and clean bounded
+completion. Strict run `20260923T142727583Z`; signed eboot SHA-256
+`634d1ce41d1c0af2c902ef36262bbcafd1acc34333c7ee29de5b8e58981fab2a`.
+The other counterpart forms have host compiler evidence only.
+
+A separate vertex-stage diagnostic used a runtime source ID loaded from a
+uniform buffer and passed the subgroup result through a flat varying to a
+fragment color attachment. With the same 96-vertex draw and measured raster
+footprint, a lane-ID control produced 160 pixels different from the source
+lane's value; the Broadcast variant produced 160 pixels equal to source lane
+7, with zero wrong pixels or source-buffer guard mismatches. Both completed a
+bounded fence, verified the transport stream and closed cleanly. The control
+run was `20260923T152735648Z` (signed eboot SHA-256
+`85d7bf176103b240c0ff507158464f1d43691023bcb1e89c06524b70dc2b6739`);
+the Broadcast run was `20260923T152851269Z` (signed eboot SHA-256
+`5da72163e4dee7fe4e13c68c077357d8f2b0da889da1382d229d91d473de16c8`).
+The same draw covered only 16 of 32 intended tile regions even without
+Broadcast, so the GPU evidence is limited to those rendered pixels. The
+shipping profile still rejects subgroup SPIR-V in graphics stages, and no
+fragment-stage GPU behavior is claimed.
+
+The pinned original CTS factory and registry impose these public eligibility
+conditions. `VK_KHR_shader_subgroup_extended_types` depends on Vulkan 1.1;
+the factory queries its bit only when `VK_KHR_shader_float16_int8` is also
+available. The shipping Vulkan 1.0 device has neither extension route.
+
+| CTS operand family | Additional feature conditions in the pinned factory | Shipping profile |
+| --- | --- | --- |
+| Signed/unsigned 8-bit integer | `shaderInt8` and `storageBuffer8BitAccess` | `shaderInt8` false |
+| Signed/unsigned 16-bit integer | `shaderInt16` and `storageBuffer16BitAccess` | `shaderInt16` false |
+| Signed/unsigned 64-bit integer | `shaderInt64` | `shaderInt64` false |
+| 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
+| 64-bit float | `shaderFloat64` | `shaderFloat64` false |
+
+The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
+`subgroupBroadcastDynamicId`. Other operations and graphics-stage behavior
+remain unproven on hardware. These diagnostics establish neither original CTS
+eligibility nor a public subgroup feature route.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
