@@ -22,7 +22,9 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         return 0;
     uint64_t local = 1, table_bytes[PS5VK_MAX_SETS] = {0};
     for (unsigned j = 0; j < 3; ++j) {
-        if (!p->local_size[j] || p->local_size[j] > 1024 || d->groups[j] > 65535 || p->tgid[j] > 1)
+        if (!p->local_size[j] || p->local_size[j] > 1024 ||
+            d->group_base[j] >= 65535 ||
+            d->groups[j] > 65535 - d->group_base[j] || p->tgid[j] > 1)
             return 0;
         local *= p->local_size[j];
     }
@@ -115,7 +117,12 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         uint32_t opcode = (packet[i] >> 8) & 0xff;
         if (opcode == 0x76 && total >= 3) {
             uint32_t reg = 0xb000 + packet[i + 1] * 4;
-            if (reg == 0xb81c) {
+            if (reg == 0xb810) {
+                if (total != 5 || (found & 32) || out + 5 > capacity) return 0;
+                memcpy(words + out, packet + i, 2 * sizeof(uint32_t));
+                memcpy(words + out + 2, d->group_base, 3 * sizeof(uint32_t));
+                out += 5; found |= 32;
+            } else if (reg == 0xb81c) {
                 if (total != 5 || (found & 1) || out + 5 > capacity) return 0;
                 memcpy(words + out, packet + i, 2 * sizeof(uint32_t));
                 memcpy(words + out + 2, p->local_size, 12);
@@ -166,7 +173,7 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         }
         i += total;
     }
-    unsigned expected_mask = legacy ? 15 : 31;
+    unsigned expected_mask = legacy ? 47 : 63;
     if (found != expected_mask) return 0;
     return out;
 }

@@ -150,6 +150,7 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
                         encoding.addresses.descriptor_table=(uintptr_t)table;
                 }
             memcpy(encoding.groups, op->groups, sizeof(encoding.groups));
+            memcpy(encoding.group_base, op->group_base, sizeof(encoding.group_base));
             /* Mesa ac_emit_cp_acquire_mem GFX10 compute form + pkt3 GCR_CNTL:
              * invalidate instruction/scalar/vector/L1/L2 caches globally.
              * No WB here: previous dispatch RELEASE_MEM already wrote back,
