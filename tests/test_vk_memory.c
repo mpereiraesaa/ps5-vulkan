@@ -173,8 +173,20 @@ static void test_failures_and_allocators(void)
     assert(vkAllocateMemory(&d, &info, NULL, &m) != VK_SUCCESS);
     info.memoryTypeIndex = 0; info.pNext = &info;
     assert(vkAllocateMemory(&d, &info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT);
+    VkMemoryAllocateFlagsInfo address_allocation = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+        .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR};
+    info.pNext = &address_allocation;
+    assert(vkAllocateMemory(&d, &info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    address_allocation.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT_KHR;
+    assert(vkAllocateMemory(&d, &info, NULL, &m) == VK_ERROR_FEATURE_NOT_PRESENT && !m);
+    info.pNext = NULL;
     VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = 256, .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT};
+    bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+               VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_FEATURE_NOT_PRESENT && !b);
+    bi.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_SUCCESS && b);
     assert(ps5vk_buffer_usage(&d,b,VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
     vkDestroyBuffer(&d,b,NULL);

@@ -1741,10 +1741,107 @@ static void tessellation_feature_negotiation(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void t08_unadvertised_extension_contract(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR address = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR,
+        .bufferDeviceAddress = VK_TRUE,
+        .bufferDeviceAddressCaptureReplay = VK_TRUE,
+        .bufferDeviceAddressMultiDevice = VK_TRUE};
+    VkPhysicalDeviceVulkanMemoryModelFeaturesKHR model = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR,
+        .vulkanMemoryModel = VK_TRUE,
+        .vulkanMemoryModelDeviceScope = VK_TRUE,
+        .vulkanMemoryModelAvailabilityVisibilityChains = VK_TRUE};
+    address.pNext = &model;
+    VkPhysicalDeviceFeatures2 query = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &address};
+    vkGetPhysicalDeviceFeatures2KHR(p, &query);
+    assert(!address.bufferDeviceAddress && !address.bufferDeviceAddressCaptureReplay &&
+           !address.bufferDeviceAddressMultiDevice);
+    assert(!model.vulkanMemoryModel && !model.vulkanMemoryModelDeviceScope &&
+           !model.vulkanMemoryModelAvailabilityVisibilityChains);
+
+    uint32_t count = 0;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS);
+    assert(count <= 8);
+    VkExtensionProperties extensions[8] = {0};
+    uint32_t capacity = 8;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &capacity, extensions) == VK_SUCCESS);
+    assert(capacity == count);
+    for (uint32_t n = 0; n < count; ++n) {
+        assert(strcmp(extensions[n].extensionName,
+                      VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME));
+        assert(strcmp(extensions[n].extensionName,
+                      VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME));
+        assert(strcmp(extensions[n].extensionName,
+                      VK_KHR_DEVICE_GROUP_EXTENSION_NAME));
+    }
+
+    VkDeviceQueueCreateInfo q; float priority;
+    VkDeviceCreateInfo info = device_info(&q, &priority);
+    VkDevice d = VK_NULL_HANDLE;
+    unsigned before = opened;
+    info.pNext = &address;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS && d);
+    assert(!d->enabled_features);
+    assert(!vkGetDeviceProcAddr(d, "vkGetBufferDeviceAddressKHR"));
+    vkDestroyDevice(d, NULL);
+    assert(opened == before + 1 && closed == opened);
+    before = opened;
+    address.bufferDeviceAddress = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    address.bufferDeviceAddress = VK_FALSE;
+    address.bufferDeviceAddressCaptureReplay = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    address.bufferDeviceAddressCaptureReplay = VK_FALSE;
+    model.vulkanMemoryModelDeviceScope = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    model.vulkanMemoryModelDeviceScope = VK_FALSE;
+    model.vulkanMemoryModel = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    model.vulkanMemoryModel = VK_FALSE;
+    model.vulkanMemoryModelAvailabilityVisibilityChains = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    model.vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
+    assert(opened == before && !i->devices);
+
+    VkPhysicalDeviceVulkan12Features core12 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .bufferDeviceAddress = VK_TRUE,
+        .vulkanMemoryModel = VK_TRUE,
+        .vulkanMemoryModelDeviceScope = VK_TRUE};
+    info.pNext = &core12;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    info.pNext = &address;
+
+    const char *names[] = {VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME,
+                           VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME};
+    for (unsigned n = 0; n < 2; ++n) {
+        info.enabledExtensionCount = 1;
+        info.ppEnabledExtensionNames = &names[n];
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    }
+    info.enabledExtensionCount = 0;
+    info.ppEnabledExtensionNames = NULL;
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR duplicate = address;
+    duplicate.pNext = &model;
+    address.pNext = &duplicate;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    address.pNext = &model;
+    model.vulkanMemoryModelDeviceScope = 2;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    assert(opened == before && !i->devices);
+    vkDestroyInstance(i, NULL);
+}
+
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     consumer_physical_queries();
     tessellation_feature_negotiation();
+    t08_unadvertised_extension_contract();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

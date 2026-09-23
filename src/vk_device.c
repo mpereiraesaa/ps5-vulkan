@@ -237,6 +237,20 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                 (VkBool32)ps5vk_platform_multiview_supported(p->platform.supported_features);
             features->multiviewGeometryShader = VK_FALSE;
             features->multiviewTessellationShader = VK_FALSE;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES) {
+            VkPhysicalDeviceBufferDeviceAddressFeatures *features =
+                (VkPhysicalDeviceBufferDeviceAddressFeatures *)next;
+            features->bufferDeviceAddress = VK_FALSE;
+            features->bufferDeviceAddressCaptureReplay = VK_FALSE;
+            features->bufferDeviceAddressMultiDevice = VK_FALSE;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES) {
+            VkPhysicalDeviceVulkanMemoryModelFeatures *features =
+                (VkPhysicalDeviceVulkanMemoryModelFeatures *)next;
+            features->vulkanMemoryModel = VK_FALSE;
+            features->vulkanMemoryModelDeviceScope = VK_FALSE;
+            features->vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
         }
     }
 }
@@ -454,6 +468,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
     VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
     VkBool32 saw_dynamic_rendering = VK_FALSE;
+    VkBool32 saw_device_address = VK_FALSE, saw_memory_model = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2) {
@@ -516,6 +531,31 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 (const VkPhysicalDeviceDynamicRenderingFeatures *)next;
             if (!valid_bool(features->dynamicRendering)) return INVALID;
             if (features->dynamicRendering) return VK_ERROR_FEATURE_NOT_PRESENT;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES) {
+            if (saw_device_address) return INVALID;
+            saw_device_address = VK_TRUE;
+            const VkPhysicalDeviceBufferDeviceAddressFeatures *features =
+                (const VkPhysicalDeviceBufferDeviceAddressFeatures *)next;
+            if (!valid_bool(features->bufferDeviceAddress) ||
+                !valid_bool(features->bufferDeviceAddressCaptureReplay) ||
+                !valid_bool(features->bufferDeviceAddressMultiDevice)) return INVALID;
+            if (features->bufferDeviceAddress || features->bufferDeviceAddressCaptureReplay ||
+                features->bufferDeviceAddressMultiDevice)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES) {
+            if (saw_memory_model) return INVALID;
+            saw_memory_model = VK_TRUE;
+            const VkPhysicalDeviceVulkanMemoryModelFeatures *features =
+                (const VkPhysicalDeviceVulkanMemoryModelFeatures *)next;
+            if (!valid_bool(features->vulkanMemoryModel) ||
+                !valid_bool(features->vulkanMemoryModelDeviceScope) ||
+                !valid_bool(features->vulkanMemoryModelAvailabilityVisibilityChains))
+                return INVALID;
+            if (features->vulkanMemoryModel || features->vulkanMemoryModelDeviceScope ||
+                features->vulkanMemoryModelAvailabilityVisibilityChains)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
             /* Enabling the extension does NOT oblige the caller to ask for the
