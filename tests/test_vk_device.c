@@ -425,7 +425,13 @@ static void lifecycle(void)
         VkResult result=vkGetPhysicalDeviceImageFormatProperties(p,image_formats[f],
             VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,usage,0,&ip);
         if(ps5vk_graphics_image_usage(image_formats[f],usage)) {
-            assert(result==VK_SUCCESS && ip.maxExtent.width==(f==0?16383u:16384u));
+            const VkBool32 storage_image_shape =
+                image_formats[f]==VK_FORMAT_R32_UINT &&
+                usage==(VK_IMAGE_USAGE_STORAGE_BIT|
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            assert(result==VK_SUCCESS &&
+                ip.maxExtent.width==(storage_image_shape?8u:(f==0?16383u:16384u)));
             assert(ip.maxExtent.height==ip.maxExtent.width && ip.maxExtent.depth==1);
             /* Every D32 role is the tiled depth surface, including the target
              * created only as the destination of a whole-subresource depth
@@ -455,7 +461,8 @@ static void lifecycle(void)
                         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
             const uint32_t expected_layers = input_attachment_shape ?
                 PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR :
-                (attachment||transfer_only?1u:PS5VK_MAX_IMAGE_ARRAY_LAYERS);
+                (attachment||transfer_only||storage_image_shape?1u:
+                    PS5VK_MAX_IMAGE_ARRAY_LAYERS);
             assert(ip.maxMipLevels==expected_mips &&
                 ip.maxArrayLayers==expected_layers &&
                 ip.sampleCounts==VK_SAMPLE_COUNT_1_BIT);
@@ -661,6 +668,10 @@ static void lifecycle(void)
             if(sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR)
                 expected_optimal|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
         }
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_STORAGE_IMAGE))
+            expected_optimal|=VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
         if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
             expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |

@@ -124,7 +124,9 @@ static void report_physical_device_contract(VkInstance instance,
                                      VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) &&
             !texel.linearTilingFeatures &&
             texel.optimalTilingFeatures == (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-                                            VK_FORMAT_FEATURE_TRANSFER_DST_BIT) &&
+                                            VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                                            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                                            VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) &&
             !unsupported.linearTilingFeatures &&
             !unsupported.optimalTilingFeatures && !unsupported.bufferFeatures,
             "exact format-property matrix");

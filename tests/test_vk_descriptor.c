@@ -144,11 +144,11 @@ static void negative(void)
     vkDestroyDescriptorSetLayout(&d,l,NULL);
     assert(!d.descriptor_objects);
 }
-static void bda_cts_output_layout_refusal(void)
+static void bda_cts_output_layout(void)
 {
     /* The original BDA compute cases declare a storage-image result at
      * binding 0 and an SSBO at binding 1, both visible to all three stages.
-     * They currently stop here, before compiling or dispatching the shader. */
+     * The image uses its own pool budget and a resource-only table record. */
     struct VkDevice_T d = {.graphics_enabled = VK_TRUE};
     VkShaderStageFlags stages = VK_SHADER_STAGE_COMPUTE_BIT |
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -162,8 +162,36 @@ static void bda_cts_output_layout_refusal(void)
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount = 2, .pBindings = bindings};
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-    assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &layout) ==
-           VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+    assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &layout) == VK_SUCCESS);
+    VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
+    VkDescriptorPoolCreateInfo pi = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets=1,.poolSizeCount=2,.pPoolSizes=sizes};
+    VkDescriptorPool p=VK_NULL_HANDLE;
+    assert(vkCreateDescriptorPool(&d,&pi,NULL,&p)==VK_SUCCESS);
+    VkDescriptorSetAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool=p,.descriptorSetCount=1,.pSetLayouts=&layout};
+    VkDescriptorSet set=VK_NULL_HANDLE;
+    assert(vkAllocateDescriptorSets(&d,&ai,&set)==VK_SUCCESS);
+    assert(p->storage_image_used==1 && p->storage_used==1);
+    assert(set->signature.binding[0].first==0 && set->signature.binding[1].first==1);
+    struct VkImage_T image={.device=&d,.info={.usage=VK_IMAGE_USAGE_STORAGE_BIT}};
+    struct VkImageView_T view={.device=&d,.image=&image,
+        .view_type=VK_IMAGE_VIEW_TYPE_2D};
+    VkDescriptorImageInfo descriptor={.sampler=(VkSampler)(uintptr_t)1,
+        .imageView=&view,.imageLayout=VK_IMAGE_LAYOUT_GENERAL};
+    VkWriteDescriptorSet write={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet=set,.dstBinding=0,.descriptorCount=1,
+        .descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,.pImageInfo=&descriptor};
+    vkUpdateDescriptorSets(&d,1,&write,0,NULL);
+    assert(set->defined[0] && set->images[0].sampler==VK_NULL_HANDLE &&
+        set->image_resources[0]==&image && !d.lifetime_errors);
+    descriptor.imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    vkUpdateDescriptorSets(&d,1,&write,0,NULL);
+    assert(d.lifetime_errors==1 && set->images[0].imageLayout==VK_IMAGE_LAYOUT_GENERAL);
+    d.lifetime_errors=0;
+    vkDestroyDescriptorPool(&d,p,NULL);
+    vkDestroyDescriptorSetLayout(&d,layout,NULL);
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     assert(vkCreateDescriptorSetLayout(&d, &ci, NULL, &layout) == VK_SUCCESS);
     vkDestroyDescriptorSetLayout(&d, layout, NULL);
@@ -665,6 +693,6 @@ static void input_attachments(void)
 
 int main(void)
 {
-    lifecycle(); rollback(); negative(); bda_cts_output_layout_refusal(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources(); input_attachments();
+    lifecycle(); rollback(); negative(); bda_cts_output_layout(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources(); input_attachments();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }

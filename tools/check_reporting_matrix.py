@@ -713,10 +713,6 @@ FEATURE_ABSENT_FORMAT_FAMILY = {
     "textureCompressionETC2": ("src/graphics_formats.h", ("VK_FORMAT_ETC2", "VK_FORMAT_EAC")),
     "textureCompressionASTC_LDR": ("src/graphics_formats.h", ("VK_FORMAT_ASTC",)),
     "textureCompressionBC": ("src/graphics_formats.h", ("VK_FORMAT_BC", "VK_FORMAT_BC1")),
-    "shaderStorageImageExtendedFormats": ("src/graphics_formats.h", ("VK_IMAGE_USAGE_STORAGE_BIT",)),
-    "shaderStorageImageMultisample": ("src/graphics_formats.h", ("VK_IMAGE_USAGE_STORAGE_BIT",)),
-    "shaderStorageImageReadWithoutFormat": ("src/graphics_formats.h", ("VK_IMAGE_USAGE_STORAGE_BIT",)),
-    "shaderStorageImageWriteWithoutFormat": ("src/graphics_formats.h", ("VK_IMAGE_USAGE_STORAGE_BIT",)),
 }
 
 # Limits whose requirement depends on an advertised feature. The values are the
@@ -782,15 +778,15 @@ KNOWN_BLOCKERS = {
     "maxDescriptorSetSamplers": "compute-only build: graphics limits are not applied; graphics reports the floor of 96",
     "maxPerStageDescriptorSampledImages": "compute-only build: graphics limits are not applied; graphics reports the floor of 16",
     "maxDescriptorSetSampledImages": "compute-only build: graphics limits are not applied; graphics reports the floor of 96",
-    "maxPerStageDescriptorStorageImages": "no storage image descriptor type is accepted",
-    "maxDescriptorSetStorageImages": "no storage image descriptor type is accepted",
+    "maxPerStageDescriptorStorageImages": "bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
+    "maxDescriptorSetStorageImages": "bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
     "maxPerStageDescriptorInputAttachments": "no input attachment support (subpass dependencies rejected)",
     "maxDescriptorSetInputAttachments": "no input attachment support (subpass dependencies rejected)",
     "maxMemoryAllocationCount": "allocator policy: heap size divided by the minimum allocation charge",
     "maxSamplerLodBias": "vkCreateSampler encodes and bounds signed mipLodBias to the reported interval",
     "minTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
     "maxTexelOffset": "no evidence the compiler/sampler path implements texel offsets",
-    "storageImageSampleCounts": "no storage image format is advertised",
+    "storageImageSampleCounts": "compute-only profile has no image objects; graphics supports one-sample R32_UINT storage images",
     # The four framebuffer sample-count limits follow the platform mask: the
     # 2026-09-23 sampleRateShading promotion reports 1x/2x/4x on the graphics
     # profile, so only the compute-only build (which applies no graphics
@@ -1229,6 +1225,16 @@ def main() -> int:
     for row in formats:
         row["applicable_cts"] = {"cases": [], "status": "not-selected",
                                  "note": "mandatory format families are not implemented; no selected case covers them"}
+        if (row.get("format") == "VK_FORMAT_R32_UINT" and
+                row.get("feature") == "VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT" and
+                row.get("scope") == "optimalTilingFeatures" and
+                row.get("profile") == "graphics"):
+            row["applicable_cts"] = {
+                "cases": [case["path"] for case in manifest.get("diagnostics", [])
+                          if case["category"] == "t08-buffer-device-address-base"],
+                "status": "diagnostic",
+                "note": "original compute BDA leaves exercise the bounded R32_UINT storage image",
+            }
     for row in features:
         advertised = ADVERTISED_FEATURES.get(row["feature"])
         cases = list(advertised["cts"]) if advertised else []

@@ -491,7 +491,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
      * combination stays refused. */
     const VkImageUsageFlags supported = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_STORAGE_BIT;
     /* The input-attachment role is bounded by the measured six-view floor: the
      * format query reports exactly that ceiling for this shape, so creation has
      * to refuse anything deeper rather than accept a shape the query says does
@@ -514,6 +515,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     if (info->mipLevels > levels ||
         (info->format == VK_FORMAT_D32_SFLOAT ? (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
          (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) return INVALID;
+    if ((info->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+        (info->format != VK_FORMAT_R32_UINT || info->imageType != VK_IMAGE_TYPE_2D ||
+         info->extent.width > 8 || info->extent.height > 8 ||
+         info->mipLevels != 1 || info->arrayLayers != 1 ||
+         info->usage != (VK_IMAGE_USAGE_STORAGE_BIT |
+             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     /* The backend owns format/usage support. Keeping a second format whitelist
      * here made newly validated native formats impossible to create even when
      * the query and requirements paths accepted them. */

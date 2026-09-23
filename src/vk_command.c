@@ -1420,6 +1420,10 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
          b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
          b->dstAccessMask==VK_ACCESS_HOST_READ_BIT);
+    if(ps5vk_storage_image(image))return
+        b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+        b->newLayout==VK_IMAGE_LAYOUT_GENERAL && !b->srcAccessMask &&
+        b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT;
     /* Pure transfer role: host-visible memory that no GPU stage samples or
      * renders into, so every transition among the transfer layouts is honest
      * bookkeeping. Only transfer dependencies can order such an image. */
