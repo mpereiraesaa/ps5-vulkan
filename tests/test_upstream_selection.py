@@ -90,13 +90,13 @@ class UpstreamSelectionTests(unittest.TestCase):
         # of them - the triangle and quad shapes - are measured Pass and are
         # now the sample-rate-shading acceptance group, and the 20 line and
         # point_1px shapes moved to plain-point-line-pipeline-refused, whose
-        # pipeline shape this profile refuses at creation. The 66 diagnostics
-        # that remain document refusals, capability gaps and pending
-        # measurement windows. Seven T08 volatile atomic leaves and two
-        # original buffer-device-address leaves now belong to acceptance.
-        # `leaves` counts every attachment_write_mask leaf
-        # the pinned factory generates, wherever the manifest now keeps it.
-        self.assertEqual((507, 66, 48),
+        # pipeline shape this profile refuses at creation. Seven T08 volatile
+        # atomic leaves and two original buffer-device-address leaves belong
+        # to acceptance. The 111 diagnostics include the 66 refusal/gap records
+        # plus 45 source-derived gather measurements; these remain diagnostic
+        # and are not a public promotion. `leaves` counts every
+        # attachment_write_mask leaf the pinned factory generates.
+        self.assertEqual((507, 111, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]
@@ -181,6 +181,15 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual(["core:shaderImageGatherExtended"], gather[
             "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot."
             "clamp_to_edge_repeat"])
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset."
+            "2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge"])
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.basic.2d_array.rgba8.size_pot."
+            "repeat_mirrored_repeat"])
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset."
+            "2d_array.rgba8.size_pot.clamp_to_edge_repeat"])
         for group in ("offset", "offset_dynamic", "offsets"):
             path = ("dEQP-VK.shaderrender.texture_gather." + group +
                     ".min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat")
@@ -219,8 +228,8 @@ class UpstreamSelectionTests(unittest.TestCase):
             {
                 "category": "t07-feature-diagnostic", "expected_status": "Fail",
                 "features_required": ["core:shaderImageGatherExtended"],
-                "path": ("dEQP-VK.shaderrender.texture_gather.basic."
-                         "2d.rgba8.size_pot.clamp_to_edge_repeat"),
+                "path": ("dEQP-VK.shaderrender.texture_gather.offsets."
+                         "implementation_offset.2d.rgba8.size_pot.clamp_to_edge_repeat"),
                 "rationale": "Temporary source-bound feature-gate regression fixture.",
                 "source": self.gate.GATHER_TEST_SOURCE + ":2783",
             },

@@ -5708,6 +5708,456 @@
       "rationale": "MEASURED NotSupported on the promoted build: the same factory leaf allocated with ALLOCATION_KIND_DEDICATED needs VK_KHR_dedicated_allocation, which this profile does not advertise (run 20260922T091802564Z_PPSA99994_upstream-cts_0x19445899fd8a1 reports \"VK_KHR_dedicated_allocation is not supported\" for both dedicated_allocation leaves). The suballocation siblings of the same factory are acceptance now."
     },
     {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_npot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_npot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d_array.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d_array.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d_array.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.implementation_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.implementation_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.implementation_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_npot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_npot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d_array.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d_array.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d_array.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.implementation_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.implementation_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.implementation_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_npot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_npot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d_array.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d_array.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d_array.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_npot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_npot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d_array.rgba8.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d_array.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-measured",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d_array.rgba8.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
       "category": "storage-8bit-memory-precondition",
       "expected_status": "NotSupported",
       "features_required": [

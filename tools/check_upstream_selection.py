@@ -214,9 +214,10 @@ def _texture_gather_leaf_requirements(text: str) -> dict[str, list[str]]:
         'string() + wrapModes[wrapSNdx].name + "_" + wrapModes[wrapTNdx].name',
         'const int wrapSNdx = wrapCaseNdx;',
         'const int wrapTNdx = (wrapCaseNdx + 1) % DE_LENGTH_OF_ARRAY(wrapModes);',
-        '{"2d", TEXTURETYPE_2D}', '{"rgba8",', '{"size_pot",',
+        '{"2d", TEXTURETYPE_2D}', '{"2d_array", TEXTURETYPE_2D_ARRAY}',
+        '{"cube", TEXTURETYPE_CUBE}', '{"rgba8",',
+        '{"size_pot", IVec3(64, 64, 3)}', '{"size_npot", IVec3(17, 23, 3)}',
         'offsetSize == OFFSETSIZE_MINIMUM_REQUIRED ? "min_required_offset"',
-        '{"cube", TEXTURETYPE_CUBE}',
         'void TextureGather2DCase::checkSupport(Context &context) const\n{\n'
         '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
         'void TextureGather2DArrayCase::checkSupport(Context &context) const\n{\n'
@@ -235,23 +236,26 @@ def _texture_gather_leaf_requirements(text: str) -> dict[str, list[str]]:
     if wrap_names != ["clamp_to_edge", "repeat", "mirrored_repeat"]:
         return {}
     group_types = ("basic", "offset", "offset_dynamic", "offsets")
-    # The loop's 2D RGBA8 power-of-two case uses the same ordinary wrap-pair
-    # cases for every operation group. Restrict these leaves to adjacent pairs
-    # produced by the pinned three-element table.
+    # Derive the measured 2D/2D-array RGBA8 shapes from the pinned dimension
+    # and size tables. Every recognized operation uses the same adjacent wrap
+    # pairs produced by the pinned three-element table.
     wrap_pairs = [f"{wrap_names[index]}_{wrap_names[(index + 1) % len(wrap_names)]}"
                   for index in range(len(wrap_names))]
     result: dict[str, list[str]] = {}
-    for group in group_types:
-        for pair in wrap_pairs:
-            intermediate = "" if group == "basic" else ".min_required_offset"
-            path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
-                    ".2d.rgba8.size_pot." + pair)
-            result[path] = ["core:shaderImageGatherExtended"]
-            if group not in ("basic",):
-                implementation_path = (
-                    "dEQP-VK.shaderrender.texture_gather." + group +
-                    ".implementation_offset.2d.rgba8.size_pot." + pair)
-                result[implementation_path] = ["core:shaderImageGatherExtended"]
+    for texture_type, sizes in (("2d", ("size_pot", "size_npot")),
+                                ("2d_array", ("size_pot",))):
+        for size in sizes:
+            for group in group_types:
+                for pair in wrap_pairs:
+                    intermediate = "" if group == "basic" else ".min_required_offset"
+                    path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                            f".{texture_type}.rgba8.{size}." + pair)
+                    result[path] = ["core:shaderImageGatherExtended"]
+                    if group != "basic":
+                        implementation_path = (
+                            "dEQP-VK.shaderrender.texture_gather." + group +
+                            f".implementation_offset.{texture_type}.rgba8.{size}." + pair)
+                        result[implementation_path] = ["core:shaderImageGatherExtended"]
     # The pinned cube case is basic gather only and its checkSupport explicitly
     # requires shaderImageGatherExtended. Keep this source-derived subset to
     # the factory's RGBA8 power-of-two ordinary cube leaves.
