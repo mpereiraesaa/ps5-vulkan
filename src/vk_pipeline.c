@@ -1,6 +1,7 @@
 #include "vk_pipeline.h"
 #include "compilation_cache.h"
 #include "vk_pipeline_cache.h"
+#include "spirv_ubo_layout.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,6 +89,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
     if (info->codeSize > 16 * 1024 * 1024 || info->codeSize > SIZE_MAX - sizeof(struct VkShaderModule_T))
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (!module_valid(info->pCode, info->codeSize / 4)) return INVALID;
+    if (!ps5vk_spirv_validate_ubo_layout(info->pCode, info->codeSize / 4,
+            !!(d->enabled_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT)))
+        return INVALID;
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkShaderModule m = ps5vk_object_alloc(d->custom_allocator ? &d->allocator : NULL, a,
         sizeof(*m) + info->codeSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, &saved, &custom);

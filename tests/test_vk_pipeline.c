@@ -134,8 +134,43 @@ static void graphics_entries(void)
     assert(!ps5vk_shader_entry(module, VK_SHADER_STAGE_FRAGMENT_BIT, "main", &id));
     vkDestroyShaderModule(&d, module, NULL); assert(!d.pipeline_objects);
 }
+static void uniform_block_layout_gate(void)
+{
+    /* One Block-decorated Uniform uint[3]. The four-byte stride is legal
+     * only when the logical device enabled standard UBO layout. This is a
+     * structural shader-module contract, so no executable entry is needed. */
+    uint32_t words[] = {
+        0x07230203, 0x00010000, 0, 7, 0,
+        (4u << 16) | 21, 1, 32, 0,             /* uint */
+        (4u << 16) | 43, 1, 2, 3,              /* length = 3 */
+        (4u << 16) | 28, 3, 1, 2,              /* uint[3] */
+        (4u << 16) | 71, 3, 6, 4,              /* ArrayStride 4 */
+        (3u << 16) | 30, 4, 3,                 /* struct { uint[3] } */
+        (5u << 16) | 72, 4, 0, 35, 0,          /* member Offset 0 */
+        (3u << 16) | 71, 4, 2,                 /* Block */
+        (4u << 16) | 32, 5, 2, 4,              /* Uniform pointer */
+        (4u << 16) | 59, 5, 6, 2,              /* Uniform variable */
+    };
+    struct VkDevice_T device = {0};
+    VkShaderModule module = VK_NULL_HANDLE;
+    VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) != VK_SUCCESS && !module);
+    device.enabled_features = PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects);
+    words[5 + 4 + 4 + 4 + 3] = 1; /* ArrayStride 1: invalid even when enabled. */
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) != VK_SUCCESS && !module);
+    words[5 + 4 + 4 + 4 + 3] = 16; /* Extended layout is valid without the bit. */
+    device.enabled_features = 0;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects);
+}
 int main(void)
 {
     lifecycle(); legacy_offline_abi(); negative(); graphics_entries();
+    uniform_block_layout_gate();
     puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
 }

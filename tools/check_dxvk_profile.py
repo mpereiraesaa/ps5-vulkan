@@ -22,6 +22,7 @@ REPORTING = ROOT / "conformance_inventory/reporting_matrix.json"
 CORE_REQUIREMENTS = ROOT / "conformance_inventory/requirements.json"
 OUTPUT = ROOT / "conformance_inventory/dxvk_v262_matrix.json"
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
+PLATFORM_SOURCE = ROOT / "native/platform_ps5.c"
 VULKAN_HEADER = ROOT / "third_party/vulkan-headers/include/vulkan/vulkan_core.h"
 SCHEMA = "ps5vk-dxvk-matrix/1"
 MULTIVIEW_FIELDS = {
@@ -80,6 +81,13 @@ def implemented_device_extensions() -> set[str]:
     end = source_text.index("VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties", start)
     tokens = set(re.findall(r'VK_[A-Z0-9_]+_EXTENSION_NAME',
                             source_text[start:end]))
+    # A guarded device-extension route can be compiled before the native
+    # platform advertises its capability. The old probe's enumerated count
+    # remains authoritative until that platform bit is enabled and a new
+    # hardware probe is recorded. Keep this guard narrow and fail closed if
+    # the platform starts referencing the bit during promotion.
+    if "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT" not in PLATFORM_SOURCE.read_text():
+        tokens.discard("VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME")
     missing = sorted(token for token in tokens if token not in definitions)
     if missing:
         raise ValueError("unresolved device extension macros: " + ", ".join(missing))
