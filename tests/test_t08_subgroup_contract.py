@@ -189,8 +189,8 @@ void main() {
                 self.assertNotEqual(signatures["broadcast"], signatures["control"],
                                     f"{stage} Broadcast was discarded by the compiler")
 
-    def test_extended_arithmetic_add_lowering(self):
-        """Original CTS Add reductions and scans must retain live PSBC ISA."""
+    def test_extended_arithmetic_lowering(self):
+        """Original CTS arithmetic reductions and scans retain live PSBC ISA."""
         glslang = shutil.which("glslangValidator")
         archive = ROOT / "build/libpsbc.host.a"
         factory = CTS / "vktSubgroupsArithmeticTests.cpp"
@@ -201,19 +201,28 @@ void main() {
         factory_source = factory.read_text()
         self.assertIn("createSubgroupsArithmeticTests", factory_source)
         self.assertIn("subgroups::getAllFormats()", factory_source)
-        for case in ("OPTYPE_ADD", "OPTYPE_INCLUSIVE_ADD", "OPTYPE_EXCLUSIVE_ADD"):
-            self.assertIn(case, factory_source)
+        operation_names = ("Add", "Mul", "Min", "Max", "And", "Or", "Xor")
+        for name in operation_names:
+            for prefix in ("", "INCLUSIVE_", "EXCLUSIVE_"):
+                self.assertIn(f"OPTYPE_{prefix}{name.upper()}", factory_source)
+        self.assertIn("if (isFloat && isBitwiseOp)", factory_source)
         format_source = utilities.read_text()
         self.assertIn("getAllFormats()", format_source)
         formats = {
             "int8": ("uint8_t", "u8vec", "GL_EXT_shader_explicit_arithmetic_types_int8",
-                     "GL_EXT_shader_subgroup_extended_types_int8", 349),
+                     "GL_EXT_shader_subgroup_extended_types_int8"),
             "int16": ("int16_t", "i16vec", "GL_EXT_shader_explicit_arithmetic_types_int16",
-                      "GL_EXT_shader_subgroup_extended_types_int16", 349),
+                      "GL_EXT_shader_subgroup_extended_types_int16"),
             "int64": ("uint64_t", "u64vec", "GL_ARB_gpu_shader_int64",
-                      "GL_EXT_shader_subgroup_extended_types_int64", 349),
+                      "GL_EXT_shader_subgroup_extended_types_int64"),
             "float16": ("float16_t", "f16vec", "GL_EXT_shader_explicit_arithmetic_types_float16",
-                        "GL_EXT_shader_subgroup_extended_types_float16", 350),
+                        "GL_EXT_shader_subgroup_extended_types_float16"),
+        }
+        opcodes = {
+            "int8": (349, 351, 354, 357, 359, 360, 361),
+            "int16": (349, 351, 353, 356, 359, 360, 361),
+            "int64": (349, 351, 354, 357, 359, 360, 361),
+            "float16": (350, 352, 355, 358),
         }
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
@@ -223,7 +232,7 @@ void main() {
                             "tests/t08_compile_probe.c", str(archive),
                             "-lstdc++", "-lm", "-lpthread", "-o", str(probe)],
                            cwd=ROOT, check=True, capture_output=True, text=True)
-            for kind, (scalar, vector, explicit, extended, opcode) in formats.items():
+            for kind, (scalar, vector, explicit, extended) in formats.items():
                 for width in (1, 2, 3, 4):
                     with self.subTest(kind=kind, width=width):
                         channels = ("R", "RG", "RGB", "RGBA")[width - 1]
@@ -247,11 +256,16 @@ void main() {
                                   "layout(set=0,binding=0,std430) buffer Data "
                                   "{ uint values[]; } data;\n")
                         signatures = {}
-                        for variant, operation, group_operation in (
-                            ("add", "subgroupAdd(value)", 0),
-                            ("inclusive", "subgroupInclusiveAdd(value)", 1),
-                            ("exclusive", "subgroupExclusiveAdd(value)", 2),
-                            ("control", "value", None)):
+                        supported = operation_names[:4] if kind == "float16" else operation_names
+                        variants = [("control", "value", None, None)]
+                        for name, opcode in zip(supported, opcodes[kind]):
+                            for mode, prefix, group_operation in (
+                                ("reduce", "", 0), ("inclusive", "Inclusive", 1),
+                                ("exclusive", "Exclusive", 2)):
+                                variants.append((f"{mode}-{name.lower()}",
+                                                 f"subgroup{prefix}{name}(value)",
+                                                 opcode, group_operation))
+                        for variant, operation, opcode, group_operation in variants:
                             outputs = "\n".join(
                                 f"data.values[gl_GlobalInvocationID.x * {width}u + {index}u]"
                                 f" = uint(result{'.' + 'xyzw'[index] if width > 1 else ''});"
@@ -266,11 +280,11 @@ void main() {
                             subprocess.run([glslang, "-V", "--target-env", "vulkan1.2",
                                             str(shader), "-o", str(binary)], check=True,
                                            capture_output=True, text=True)
-                            adds = [args for op, args in instructions(binary.read_bytes())
-                                    if op == opcode]
-                            self.assertEqual(len(adds), int(group_operation is not None))
-                            if adds:
-                                self.assertEqual(adds[0][3], group_operation)
+                            arithmetic = [(op, args[3]) for op, args in
+                                          instructions(binary.read_bytes())
+                                          if 349 <= op <= 361]
+                            expected = [] if opcode is None else [(opcode, group_operation)]
+                            self.assertEqual(arithmetic, expected)
                             result = subprocess.run(
                                 [str(probe), "subgroup", str(binary), kind],
                                 capture_output=True, text=True)
@@ -281,7 +295,7 @@ void main() {
                             self.assertIsNotNone(match, result.stdout)
                             signatures[variant] = match.group(1)
                         self.assertEqual(len(set(signatures.values())), len(signatures),
-                                         "reduce, scans and control must have distinct ISA")
+                                         "CTS arithmetic operations must have distinct live ISA")
 
 
 if __name__ == "__main__":

@@ -4416,6 +4416,8 @@ evidence, not a legal public feature or original CTS result.
 | Unsigned Int64 vec4 `subgroupAdd` reduction | Compute | Exact high and low words of all four components for 64 active outputs over four wave32 groups, 64 inactive slots untouched, guards zero | False |
 | Unsigned Int8 vec4 exclusive `subgroupAdd` scan | Compute | Exact per-lane four-component results including the zero first lane and eight-bit wraparound; 64 active outputs, 64 inactive slots untouched, guards zero | False |
 | Unsigned Int64 vec4 inclusive `subgroupAdd` scan | Compute | Exact per-lane high and low words of four components; 64 active outputs, 64 inactive slots untouched, guards zero | False |
+| Extended operand types with `subgroupMul`, `subgroupMin`, `subgroupMax` and integer `subgroupAnd`/`Or`/`Xor`, each reduce/inclusive/exclusive | Compute | 252 original-CTS-selected typed forms compiled to distinct live PS5 machine code; GPU evidence below covers unsigned Int8 vec4 Min reduction only | False |
+| Unsigned Int8 vec4 `subgroupMin` reduction | Compute | Four components used distinct minimum source lanes; exact results for 64 active outputs, 64 inactive slots untouched, guards zero | False |
 | Other subgroup operations or graphics stages | None | No reviewed public stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4493,9 +4495,22 @@ and wrapped sums: run `20260923T161253042Z`, signed eboot SHA-256
 The unsigned Int64 vec4 inclusive scan checked both halves of all four
 components at every active lane: run `20260923T161354023Z`, signed eboot
 SHA-256 `e98f647ecfd09eced62b483c42814bb435bb5c0e3888b18e1794c02945a7c2b7`.
-Both had zero result, inactive-slot and guard mismatches. These diagnostics
-do not establish other arithmetic operations, original CTS eligibility or a
-public subgroup feature route.
+Both had zero result, inactive-slot and guard mismatches. The Add diagnostics
+alone do not establish other arithmetic operations, original CTS eligibility
+or a public subgroup feature route.
+
+The pinned arithmetic factory also selects Mul, Min and Max for all four
+extended operand families, plus bitwise And, Or and Xor for the integer
+families. The host regression checked 252 additional scalar through vec4
+reduce/inclusive/exclusive modules with exact SPIR-V operations, nonempty PS5
+machine code and distinct code for every operation and scan mode per form.
+This establishes a compiler boundary, not GPU behavior for those 252 forms.
+A separate unsigned Int8 vec4 Min reduction chose each component's minimum
+from a different lane (31, 0, 17 and 25). Its bounded firmware 12.02 run
+checked 64 active outputs over four wave32 groups, 64 untouched inactive
+slots, guards, complete transport and title closure with zero mismatches:
+`20260923T162745545Z`, signed eboot SHA-256
+`5027881ae2c5ddd8188597423b73cb47b544fb9ba45a67cc04b55ecabbb0625c`.
 
 A separate vertex-stage diagnostic used a runtime source ID loaded from a
 uniform buffer and passed the subgroup result through a flat varying to a
@@ -4527,10 +4542,10 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
-`subgroupBroadcastDynamicId`. Operations beyond Add reductions and scans, and
-graphics-stage behavior beyond the bounded vertex Broadcast draw remain
-unproven on hardware. These diagnostics establish neither original CTS
-eligibility nor a public subgroup feature route.
+`subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
+Add and Min cases and graphics-stage behavior beyond the bounded vertex
+Broadcast draw remain unproven on hardware. These diagnostics establish
+neither original CTS eligibility nor a public subgroup feature route.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
