@@ -4959,3 +4959,28 @@ current public-review sequence preserves the T08 bits 20/21/22, UBO bit 23,
 and the cube-array/gather/precise-query assignments 25/26/27. The BC bit 24
 and all T07 behavior remain unpromoted pending serial combined integration,
 canonical hardware acceptance and applicable CTS evidence.
+
+
+### Next combined T07 witness dependencies (2026-09-24)
+
+The review stack now extends through #430 (documentation); #425–#430 are still
+open, target the Part1 final branch or their immediate predecessor, and currently
+have green CI. This is review/build evidence only. The stable Part1 base remains
+`722973c`; no PR in this stack has been merged.
+
+A combined witness is gated on two Part1 implementation slices landing on the
+final branch: (1) the BC buffer/image upload and readback executor, plus the
+bounded BC-to-RGBA8 blit path and host oracles; (2) the D16_UNORM attachment,
+clear and draw path with host contracts. The BC diagnostic reporting switch
+remains default-off, and host contracts do not establish emitted hardware
+behavior. The current Part2 stack carries D32/query/gather changes, not the BC
+executor.
+
+After those slices are reviewed and integrated serially, rebuild the pinned
+PSBC host and PS5 archives and SDK from the exact combined HEAD, then run
+`make check` and validate the source-derived measurement selection against that
+HEAD. The acceptance window must exercise the exact precise-query and gather
+leaves plus the applicable original BC and D16 CTS oracles, alongside the
+canonical frozen selection. Record exact source/eboot and selection hashes,
+firmware, receipts, and repeated results. Until that combined run passes, this
+work has no new CTS/GPU acceptance result and no T07 feature-bit promotion.
