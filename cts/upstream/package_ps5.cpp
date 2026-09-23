@@ -6,10 +6,12 @@
 #include "vktApiCopiesAndBlittingTests.hpp"
 #include "vktApiFillBufferTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
+#include "vktBindingBufferDeviceAddressTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktSynchronizationBasicEventTests.hpp"
 #include "vktSynchronizationBasicSemaphoreTests.hpp"
 #include "vktMemoryMappingTests.hpp"
+#include "vktMemoryModelTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
 #include "vktComputeIndirectComputeDispatchTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
@@ -129,12 +131,17 @@ void FocusedVkTestPackage::init(void)
         addChild(apiGroup.release());
     }
 
-    // binding_model.shader_access group
+    // Original binding-model factories. cases.txt remains the leaf filter.
     {
         de::MovePtr<tcu::TestCaseGroup> bindingModelGroup(new tcu::TestCaseGroup(m_testCtx, "binding_model"));
         bindingModelGroup->addChild(vkt::BindingModel::createShaderAccessTests(m_testCtx));
+        bindingModelGroup->addChild(vkt::BindingModel::createBufferDeviceAddressTests(m_testCtx));
         addChild(bindingModelGroup.release());
     }
+
+    // Register the pinned upstream Vulkan memory-model factory and its own
+    // result oracle. No leaf runs unless it is selected in cases.txt.
+    addChild(vkt::MemoryModel::createTests(m_testCtx, "memory_model"));
 
     // synchronization.basic: original legacy event, fence and binary-semaphore
     // factories. cases.txt remains the only leaf filter, so timeline,
