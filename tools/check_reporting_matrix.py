@@ -235,6 +235,25 @@ ADVERTISED_FEATURES["vulkanMemoryModel"] = {
     "cts": _MEMORY_MODEL_VOLATILE_CTS,
 }
 
+ADVERTISED_FEATURES["bufferDeviceAddress"] = {
+    "citations": (
+        ("native/platform_ps5.c",
+         "platform->supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;"),
+        ("src/vk_device.c", "VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME"),
+        ("src/vk_memory.c", "vkGetBufferDeviceAddressKHR"),
+        ("src/vk_pipeline.c", "PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS"),
+        ("src/ps5vk_compiler.c", "enable_physical_storage_buffer_addresses"),
+        ("src/descriptor_encode.c", "storage_image_descriptor"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query/create route enables bounded physical "
+               "storage-buffer addressing; two unchanged original compute "
+               "CTS leaves and an independent GPU address witness passed"),
+    "cts": (
+        "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
+        "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero",
+    ),
+}
+
 # DXVK262-T04. The applicable upstream oracle for both distance features is the
 # pinned clipping module's user-defined family, which the frozen selection lists
 # in full for the shapes this device can run: vertex-only, the two indexing modes
@@ -1230,9 +1249,9 @@ def main() -> int:
                 row.get("scope") == "optimalTilingFeatures" and
                 row.get("profile") == "graphics"):
             row["applicable_cts"] = {
-                "cases": [case["path"] for case in manifest.get("diagnostics", [])
+                "cases": [case["path"] for case in manifest.get("cases", [])
                           if case["category"] == "t08-buffer-device-address-base"],
-                "status": "diagnostic",
+                "status": "acceptance",
                 "note": "original compute BDA leaves exercise the bounded R32_UINT storage image",
             }
     for row in features:

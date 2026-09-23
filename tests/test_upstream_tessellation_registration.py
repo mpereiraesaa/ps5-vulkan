@@ -10,9 +10,12 @@ class TessellationRegistrationTests(unittest.TestCase):
     def test_profile_records_experimental_switches_not_validation(self):
         normal = tessellation_build_profile({})
         self.assertFalse(normal["experimental"])
-        self.assertEqual("0", normal["switches"]["PS5VK_BDA_DIAGNOSTIC"])
-        self.assertEqual("1", tessellation_build_profile(
-            {"PS5VK_BDA_DIAGNOSTIC": "1"})["switches"]["PS5VK_BDA_DIAGNOSTIC"])
+        self.assertNotIn("PS5VK_BDA_DIAGNOSTIC", normal["switches"])
+        for path in ("native/platform_ps5.c", "tools/build_sdk.py",
+                     "tools/build_upstream_cts.py", "tools/build_t08_bda_witness.py",
+                     "tools/check_dxvk_profile.py"):
+            with self.subTest(path=path):
+                self.assertNotIn("PS5VK_BDA_DIAGNOSTIC", (ROOT / path).read_text())
         for name in normal["switches"]:
             with self.subTest(name=name):
                 profile = tessellation_build_profile({name: "4"})
