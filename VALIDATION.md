@@ -4410,6 +4410,9 @@ evidence, not a legal public feature or original CTS result.
 | Opposite integer signedness in scalar through vec4 `subgroupBroadcast` and `subgroupBroadcastFirst` | Compute | Signed Int8, unsigned Int16 and signed Int64: 24 typed SPIR-V modules compiled to nonempty machine code; GPU proof below covers signed Int64 vec4 BroadcastFirst only | False |
 | Negative signed Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | Distinct negative high and positive low words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
 | 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Vertex | Private GPU color readback: 160/160 rendered pixels matched source lane 7; a lane-ID control on the same draw differed at all 160 pixels. The diagnostic draw covered 16 of its 32 intended tile regions, so this does not establish full graphics coverage | False |
+| Unsigned Int8, signed Int16, unsigned Int64 and Float16 `subgroupAdd` reduction, scalar through vec4 | Compute | All 16 typed SPIR-V modules compiled to live PS5 machine code distinct from no-reduction controls; GPU evidence below covers unsigned Int8 vec4 and unsigned Int64 vec4 | False |
+| Unsigned Int8 vec4 `subgroupAdd` reduction with wraparound | Compute | Exact four-component results for 64 active outputs over four wave32 groups, 64 inactive slots untouched, guards zero | False |
+| Unsigned Int64 vec4 `subgroupAdd` reduction | Compute | Exact high and low words of all four components for 64 active outputs over four wave32 groups, 64 inactive slots untouched, guards zero | False |
 | Other subgroup operations or graphics stages | None | No reviewed public stage exposure or GPU oracle | False |
 
 The diagnostic narrow-integer runs enabled compiler options and SPIR-V
@@ -4459,6 +4462,24 @@ completion. Strict run `20260923T142727583Z`; signed eboot SHA-256
 `634d1ce41d1c0af2c902ef36262bbcafd1acc34333c7ee29de5b8e58981fab2a`.
 The other counterpart forms have host compiler evidence only.
 
+The pinned original CTS arithmetic factory selects the same narrow operand
+families for `subgroupAdd` reduction. The host compiler regression compiles
+scalar through vec4 unsigned Int8, signed Int16, unsigned Int64 and Float16
+modules, confirms the expected reduction instruction in each SPIR-V module,
+and confirms that live PS5 machine code differs from a no-reduction control.
+Two separate diagnostic GPU runs then checked every component of 64 active
+outputs across four wave32 groups, 64 untouched inactive slots, guards, a
+bounded fence, a complete transport receipt and title closure. The unsigned
+Int64 vec4 run checked both 32-bit halves of each 64-bit result:
+`20260923T154756035Z`, signed eboot SHA-256
+`89dceae9af91be0c19d506eed48efab3a417222a26aa34f0ee330794b4ed23d5`.
+The unsigned Int8 vec4 run used values whose sums wrap at eight bits:
+`20260923T155857928Z`, signed eboot SHA-256
+`9518f1e1f0c99d7cea5946f170c3a2c00f90a7d4bca77d67d08156ed5a42aeab`.
+Both had zero result, inactive-slot and guard mismatches. These diagnostics
+do not establish other arithmetic operations, original CTS eligibility or a
+public subgroup feature route.
+
 A separate vertex-stage diagnostic used a runtime source ID loaded from a
 uniform buffer and passed the subgroup result through a flat varying to a
 fragment color attachment. With the same 96-vertex draw and measured raster
@@ -4489,8 +4510,9 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
-`subgroupBroadcastDynamicId`. Other operations and graphics-stage behavior
-remain unproven on hardware. These diagnostics establish neither original CTS
+`subgroupBroadcastDynamicId`. Operations beyond reduction Add and
+graphics-stage behavior beyond the bounded vertex Broadcast draw remain
+unproven on hardware. These diagnostics establish neither original CTS
 eligibility nor a public subgroup feature route.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
