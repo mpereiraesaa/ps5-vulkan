@@ -4409,8 +4409,8 @@ evidence, not a legal public feature or original CTS result.
 | Unsigned Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | All eight high/low component words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
 | Opposite integer signedness in scalar through vec4 `subgroupBroadcast` and `subgroupBroadcastFirst` | Compute | Signed Int8, unsigned Int16 and signed Int64: 24 typed SPIR-V modules compiled to nonempty machine code; GPU proof below covers signed Int64 vec4 BroadcastFirst only | False |
 | Negative signed Int64 vec4 `subgroupBroadcastFirst` inside an odd-lane branch | Compute | Distinct negative high and positive low words checked for 64 active outputs; 64 inactive slots untouched, guards zero | False |
-| 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Vertex | Diagnostic shader compiled and bounded draw completed; the prior color oracle was invalidated by direct row-major reads of an optimal-tiled image | False |
-| 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Fragment | Diagnostic shader compiled and bounded draw completed; the prior color oracle was invalidated by direct row-major reads of an optimal-tiled image | False |
+| 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Vertex | Corrected linear-staging GPU readback: 320/320 drawn pixels across all 32 tiles matched source lane 7; the lane-ID control differed in all 320 | False |
+| 32-bit unsigned `subgroupBroadcast` with a runtime source ID | Fragment | Corrected linear-staging GPU readback: 2,004/2,004 pixels with active source lane matched lane 7 across a full 2,048-pixel, 32-tile target; the lane-ID control differed in 1,937 eligible pixels | False |
 | Unsigned Int8, signed Int16, unsigned Int64 and Float16 `subgroupAdd` reduction, scalar through vec4 | Compute | All 16 typed SPIR-V modules compiled to live PS5 machine code distinct from no-reduction controls; GPU evidence below covers unsigned Int8 vec4 and unsigned Int64 vec4 | False |
 | The same 16 type and width forms with inclusive and exclusive `subgroupAdd` scans | Compute | All 32 scan SPIR-V modules compiled to live PS5 machine code; reduce, both scans and no-op control had distinct code per form. GPU evidence below covers Int8 vec4 exclusive and Int64 vec4 inclusive only | False |
 | Unsigned Int8 vec4 `subgroupAdd` reduction with wraparound | Compute | Exact four-component results for 64 active outputs over four wave32 groups, 64 inactive slots untouched, guards zero | False |
@@ -4521,10 +4521,18 @@ run was `20260923T152735648Z` (signed eboot SHA-256
 `85d7bf176103b240c0ff507158464f1d43691023bcb1e89c06524b70dc2b6739`);
 the Broadcast run was `20260923T152851269Z` (signed eboot SHA-256
 `5da72163e4dee7fe4e13c68c077357d8f2b0da889da1382d229d91d473de16c8`).
-The color verifier directly indexed mapped memory of an optimal-tiled image as
-row-major pixels. Its reported pixel counts, colors and tile footprint are
-therefore invalid as a GPU oracle. A linear staging readback is required before
-claiming vertex-stage Broadcast output correctness.
+The original color verifier directly indexed mapped memory of an optimal-tiled
+image as row-major pixels. Its reported pixel counts, colors and tile footprint
+are invalid as a GPU oracle. A corrected witness copied the rendered image to
+a linear staging image and read its rows using `vkGetImageSubresourceLayout`.
+The 96-vertex control and Broadcast draws each covered 320 pixels across all
+32 tile regions. Every control pixel differed from source lane 7, while every
+Broadcast pixel matched it. Both runs had zero invalid colors and unchanged
+source-buffer guards, completed bounded fences and closed cleanly. The control
+run was `20260923T171645174Z` (signed eboot SHA-256
+`50ec8a044661870601e605531f84f9fd7a1a5df76d7cb37fcb994dca81ef363e`);
+the Broadcast run was `20260923T171723313Z` (signed eboot SHA-256
+`55f6915717b934d5f9330fcbac94179db68df759edb66b95a236b75f50c07fb9`).
 
 A separate fragment-stage diagnostic loaded source ID 7 from a uniform buffer
 and used a ballot to identify pixels whose source lane was active. Its control
@@ -4536,8 +4544,18 @@ the Broadcast run was `20260923T164545696Z` (signed eboot SHA-256
 `a9ec0bc73029dfd953b3e6d8cbfb5fed997cedd1710208707003213d04b9e36b`).
 This witness used the same invalid direct read of optimal-tiled image memory.
 Its reported 52 eligible pixels, color comparisons and 16-tile footprint do
-not establish fragment-stage Broadcast correctness. The shipping profile
-still rejects subgroup SPIR-V in graphics stages.
+not establish fragment-stage Broadcast correctness. A corrected single-triangle
+witness copied the optimal image to linear staging and verified all 2,048
+pixels across all 32 tile regions. A ballot identified 2,004 pixels with an
+active source lane; the other 44 were excluded from the Broadcast oracle. The
+lane-ID control differed from source lane 7 in 1,937 eligible pixels, and the
+Broadcast variant matched lane 7 in all 2,004. Both had zero invalid colors
+or source-buffer guard mismatches, bounded fences, complete transport and
+clean title closure. The control run was `20260923T171258358Z` (signed eboot
+SHA-256 `70665b25cd0c7434c671f996d3b46b73863649985658732cb573fdc845a1de46`);
+the Broadcast run was `20260923T171340730Z` (signed eboot SHA-256
+`7dd33264159adcb5953ceb71ea0e536dc86bd3b132778c7a05c1bd22290a329d`).
+The shipping profile still rejects subgroup SPIR-V in graphics stages.
 
 The pinned original CTS factory and registry impose these public eligibility
 conditions. `VK_KHR_shader_subgroup_extended_types` depends on Vulkan 1.1;
@@ -4554,9 +4572,10 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
 `subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
-Add and Min cases and graphics-stage Broadcast color output remain unproven on
-hardware. These diagnostics establish
-neither original CTS eligibility nor a public subgroup feature route.
+Add and Min cases and graphics-stage subgroup operations beyond the bounded
+vertex and fragment Broadcast draws remain unproven on hardware. These
+diagnostics establish neither original CTS eligibility nor a public subgroup
+feature route.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
