@@ -1922,6 +1922,124 @@ static void device_group_dispatch_command_gate(void)
     assert(!vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMask"));
 }
 
+static void buffer_address_khr_device_route(void)
+{
+    const char *instance_names[] = {
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+        VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME,
+    };
+    VkInstanceCreateInfo instance_info = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 2, .ppEnabledExtensionNames = instance_names};
+    VkInstance i = VK_NULL_HANDLE;
+    assert(vkCreateInstance(&instance_info, NULL, &i) == VK_SUCCESS);
+    VkPhysicalDevice p = physical(i);
+    const uint32_t baseline = p->platform.supported_features;
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR reported = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR};
+    VkPhysicalDeviceFeatures2 query = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &reported};
+    vkGetPhysicalDeviceFeatures2KHR(p, &query);
+    assert(!reported.bufferDeviceAddress && !reported.bufferDeviceAddressCaptureReplay &&
+           !reported.bufferDeviceAddressMultiDevice);
+
+    const char *device_names[] = {
+        VK_KHR_DEVICE_GROUP_EXTENSION_NAME,
+        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+    };
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR requested = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR,
+        .bufferDeviceAddress = VK_TRUE};
+    VkDeviceGroupDeviceCreateInfo group = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO,
+        .pNext = &requested, .physicalDeviceCount = 1,
+        .pPhysicalDevices = &p};
+    VkDeviceQueueCreateInfo q;
+    float priority;
+    VkDeviceCreateInfo info = device_info(&q, &priority);
+    info.pNext = &group;
+    info.enabledExtensionCount = 2;
+    info.ppEnabledExtensionNames = device_names;
+    VkDevice d = VK_NULL_HANDLE;
+    const unsigned before = opened;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT);
+    assert(!d && opened == before);
+
+    p->platform.supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    vkGetPhysicalDeviceFeatures2KHR(p, &query);
+    assert(reported.bufferDeviceAddress && !reported.bufferDeviceAddressCaptureReplay &&
+           !reported.bufferDeviceAddressMultiDevice);
+    uint32_t count = 0;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS);
+    assert(count <= 16);
+    VkExtensionProperties properties[16] = {0};
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, properties) == VK_SUCCESS);
+    int found_group = 0, found_bda = 0;
+    for (uint32_t n = 0; n < count; ++n) {
+        found_group |= !strcmp(properties[n].extensionName, device_names[0]);
+        found_bda |= !strcmp(properties[n].extensionName, device_names[1]);
+    }
+    assert(found_group && found_bda);
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && d->device_group_extension_enabled &&
+           (d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS));
+    vkDestroyDevice(d, NULL);
+
+    requested.bufferDeviceAddress = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && d->device_group_extension_enabled &&
+           !(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS));
+    vkDestroyDevice(d, NULL);
+    requested.bufferDeviceAddress = VK_TRUE;
+    info.enabledExtensionCount = 1;
+    requested.bufferDeviceAddress = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d && d->device_group_extension_enabled &&
+           !(d->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS));
+    vkDestroyDevice(d, NULL);
+    requested.bufferDeviceAddress = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    info.enabledExtensionCount = 2;
+    info.ppEnabledExtensionNames = &device_names[1];
+    info.enabledExtensionCount = 1;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    info.ppEnabledExtensionNames = device_names;
+    info.enabledExtensionCount = 2;
+    requested.bufferDeviceAddressCaptureReplay = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    requested.bufferDeviceAddressCaptureReplay = VK_FALSE;
+    requested.bufferDeviceAddressMultiDevice = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    requested.bufferDeviceAddressMultiDevice = 2;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.bufferDeviceAddressMultiDevice = VK_FALSE;
+    requested.bufferDeviceAddress = 2;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.bufferDeviceAddress = VK_TRUE;
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR duplicate = requested;
+    requested.pNext = &duplicate;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+    requested.pNext = NULL;
+    p->platform.supported_features = baseline;
+    vkDestroyInstance(i, NULL);
+
+    instance_info.enabledExtensionCount = 1;
+    assert(vkCreateInstance(&instance_info, NULL, &i) == VK_SUCCESS);
+    p = physical(i);
+    p->platform.supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    group.pPhysicalDevices = &p;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+
+    instance_info.ppEnabledExtensionNames = &instance_names[1];
+    assert(vkCreateInstance(&instance_info, NULL, &i) == VK_SUCCESS);
+    p = physical(i);
+    p->platform.supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+    group.pPhysicalDevices = &p;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+}
+
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
@@ -1931,5 +2049,6 @@ int main(void)
     single_device_group_creation();
     buffer_address_command_gate();
     device_group_dispatch_command_gate();
+    buffer_address_khr_device_route();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }
