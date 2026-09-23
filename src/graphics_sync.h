@@ -16,6 +16,9 @@ size_t ps5vk_graphics_register_probe(uint32_t *,size_t,uint64_t);
  * availability bit 63 set. Returns 0 for a null, misaligned or out-of-range
  * address, or too little capacity, and writes nothing in that case. */
 size_t ps5vk_graphics_occlusion_event(uint32_t *, size_t, uint64_t);
+/* Default-off diagnostic DB_COUNT_CONTROL write. precise selects ZPASS slot
+ * zero and PERFECT_ZPASS_COUNTS; false disables the counter after the dump. */
+size_t ps5vk_graphics_occlusion_control(uint32_t *,size_t,int precise);
 /* Full-range GFX10 cache operations for the first serial graphics backend.
  * Caller supplies mapped owned storage and flushes CPU writes before submit.
  * RELEASE signals an exact nonzero 64-bit serial after CB/DB and GCR work.
