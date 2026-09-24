@@ -51,6 +51,9 @@ def tessellation_build_profile(environment):
             "PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC",
             "PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC",
             "PS5VK_GATHER_EXTENDED_DIAGNOSTIC",
+            "PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC",
+            "PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC",
+            "PS5VK_D32_SAMPLED_DIAGNOSTIC",
         )
     }
     return {

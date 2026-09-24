@@ -11,6 +11,20 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeDiagnosticOptions(unittest.TestCase):
+    def test_t07_depth_and_integer_build_switches_are_attributed(self):
+        from tools.build_upstream_cts import tessellation_build_profile
+
+        names = ("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC",
+                 "PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC",
+                 "PS5VK_D32_SAMPLED_DIAGNOSTIC")
+        profile = tessellation_build_profile({name: "1" for name in names})
+        self.assertTrue(profile["experimental"])
+        sdk = (ROOT / "tools/build_sdk.py").read_text()
+        for name in names:
+            self.assertEqual(profile["switches"][name], "1")
+            self.assertIn(name, sdk)
+            self.assertEqual(tessellation_build_profile({})["switches"][name], "0")
+
     def test_promoted_fragment_feature_has_no_diagnostic_switch(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
         builder = (ROOT / "tools/build_sdk.py").read_text()

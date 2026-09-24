@@ -277,6 +277,13 @@ def main():
             raise SystemExit("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC must be 0 or 1")
         if d16_depth_diagnostic == "1":
             native_cflags.append("-DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1")
+        for name in ("PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC",
+                     "PS5VK_D32_SAMPLED_DIAGNOSTIC"):
+            value = os.environ.get(name, "0")
+            if value not in ("0", "1"):
+                raise SystemExit(f"{name} must be 0 or 1")
+            if value == "1":
+                native_cflags.append(f"-D{name}=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:
