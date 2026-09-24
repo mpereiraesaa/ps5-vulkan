@@ -177,6 +177,41 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
             j->readback.target[0]=plan;
         }
     } else rc=ps5vk_upload_commands(d,cb->operations+first,count,NULL,&j->layouts,&cursor,end,cache);
+    if(rc!=VK_SUCCESS) {
+        /* Keep a refused upload measurable at the same boundary where it is
+         * rejected. The operation index and shape tell an unsupported CTS
+         * barrier from a copy-plan or resource-span failure without guessing
+         * from the later queue error. */
+        for(unsigned i=0;i<count;++i) {
+            const struct ps5vk_operation *op=&cb->operations[first+i];
+            if(op->type==PS5VK_IMAGE_BARRIER) {
+                VkImage image=op->image_barrier.image;
+                ps5log_printf(PS5LOG_INFO,
+                    "PS5VK_UPLOAD_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x layout=%u/%u format=%u usage=%08x",
+                    i,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                    (unsigned)op->src_access,(unsigned)op->dst_access,
+                    (unsigned)op->image_barrier.oldLayout,(unsigned)op->image_barrier.newLayout,
+                    image?(unsigned)image->info.format:0u,
+                    image?(unsigned)image->info.usage:0u);
+            } else if(op->type==PS5VK_COPY_BUFFER_IMAGE) {
+                ps5log_printf(PS5LOG_INFO,
+                    "PS5VK_UPLOAD_OP index=%u type=%u stages=%08x/%08x layout=%u format=%u usage=%08x offset=%llu extent=%ux%ux%u row=%u image_height=%u",
+                    i,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                    (unsigned)op->copy_layout,op->copy_image?(unsigned)op->copy_image->info.format:0u,
+                    op->copy_image?(unsigned)op->copy_image->info.usage:0u,
+                    (unsigned long long)op->copy_region.bufferOffset,
+                    op->copy_region.imageExtent.width,op->copy_region.imageExtent.height,
+                    op->copy_region.imageExtent.depth,op->copy_region.bufferRowLength,
+                    op->copy_region.bufferImageHeight);
+            } else {
+                ps5log_printf(PS5LOG_INFO,
+                    "PS5VK_UPLOAD_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x buffer=%u",
+                    i,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                    (unsigned)op->src_access,(unsigned)op->dst_access,
+                    op->buffer_barrier.buffer?1u:0u);
+            }
+        }
+    }
     if(rc!=VK_SUCCESS)goto fail;
     j->chain.cursor=cursor;
     rc=ps5vk_draw_batch_close(&j->chain);
@@ -1442,14 +1477,122 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             if(rc==VK_SUCCESS && partition.prefix_count)
                 rc=ps5vk_upload_commands(d,postlude,partition.prefix_count,j->color,
                     &j->layouts,&cursor,end,cache);
+            if(rc!=VK_SUCCESS && partition.prefix_count) {
+                for(unsigned k=0;k<partition.prefix_count;++k) {
+                    const struct ps5vk_operation *op=&postlude[k];
+                    if(op->type==PS5VK_IMAGE_BARRIER) {
+                        VkImage image=op->image_barrier.image;
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x layout=%u/%u format=%u usage=%08x",
+                            k,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                            (unsigned)op->src_access,(unsigned)op->dst_access,
+                            (unsigned)op->image_barrier.oldLayout,
+                            (unsigned)op->image_barrier.newLayout,
+                            image?(unsigned)image->info.format:0u,
+                            image?(unsigned)image->info.usage:0u);
+                    } else if(op->type==PS5VK_COPY_BUFFER_IMAGE) {
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u layout=%u format=%u usage=%08x offset=%llu extent=%ux%ux%u row=%u image_height=%u",
+                            k,(unsigned)op->type,(unsigned)op->copy_layout,
+                            op->copy_image?(unsigned)op->copy_image->info.format:0u,
+                            op->copy_image?(unsigned)op->copy_image->info.usage:0u,
+                            (unsigned long long)op->copy_region.bufferOffset,
+                            op->copy_region.imageExtent.width,op->copy_region.imageExtent.height,
+                            op->copy_region.imageExtent.depth,op->copy_region.bufferRowLength,
+                            op->copy_region.bufferImageHeight);
+                    } else {
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x",
+                            k,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                            (unsigned)op->src_access,(unsigned)op->dst_access);
+                    }
+                }
+            }
             if(rc==VK_SUCCESS)
                 rc=ps5vk_readback_commands(d,postlude+partition.readback_first,
                     partition.readback_count,j->color,&j->layouts,&plan);
+            if(rc==VK_SUCCESS && partition.suffix_count)
+                rc=ps5vk_upload_commands(d,postlude+partition.suffix_first,
+                    partition.suffix_count,j->color,&j->layouts,&cursor,end,cache);
+            if(rc!=VK_SUCCESS) {
+                ps5log_printf(PS5LOG_INFO,
+                    "PS5VK_GRAPHICS_POSTLUDE_SPLIT total=%u prefix=%u readback_first=%u readback_count=%u readback=%u",
+                    postlude_count,partition.prefix_count,partition.readback_first,
+                    partition.readback_count,readback);
+                for(unsigned k=0;k<postlude_count;++k) {
+                    const struct ps5vk_operation *op=&postlude[k];
+                    if(op->type==PS5VK_IMAGE_BARRIER) {
+                        VkImage image=op->image_barrier.image;
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x layout=%u/%u format=%u usage=%08x",
+                            k,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                            (unsigned)op->src_access,(unsigned)op->dst_access,
+                            (unsigned)op->image_barrier.oldLayout,
+                            (unsigned)op->image_barrier.newLayout,
+                            image?(unsigned)image->info.format:0u,
+                            image?(unsigned)image->info.usage:0u);
+                    } else if(op->type==PS5VK_COPY_IMAGE_BUFFER) {
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u buffer=%u format=%u usage=%08x layout=%u extent=%ux%ux%u row=%u image_height=%u",
+                            k,(unsigned)op->type,op->copy_destination?1u:0u,
+                            op->copy_image?(unsigned)op->copy_image->info.format:0u,
+                            op->copy_image?(unsigned)op->copy_image->info.usage:0u,
+                            (unsigned)op->copy_layout,op->copy_region.imageExtent.width,
+                            op->copy_region.imageExtent.height,op->copy_region.imageExtent.depth,
+                            op->copy_region.bufferRowLength,op->copy_region.bufferImageHeight);
+                    } else if(op->type==PS5VK_COPY_BUFFER_IMAGE) {
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u format=%u usage=%08x layout=%u extent=%ux%ux%u row=%u image_height=%u",
+                            k,(unsigned)op->type,
+                            op->copy_image?(unsigned)op->copy_image->info.format:0u,
+                            op->copy_image?(unsigned)op->copy_image->info.usage:0u,
+                            (unsigned)op->copy_layout,op->copy_region.imageExtent.width,
+                            op->copy_region.imageExtent.height,op->copy_region.imageExtent.depth,
+                            op->copy_region.bufferRowLength,op->copy_region.bufferImageHeight);
+                    } else {
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x",
+                            k,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                            (unsigned)op->src_access,(unsigned)op->dst_access);
+                    }
+                }
+            }
             if(rc!=VK_SUCCESS)goto fail;
             j->readback.count=1u;j->readback.target[0]=plan;
         } else {
             rc=ps5vk_upload_commands(d,postlude,postlude_count,j->color,
                 &j->layouts,&cursor,end,cache);
+            if(rc!=VK_SUCCESS) {
+                for(unsigned k=0;k<postlude_count;++k) {
+                    const struct ps5vk_operation *op=&postlude[k];
+                    if(op->type==PS5VK_IMAGE_BARRIER) {
+                        VkImage image=op->image_barrier.image;
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x layout=%u/%u format=%u usage=%08x",
+                            k,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                            (unsigned)op->src_access,(unsigned)op->dst_access,
+                            (unsigned)op->image_barrier.oldLayout,
+                            (unsigned)op->image_barrier.newLayout,
+                            image?(unsigned)image->info.format:0u,
+                            image?(unsigned)image->info.usage:0u);
+                    } else if(op->type==PS5VK_COPY_BUFFER_IMAGE) {
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u layout=%u format=%u usage=%08x offset=%llu extent=%ux%ux%u row=%u image_height=%u",
+                            k,(unsigned)op->type,(unsigned)op->copy_layout,
+                            op->copy_image?(unsigned)op->copy_image->info.format:0u,
+                            op->copy_image?(unsigned)op->copy_image->info.usage:0u,
+                            (unsigned long long)op->copy_region.bufferOffset,
+                            op->copy_region.imageExtent.width,op->copy_region.imageExtent.height,
+                            op->copy_region.imageExtent.depth,op->copy_region.bufferRowLength,
+                            op->copy_region.bufferImageHeight);
+                    } else {
+                        ps5log_printf(PS5LOG_INFO,
+                            "PS5VK_GRAPHICS_POSTLUDE_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x",
+                            k,(unsigned)op->type,(unsigned)op->src_stage,(unsigned)op->dst_stage,
+                            (unsigned)op->src_access,(unsigned)op->dst_access);
+                    }
+                }
+            }
             if(rc!=VK_SUCCESS)goto fail;
         }
     }

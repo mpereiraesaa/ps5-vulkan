@@ -36,6 +36,43 @@ int main(void)
     struct ps5vk_readback_partition partition={0};
     assert(ps5vk_readback_partition(ops,4,&partition)==VK_SUCCESS);
     assert(!partition.prefix_count && !partition.readback_first && partition.readback_count==4);
+    /* TextureRenderer appends the image's return-to-attachment transition
+     * after copyImageToBuffer's four-operation readback sequence. Keep that
+     * transition in the same submission and expose it as the trailing range. */
+    struct ps5vk_operation renderer_postlude[5]={
+        ops[0],ops[1],ops[2],ops[3],
+        {.type=PS5VK_IMAGE_BARRIER,
+         .src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+         .dst_stage=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+         .image_barrier={.image=&image,
+             .oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+             .newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+             .srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT,
+             .dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT}}
+    };
+    partition=(struct ps5vk_readback_partition){0};
+    assert(ps5vk_readback_partition(renderer_postlude,5,&partition)==VK_SUCCESS);
+    assert(partition.prefix_count==0 && partition.readback_first==0 &&
+        partition.readback_count==4 && partition.suffix_first==4 &&
+        partition.suffix_count==1);
+    layouts=(struct ps5vk_layout_state){0};
+    assert(ps5vk_readback_commands(&device,renderer_postlude,4,&image,
+        &layouts,&plan)==VK_SUCCESS);
+    const struct ps5vk_operation saved_return=renderer_postlude[4];
+    renderer_postlude[4].image_barrier.image=&other;
+    assert(ps5vk_readback_partition(renderer_postlude,5,&partition)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    renderer_postlude[4]=saved_return;
+    renderer_postlude[4].image_barrier.newLayout=VK_IMAGE_LAYOUT_GENERAL;
+    assert(ps5vk_readback_partition(renderer_postlude,5,&partition)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    renderer_postlude[4]=saved_return;
+    renderer_postlude[4].dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT;
+    assert(ps5vk_readback_partition(renderer_postlude,5,&partition)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    renderer_postlude[4]=saved_return;
+    assert(ps5vk_readback_partition(renderer_postlude,6,&partition)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
     struct ps5vk_operation mixed[6]={
         {.type=PS5VK_BARRIER,.src_stage=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
          .dst_stage=VK_PIPELINE_STAGE_HOST_BIT,.src_access=VK_ACCESS_SHADER_WRITE_BIT,

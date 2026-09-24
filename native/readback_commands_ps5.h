@@ -26,14 +26,17 @@ struct ps5vk_readback_partition {
     unsigned prefix_count;
     unsigned readback_first;
     unsigned readback_count;
+    unsigned suffix_first;
+    unsigned suffix_count;
 };
 
 /* A render-pass postlude may order unrelated shader writes before the fixed
  * image readback sequence.  Locate that sequence by its single image-to-buffer
  * copy, whose immediately preceding operation must be its image barrier.  The
  * strict readback validator below still owns the complete four-operation
- * suffix; this function only partitions the immutable command record and
- * refuses ambiguous or trailing shapes. */
+ * readback. The texture renderer may append its exact TRANSFER_SRC-to-colour
+ * handback after that readback; return it as a separate suffix so the caller
+ * can run it through the ordinary upload/barrier validator in the same serial. */
 static inline VkResult ps5vk_readback_partition(
     const struct ps5vk_operation *ops,unsigned count,
     struct ps5vk_readback_partition *out)
@@ -42,10 +45,29 @@ static inline VkResult ps5vk_readback_partition(
     unsigned copy=count,copies=0;
     for(unsigned i=0;i<count;++i)
         if(ops[i].type==PS5VK_COPY_IMAGE_BUFFER){copy=i;++copies;}
-    if(copies!=1 || !copy || count-copy!=3)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(copies!=1 || !copy || count-copy<3)return VK_ERROR_FEATURE_NOT_PRESENT;
     const unsigned first=copy-1;
     if(ops[first].type!=PS5VK_IMAGE_BARRIER)return VK_ERROR_FEATURE_NOT_PRESENT;
-    *out=(struct ps5vk_readback_partition){first,first,4};
+    const unsigned readback_end=first+4;
+    if(readback_end>count)return VK_ERROR_FEATURE_NOT_PRESENT;
+    const unsigned suffix_count=count-readback_end;
+    if(suffix_count) {
+        if(suffix_count!=1 || ops[readback_end].type!=PS5VK_IMAGE_BARRIER)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        const struct ps5vk_operation *op=&ops[readback_end];
+        const VkImageMemoryBarrier *b=&op->image_barrier;
+        if(b->image!=ops[first].image_barrier.image ||
+           b->oldLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+           b->newLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
+           b->srcAccessMask!=VK_ACCESS_TRANSFER_READ_BIT ||
+           b->dstAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
+           op->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
+           op->dst_stage!=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    *out=(struct ps5vk_readback_partition){
+        .prefix_count=first,.readback_first=first,.readback_count=4,
+        .suffix_first=readback_end,.suffix_count=suffix_count};
     return VK_SUCCESS;
 }
 

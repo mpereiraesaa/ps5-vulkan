@@ -171,6 +171,17 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                    b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
                    b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT &&
                    op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                  /* The pinned compressed-texture renderer clears its
+                   * RGBA8 readback target, then hands it to the colour
+                   * attachment stage with the ordinary colour-write access
+                   * and ALL_COMMANDS destination stage
+                   * (vktTextureTestUtil.cpp:1167-1185). */
+                  (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                   b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                   b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                   b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                   op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                   op->dst_stage==VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) ||
                   /* The pinned render-pass module's own initialization pair:
                    * the acquire that discards each attachment into its
                    * transfer destination and the handover that gives the
@@ -196,6 +207,17 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
                  op->src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
                  op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                /* The pinned texture renderer restores its colour target
+                 * after copyImageToBuffer. Keep this explicit handback in the
+                 * same graphics serial as the readback and preserve the final
+                 * COLOR_ATTACHMENT_OPTIMAL layout for the following pass. */
+                (ps5vk_colour_readback_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                 b->srcAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
+                 b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                 op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                 op->dst_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) ||
                 ((!color || b->image==color) && ps5vk_color_discard_barrier(b)) ||
                 ((!color || b->image==color) && ps5vk_color_readback_reuse_barrier(b)) ||
                 /* The pinned multisample leaves' own first-use transition: the
