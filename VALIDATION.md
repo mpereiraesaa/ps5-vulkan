@@ -5517,16 +5517,44 @@ The original CTS leaf named above has not run and is not a claimed PASS.
 
 ### T09 imageless framebuffer diagnostic measurement (2026-09-24)
 
-One imageless framebuffer accepted two attachment views at separate render
-pass begins. Two completed submissions and 8,192 readback pixels matched the
-strict SDK oracle with zero mismatches in run
+The initial SDK-linked clear/readback witness used one imageless framebuffer
+with two attachment views at separate render pass begins. Two completed
+submissions and 8,192 readback pixels matched the strict oracle with zero
+mismatches in run
 `20260924T194946966Z_PPSA99994_ps5vk_0x7869ad308ae`. Eboot SHA-256:
 `01ff1cfbf7ed3f3cf34a0e49dc1256f2d20f65fbfe7db4725c615cfd26abfd21`;
 source-log SHA-256:
 `df42d9306c02b962a5b7f116f1eee4a1b62083474df42236d023f105ba54deb9`.
-The original `dEQP-VK.imageless_framebuffer.color` leaf is registered but has
-not run. The Vulkan 1.0 KHR extension dependency chain is incomplete, so the
-ordinary public extension and feature remain disabled.
+
+A second SDK-linked diagnostic witness cleared and drew into each of two
+begin-time views, then read back both after separate bounded submissions.
+It checked 2,048 drawn pixels and 6,144 clear pixels with zero mismatches
+in run `20260924T225116620Z_PPSA99994_ps5vk_0x116e03cca98b`.
+Eboot SHA-256:
+`0de8621154ed3da156d192631cf31cbd416876bce8a23252f7d2ae1531664cd3`;
+source-log SHA-256:
+`6ad91b76b5b8e41c5c3d18fb1dda16e9599696138a5e618945683c2da8d2dad6`.
+The strict verifier reported two draws, two views, 8,192 checked pixels,
+zero mismatches and clean title closure. Firmware was not queried for this run.
+
+The original `dEQP-VK.imageless_framebuffer.color` leaf was then packaged
+alone in a diagnostic CTS measurement: selection SHA-256
+`aed21135b8b6797c3cd0cf77dce77715d8eb0b701af8db547ae73561e313f7b5`,
+eboot SHA-256
+`34fc5cf0f94a3c2d1f31717852cb8f3c4515fdf71d840697c00bc969809f2cfc`.
+Run `20260924T233314986Z_PPSA99994_upstream-cts_0x13b85c07824e`
+reported **0 Pass, 0 Fail, 1 NotSupported**. QPA SHA-256:
+`9e56f4bdd01816f35c09c2d2a154c71b3665e52ba214f4bf092bda47746eca16`;
+source-log SHA-256:
+`c5fccc7a45d2b89b7197be0b8c88f8c406db08738f2fc91ec24d715b8eacca5f`;
+receipt SHA-256:
+`a86d9da03e503a7da19741d931f169352ece1cccd8cccfddc0b435705542d74b`.
+The upstream support check stopped before rendering because
+`VK_KHR_imageless_framebuffer` is not advertised. The QPA was complete, the
+title closed cleanly and the previous payload was restored. This is not a CTS
+PASS or a render failure. The Vulkan 1.0 public path still needs
+`VK_KHR_maintenance2` and `VK_KHR_image_format_list`; the instance extension
+`VK_KHR_get_physical_device_properties2` is already present.
 
 ### T09 sampler mirror clamp diagnostic measurement (2026-09-24)
 
