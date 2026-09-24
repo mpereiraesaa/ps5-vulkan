@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Join the pinned DXVK 2.6.2 profile to ps5vk's current evidence.
 
-This is intentionally fail-closed.  A required value that cannot be obtained
-from the public reporting matrix, reviewed implementation evidence, upstream
-CTS mapping and native evidence remains a blocker.
+This is intentionally fail-closed. A required value without public reporting,
+reviewed implementation or native execution evidence remains a blocker. CTS
+mapping and runs are regression evidence: an unmapped or unrun leaf does not
+block, while an observed applicable failure does.
 """
 
 from __future__ import annotations
@@ -188,7 +189,8 @@ def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, 
              "detail": "Equivalent KHR field; Vulkan 1.2 aggregate structs and API 1.3 remain unadvertised."},
             {"state": "implemented" if satisfied else "missing",
              "refs": ["src/vk_device.c", "src/vk_render_pass.c", "native/graphics_queue_ps5.c"],
-             "detail": "Reviewed multiview execution; the separate CTS and native axes must also pass."})
+             "detail": "Reviewed multiview execution; a strict native witness is required, "
+                       "and an observed applicable CTS failure blocks."})
 
 
 def canonical(value: object) -> str:
