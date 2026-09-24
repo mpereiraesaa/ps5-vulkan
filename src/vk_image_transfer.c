@@ -186,6 +186,7 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_IMAGE_BARRIER:
         return (ps5vk_bc_linear_image(op->image_barrier.image) ||
+                ps5vk_rgba_linear_image(op->image_barrier.image) ||
                 ps5vk_pure_transfer_image(op->image_barrier.image) ||
                 ps5vk_linear_staging_image(op->image_barrier.image) ||
                 ps5vk_storage_image(op->image_barrier.image)) ?
@@ -196,7 +197,7 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
 }
 
 /* Frontend work of the linear domain: image/buffer transfers over the padded
- * linear layout, layout bookkeeping for the roles that have no GPU stage, and
+ * linear layout, ordered layout bookkeeping for linear storage, and
  * the colour-attachment readback copy whose detile runs in recorded order after
  * the producing submission completed. The tiled colour-attachment role itself
  * keeps its GPU prelude/postlude path and the sampled role keeps its upload
@@ -758,24 +759,8 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
     VkDeviceSize bytes = 0;
     if (op->type == PS5VK_IMAGE_BARRIER) {
         const VkImageMemoryBarrier *b = &op->image_barrier;
-        if (ps5vk_bc_linear_image(b->image) &&
-            (b->image->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT)) {
-            const VkImageUsageFlags usage = b->image->info.usage;
-            const int upload = (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
-                b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-                b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-                !b->srcAccessMask && b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT;
-            const int sample = (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
-                b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-                b->newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-                b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT &&
-                b->dstAccessMask == VK_ACCESS_SHADER_READ_BIT;
-            const int readback = (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
-                b->oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-                b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
-                b->srcAccessMask == VK_ACCESS_SHADER_READ_BIT &&
-                b->dstAccessMask == VK_ACCESS_TRANSFER_READ_BIT;
-            if (!upload && !sample && !readback) return INVALID;
+        if (ps5vk_bc_linear_image(b->image) || ps5vk_rgba_linear_image(b->image)) {
+            if (!ps5vk_linear_image_barrier(b)) return INVALID;
         } else if (ps5vk_storage_image(b->image)) {
             if (b->oldLayout != VK_IMAGE_LAYOUT_UNDEFINED ||
                 b->newLayout != VK_IMAGE_LAYOUT_GENERAL || b->srcAccessMask ||
@@ -932,12 +917,12 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
     if (ps5vk_image_linear_validate(d, op) != VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
     if (op->type == PS5VK_IMAGE_BARRIER) {
         const VkImageMemoryBarrier *b = &op->image_barrier;
-        /* The role is host-visible memory that no GPU stage touches, so the
-         * transition is bookkeeping and commits in recorded order. UNDEFINED
-         * discards the previous contents exactly as the GPU path does. */
-        if (b->oldLayout != VK_IMAGE_LAYOUT_UNDEFINED && b->image->layout != b->oldLayout)
-            return VK_ERROR_DEVICE_LOST;
-        b->image->layout = b->newLayout;
+        /* Queue segments execute in order after the preceding segment has
+         * completed. Copies perform their cache visibility operations; this
+         * bookkeeping commits only the addressed subresources. UNDEFINED
+         * discards their previous contents exactly as the GPU path does. */
+        if (!ps5vk_image_layout_transition(b->image, &b->subresourceRange,
+            b->oldLayout, b->newLayout)) return VK_ERROR_DEVICE_LOST;
         return VK_SUCCESS;
     }
     if (op->type == PS5VK_COPY_IMAGE) {
@@ -989,9 +974,17 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         struct ps5vk_texture_mip_layout layout, destination_layout;
         void *source_address = NULL, *destination_address = NULL;
         VkDeviceSize source_bytes = 0, destination_bytes = 0;
-        if (op->image_source->layout != op->image_source_layout ||
-            op->image_destination->layout != op->image_destination_layout ||
-            !bc_blit_decode_format(op->image_source->info.format, &format) ||
+        const VkImageBlit *regions = op->owned_payload;
+        for (uint32_t i = 0; i < op->image_region_count; ++i) {
+            const VkImageBlit *r = &regions[i];
+            if (!ps5vk_image_layout_matches(op->image_source, r->srcSubresource.mipLevel,
+                    r->srcSubresource.baseArrayLayer, r->srcSubresource.layerCount,
+                    op->image_source_layout) ||
+                !ps5vk_image_layout_matches(op->image_destination, r->dstSubresource.mipLevel,
+                    r->dstSubresource.baseArrayLayer, r->dstSubresource.layerCount,
+                    op->image_destination_layout)) return VK_ERROR_DEVICE_LOST;
+        }
+        if (!bc_blit_decode_format(op->image_source->info.format, &format) ||
             ps5vk_texture_mip_layout_for_slices(op->image_source->info.format,
                 op->image_source->info.extent.width, op->image_source->info.extent.height,
                 op->image_source->info.arrayLayers, op->image_source->info.mipLevels, &layout) ||
@@ -1007,7 +1000,7 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         if (!block_bytes || !layout.levels[0].row_pitch || !destination_layout.levels[0].row_pitch ||
             ps5vk_image_invalidate_range(d, op->image_source, 0, layout.bytes) != VK_SUCCESS)
             return VK_ERROR_DEVICE_LOST;
-        const VkImageBlit *regions = (const VkImageBlit *)op->owned_payload;
+
         for (uint32_t i = 0; i < op->image_region_count; ++i) {
             const VkImageBlit *r = &regions[i];
             const uint32_t mip = r->srcSubresource.mipLevel;
@@ -1062,7 +1055,9 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
     }
     void *image_address = NULL, *buffer_address = NULL;
     VkDeviceSize image_bytes = 0, buffer_bytes = 0;
-    if (op->copy_image->layout != op->copy_layout ||
+    if (!ps5vk_image_layout_matches(op->copy_image, op->copy_region.imageSubresource.mipLevel,
+            op->copy_region.imageSubresource.baseArrayLayer,
+            op->copy_region.imageSubresource.layerCount, op->copy_layout) ||
         ps5vk_image_span(d, op->copy_image, &image_address, &image_bytes) != VK_SUCCESS ||
         ps5vk_buffer_span(d, op->type == PS5VK_COPY_BUFFER_IMAGE ? op->copy_source : op->copy_destination,
             0, VK_WHOLE_SIZE, &buffer_address, &buffer_bytes) != VK_SUCCESS)

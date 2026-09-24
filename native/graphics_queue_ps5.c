@@ -1220,7 +1220,13 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                        set->images[index].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
                         rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=18;goto fail;
                     }
-                    rc=ps5vk_layout_require(&j->layouts,set->image_resources[index],set->images[index].imageLayout);
+                    VkImage sampled = set->image_resources[index];
+                    if (sampled->subresource_layouts) {
+                        VkImageView view = set->images[index].imageView;
+                        rc = view && view->image == sampled &&
+                            ps5vk_image_range_layout_matches(sampled, &view->range,
+                                set->images[index].imageLayout) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
+                    } else rc=ps5vk_layout_require(&j->layouts,sampled,set->images[index].imageLayout);
                     if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
                 }
             }

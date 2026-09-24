@@ -533,11 +533,24 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
         !power_two(requirements.alignment) || requirements.memoryTypeBits != 1 ||
         requirements.size % requirements.alignment) return VK_ERROR_INITIALIZATION_FAILED;
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
-    VkImage image = object_alloc(d, allocator, sizeof(*image), &saved, &custom);
+    struct VkImage_T shape = {.info = *info};
+    size_t layout_count = 0;
+    if ((info->mipLevels > 1 || info->arrayLayers > 1) &&
+        (ps5vk_bc_linear_image(&shape) || ps5vk_rgba_linear_image(&shape))) {
+        if ((size_t)info->mipLevels > (SIZE_MAX - sizeof(shape)) /
+            sizeof(VkImageLayout) / info->arrayLayers) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        layout_count = (size_t)info->mipLevels * info->arrayLayers;
+    }
+    VkImage image = object_alloc(d, allocator,
+        sizeof(*image) + layout_count * sizeof(VkImageLayout), &saved, &custom);
     if (!image) return VK_ERROR_OUT_OF_HOST_MEMORY;
     memset(image, 0, sizeof(*image));
     image->device = d; image->allocator = saved; image->custom_allocator = custom;
     image->info = *info;
+    if (layout_count) {
+        image->subresource_layouts = (VkImageLayout *)(image + 1);
+        memset(image->subresource_layouts, 0, layout_count * sizeof(VkImageLayout));
+    }
     /* Queue family indices are ignored for exclusive sharing; do not retain a
      * caller-owned pointer even when a caller supplies an ignored array. */
     image->info.pQueueFamilyIndices = NULL; image->info.queueFamilyIndexCount = 0;

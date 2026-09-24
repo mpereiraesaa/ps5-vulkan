@@ -201,7 +201,10 @@ static void round_trip(VkFormat format, int general)
     }
     /* Barrier coverage is a separate contract. Set the completed layout so
      * this test isolates the public copy recording, routing and execution. */
-    image->layout=general ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    const VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0,
+        VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
+    assert(ps5vk_image_layout_transition(image, &whole, VK_IMAGE_LAYOUT_UNDEFINED,
+        general ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
     VkCommandBuffer c=begin();
     vkCmdCopyBufferToImage(c,upload,image,image->layout,2,regions);
     assert(c->state==PS5VK_RECORDING && c->operation_count==2);
@@ -212,7 +215,9 @@ static void round_trip(VkFormat format, int general)
         expect_cache(im,image_begin[j],image_size[j],0);
     }
     assert(!memcmp(im,expected_image,(size_t)layout.bytes));
-    image->layout=general ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    assert(ps5vk_image_layout_transition(image, &whole,
+        general ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        general ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
     c=begin();
     vkCmdCopyImageToBuffer(c,image,image->layout,download,2,regions);
     assert(c->state==PS5VK_RECORDING && c->operation_count==2);

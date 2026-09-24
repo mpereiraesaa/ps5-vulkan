@@ -398,7 +398,9 @@ static void bc_optimal_transfer_blit(VkImageLayout source_layout, VkImageLayout 
     VkImage source=make_image_extent(srgb ? VK_FORMAT_BC1_RGBA_SRGB_BLOCK : VK_FORMAT_BC1_RGBA_UNORM_BLOCK,usage,4,4,&src_map);
     VkImage destination=make_image_extent(srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM,usage,4,4,&dst_map);
     if (srgb) {
-        destination->layout=VK_IMAGE_LAYOUT_GENERAL;
+        VkImageSubresourceRange whole_destination={VK_IMAGE_ASPECT_COLOR_BIT,0,VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
+    assert(ps5vk_image_layout_transition(destination,&whole_destination,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL));
         memset(dst_map,0xa5,1024);
         VkCommandBuffer clear=begin();
         const VkClearColorValue value={.float32={0.5f,0.25f,0.0f,0.25f}};
@@ -484,8 +486,12 @@ static void bc_source_subresources(VkFormat format, VkFilter filter)
     }
     uint8_t *snapshot=malloc((size_t)layout.bytes); assert(snapshot);
     memcpy(snapshot,src_map,(size_t)layout.bytes);
-    source->layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    destination->layout=VK_IMAGE_LAYOUT_GENERAL;
+    VkImageSubresourceRange whole_source={VK_IMAGE_ASPECT_COLOR_BIT,0,VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
+    assert(ps5vk_image_layout_transition(source,&whole_source,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
+    VkImageSubresourceRange whole_destination={VK_IMAGE_ASPECT_COLOR_BIT,0,VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
+    assert(ps5vk_image_layout_transition(destination,&whole_destination,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL));
     for(unsigned layer=0;layer<3;++layer) for(unsigned mip=0;mip<5;++mip) {
         unsigned width=17>>mip,height=9>>mip;
         if(!width)width=1;
@@ -553,8 +559,12 @@ static void bc_destination_subresources(VkFormat destination_format, VkFilter fi
                 y*src.levels[mip].row_pitch+x*8,block,8);
     }
     uint8_t *expected=malloc((size_t)dst.bytes); assert(expected);
-    source->layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    destination->layout=VK_IMAGE_LAYOUT_GENERAL;
+    VkImageSubresourceRange whole_source={VK_IMAGE_ASPECT_COLOR_BIT,0,VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
+    assert(ps5vk_image_layout_transition(source,&whole_source,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
+    VkImageSubresourceRange whole_destination={VK_IMAGE_ASPECT_COLOR_BIT,0,VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
+    assert(ps5vk_image_layout_transition(destination,&whole_destination,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL));
     for(unsigned mip=0;mip<3;++mip) {
         unsigned width=17>>mip,height=9>>mip;
         memset(dst_map,0xa5,(size_t)dst.bytes);memset(expected,0xa5,(size_t)dst.bytes);

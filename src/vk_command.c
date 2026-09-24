@@ -1283,21 +1283,8 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
     VkImage image=b->image;
     const VkImageUsageFlags usage=image->info.usage;
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
-    if(ps5vk_bc_linear_image(image) && (usage&VK_IMAGE_USAGE_SAMPLED_BIT))return
-        ((usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
-         b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
-         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
-        ((usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
-         b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-         b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
-         b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT) ||
-        ((usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
-         b->oldLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
-         b->srcAccessMask==VK_ACCESS_SHADER_READ_BIT &&
-         b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT);
+    if(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image))
+        return ps5vk_linear_image_barrier(b);
     const int upload=(usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))==
         (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
         !(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
@@ -1492,6 +1479,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
     for(uint32_t j=0;j<image_count;++j) {
         const VkImageMemoryBarrier *b=&images[j];
         VkImage image=b->image;void *address;VkDeviceSize bytes;
+        VkImageSubresourceRange resolved;
         if(!c->pool->device->graphics_enabled ||
             b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
             !command_scope(src,b->srcAccessMask) || !command_scope(dst,b->dstAccessMask) ||
@@ -1506,11 +1494,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
             b->subresourceRange.aspectMask!=(ps5vk_depth_clear_image(image)?
                 (VkImageAspectFlags)VK_IMAGE_ASPECT_DEPTH_BIT:
                 (VkImageAspectFlags)VK_IMAGE_ASPECT_COLOR_BIT) ||
-            b->subresourceRange.baseMipLevel || b->subresourceRange.baseArrayLayer ||
-            (b->subresourceRange.levelCount!=image->info.mipLevels &&
-             b->subresourceRange.levelCount!=VK_REMAINING_MIP_LEVELS) ||
-            (b->subresourceRange.layerCount!=VK_REMAINING_ARRAY_LAYERS &&
-             b->subresourceRange.layerCount!=image->info.arrayLayers) ||
+            !ps5vk_image_range_resolve(image, &b->subresourceRange, &resolved) ||
+            (!(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image)) &&
+             (resolved.baseMipLevel || resolved.baseArrayLayer ||
+              resolved.levelCount != image->info.mipLevels ||
+              resolved.layerCount != image->info.arrayLayers)) ||
             ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS) {invalid(c);return;}
     }
     /* Append only after every member validates: a rejected mixed dependency
