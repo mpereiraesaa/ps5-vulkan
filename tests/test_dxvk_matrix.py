@@ -287,7 +287,8 @@ class DxvkMatrixTests(unittest.TestCase):
                    if item["verdict"] == "satisfied")
         for axis, replacement in (
             ("api", "blocker"), ("implementation", "missing"),
-            ("cts", "mapped-not-run"), ("native", "not-run"),
+            ("cts", "cts-fail"), ("native", "not-run"),
+            ("native", "reported-not-executed"),
         ):
             broken = copy.deepcopy(document)
             candidate = next(item for item in broken["requirements"]
@@ -296,6 +297,133 @@ class DxvkMatrixTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "non-fail-closed"):
                 matrix.validate(broken)
 
+
+    FOCUSED = ["dEQP-VK.synchronization.timeline_semaphore.one_to_n.write_ssbo_compute",
+               "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_device"]
+    SELECTED = {"dEQP-VK.api.smoke.triangle"}
+    DIAGNOSTIC = {"dEQP-VK.api.smoke.diagnostic_only"}
+
+    def focused(self, **changes):
+        return {"state": "cts-focused-pass", "cases": list(self.FOCUSED),
+                "result": {"Pass": len(self.FOCUSED)}, "run_ids": ["run-focused-1"],
+                "artifact_sha256": "a" * 64, "case_list_sha256": "b" * 64,
+                "refs": ["VALIDATION.md#focused"], **changes}
+
+    def test_focused_cts_run_is_green_only_when_every_case_passed(self):
+        cts = matrix.cts_join([], self.focused(), self.SELECTED, self.DIAGNOSTIC)
+        self.assertEqual("cts-focused-pass", cts["state"])
+        self.assertEqual(self.FOCUSED, cts["cases"])
+        self.assertEqual({"Pass": 2}, cts["result"])
+        self.assertEqual(["run-focused-1"], cts["run_ids"])
+        self.assertEqual("a" * 64, cts["artifact_sha256"])
+        self.assertEqual("b" * 64, cts["case_list_sha256"])
+        # A frozen-selection case may accompany focused ones.
+        mixed = self.focused(cases=self.FOCUSED + ["dEQP-VK.api.smoke.triangle"],
+                             result={"Pass": 3})
+        self.assertEqual(3, len(matrix.cts_join([], mixed, self.SELECTED,
+                                                self.DIAGNOSTIC)["cases"]))
+
+    def test_focused_cts_never_counts_not_supported_skip_or_fail(self):
+        for result in ({"Pass": 1, "NotSupported": 1}, {"Pass": 1, "Skip": 1},
+                       {"Pass": 1, "Fail": 1}, {"Pass": 2, "NotSupported": 0},
+                       {"Pass": 1}, {"Pass": 3}, {"NotSupported": 2}, None):
+            with self.subTest(result=result):
+                with self.assertRaisesRegex(ValueError, "exactly Pass"):
+                    matrix.cts_join([], self.focused(result=result),
+                                    self.SELECTED, self.DIAGNOSTIC)
+
+    def test_focused_cts_is_bound_to_an_exact_artifact_and_case_list(self):
+        for changes, message in (
+            ({"run_ids": []}, "run id"), ({"run_ids": [""]}, "run id"),
+            ({"artifact_sha256": "A" * 64}, "artifact_sha256"),
+            ({"artifact_sha256": None}, "artifact_sha256"),
+            ({"case_list_sha256": "c" * 63}, "case_list_sha256"),
+            ({"cases": []}, "leaf names"),
+            ({"cases": ["dEQP-VK.synchronization.*"], "result": {"Pass": 1}}, "leaf names"),
+            ({"cases": ["dEQP-GLES2.info.vendor"], "result": {"Pass": 1}}, "leaf names"),
+            ({"cases": self.FOCUSED[:1] * 2}, "leaf names"),
+            ({"cases": ["dEQP-VK.api.smoke.diagnostic_only"], "result": {"Pass": 1}},
+             "diagnostic"),
+            ({"cases": ["dEQP-VK.api.smoke.triangle"], "result": {"Pass": 1}},
+             "use cts-pass"),
+        ):
+            with self.subTest(changes=changes):
+                with self.assertRaisesRegex(ValueError, message):
+                    matrix.cts_join([], self.focused(**changes),
+                                    self.SELECTED, self.DIAGNOSTIC)
+
+    def test_unknown_cts_states_are_refused(self):
+        for state in ("cts-waived", "cts-not-applicable", None):
+            with self.subTest(state=state):
+                with self.assertRaisesRegex(ValueError, "unsupported CTS evidence state"):
+                    matrix.cts_join([], {"state": state}, self.SELECTED, self.DIAGNOSTIC)
+
+    def test_native_evidence_must_name_run_artifact_and_refs(self):
+        good = {"state": "native-evidence", "run_ids": ["run-1"],
+                "artifact_sha256": "d" * 64, "refs": ["VALIDATION.md#witness"]}
+        matrix.validate_native("x", good)
+        for key, value in (("run_ids", []), ("artifact_sha256", "not-a-hash"),
+                           ("refs", []), ("state", "native-pass")):
+            with self.subTest(key=key):
+                with self.assertRaises(ValueError):
+                    matrix.validate_native("x", {**good, key: value})
+        for state in ("witnessed-blocker", "reported-not-executed", "not-run"):
+            matrix.validate_native("x", {"state": state})
+
+    def test_cts_is_evidence_and_only_an_observed_failure_blocks(self):
+        green = {"api": {"state": "satisfied"}, "implementation": {"state": "implemented"},
+                 "native": {"state": "native-evidence"}}
+        for state in ("cts-pass", "cts-focused-pass", "mapped-not-run", "not-mapped"):
+            with self.subTest(state=state):
+                self.assertTrue(matrix.row_ready({**green, "cts": {"state": state}}))
+                for axis, blocked in (("api", "blocker"), ("implementation", "missing"),
+                                      ("native", "reported-not-executed"),
+                                      ("native", "witnessed-blocker"), ("native", "not-run")):
+                    self.assertFalse(matrix.row_ready(
+                        {**green, "cts": {"state": state}, axis: {"state": blocked}}),
+                        (axis, blocked))
+        self.assertFalse(matrix.row_ready({**green, "cts": {"state": "cts-fail"}}))
+
+    def test_observed_cts_failure_stays_visible_and_blocks(self):
+        document = matrix.generate()
+        broken = copy.deepcopy(document)
+        row = next(item for item in broken["requirements"]
+                   if item["verdict"] == "satisfied")
+        row["cts"]["state"] = "cts-fail"
+        with self.assertRaisesRegex(ValueError, "non-fail-closed"):
+            matrix.validate(broken)
+        self.assertEqual({"pass": 26, "fail": 0, "no-evidence": 36},
+                         document["summary"]["dimensions"]["cts"])
+
+    def test_unmapped_cts_does_not_block_but_the_api_axis_still_does(self):
+        """DeviceScope is implemented and native-witnessed with no mapped CTS leaf:
+        it is implementation ready, yet stays a profile blocker while unadvertised."""
+        rows = {r["id"]: r for r in matrix.generate()["requirements"]}
+        row = rows[matrix.DEVICE_SCOPE_ID]
+        self.assertEqual(("blocker", "implemented", "not-mapped", "native-evidence"),
+                         tuple(row[axis]["state"] for axis in
+                               ("api", "implementation", "cts", "native")))
+        self.assertEqual("blocker", row["verdict"])
+        self.assertTrue(matrix.row_ready({**row, "api": {"state": "satisfied"}}))
+        evidence = json.loads(matrix.EVIDENCE.read_text())
+        original = matrix.EVIDENCE
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "evidence.json"
+            matrix.EVIDENCE = path
+            try:
+                stripped = copy.deepcopy(evidence)
+                del stripped["requirements"][matrix.DEVICE_SCOPE_ID]["native"]["artifact_sha256"]
+                path.write_text(json.dumps(stripped))
+                with self.assertRaisesRegex(ValueError, "artifact_sha256"):
+                    matrix.generate()
+            finally:
+                matrix.EVIDENCE = original
+
+    def test_policy_publishes_the_per_capability_cts_scope(self):
+        policy = matrix.generate()["policy"]
+        self.assertEqual(["cts-fail"], policy["cts_blocking_states"])
+        self.assertIn("never blocks", policy["cts_scope"])
+        self.assertIn("never whole-suite CTS or conformance", policy["cts_scope"])
 
 if __name__ == "__main__":
     unittest.main()

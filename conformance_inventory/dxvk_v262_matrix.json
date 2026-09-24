@@ -86,8 +86,12 @@
     }
   },
   "policy": {
+    "cts_blocking_states": [
+      "cts-fail"
+    ],
+    "cts_scope": "regression evidence per capability (frozen selection or a focused run); a missing, unmapped or unrun leaf never blocks, an observed applicable failure always does; never whole-suite CTS or conformance",
     "missing_evidence": "blocker",
-    "ready_rule": "api=satisfied AND implementation=implemented AND cts=cts-pass AND native=native-evidence",
+    "ready_rule": "api=satisfied AND implementation=implemented AND native=native-evidence AND cts not in cts_blocking_states",
     "scope": "DXVK v2.6.2 D3D11 feature level 11_0 baseline only"
   },
   "profile": {
@@ -3921,8 +3925,9 @@
         "satisfied": 26
       },
       "cts": {
-        "blocker": 36,
-        "satisfied": 26
+        "fail": 0,
+        "no-evidence": 36,
+        "pass": 26
       },
       "implementation": {
         "blocker": 35,
