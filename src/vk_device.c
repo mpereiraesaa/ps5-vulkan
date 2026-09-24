@@ -231,6 +231,23 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice 
 { if (p && out) *out = p->platform.memory_properties; }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures(VkPhysicalDevice p, VkPhysicalDeviceFeatures *out)
 { if (p && out) get_core_features(&p->platform, out); }
+/* VK_KHR_separate_depth_stencil_layouts depends, in the pinned registry, on
+ * VK_KHR_get_physical_device_properties2 and VK_KHR_create_renderpass2 (which
+ * itself needs VK_KHR_multiview and VK_KHR_maintenance2). This profile does
+ * not expose create_renderpass2 yet, so the route is closed whatever the
+ * platform reports: the extension is neither enumerated nor accepted. The
+ * create_renderpass2 exposure replaces this with its own condition. */
+static VkBool32 separate_depth_stencil_route(VkPhysicalDevice p)
+{
+    (void)p;
+    return VK_FALSE;
+}
+static VkBool32 separate_depth_stencil_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 &
+            PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS) &&
+        separate_depth_stencil_route(p);
+}
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                                                            VkPhysicalDeviceFeatures2 *out)
 {
@@ -299,6 +316,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES) {
             ((VkPhysicalDeviceTimelineSemaphoreFeatures *)next)->timelineSemaphore =
                 !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES) {
+            ((VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *)next)
+                ->separateDepthStencilLayouts = separate_depth_stencil_supported(p);
         }
     }
 }
@@ -444,11 +465,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    /* Ten conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Eleven conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
-     * layout, timeline). Keep headroom so a new entry cannot overflow the
-     * array before this bound is revisited; each push site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 10, DEVICE_EXTENSION_SLOTS = 16 };
+     * layout, timeline, separate depth/stencil layouts). Keep headroom so a
+     * new entry cannot overflow the array before this bound is revisited;
+     * each push site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 11, DEVICE_EXTENSION_SLOTS = 16 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -501,6 +523,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
             VK_KHR_TIMELINE_SEMAPHORE_SPEC_VERSION};
     }
+    if (separate_depth_stencil_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
+            VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -530,6 +557,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 group_extension = VK_FALSE, buffer_address_extension = VK_FALSE;
     VkBool32 uniform_buffer_standard_layout_extension = VK_FALSE;
     VkBool32 timeline_extension = VK_FALSE;
+    VkBool32 separate_depth_stencil_extension = VK_FALSE;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -554,6 +582,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &uniform_buffer_standard_layout_extension;
         else if (!strcmp(name, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME))
             seen = &timeline_extension;
+        else if (!strcmp(name, VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME))
+            seen = &separate_depth_stencil_extension;
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -598,6 +628,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
          !p->instance->features2_extension_enabled))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
+    if (separate_depth_stencil_extension &&
+        (!separate_depth_stencil_supported(p) || !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+
     uint32_t enabled_features = 0;
     uint32_t enabled_features_t09 = 0;
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
@@ -608,6 +642,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_uniform_buffer_standard_layout = VK_FALSE;
     VkBool32 saw_dynamic_rendering = VK_FALSE;
     VkBool32 saw_timeline = VK_FALSE;
+    VkBool32 saw_separate_depth_stencil = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO) {
@@ -790,6 +825,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                     !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE))
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES) {
+            if (saw_separate_depth_stencil) return INVALID;
+            saw_separate_depth_stencil = VK_TRUE;
+            const VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *features =
+                (const VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *)next;
+            if (!valid_bool(features->separateDepthStencilLayouts)) return INVALID;
+            if (features->separateDepthStencilLayouts) {
+                if (!separate_depth_stencil_extension || !separate_depth_stencil_supported(p))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS;
             }
         } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;
