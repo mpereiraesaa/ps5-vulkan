@@ -71,6 +71,15 @@ NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)
 # native build already passes.
 GRAPHICS_PAIR_TEST = -Ithird_party/vulkan-headers/include -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/graphics_pair.c src/shader_relocate.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_shader_header.c tests/test_graphics_pair.c
 .PHONY: check doctor compiler-control compiler-programs native-bootstrap vulkan-headers check-sanitize native-memory-check test-shaders
+.PHONY: check-thread-sanitize
+# The timeline payload is the one queue state other threads may touch
+# (host signal, counter query and semaphore waits), so its host contract also
+# runs under ThreadSanitizer. Kernels with high mmap entropy need ASLR off for
+# the TSan runtime, hence setarch.
+check-thread-sanitize:
+	mkdir -p build/tests
+	$(CC) -std=c11 -g -O1 -Wall -Wextra -Werror -pthread -fsanitize=thread $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_timeline.c -o build/tests/test_vk_timeline_tsan
+	setarch $$(uname -m) -R ./build/tests/test_vk_timeline_tsan
 .PHONY: compiler-pipelines
 .PHONY: native-compute native-graphics native-runtime-graphics
 .PHONY: upstream-cts check-upstream-cts check-upstream-cts-sink
@@ -214,6 +223,8 @@ check-sanitize:
 	./build/tests/test_vk_sync_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_queue.c -o build/tests/test_vk_queue_sanitized
 	./build/tests/test_vk_queue_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_timeline.c -o build/tests/test_vk_timeline_sanitized
+	./build/tests/test_vk_timeline_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache_sanitized
 	./build/tests/test_compilation_cache_sanitized
 	$(MAKE) graphics-stage-shaders
@@ -416,6 +427,8 @@ check:
 	./build/tests/test_vk_sync
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_queue.c -o build/tests/test_vk_queue
 	./build/tests/test_vk_queue
+	$(CC) -std=c11 -Wall -Wextra -Werror -pthread $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_timeline.c -o build/tests/test_vk_timeline
+	./build/tests/test_vk_timeline
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache
 	./build/tests/test_compilation_cache
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/clip_cull_witness.c tests/test_clip_cull_witness.c -o build/tests/test_clip_cull_witness
