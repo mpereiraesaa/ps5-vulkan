@@ -2492,13 +2492,13 @@
       "kind": "feature",
       "name": "imagelessFramebuffer",
       "native": {
-        "artifact_sha256": "01ff1cfbf7ed3f3cf34a0e49dc1256f2d20f65fbfe7db4725c615cfd26abfd21",
-        "note": "Default-off SDK witness bound two image views to one imageless framebuffer on two completed submissions and matched 8192 readback pixels; the public KHR dependency chain remains closed.",
+        "artifact_sha256": "0de8621154ed3da156d192631cf31cbd416876bce8a23252f7d2ae1531664cd3",
+        "note": "Default-off SDK draw/readback witness bound two image views to one imageless framebuffer in separate completed submissions: two draws, 2048 drawn and 6144 clear pixels checked, zero mismatches. An independent one-leaf original CTS measurement returned NotSupported before rendering because the public KHR extension is unadvertised; this is not a CTS pass. Firmware was not queried.",
         "refs": [
           "VALIDATION.md#t09-imageless-framebuffer-diagnostic-measurement-2026-09-24"
         ],
         "run_ids": [
-          "20260924T194946966Z_PPSA99994_ps5vk_0x7869ad308ae"
+          "20260924T225116620Z_PPSA99994_ps5vk_0x116e03cca98b"
         ],
         "state": "native-evidence"
       },
