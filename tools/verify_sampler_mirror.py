@@ -23,11 +23,21 @@ CASES = (
     ("v", "linear", 0.25, -0.375),
     ("v", "linear", 0.25, 0.375),
     ("v", "linear", 0.25, 1.25),
+    ("w", "nearest", -0.25, 0.25),
+    ("w", "nearest", 0.25, 0.25),
+    ("w", "nearest", 1.25, 0.25),
+    ("w", "linear", -0.375, 0.25),
+    ("w", "linear", 0.375, 0.25),
+    ("w", "linear", 1.25, 0.25),
 )
 
 
 def expected_pixel(axis, filtering, u, v):
-    """Vulkan mirror-once coordinates over four independent RGBA8 texels."""
+    """Vulkan mirror-once coordinates over the bounded 2D/3D RGBA8 source."""
+    if axis == "w":
+        z = min(1.0, abs(u))
+        weight = float(z >= 0.5) if filtering == "nearest" else min(1.0, max(0.0, 2*z-0.5))
+        return (255 << 24) | (int(255 * (1-weight) + 0.5) << 16) | (int(255 * weight + 0.5) << 8)
     if axis == "u":
         u = min(1.0, abs(u))
     else:
@@ -58,17 +68,21 @@ def color_near(actual, expected, tolerance=1):
 def validate(run, manifest_path, artifact_path):
     manifest = json.loads(Path(manifest_path).read_text())
     case = manifest.get("sampler_mirror_case")
-    require(type(case) is int and 8 <= case <= 19, "mirror case in manifest")
+    require(type(case) is int and 8 <= case <= 25, "mirror case in manifest")
+    is_w = case >= 20
     require(manifest.get("stage") == "graphics-api-offscreen-draw" and
             manifest.get("runtime_sdk") is True and
             manifest.get("submit_enabled") is True and
             manifest.get("scissor_probe") == 6 and
-            manifest.get("geometry_fixture") == "sampler-core-addressing" and
+            manifest.get("geometry_fixture") == (
+                "sampler-mirror-w-3d" if is_w else "sampler-core-addressing") and
+            (not is_w or manifest.get("image_target") == "3d") and
             manifest.get("t09_diagnostics", {}).get(
                 "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC") is True and
             manifest.get("termination") == "shell-close-after-cleanup" and
-            manifest.get("graphics", {}).get("source") ==
-            "experiments/graphics/scene3d.pipe", "SDK offscreen artifact")
+            manifest.get("graphics", {}).get("source") == (
+                "experiments/graphics/scene3d-mirror-w.pipe" if is_w else
+                "experiments/graphics/scene3d.pipe"), "SDK offscreen artifact")
     digest = hashlib.sha256(Path(artifact_path).read_bytes()).hexdigest()
     require(manifest.get("files", {}).get("eboot.bin") == digest, "signed eboot hash")
 
@@ -77,30 +91,39 @@ def validate(run, manifest_path, artifact_path):
             "project run identity")
     axis, filtering, u, v = CASES[case - 8]
     name = f"mirror-{axis}-{filtering}-" + (
-        "negative" if (u if axis == "u" else v) < 0 else
-        "positive" if (u if axis == "u" else v) > 1 else "inside")
+        "negative" if (u if axis in ("u", "w") else v) < 0 else
+        "positive" if (u if axis in ("u", "w") else v) > 1 else "inside")
     expected = expected_pixel(axis, filtering, u, v)
     inputs = rows(records, "PS5VK_SAMPLER_CORE_INPUT")
     uploads = rows(records, "PS5VK_TEXTURE_UPLOAD")
+    layered = rows(records, "PS5VK_LAYERED_INPUT")
     outputs = rows(records, "PS5VK_SAMPLER_CORE_READBACK")
     submits = rows(records, "PS5VK_GRAPHICS_SUBMIT")
     completes = rows(records, "PS5VK_GRAPHICS_COMPLETED")
     closes = rows(records, "PS5VK_PLATFORM_CLOSE")
     require(all(len(group) == 1 for group in
                 (inputs, uploads, outputs, submits, completes, closes)), "one completed draw")
+    if is_w:
+        require(len(layered) == 1 and layered[0][1] ==
+                {"target": "3d", "slices": "2", "width": "2", "height": "2"},
+                "3D source fixture")
+    else:
+        require(not layered, "2D source fixture")
     require(not rows(records, "PS5VK_VIDEO_PRESENTED"), "offscreen measurement")
     source, output = inputs[0][1], outputs[0][1]
     require(inputs[0][0] < uploads[0][0] < submits[0][0] <
             completes[0][0] < outputs[0][0] <
             closes[0][0], "draw/readback/close order")
-    require(uploads[0][1] == {"frame": "0", "pattern": "rgb-cycle", "width": "2",
-                               "height": "2", "slices": "1", "levels": "1",
+    if is_w:
+        require(inputs[0][0] < layered[0][0] < uploads[0][0], "3D upload order")
+    require(uploads[0][1] == {"frame": "0", "pattern": "layered-rgb" if is_w else "rgb-cycle", "width": "2",
+                               "height": "2", "slices": "2" if is_w else "1", "levels": "1",
                                "format": "37"}, "four-texel source fixture")
     require(source.get("case") == output.get("case") == str(case) and
             source.get("name") == output.get("name") == name and
             source.get("uv_milli") == str(int(u * 1000)) and
             source.get("uv_v_milli") == str(int(v * 1000)) and
-            source.get("mirror_axis") == ("1" if axis == "u" else "2") and
+            source.get("mirror_axis") == {"u": "1", "v": "2", "w": "3"}[axis] and
             source.get("filter") == filtering and
             source.get("minification") == "0" and
             source.get("expected_bgra") == output.get("expected_bgra") ==
