@@ -336,6 +336,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * properties2. The bounded address witness and two unchanged original
      * buffer-address compute leaves execute through the R32_UINT output. */
     platform->supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
+#if defined(PS5VK_TIMELINE_DIAGNOSTIC) && PS5VK_TIMELINE_DIAGNOSTIC
+    /* VK_KHR_timeline_semaphore measurement build (DXVK262-T09). The payload
+     * lives in the queue frontend and advances only when a record retires
+     * after this backend's exact-serial completion. Off by default: the
+     * shipping bit is a separate, evidence-backed promotion. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;
+#endif
     platform->max_allocation = HEAP_BYTES;
     /* The same initializer the host reporting dump uses; see
      * src/device_profile_report.h. Object-model sizing follows

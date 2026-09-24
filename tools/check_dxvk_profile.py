@@ -202,7 +202,10 @@ def implemented_device_extensions() -> set[str]:
     # A default-off measurement build is not the shipping capability probe.
     # Strip only this explicitly named conditional block, and fail closed if
     # its preprocessor boundary is malformed rather than counting its bits.
-    for name in ("PS5VK_MEMORY_MODEL_DIAGNOSTIC",):
+    for name in (
+        "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
+        "PS5VK_TIMELINE_DIAGNOSTIC",
+    ):
         guard = f"#if defined({name}) && {name}"
         if guard in platform_source:
             pattern = re.compile(r"^" + re.escape(guard) + r"\n.*?^#endif\s*$",
@@ -215,10 +218,10 @@ def implemented_device_extensions() -> set[str]:
                 raise ValueError(f"malformed {name} guard")
             platform_source = pattern.sub("", platform_source)
     platform_source = re.sub(r"/\*.*?\*/|//[^\n]*", "", platform_source, flags=re.DOTALL)
-    assignments = re.findall(r"platform->supported_features\s*(?:\|=|=)\s*(.*?);",
+    assignments = re.findall(r"platform->supported_features(?:_t09)?\s*(?:\|=|=)\s*(.*?);",
                              platform_source, re.DOTALL)
     shipping_bits = {bit for assignment in assignments
-                     for bit in re.findall(r"PS5VK_FEATURE_[A-Z0-9_]+", assignment)}
+                     for bit in re.findall(r"PS5VK_(?:T09_)?FEATURE_[A-Z0-9_]+", assignment)}
     gates = {
         "VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME": {
             "PS5VK_FEATURE_STORAGE_BUFFER_8BIT", "PS5VK_FEATURE_STORAGE_BUFFER_16BIT"},
@@ -235,6 +238,8 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS"},
         "VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME": {
             "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT"},
+        "VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE"},
     }
     unmapped = sorted(tokens - gates.keys())
     if unmapped:

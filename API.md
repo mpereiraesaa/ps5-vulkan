@@ -372,7 +372,18 @@ smaller incompatible layer pitches. The graphics profile reports
   classes and the physical device conservatively reports the Vulkan 1.0 floor
   of two discrete priorities. Because the family exposes one queue, the two
   classes cannot compete and do not imply a multi-queue scheduler.
-  Multi-queue, timeline semaphore and synchronization2 contracts are absent.
+  Multi-queue and synchronization2 contracts are absent.
+- `VK_KHR_timeline_semaphore` is implemented in the queue frontend: 64-bit
+  payloads, `VkTimelineSemaphoreSubmitInfo`, and the KHR host commands
+  (`vkGetSemaphoreCounterValueKHR`, `vkWaitSemaphoresKHR` with ALL/ANY and
+  zero, finite or unbounded timeouts, `vkSignalSemaphoreKHR`). A payload
+  advances only when a host signal executes or a record retires after the
+  backend's exact completion. A submission whose head waits on a value no
+  queued work signals does not block `vkQueueSubmit`; later records queue
+  behind it and native jobs are prepared only when they reach the head.
+  `maxTimelineSemaphoreValueDifference` is `UINT64_MAX` because every value is
+  ordered with full-width comparisons. The extension is reported only by the
+  default-off `PS5VK_TIMELINE_DIAGNOSTIC` measurement build until promoted.
 - Vulkan 1.0 events support host and recorded device set/reset plus waits inside
   or across primary command buffers. Event transitions are segmented from GPU
   jobs, and `vkCmdWaitEvents` preserves its validated memory dependency without

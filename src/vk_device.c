@@ -295,6 +295,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES) {
             ((VkPhysicalDeviceUniformBufferStandardLayoutFeatures *)next)->uniformBufferStandardLayout =
                 !!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES) {
+            ((VkPhysicalDeviceTimelineSemaphoreFeatures *)next)->timelineSemaphore =
+                !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE);
         }
     }
 }
@@ -317,6 +321,14 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
                 supported ? (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR : 0u;
             properties->maxMultiviewInstanceIndex =
                 supported ? (uint32_t)PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR : 0u;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES) {
+            /* The payload algorithm's own bound (src/vk_internal.h), and
+             * zero when the platform does not carry the capability. */
+            ((VkPhysicalDeviceTimelineSemaphoreProperties *)next)
+                ->maxTimelineSemaphoreValueDifference =
+                (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE) ?
+                PS5VK_TIMELINE_MAX_VALUE_DIFFERENCE : 0u;
         }
     }
 }
@@ -425,7 +437,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkExtensionProperties properties[9];
+    VkExtensionProperties properties[10];
     uint32_t total = 0;
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
@@ -470,6 +482,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME,
             VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_SPEC_VERSION};
     }
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+            VK_KHR_TIMELINE_SEMAPHORE_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -498,6 +515,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 memory_model_extension = VK_FALSE;
     VkBool32 group_extension = VK_FALSE, buffer_address_extension = VK_FALSE;
     VkBool32 uniform_buffer_standard_layout_extension = VK_FALSE;
+    VkBool32 timeline_extension = VK_FALSE;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -520,6 +538,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &buffer_address_extension;
         else if (!strcmp(name, VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME))
             seen = &uniform_buffer_standard_layout_extension;
+        else if (!strcmp(name, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME))
+            seen = &timeline_extension;
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -556,8 +576,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT) ||
          !p->instance->features2_extension_enabled))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    /* The pinned registry makes VK_KHR_timeline_semaphore depend on
+     * VK_KHR_get_physical_device_properties2 or Vulkan 1.1; this profile is
+     * 1.0, so only the instance extension satisfies it. */
+    if (timeline_extension &&
+        (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
+    uint32_t enabled_features_t09 = 0;
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
     VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
     VkBool32 saw_memory_model = VK_FALSE;
@@ -565,6 +593,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_device_group = VK_FALSE;
     VkBool32 saw_uniform_buffer_standard_layout = VK_FALSE;
     VkBool32 saw_dynamic_rendering = VK_FALSE;
+    VkBool32 saw_timeline = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO) {
@@ -735,6 +764,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
             }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES) {
+            if (saw_timeline) return INVALID;
+            saw_timeline = VK_TRUE;
+            const VkPhysicalDeviceTimelineSemaphoreFeatures *features =
+                (const VkPhysicalDeviceTimelineSemaphoreFeatures *)next;
+            if (!valid_bool(features->timelineSemaphore)) return INVALID;
+            if (features->timelineSemaphore) {
+                if (!timeline_extension ||
+                    !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;
+            }
         } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;
         }
@@ -764,7 +806,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->physical = p; d->queue.device = d; d->queue.next_serial = 1;
     d->queue.priority_class = q->pQueuePriorities[0] >= 0.5f ? 1u : 0u;
     d->enabled_features = enabled_features;
+    d->enabled_features_t09 = enabled_features_t09;
     d->device_group_extension_enabled = group_extension;
+    d->timeline_extension_enabled = timeline_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;
