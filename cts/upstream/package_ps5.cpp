@@ -3,6 +3,7 @@
 #include "vktApiFeatureInfo.hpp"
 #include "vktApiBufferViewAccessTests.hpp"
 #include "vktApiPipelineTests.hpp"
+#include "vktApiObjectManagementTests.hpp"
 #include "vktApiCopiesAndBlittingTests.hpp"
 #include "vktApiFillBufferTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
@@ -136,6 +137,9 @@ void FocusedVkTestPackage::init(void)
         bufferViewGroup->addChild(vkt::api::createBufferViewAccessTests(m_testCtx));
         apiGroup->addChild(bufferViewGroup.release());
         apiGroup->addChild(vkt::api::createPipelineTests(m_testCtx));
+        // Keep the original image-view factory and support gate registered;
+        // the focused cases manifest selects only the cube-array leaf.
+        apiGroup->addChild(vkt::api::createObjectManagementTests(m_testCtx));
         // Original upstream buffer-copy and fill/update cases. The build-time
         // focused copy module prunes only unrelated image/blit/resolve
         // registration so the package stays within the PS5 application heap.

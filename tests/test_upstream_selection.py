@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from tools.build_upstream_cts import tessellation_build_profile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -372,6 +373,27 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertIn("vulkan/amber/rasterization/line_continuity/polygon-mode-lines.amber", builder)
         self.assertTrue((UPSTREAM / "external/vulkancts/data/vulkan/amber/rasterization/"
                          "line_continuity/polygon-mode-lines.amber").is_file())
+
+    def test_cube_array_image_view_uses_original_object_management_factory(self):
+        """The unchanged 12-layer CUBE_ARRAY image-view leaf stays reachable."""
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        upstream = (UPSTREAM / "external/vulkancts/modules/vulkan/api/"
+                    "vktApiObjectManagementTests.cpp").read_text()
+        self.assertIn("createObjectManagementTests(m_testCtx)", package)
+        self.assertIn("vktApiObjectManagementTests.cpp", builder)
+        self.assertIn('"image_view_cube_arr", imgViewCubeArr', upstream)
+        self.assertIn("checkImageCubeArraySupport", upstream)
+        self.assertIn("VK_IMAGE_VIEW_TYPE_CUBE_ARRAY", upstream)
+
+    def test_feature_diagnostic_switches_are_recorded_in_cts_build_manifest(self):
+        """A measured feature profile must remain visible in artifact identity."""
+        normal = tessellation_build_profile({})
+        self.assertEqual("0", normal["switches"]["PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC"])
+        self.assertEqual("0", normal["switches"]["PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC"])
+        cube = tessellation_build_profile({"PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC": "1"})
+        self.assertTrue(cube["experimental"])
+        self.assertEqual("1", cube["switches"]["PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC"])
 
     def test_t06_fragment_store_leaves_are_exact_promoted_upstream_oracles(self):
         expected_paths = {

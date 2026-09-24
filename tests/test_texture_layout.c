@@ -49,6 +49,24 @@ int main(void)
         r.size==2048 && r.alignment==256);
     i.usage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_ERROR_FORMAT_NOT_SUPPORTED);
+    /* The pinned cube-array image-view case's exact sampled/attachment
+     * combination is backed as a tiled layered target. Neighbouring shapes
+     * remain outside the executor profile. */
+    i=(VkImageCreateInfo){.imageType=VK_IMAGE_TYPE_2D,
+        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={64,64,1},.mipLevels=1,
+        .arrayLayers=12,.samples=VK_SAMPLE_COUNT_1_BIT,
+        .tiling=VK_IMAGE_TILING_OPTIMAL,
+        .usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT};
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_SUCCESS &&
+        r.size && r.alignment==131072);
+    i.flags=0;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==
+        VK_ERROR_FORMAT_NOT_SUPPORTED && !r.size);
+    i.flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    i.usage|=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==
+        VK_ERROR_FORMAT_NOT_SUPPORTED && !r.size);
 
     /* Only formats with an implemented padded-linear encoding have layout
      * arithmetic: the colour attachment, the depth target, the vertex-only

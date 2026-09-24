@@ -47,6 +47,8 @@ def tessellation_build_profile(environment):
             # reported every selected leaf NotSupported for sampleRateShading.
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
             "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
+            "PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC",
+            "PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC",
         )
     }
     return {
@@ -729,6 +731,7 @@ def main(argv=None):
         cts_root / "framework/delibs/decpp/deRingBuffer.cpp",
         cts_root / "framework/delibs/decpp/deSemaphore.cpp",
         cts_root / "framework/delibs/decpp/deSharedPtr.cpp",
+        cts_root / "framework/delibs/decpp/deSpinBarrier.cpp",
         cts_root / "framework/delibs/decpp/deSocket.cpp",
         cts_root / "framework/delibs/decpp/deStringUtil.cpp",
         cts_root / "framework/delibs/decpp/deThread.cpp",
@@ -884,6 +887,9 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferAndImageAllocationUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiPipelineTests.cpp",
+        # Original object-management factory, including the cube-array image
+        # view test and its imageCubeArray support gate.
+        cts_root / "external/vulkancts/modules/vulkan/api/vktApiObjectManagementTests.cpp",
         focused_sources / "vktApiCopiesAndBlittingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp",
         # Original UBO block-layout factory, shader bodies and result oracle.

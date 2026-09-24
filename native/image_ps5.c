@@ -120,7 +120,8 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         d && info->imageType == VK_IMAGE_TYPE_2D && info->mipLevels == 1 &&
         !info->flags && ps5vk_multisampled_color_usage(info->usage) &&
         (ps5vk_platform_sample_counts(d->platform_features) & info->samples) != 0;
-    if (!multisampled_color && !ps5vk_graphics_image_usage(info->format,info->usage))
+    if (!multisampled_color && !ps5vk_graphics_image_usage_with_flags(
+            info->format,info->imageType,info->tiling,info->usage,info->flags))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     if (!sample_count || (sample_count > 1 && !multisampled_color))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
