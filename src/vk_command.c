@@ -71,6 +71,8 @@ static void clear(VkCommandBuffer c)
     c->inheritance_valid = VK_FALSE;
     memset(&c->inheritance, 0, sizeof(c->inheritance));
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
+    c->active_occlusion_query_pool = VK_NULL_HANDLE;
+    c->active_occlusion_query = 0;
     c->render_pass_inherited = VK_FALSE;
     c->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
     c->subpass = 0;
@@ -408,10 +410,10 @@ static VkResult inheritance_valid(VkDevice d, const VkCommandBufferInheritanceIn
               !ps5vk_framebuffer_compatible(i->framebuffer, i->renderPass))))
             return INVALID;
     }
-    /* occlusionQueryEnable, queryFlags and pipelineStatistics describe queries
-     * this device does not execute: it reports occlusionQueryPrecise and
-     * pipelineStatisticsQuery false and no query command is implemented, so a
-     * secondary that claims to inherit one is refused instead of recorded. */
+    /* This implementation executes occlusion queries in primary command
+     * buffers, but does not expose inherited occlusion queries or pipeline
+     * statistics queries. Meaningful inheritance fields stay refused until
+     * those separate device capabilities and execution paths are supported. */
     if (i->occlusionQueryEnable || i->queryFlags || i->pipelineStatistics)
         return INVALID;
     (void)d;
@@ -475,7 +477,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer c)
     /* A pass this buffer BEGAN must be ended before recording stops; an
      * INHERITED one must not, because the primary owns it and the secondary
      * has no vkCmdEndRenderPass to give. */
-    if (!c || c->state != PS5VK_RECORDING ||
+    if (!c || c->state != PS5VK_RECORDING || c->active_occlusion_query_pool ||
         (c->render_pass && !c->render_pass_inherited)) return INVALID;
     c->state = PS5VK_EXECUTABLE;
     return VK_SUCCESS;
@@ -848,6 +850,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
     if (!c || c->state != PS5VK_RECORDING ||
         c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY || !c->render_pass ||
         c->render_pass_inherited ||
+        c->active_occlusion_query_pool ||
         (contents != VK_SUBPASS_CONTENTS_INLINE &&
          contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
         c->subpass + 1 >= c->render_pass->subpass_count) { invalid(c); return; }
@@ -878,6 +881,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
      * work: ending early would silently drop the subpasses never entered. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         !c->render_pass || c->subpass + 1 != c->render_pass->subpass_count ||
+        c->active_occlusion_query_pool ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
