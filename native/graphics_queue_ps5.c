@@ -1,4 +1,5 @@
 #include "vk_queue.h"
+#include "vk_query_pool.h"
 #include "color_attachment_contract.h"
 #include "vk_indirect.h"
 #include "draw_prepare_ps5.h"
@@ -30,6 +31,8 @@
 #include "tess_ring_lease.h"
 #include "resolve_program.h"
 #include "texture_descriptor.h"
+enum { PS5VK_QUERY_COUNTER_PAIRS = 64, PS5VK_QUERY_SLOT_BYTES = 1024,
+       PS5VK_QUERY_SLOTS = 64 };
 #include "graphics_pipeline_ps5.h"
 #include "runtime_graphics_compiler.h"
 extern unsigned ps5vk_draw_prepare_site;
@@ -79,6 +82,12 @@ struct graphics_job {
      * the GPU; poll() launches the next only after the previous label retired. */
     struct ps5vk_draw_batch_chain chain;
     struct ps5vk_command_arena slot;
+    struct ps5vk_command_arena query_arena;
+    struct {
+        VkQueryPool pool;
+        uint32_t query;
+        uint64_t *counters;
+    } queries[PS5VK_QUERY_SLOTS];
     struct ps5vk_prepared_draw draws[PS5VK_MAX_OPERATIONS];
     /* The draws the DRIVER emits for its own resolve boundaries (DXVK262-T06).
      * They are prepared draws like any other, so their AGC context block has to
@@ -93,6 +102,7 @@ struct graphics_job {
      * draw itself. */
     void *resolve_states[PS5VK_MAX_SUBPASSES];
     unsigned count, words, attempted, complete, slot_active, launched, resolve_count;
+    unsigned query_arena_active, query_count;
     /* One token per colour-to-texture barrier this submission emits. The token
      * names a private word of the arena that executes the wait, so the barrier
      * can block until the colour block has CONFIRMED its writeback: see
@@ -127,6 +137,8 @@ static void release(VkDevice d,void *opaque)
     if(j->slot_active && ps5vk_command_arena_release(&j->slot)!=VK_SUCCESS)
         retain("occlusion-slot-release");
 #endif
+    if(j->query_arena_active && ps5vk_command_arena_release(&j->query_arena)!=VK_SUCCESS)
+        retain("query-arena-release");
     if(ps5vk_draw_batch_release(&j->chain)!=VK_SUCCESS)retain("command-release");
     for(unsigned i=0;i<j->count;++i)ps5vk_native_release_draw(&j->draws[i]);
     for(unsigned i=0;i<j->resolve_count;++i) {
@@ -146,6 +158,7 @@ static int draw_has_work(const struct ps5vk_operation *op)
 static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
     VkCommandBuffer cb,unsigned first,unsigned count,void **out)
 {
+    unsigned readback=0,readback_site=0;
     if(!count)return VK_ERROR_FEATURE_NOT_PRESENT;
     struct graphics_job *j=calloc(1,sizeof(*j));
     if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -170,7 +183,7 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
         }
     } else if(copies) {
         struct ps5vk_readback_plan plan={0};
-        rc=ps5vk_readback_commands(d,cb->operations+first,count,NULL,&j->layouts,&plan);
+        rc=ps5vk_readback_commands(d,cb->operations+first,count,NULL,&j->layouts,&plan,&readback_site);
         if(rc==VK_SUCCESS) {
             j->color=plan.image;
             j->readback.count=1u;
@@ -221,8 +234,31 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
         (unsigned long long)j->serial,count,j->words,j->readback.count);
     return VK_SUCCESS;
 fail:
-    ps5log_printf(PS5LOG_ERR,"PS5VK_UPLOAD_PREPARE_FAILED serial=%llu rc=%d",
-        (unsigned long long)j->serial,rc);
+#if defined(PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC) && PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
+    for(unsigned i=0;i<count;++i) {
+        const struct ps5vk_operation *op=&cb->operations[first+i];
+        if(op->type==PS5VK_IMAGE_BARRIER) {
+            const VkImageMemoryBarrier *b=&op->image_barrier;
+            ps5log_printf(PS5LOG_ERR,
+                "PS5VK_PRECISE_TRANSFER_OP index=%u type=image_barrier format=%u usage=%08x extent=%ux%ux%u old=%u new=%u src=%08x dst=%08x stages=%08x/%08x",
+                i,b->image->info.format,b->image->info.usage,b->image->info.extent.width,
+                b->image->info.extent.height,b->image->info.extent.depth,b->oldLayout,b->newLayout,
+                b->srcAccessMask,b->dstAccessMask,op->src_stage,op->dst_stage);
+        } else if(op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE || op->type==PS5VK_CLEAR_COLOR_IMAGE) {
+            VkImage image=op->image_destination;
+            ps5log_printf(PS5LOG_ERR,
+                "PS5VK_PRECISE_TRANSFER_OP index=%u type=%u format=%u usage=%08x extent=%ux%ux%u layout=%u",
+                i,op->type,image?image->info.format:0,image?image->info.usage:0,
+                image?image->info.extent.width:0,image?image->info.extent.height:0,
+                image?image->info.extent.depth:0,op->image_destination_layout);
+        } else {
+            ps5log_printf(PS5LOG_ERR,"PS5VK_PRECISE_TRANSFER_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x",
+                i,op->type,op->src_stage,op->dst_stage,op->src_access,op->dst_access);
+        }
+    }
+#endif
+    ps5log_printf(PS5LOG_ERR,"PS5VK_UPLOAD_PREPARE_FAILED serial=%llu site=%u rc=%d",
+        (unsigned long long)j->serial,readback?readback_site:0u,rc);
     release(d,j);return rc;
 }
 /* The bounded shapes this executor accepts, and the reason a submission that
@@ -492,6 +528,11 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
      * the line. Zero means the failure was not one of the numbered sites. */
     unsigned draw_site=0;
     *out=NULL;
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GRAPHICS_PREPARE_ENTER serial=%llu buffers=%u first=%u count=%u",
+        (unsigned long long)(s?s->serial:0),s?s->count:0,
+        s?ps5vk_submission_first_operation(s,0):0,
+        s?ps5vk_submission_operation_count(s,0):0);
     /* One color pass, optional D32 and texture-upload prelude.  LOAD preserves
      * an attachment only when its tracked initial layout matches.  CLEAR is
      * bounded to the full render area until a rectangular clear path exists. */
@@ -690,7 +731,9 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         VkImage image=target;
         /* An integer target's clear is the raw 32-bit word its components
          * pack into, not a UNORM conversion. */
-        int clear_ok=ps5vk_color_target_integer_served(colour_format[a]) ?
+        int clear_ok=colour_format[a]==VK_FORMAT_R8G8B8A8_SINT ?
+            ps5vk_color_clear_rgba8_sint(begin->clears[a].color.int32,&clear_word[a]) :
+            ps5vk_color_target_integer_served(colour_format[a]) ?
             ps5vk_color_clear_rgba8_uint(begin->clears[a].color.uint32,&clear_word[a]) :
             (colour_format[a]==VK_FORMAT_B8G8R8A8_UNORM ?
                 ps5vk_color_clear_bgra8(begin->clears[a].color.float32,&clear_word[a]) :
@@ -753,7 +796,8 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 for(uint32_t k=child_first;k<child_first+child_count;++k) {
                     const struct ps5vk_operation *inner=&child->operations[k];
                     if(inner->type!=PS5VK_DRAW && inner->type!=PS5VK_DRAW_INDEXED &&
-                       !ps5vk_indirect_graphics_operation(inner->type))
+                       !ps5vk_indirect_graphics_operation(inner->type) &&
+                       inner->type!=PS5VK_QUERY_BEGIN && inner->type!=PS5VK_QUERY_END)
                         {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
                     /* The prepared-draw arena is bounded; refuse rather than
                      * silently dropping the tail of the pass. */
@@ -765,7 +809,8 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             continue;
         }
         if(op->type!=PS5VK_DRAW && op->type!=PS5VK_DRAW_INDEXED &&
-           !ps5vk_indirect_graphics_operation(op->type))
+           !ps5vk_indirect_graphics_operation(op->type) &&
+           op->type!=PS5VK_QUERY_BEGIN && op->type!=PS5VK_QUERY_END)
             {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
         if(body_count==PS5VK_MAX_OPERATIONS){rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
         body[body_count++]=op;
@@ -782,6 +827,19 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
      * colour image, and the helpers below already treat a missing one as
      * "no colour work in this range" rather than as an error. */
     j->color=color_count?begin->framebuffer->attachments[colour_attachment[0]]->image:NULL;
+    int needs_query_arena=0;
+    for(unsigned i=0;i<body_count;++i)
+        if(body[i]->type==PS5VK_QUERY_BEGIN) needs_query_arena=1;
+    if(needs_query_arena) {
+        phase="query-arena";
+        rc=ps5vk_command_arena_create(&j->query_arena);
+        if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
+        j->query_arena_active=1;
+        memset(j->query_arena.address,0,
+            (size_t)PS5VK_QUERY_SLOTS*PS5VK_QUERY_SLOT_BYTES);
+        cache(j->query_arena.address,
+            (size_t)PS5VK_QUERY_SLOTS*PS5VK_QUERY_SLOT_BYTES);
+    }
     PHASE("command-arena");
     rc=ps5vk_draw_batch_open(&j->chain,j->serial);
     if(rc==VK_ERROR_DEVICE_LOST)retain("command-create");
@@ -945,7 +1003,9 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             if(begin->clear_count<=a){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=__LINE__;goto fail;}
             VkImage image=begin->framebuffer->attachments[a]->image;
             uint32_t word;
-            const int clear_ok=ps5vk_color_target_integer_served(image->info.format)?
+            const int clear_ok=image->info.format==VK_FORMAT_R8G8B8A8_SINT?
+                ps5vk_color_clear_rgba8_sint(begin->clears[a].color.int32,&word):
+                ps5vk_color_target_integer_served(image->info.format)?
                 ps5vk_color_clear_rgba8_uint(begin->clears[a].color.uint32,&word):
                 (image->info.format==VK_FORMAT_B8G8R8A8_UNORM?
                     ps5vk_color_clear_bgra8(begin->clears[a].color.float32,&word):
@@ -971,17 +1031,63 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     PHASE("draw");
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
+#if defined(PS5VK_OCCLUSION_PRECISE_PROBE) && PS5VK_OCCLUSION_PRECISE_PROBE
+        size_t control=ps5vk_graphics_occlusion_control(cursor,(size_t)(end-cursor),1);
+        if(!control){rc=VK_ERROR_UNKNOWN;draw_site=1;goto fail;}cursor+=control;
+#endif
         size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),(uint64_t)(uintptr_t)j->slot.address);
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=1;goto fail;}cursor+=n;
         ps5log_printf(PS5LOG_MARK,
-            "PS5VK_OCCLUSION_PROBE_BEGIN serial=%llu base=%llx pairs=%u",
+            "PS5VK_OCCLUSION_PROBE_BEGIN serial=%llu base=%llx pairs=%u precise=%u depth=%u",
             (unsigned long long)j->serial,(unsigned long long)(uintptr_t)j->slot.address,
-            (unsigned)PS5VK_OCCLUSION_PROBE_PAIRS);
+            (unsigned)PS5VK_OCCLUSION_PROBE_PAIRS,
+            (unsigned)PS5VK_OCCLUSION_PRECISE_PROBE,
+            (unsigned)PS5VK_OCCLUSION_DEPTH_PROBE);
     }
 #endif
     uint32_t subpass_index=0;
+    int active_query_slot=-1;
     for(unsigned i=0;i<body_count;++i) {
         const struct ps5vk_operation *recorded=body[i];
+        if(recorded->type==PS5VK_QUERY_BEGIN) {
+            if(active_query_slot>=0 || j->query_count>=PS5VK_QUERY_SLOTS ||
+               recorded->query_count!=1 || !recorded->query_pool ||
+               recorded->query_first>=recorded->query_pool->query_count) {
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=26;goto fail;
+            }
+            BATCH_RESERVE(64u);
+            size_t control=ps5vk_graphics_occlusion_control(cursor,
+                (size_t)(end-cursor),1);
+            if(!control){rc=VK_ERROR_UNKNOWN;draw_site=26;goto fail;}cursor+=control;
+            uint64_t *counters=(uint64_t *)((uint8_t *)j->query_arena.address+
+                (size_t)j->query_count*PS5VK_QUERY_SLOT_BYTES);
+            size_t event=ps5vk_graphics_occlusion_event(cursor,
+                (size_t)(end-cursor),(uint64_t)(uintptr_t)counters);
+            if(!event){rc=VK_ERROR_UNKNOWN;draw_site=26;goto fail;}cursor+=event;
+            j->queries[j->query_count].pool=recorded->query_pool;
+            j->queries[j->query_count].query=recorded->query_first;
+            j->queries[j->query_count].counters=counters;
+            active_query_slot=(int)j->query_count++;
+            continue;
+        }
+        if(recorded->type==PS5VK_QUERY_END) {
+            if(active_query_slot<0 ||
+               j->queries[active_query_slot].pool!=recorded->query_pool ||
+               j->queries[active_query_slot].query!=recorded->query_first) {
+                rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=27;goto fail;
+            }
+            BATCH_RESERVE(64u);
+            uint64_t address=(uint64_t)(uintptr_t)
+                j->queries[active_query_slot].counters+8u;
+            size_t event=ps5vk_graphics_occlusion_event(cursor,
+                (size_t)(end-cursor),address);
+            if(!event){rc=VK_ERROR_UNKNOWN;draw_site=27;goto fail;}cursor+=event;
+            size_t control=ps5vk_graphics_occlusion_control(cursor,
+                (size_t)(end-cursor),0);
+            if(!control){rc=VK_ERROR_UNKNOWN;draw_site=27;goto fail;}cursor+=control;
+            active_query_slot=-1;
+            continue;
+        }
         if(recorded->type==PS5VK_CLEAR_ATTACHMENT) {
             if(recorded->subpass!=subpass_index || !ps5vk_clear_attachment_valid(recorded)) {
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=2;goto fail;
@@ -1481,11 +1587,16 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
      * early and the submission layer refuses it independently, so a body that
      * never entered the last subpass cannot be executed without dropping it. */
     if(subpass_index+1u!=pass->subpass_count) {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=24;goto fail;}
+    if(active_query_slot>=0) {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=27;goto fail;}
 #if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15
     if(j->slot_active) {
         size_t n=ps5vk_graphics_occlusion_event(cursor,(size_t)(end-cursor),
             (uint64_t)(uintptr_t)j->slot.address+8);
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=25;goto fail;}cursor+=n;
+#if defined(PS5VK_OCCLUSION_PRECISE_PROBE) && PS5VK_OCCLUSION_PRECISE_PROBE
+        size_t control=ps5vk_graphics_occlusion_control(cursor,(size_t)(end-cursor),0);
+        if(!control){rc=VK_ERROR_UNKNOWN;draw_site=25;goto fail;}cursor+=control;
+#endif
         ps5log_printf(PS5LOG_MARK,
             "PS5VK_OCCLUSION_PROBE_END serial=%llu base_plus_8=%llx",
             (unsigned long long)j->serial,(unsigned long long)(uintptr_t)j->slot.address+8);
@@ -1545,7 +1656,7 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             }
             if(rc==VK_SUCCESS)
                 rc=ps5vk_readback_commands(d,postlude+partition.readback_first,
-                    partition.readback_count,j->color,&j->layouts,&plan);
+                    partition.readback_count,j->color,&j->layouts,&plan,&draw_site);
             if(rc==VK_SUCCESS && partition.suffix_count)
                 rc=ps5vk_upload_commands(d,postlude+partition.suffix_first,
                     partition.suffix_count,j->color,&j->layouts,&cursor,end,cache);
@@ -1682,6 +1793,25 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
 #undef BATCH_RESERVE
     j->words=0;
     for(unsigned b=0;b<j->chain.count;++b)j->words+=j->chain.words[b];
+#if defined(PS5VK_GRAPHICS_SCISSOR_PROBE) && PS5VK_GRAPHICS_SCISSOR_PROBE==15 && \
+    defined(PS5VK_OCCLUSION_PRECISE_PROBE) && PS5VK_OCCLUSION_PRECISE_PROBE
+    /* Dump the complete emitted PM4 stream for the one precise-counter
+     * diagnostic. This makes it possible to see whether later draw-state
+     * packets overwrite DB_COUNT_CONTROL after our explicit setting. */
+    if(j->slot_active) {
+        for(unsigned b=0;b<j->chain.count;++b) {
+            const uint32_t *w=(const uint32_t *)j->chain.arenas[b].address;
+            const uint32_t n=j->chain.words[b];
+            for(uint32_t i=0;i<n;i+=4)
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_OCCLUSION_PM4 serial=%llu arena=%u at=%u of=%u "
+                    "%08x %08x %08x %08x",
+                    (unsigned long long)j->serial,b,i,n,
+                    w[i],i+1<n?w[i+1]:0u,i+2<n?w[i+2]:0u,
+                    i+3<n?w[i+3]:0u);
+        }
+    }
+#endif
 #if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
     /* The COMMAND WORDS of a patch submission, which is the last stream in
      * this driver that has never been read.
@@ -1888,7 +2018,9 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
             /* Private diagnostic only. Never change pixels or upstream's
              * comparator; count just the exact single-layer packed image. */
             if((image->info.format==VK_FORMAT_R8G8B8A8_UNORM ||
-                image->info.format==VK_FORMAT_B8G8R8A8_UNORM) &&
+                image->info.format==VK_FORMAT_B8G8R8A8_UNORM ||
+                image->info.format==VK_FORMAT_R8G8B8A8_UINT ||
+                image->info.format==VK_FORMAT_R8G8B8A8_SINT) &&
                image->info.arrayLayers==1 && image->info.extent.depth==1 &&
                destination_bytes==(uint64_t)image->info.extent.width*image->info.extent.height*4u) {
                 struct ps5vk_readback_content content;
@@ -1900,6 +2032,34 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
                         (unsigned long long)content.gray128,content.hash);
             }
 #endif
+        }
+        if(j->query_arena_active) {
+            for(unsigned q=0;q<j->query_count;++q) {
+                uint64_t *pair=j->queries[q].counters;
+                cache(pair,PS5VK_QUERY_SLOT_BYTES);
+                uint64_t sum=0;
+                unsigned available=0;
+                for(unsigned rb=0;rb<PS5VK_QUERY_COUNTER_PAIRS;++rb) {
+                    uint64_t begin=pair[2u*rb],end=pair[2u*rb+1u];
+                    VkBool32 begin_valid=(begin>>63)!=0;
+                    VkBool32 end_valid=(end>>63)!=0;
+                    if(begin_valid!=end_valid)return VK_ERROR_DEVICE_LOST;
+                    if(!begin_valid)continue;
+                    begin&=~(UINT64_C(1)<<63);
+                    end&=~(UINT64_C(1)<<63);
+                    if(end<begin || UINT64_MAX-sum<end-begin)
+                        return VK_ERROR_DEVICE_LOST;
+                    sum+=end-begin;
+                    ++available;
+                }
+                if(!available || ps5vk_query_publish(d,j->queries[q].pool,
+                        j->queries[q].query,sum)!=VK_SUCCESS)
+                    return VK_ERROR_DEVICE_LOST;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_OCCLUSION_QUERY serial=%llu query=%u passed_samples=%llu render_backends=%u available=1 precise=1",
+                    (unsigned long long)j->serial,j->queries[q].query,
+                    (unsigned long long)sum,available);
+            }
         }
         if(ps5vk_layout_commit(&j->layouts)!=VK_SUCCESS)return VK_ERROR_DEVICE_LOST;
         j->complete=1;*completed=j->serial;

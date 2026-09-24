@@ -3,6 +3,17 @@
 #include "color_attachment_contract.h"
 #include <string.h>
 
+static int configure_integer_color_target(VkFormat format, ps5_agc_register *registers)
+{
+    if (!ps5vk_color_target_format_is_integer(format)) return 0;
+    const uint32_t number_type = format == VK_FORMAT_R8G8B8A8_SINT ? 5u : 4u;
+    const uint32_t clear_mask = (7u << 8) | (1u << 15) | (1u << 16) |
+        (1u << 17) | (1u << 18);
+    registers[2].value = (registers[2].value & ~clear_mask) |
+        (number_type << 8) | (1u << 16) | (1u << 17) | (1u << 18);
+    return 0;
+}
+
 /* The colour target's sample geometry lives in CB_COLOR0_ATTRIB (context
  * offset 0x31d), whose NUM_SAMPLES/NUM_FRAGMENTS fields the shared builder
  * clears. A single-sample target keeps those zeroes - byte for byte what this
@@ -63,6 +74,8 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
                ps5vk_color_target_integer_served(view->format)) {
         if (!(image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         if (ps5_color_build_target(result.registers, color_defaults, base, width, height)) return VK_ERROR_UNKNOWN;
+        if (configure_integer_color_target(view->format, result.registers))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
         /* Gears' generic builder selects COMP_SWAP=STD (RGBA byte order).
          * Vulkan BGRA requires ZYXW / SWAP_ALT=1 in CB_COLOR0_INFO[12:11].
          * Public Mesa ac_translate_colorswap + gfx10.json; do not change the
@@ -74,9 +87,6 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
          * normalized targets, UINT or SINT for integer targets. Pinned gfx103 table:
          * NUMBER_UNORM = 0, NUMBER_UINT = 4, NUMBER_SINT = 5; tests/test_color_attachment_
          * offsets.py recomputes the field and the values from that table. */
-        if (ps5vk_color_target_format_is_integer(view->format))
-            result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x700)) |
-                                      ((view->format == VK_FORMAT_R8G8B8A8_SINT ? 5u : 4u) << 8u);
         /* The target's sample geometry, in the word the shared builder clears
          * (DXVK262-T06). */
         rc = color_target_samples(result.registers, image->info.samples);
@@ -152,11 +162,10 @@ VkResult ps5vk_native_layer_target(VkDevice d, VkImageView view, uint32_t layer,
         if (!(image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         if (ps5_color_build_target(result.registers, color_defaults, base, width, height))
             return VK_ERROR_UNKNOWN;
+        if (configure_integer_color_target(view->format, result.registers))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
         if (view->format == VK_FORMAT_B8G8R8A8_UNORM)
             result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x1800)) | UINT32_C(0x0800);
-        if (ps5vk_color_target_format_is_integer(view->format))
-            result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x700)) |
-                                      ((view->format == VK_FORMAT_R8G8B8A8_SINT ? 5u : 4u) << 8u);
         rc = color_target_samples(result.registers, image->info.samples);
         if (rc != VK_SUCCESS) return rc;
         result.count = PS5_COLOR_REGISTER_COUNT;

@@ -92,9 +92,13 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    int depth_format_supported = p->depth_format == VK_FORMAT_D32_SFLOAT;
+#if defined(PS5VK_D16_ATTACHMENT_DIAGNOSTIC) && PS5VK_D16_ATTACHMENT_DIAGNOSTIC
+    depth_format_supported |= p->depth_format == VK_FORMAT_D16_UNORM &&
+        width == 128u && height == 128u;
+#endif
     if (p->depth_format == VK_FORMAT_UNDEFINED ? depth != NULL :
-        ((p->depth_format != VK_FORMAT_D32_SFLOAT && p->depth_format != VK_FORMAT_D16_UNORM) ||
-         !depth || depth->count != PS5_DEPTH_REGISTER_COUNT ||
+        (!depth_format_supported || !depth || depth->count != PS5_DEPTH_REGISTER_COUNT ||
          (p->depth_format == VK_FORMAT_D16_UNORM && p->raster.depth_bias_enable)))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_native_graphics_pipeline *native = p->graphics_state;

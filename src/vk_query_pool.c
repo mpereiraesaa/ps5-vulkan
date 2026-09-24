@@ -14,6 +14,10 @@
 
 #include <string.h>
 
+#if defined(PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC) && PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
+#include "ps5log.h"
+#endif
+
 #define INVALID VK_ERROR_UNKNOWN
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateQueryPool(VkDevice d,
@@ -249,8 +253,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResetQueryPool(VkCommandBuffer command,
     op->query_count = count;
 }
 
-static void unsupported_query_command(VkCommandBuffer command)
+static void unsupported_query_command(VkCommandBuffer command, unsigned site)
 {
+    (void)site;
+#if defined(PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC) && PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
+    ps5log_printf(PS5LOG_MARK, "PS5VK_QUERY_RECORD_REFUSE site=%u", site);
+#endif
     ps5vk_command_invalidate(command);
 }
 
@@ -269,7 +277,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginQuery(VkCommandBuffer command,
          !ps5vk_query_reset_before(command, command->operation_count, pool, query)) ||
         ((flags & VK_QUERY_CONTROL_PRECISE_BIT) &&
          !(d->enabled_features & PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE))) {
-        unsupported_query_command(command);
+        unsupported_query_command(command, 1);
         return;
     }
     struct ps5vk_operation *op = ps5vk_command_reserve_operations(command,
@@ -292,7 +300,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndQuery(VkCommandBuffer command,
     if (!command || !command->active_occlusion_query_pool ||
         command->active_occlusion_query_pool != pool ||
         command->active_occlusion_query != query) {
-        unsupported_query_command(command);
+        unsupported_query_command(command, 2);
         return;
     }
     struct ps5vk_operation *op = ps5vk_command_reserve_operations(command,
@@ -316,7 +324,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyQueryPoolResults(VkCommandBuffer command,
     if (!count) return;
     if (!query_range(d, pool, first, count) || !destination ||
         command->render_pass) {
-        unsupported_query_command(command);
+        unsupported_query_command(command, 3);
         return;
     }
     struct ps5vk_operation candidate = {
@@ -330,7 +338,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyQueryPoolResults(VkCommandBuffer command,
         .buffer_offset = offset,
     };
     if (ps5vk_query_operation_validate(d, &candidate) != VK_SUCCESS) {
-        unsupported_query_command(command);
+        unsupported_query_command(command, 4);
         return;
     }
     struct ps5vk_operation *op = ps5vk_command_reserve_operations(command,
@@ -342,7 +350,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp(VkCommandBuffer command,
     VkPipelineStageFlagBits stage, VkQueryPool pool, uint32_t query)
 {
     (void)stage; (void)pool; (void)query;
-    unsupported_query_command(command);
+    unsupported_query_command(command, 5);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetQueryPoolResults(VkDevice d,
