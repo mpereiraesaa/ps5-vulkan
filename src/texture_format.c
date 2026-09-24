@@ -22,6 +22,8 @@
 #define CAP_SRC PS5VK_FORMAT_CAP_TRANSFER_SRC
 #define CAP_SAMP PS5VK_FORMAT_CAP_SAMPLED_IMAGE
 #define CAP_LINEAR PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR
+#define CAP_BLIT_SRC PS5VK_FORMAT_CAP_BLIT_SRC
+#define CAP_BLIT_DST PS5VK_FORMAT_CAP_BLIT_DST
 #define CAP_COLOR PS5VK_FORMAT_CAP_COLOR_ATTACHMENT
 #define CAP_COLOR_READBACK PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK
 #define CAP_BLEND PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND
@@ -29,6 +31,8 @@
 #define CAP_VERTEX PS5VK_FORMAT_CAP_VERTEX_BUFFER
 #define CAP_UTEXEL PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER
 #define CAP_STORAGE_IMAGE PS5VK_FORMAT_CAP_STORAGE_IMAGE
+#define RGBA8_SINT_ATTACHMENT_CAP CAP_INTEGER_TARGET
+#define D32_SAMPLED_CAP (CAP_SAMP | CAP_DST)
 
 /* Sampled row: the GFX1013 word/selectors/texel size are the pinned GPL
  * encoding. ENABLED carries additional directly qualified roles. */
@@ -41,7 +45,7 @@
 #define SAMPLED(f, bpt, word, s0, s1, s2, s3, EXTRA, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), \
-      CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), GPL }
+      CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), GPL, 1, 1, (bpt) }
 /* Sampled row whose byte layout is the pinned registry's packed-component
  * order rather than one of the reference's explicit rows. WITNESSED lists
  * enabled capabilities, including the independently qualified sampled roles;
@@ -49,10 +53,19 @@
 #define SAMPLED_PACKED(f, bpt, word, s0, s1, s2, s3, WITNESSED, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (WITNESSED) | (ENABLED), \
-      (WITNESSED) | (ENABLED), GPL | PACK }
+      (WITNESSED) | (ENABLED), GPL | PACK, 1, 1, (bpt) }
 /* Row with no sampled-image encoding: a render-target, depth or buffer role. */
 #define BUFFER(f, CAPS) \
-    { (f), 0, 0, {0, 0, 0, 0}, (CAPS), (CAPS), PS5VK_FORMAT_PROVENANCE_NONE }
+    { (f), 0, 0, {0, 0, 0, 0}, (CAPS), (CAPS), PS5VK_FORMAT_PROVENANCE_NONE, 0, 0, 0 }
+/* Complete components absent from the Vulkan format in the descriptor.
+ * In particular BC1 RGB must not expose BC1's optional transparent alpha. */
+#define BC(f, gfxfmt, bytes, components) \
+    { (f), 0, ((uint32_t)(gfxfmt) << 20), \
+      {4, (components) >= 2 ? 5 : 0, (components) >= 3 ? 6 : 0, \
+       (components) == 4 ? 7 : 1}, \
+      CAP_SAMP | CAP_LINEAR | CAP_SRC | CAP_DST | CAP_BLIT_SRC, \
+      CAP_SAMP | CAP_LINEAR | CAP_SRC | CAP_DST | CAP_BLIT_SRC, \
+      PS5VK_FORMAT_PROVENANCE_GFX10_FORMAT_ENUM, 4, 4, (bytes) }
 
 static const struct ps5vk_texture_format formats[] = {
     /* --- 8-bit and packed sampled formats ---------------------------------
@@ -80,12 +93,13 @@ static const struct ps5vk_texture_format formats[] = {
      * back; the readback pair is a separate capability from the bare
      * attachment usage. */
     SAMPLED(VK_FORMAT_R8G8B8A8_UNORM, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
-            CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK | CAP_UTEXEL,
+            CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK |
+            CAP_UTEXEL | CAP_BLIT_DST,
             CAP_BLEND),
     SAMPLED(VK_FORMAT_R8G8B8A8_SNORM, 4, UINT32_C(0x03900000), 4, 5, 6, 7,
             CAP_LINEAR | CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R8G8B8A8_SRGB, 4, UINT32_C(0x08200000), 4, 5, 6, 7,
-            CAP_LINEAR, 0),
+            CAP_LINEAR | CAP_SRC | CAP_BLIT_DST, 0),
     SAMPLED(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32, 4, UINT32_C(0x08400000), 4, 5, 6, 1,
             CAP_LINEAR, 0),
     SAMPLED(VK_FORMAT_B10G11R11_UFLOAT_PACK32, 4, UINT32_C(0x02400000), 4, 5, 6, 1,
@@ -136,7 +150,8 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R8G8B8A8_UINT, 4, UINT32_C(0x03c00000), 4, 5, 6, 7,
             CAP_VERTEX | CAP_UTEXEL | CAP_INTEGER_TARGET, CAP_INTEGER_TARGET),
     SAMPLED(VK_FORMAT_R8G8B8A8_SINT, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
-            CAP_VERTEX | CAP_UTEXEL, 0),
+            CAP_VERTEX | CAP_UTEXEL | RGBA8_SINT_ATTACHMENT_CAP,
+            RGBA8_SINT_ATTACHMENT_CAP),
     SAMPLED(VK_FORMAT_R16_UINT, 2, UINT32_C(0x00b00000), 4, 0, 0, 1,
             CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16_SINT, 2, UINT32_C(0x00c00000), 4, 0, 0, 1,
@@ -183,15 +198,40 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SINT_PACK32, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
                    CAP_VERTEX | CAP_SAMP | CAP_DST, CAP_UTEXEL),
     /* --- roles without a sampled-image encoding --------------------------- */
+    /* GFX10's BC image-format field is nine bits wide. The descriptor and
+     * padded block layout serve all 16 Vulkan variants. */
+    BC(VK_FORMAT_BC1_RGB_UNORM_BLOCK, 169, 8, 3),
+    BC(VK_FORMAT_BC1_RGB_SRGB_BLOCK, 170, 8, 3),
+    BC(VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 169, 8, 4),
+    BC(VK_FORMAT_BC1_RGBA_SRGB_BLOCK, 170, 8, 4),
+    BC(VK_FORMAT_BC2_UNORM_BLOCK, 171, 16, 4),
+    BC(VK_FORMAT_BC2_SRGB_BLOCK, 172, 16, 4),
+    BC(VK_FORMAT_BC3_UNORM_BLOCK, 173, 16, 4),
+    BC(VK_FORMAT_BC3_SRGB_BLOCK, 174, 16, 4),
+    BC(VK_FORMAT_BC4_UNORM_BLOCK, 175, 8, 1),
+    BC(VK_FORMAT_BC4_SNORM_BLOCK, 176, 8, 1),
+    BC(VK_FORMAT_BC5_UNORM_BLOCK, 177, 16, 2),
+    BC(VK_FORMAT_BC5_SNORM_BLOCK, 178, 16, 2),
+    BC(VK_FORMAT_BC6H_UFLOAT_BLOCK, 179, 16, 3),
+    BC(VK_FORMAT_BC6H_SFLOAT_BLOCK, 180, 16, 3),
+    BC(VK_FORMAT_BC7_UNORM_BLOCK, 181, 16, 4),
+    BC(VK_FORMAT_BC7_SRGB_BLOCK, 182, 16, 4),
     /* VideoOut target and vertex input; deliberately not sampled. */
     BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_VERTEX),
     /* 64KB_Z_X depth target. TRANSFER_DST is the whole-subresource clear:
      * vkCmdClearDepthStencilImage writes one uniform 32-bit word over the
      * entire surface, which is tiling-invariant. TRANSFER_SRC is the whole
      * surface readback, which does need pixel addressing and now has it -
-     * src/depth_detile.c carries the SW_64K_Z_X equation. No sampled role and
-     * no blit role is claimed: neither has an implemented path. */
-    BUFFER(VK_FORMAT_D32_SFLOAT, CAP_DEPTH | CAP_DST | CAP_SRC),
+     * src/depth_detile.c carries the SW_64K_Z_X equation. The bounded Dref
+     * gather shape adds sampling, while blit remains unsupported. */
+    {VK_FORMAT_D32_SFLOAT, 4, UINT32_C(0x01600000), {4, 0, 0, 1},
+     CAP_DEPTH | CAP_DST | CAP_SRC | D32_SAMPLED_CAP,
+     CAP_DEPTH | CAP_DST | CAP_SRC | D32_SAMPLED_CAP,
+     PS5VK_FORMAT_PROVENANCE_GFX10_FORMAT_ENUM, 1, 1, 4},
+    /* Narrow depth-attachment profile: exactly one 128x128 D16
+     * surface. It has no transfer, sampled-image or stencil role. */
+    {VK_FORMAT_D16_UNORM, 0, 0, {0, 0, 0, 0}, CAP_DEPTH, CAP_DEPTH,
+     PS5VK_FORMAT_PROVENANCE_NONE, 0, 0, 0},
     /* Three-component rows are vertex-only: GFX1013 has no 96-bit image
      * data format, so no sampled encoding is claimed for them. */
     BUFFER(VK_FORMAT_R32G32B32_SFLOAT, CAP_VERTEX),
@@ -229,7 +269,7 @@ uint32_t ps5vk_texture_format_dst_sel(const struct ps5vk_texture_format *format)
 
 uint32_t ps5vk_texture_format_gfx10_format(const struct ps5vk_texture_format *format)
 {
-    return format ? ((format->descriptor_format_word >> 20) & 0x7fu) : 0;
+    return format ? ((format->descriptor_format_word >> 20) & 0x1ffu) : 0;
 }
 
 uint32_t ps5vk_texture_format_capabilities(VkFormat format)
@@ -253,7 +293,8 @@ VkBool32 ps5vk_texture_format_witnessed(VkFormat format, uint32_t capability)
 VkBool32 ps5vk_texture_format_sampled_image(VkFormat format)
 {
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
-    return entry && (entry->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
+    return entry && ps5vk_texture_format_witnessed(format,
+        PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
         entry->descriptor_format_word != 0;
 }
 
@@ -261,7 +302,16 @@ VkBool32 ps5vk_texture_format_sampled_encoding(VkFormat format)
 {
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
     return entry && (entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
-        entry->descriptor_format_word != 0 && entry->bytes_per_texel != 0;
+        entry->descriptor_format_word != 0 && entry->bytes_per_block != 0 &&
+        entry->block_width != 0 && entry->block_height != 0;
+}
+
+VkBool32 ps5vk_texture_format_block_compressed(VkFormat format)
+{
+    const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
+    return entry && !entry->bytes_per_texel && entry->block_width > 1 &&
+        entry->block_height != 0 &&
+        entry->bytes_per_block != 0;
 }
 
 void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
@@ -317,6 +367,11 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
      * repeating the optimal-tiling bits. */
     if (format == VK_FORMAT_R8G8B8A8_UNORM)
         properties.linearTilingFeatures |= VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    /* The BC region executor writes RGBA8 staging and optimal transfer images. */
+    if (format == VK_FORMAT_R8G8B8A8_UNORM) {
+        properties.linearTilingFeatures |= VK_FORMAT_FEATURE_BLIT_DST_BIT;
+        properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_BLIT_DST_BIT;
+    }
     *out = properties;
 }
 
@@ -345,6 +400,14 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
     /* Each implemented role contributes an exact combination; a usage the
      * profile has no executable path for is rejected here, before any object
      * exists. */
+    if (ps5vk_texture_format_block_compressed(format) &&
+        (w & (PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_SRC |
+              PS5VK_FORMAT_CAP_TRANSFER_DST)) ==
+            (PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_SRC |
+             PS5VK_FORMAT_CAP_TRANSFER_DST) &&
+        usage == (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+        return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
         (usage == VK_IMAGE_USAGE_SAMPLED_BIT ||
          usage == (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))

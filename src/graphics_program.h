@@ -158,15 +158,10 @@ static inline int ps5vk_tess_patch_primitive_type(uint32_t *out)
     *out=PS5VK_AGC_PRIMITIVE_TYPE_PATCH;
     return 1;
 }
-/* True for the primitive families this profile accepts only as the input of a
- * geometry stage. The geometry witness measures exactly that shape - the
- * merged program's link value, with the stage reading one vertex per point and
- * two per line - while a plain point or line pipeline has no witness behind it,
- * so it stays refused instead of riding on the geometry families' acceptance. */
+/* Point-list rasterization is served; lines still require geometry. */
 static inline int ps5vk_agc_primitive_needs_geometry(uint32_t primitive_type)
 {
-    return primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST ||
-        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST ||
+    return primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST ||
         primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP;
 }
 /* The primitive values the native create path will hand to the AGC linker. It is

@@ -325,14 +325,13 @@ static void lifecycle(void)
     for(unsigned usage=0;usage<256;++usage) {
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_B8G8R8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
-        /* The depth target is an attachment, the destination of the whole-
-         * subresource vkCmdClearDepthStencilImage, the source of the
-         * whole-surface readback, or a combination of those. Every form is the
-         * tiled depth surface; no other combination exists, and in particular
-         * the transfer source never appears without the attachment, because a
-         * standalone D32 transfer image has no role here. */
+        /* D32 also has a separate bounded sampled-depth role for Dref gather.
+         * The depth attachment forms remain tiled, and transfer source never
+         * appears without the attachment. */
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_D32_SFLOAT,usage)==
-            (usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT ||
+            (usage==VK_IMAGE_USAGE_SAMPLED_BIT ||
+             usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT ||
              usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
              usage==(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
                      VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
@@ -430,12 +429,16 @@ static void lifecycle(void)
                 usage==(VK_IMAGE_USAGE_STORAGE_BIT|
                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                         VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            const VkBool32 bounded_d32_sampled =
+                image_formats[f]==VK_FORMAT_D32_SFLOAT &&
+                (usage==VK_IMAGE_USAGE_SAMPLED_BIT ||
+                 usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT));
             assert(result==VK_SUCCESS &&
-                ip.maxExtent.width==(storage_image_shape?8u:(f==0?16383u:16384u)));
+                ip.maxExtent.width==(storage_image_shape?8u:
+                    bounded_d32_sampled?64u:(f==0?16383u:16384u)));
             assert(ip.maxExtent.height==ip.maxExtent.width && ip.maxExtent.depth==1);
-            /* Every D32 role is the tiled depth surface, including the target
-             * created only as the destination of a whole-subresource depth
-             * clear, so all of them are attachment-shaped: one mip, one layer. */
+            /* D32 sampling has its own bounded descriptor profile; other D32
+             * roles use the tiled depth attachment and readback surface. */
             const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 ||
                 image_formats[f]==VK_FORMAT_D32_SFLOAT;
@@ -447,8 +450,11 @@ static void lifecycle(void)
                 PS5VK_FORMAT_CAP_TRANSFER_SRC) && usage &&
                 !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                                              VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-            const uint32_t expected_mips=!attachment &&
-                (usage&VK_IMAGE_USAGE_SAMPLED_BIT)?15u:1u;
+            const VkBool32 multi_transfer = transfer_only &&
+                ps5vk_bc_transfer_subresources(image_formats[f]);
+            const uint32_t expected_mips=bounded_d32_sampled?7u:
+                ((!attachment && (usage&VK_IMAGE_USAGE_SAMPLED_BIT)) ||
+                 multi_transfer)?15u:1u;
             /* The one input-attachment shape the pinned multiview helper needs
              * reports the measured six-view layer floor; every other attachment
              * (and the pure transfer role) stays single-layer, so the query and
@@ -461,7 +467,8 @@ static void lifecycle(void)
                         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
             const uint32_t expected_layers = input_attachment_shape ?
                 PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR :
-                (attachment||transfer_only||storage_image_shape?1u:
+                (bounded_d32_sampled||attachment||storage_image_shape||
+                 (transfer_only&&!multi_transfer)?1u:
                     PS5VK_MAX_IMAGE_ARRAY_LAYERS);
             assert(ip.maxMipLevels==expected_mips &&
                 ip.maxArrayLayers==expected_layers &&
@@ -481,7 +488,29 @@ static void lifecycle(void)
         VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,&ip)==VK_SUCCESS &&
         ip.maxExtent.width==PS5VK_MAX_IMAGE_CUBE && ip.maxExtent.height==PS5VK_MAX_IMAGE_CUBE &&
-        ip.maxExtent.depth==1 && ip.maxArrayLayers==6);
+        ip.maxExtent.depth==1 &&
+        ip.maxArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
+    /* The pinned upstream cube-array image-view leaf creates this exact
+     * sampled colour-attachment shape. It remains limited to cube-compatible
+     * RGBA8 images; the same usage without the cube flag and neighbouring
+     * transfer combinations remain refused. */
+    const VkImageUsageFlags cube_sampled_attachment_usage =
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,cube_sampled_attachment_usage,
+        VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,&ip)==VK_SUCCESS &&
+        ip.maxExtent.width==PS5VK_MAX_IMAGE_CUBE &&
+        ip.maxExtent.height==PS5VK_MAX_IMAGE_CUBE && ip.maxExtent.depth==1 &&
+        ip.maxMipLevels==1 &&
+        ip.maxArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,cube_sampled_attachment_usage,0,&ip)
+        ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
+    assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,
+        cube_sampled_attachment_usage|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,&ip)
+        ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));
     for(unsigned variant=0;variant<2;++variant) {
         memset(&ip,0xff,sizeof(ip));
         assert(vkGetPhysicalDeviceImageFormatProperties(p,
@@ -559,15 +588,21 @@ static void lifecycle(void)
              * applicable leaves passed with it reported. */
             optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
-                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT;
+        else if(formats[n]==VK_FORMAT_R8G8B8A8_SRGB)
+            optimal_bits|=VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT;
         else if(formats[n]==VK_FORMAT_D32_SFLOAT)
             /* TRANSFER_DST is the whole-subresource depth clear and
              * TRANSFER_SRC is the whole-surface readback, which 64KB_Z_X has
              * had since its pixel addressing was implemented. */
-            optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+            optimal_bits=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
-        else if(formats[n]==VK_FORMAT_R8G8B8A8_UINT)
+        else if(formats[n]==VK_FORMAT_R8G8B8A8_UINT ||
+                formats[n]==VK_FORMAT_R8G8B8A8_SINT)
             /* DXVK262-T06 independentBlend is promoted, so the integer colour
              * target the two upstream leaves draw into reports its colour
              * attachment role (and the transfer source its readback needs)
@@ -578,7 +613,8 @@ static void lifecycle(void)
         /* One format publishes a linear-tiling role: RGBA8 carries the transfer
          * destination of the pinned host-readback staging image. */
         const VkFormatFeatureFlags linear_bits = formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?
-            (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT : 0;
+            (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT) : 0;
         assert(fp.linearTilingFeatures==linear_bits && fp.bufferFeatures==buffer_bits &&
             fp.optimalTilingFeatures==optimal_bits);
     }
@@ -660,7 +696,8 @@ static void lifecycle(void)
         /* RGBA8 is also the one linear-tiling staging row; the other vertex
          * formats publish nothing there. */
         assert(fp.linearTilingFeatures==(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?
-            (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT : 0));
+            (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT) : 0));
         VkFormatFeatureFlags expected_optimal=0;
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
             expected_optimal=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
@@ -675,7 +712,8 @@ static void lifecycle(void)
         if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
             expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
-                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT;
         else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
             expected_optimal=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         assert(fp.optimalTilingFeatures==expected_optimal);
@@ -1319,6 +1357,72 @@ static void negative(void)
         memset(&features, 0, sizeof(features));
         features.robustBufferAccess = VK_TRUE;
     }
+    /* Every T07 core feature uses the same one-member/one-platform bit
+     * contract. This host fixture starts with the bits off and turns each on
+     * to prove the query and logical-device routes independently of the
+     * native platform's reporting decision. */
+    {
+        const struct { size_t offset; uint32_t bit; } t07[] = {
+            {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),
+             PS5VK_FEATURE_IMAGE_CUBE_ARRAY},
+            {offsetof(VkPhysicalDeviceFeatures, textureCompressionBC),
+             PS5VK_FEATURE_TEXTURE_COMPRESSION_BC},
+            {offsetof(VkPhysicalDeviceFeatures, shaderImageGatherExtended),
+             PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED},
+            {offsetof(VkPhysicalDeviceFeatures, occlusionQueryPrecise),
+             PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE},
+        };
+        const unsigned t07_count = sizeof(t07) / sizeof(t07[0]);
+        const uint32_t saved = p->platform.supported_features;
+        const VkBool32 yes = VK_TRUE;
+        VkPhysicalDeviceFeatures reported;
+        vkGetPhysicalDeviceFeatures(p, &reported);
+        assert(!reported.imageCubeArray && !reported.textureCompressionBC &&
+               !reported.shaderImageGatherExtended && !reported.occlusionQueryPrecise);
+        uint32_t all_bits = 0;
+        for (unsigned n = 0; n < t07_count; ++n) {
+            all_bits |= t07[n].bit;
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t07[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+
+            p->platform.supported_features = saved | t07[n].bit;
+            vkGetPhysicalDeviceFeatures(p, &reported);
+            for (unsigned other = 0; other < t07_count; ++other) {
+                VkBool32 value;
+                memcpy(&value, (unsigned char *)&reported + t07[other].offset,
+                       sizeof(value));
+                assert(value == (other == n ? VK_TRUE : VK_FALSE));
+            }
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t07[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == t07[n].bit);
+            vkDestroyDevice(d, NULL);
+            p->platform.supported_features = saved;
+        }
+
+        p->platform.supported_features = saved | all_bits;
+        VkPhysicalDeviceFeatures2 all = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2
+        };
+        vkGetPhysicalDeviceFeatures2KHR(p, &all);
+        assert(all.features.imageCubeArray && all.features.textureCompressionBC &&
+               all.features.shaderImageGatherExtended &&
+               all.features.occlusionQueryPrecise);
+        VkDeviceCreateInfo chained = info;
+        chained.pEnabledFeatures = NULL;
+        chained.pNext = &all;
+        d=(VkDevice)(uintptr_t)1;
+        assert(vkCreateDevice(p,&chained,NULL,&d)==VK_SUCCESS && d);
+        assert(d->enabled_features == (PS5VK_FEATURE_ROBUST_BUFFER_ACCESS | all_bits));
+        vkDestroyDevice(d, NULL);
+        p->platform.supported_features = saved;
+        memset(&features, 0, sizeof(features));
+        features.robustBufferAccess = VK_TRUE;
+    }
     info.pEnabledFeatures = NULL; priority = NAN;
     assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
     priority = 0.0f;
@@ -1755,6 +1859,73 @@ static void tessellation_feature_negotiation(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void shader_int16_core_route(void)
+{
+    VkInstance instance_with_features2 = features2_instance();
+    VkPhysicalDevice p = physical(instance_with_features2);
+    assert(!(p->platform.supported_features & PS5VK_FEATURE_SHADER_INT16));
+    VkPhysicalDeviceFeatures reported;
+    vkGetPhysicalDeviceFeatures(p, &reported);
+    assert(!reported.shaderInt16);
+    VkDeviceQueueCreateInfo queue; float priority;
+    VkDeviceCreateInfo info = device_info(&queue, &priority);
+    VkPhysicalDeviceFeatures requested = {.shaderInt16 = VK_TRUE};
+    info.pEnabledFeatures = &requested;
+    const unsigned before = opened;
+    VkDevice device = VK_NULL_HANDLE;
+    assert(vkCreateDevice(p, &info, NULL, &device) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !device && opened == before);
+
+    /* Host-only capable-platform simulation; the shipping platform mask is
+     * unchanged until native and original CTS evidence justify promotion. */
+    p->platform.supported_features |= PS5VK_FEATURE_SHADER_INT16;
+    vkGetPhysicalDeviceFeatures(p, &reported);
+    assert(reported.shaderInt16);
+    VkPhysicalDeviceFeatures2 reported2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    vkGetPhysicalDeviceFeatures2KHR(p, &reported2);
+    assert(reported2.features.shaderInt16);
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features & PS5VK_FEATURE_SHADER_INT16);
+    vkDestroyDevice(device, NULL);
+
+    VkPhysicalDeviceFeatures2 chained = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .features.shaderInt16 = VK_TRUE};
+    info.pEnabledFeatures = NULL;
+    info.pNext = &chained;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features & PS5VK_FEATURE_SHADER_INT16);
+    vkDestroyDevice(device, NULL);
+    chained.features.shaderInt16 = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(!(device->enabled_features & PS5VK_FEATURE_SHADER_INT16));
+    vkDestroyDevice(device, NULL);
+    vkDestroyInstance(instance_with_features2, NULL);
+}
+
+static void unadvertised_subgroup_properties(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    assert(VK_API_VERSION_MAJOR(p->platform.properties.apiVersion) == 1);
+    assert(VK_API_VERSION_MINOR(p->platform.properties.apiVersion) == 0);
+    VkPhysicalDeviceSubgroupProperties subgroup = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
+        .subgroupSize = 99u,
+        .supportedStages = VK_SHADER_STAGE_ALL,
+        .supportedOperations = VK_SUBGROUP_FEATURE_BALLOT_BIT,
+        .quadOperationsInAllStages = VK_TRUE};
+    VkPhysicalDeviceProperties2 properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &subgroup};
+    vkGetPhysicalDeviceProperties2KHR(p, &properties);
+    assert(!subgroup.subgroupSize && !subgroup.supportedStages &&
+           !subgroup.supportedOperations && !subgroup.quadOperationsInAllStages);
+    assert(properties.properties.apiVersion == VK_API_VERSION_1_0);
+    vkDestroyInstance(i, NULL);
+}
+
 static void memory_model_feature_negotiation(void)
 {
     VkInstance i = features2_instance();
@@ -2121,6 +2292,8 @@ int main(void)
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     consumer_physical_queries();
     tessellation_feature_negotiation();
+    shader_int16_core_route();
+    unadvertised_subgroup_properties();
     memory_model_feature_negotiation();
     single_device_group_creation();
     buffer_address_command_gate();

@@ -37,6 +37,21 @@ Current derived or adapted files are:
 | `src/texture_layout.c` | `src/gallium/ps5/ps5_screen.c`, linear sampled-resource allocation | Descending, 256-byte-aligned GFX1013 mip-level packing and complete-chain-per-layer layout; ps5-vulkan supplies Vulkan mip bounds, transfer planning and memory-overflow gates |
 | `native/runtime_graphics_compiler.c`, `native/runtime_shader.c`, `native/runtime_draw_abi.h`, `native/draw_emit_ps5.c`, `src/graphics_formats.h` | `src/gallium/ps5/ps5_screen.c`, bounded PSBC texture-descriptor ABI, `ps5_integer_vertex_format` and `ps5_packed_vertex_format` | Vulkan-to-PSBC GFX1013 vertex formats plus the exact fragment set-0 combined-sampler metadata/user-SGPR bridge; unsupported descriptor profiles fail closed and explicit mip LOD has public-SDK-linked hardware readback |
 
+## BC block decoder
+
+[`third_party/bcdec/bcdec.h`](third_party/bcdec/bcdec.h) is vendored from
+Sergii Kudlai's `iOrange/bcdec` repository at commit
+[`80859ed3b7afb1c527a2a99d70c61457bea72d0c`](https://github.com/iOrange/bcdec/commit/80859ed3b7afb1c527a2a99d70c61457bea72d0c).
+Only trailing whitespace was removed from the pinned header. It is used only by
+the CPU-side diagnostic oracle for BC block decoding. This project selects the
+upstream MIT license, whose complete notice is preserved in
+[`third_party/bcdec/LICENSE`](third_party/bcdec/LICENSE).
+
+| ps5-vulkan file | upstream source | relationship |
+| --- | --- | --- |
+| `third_party/bcdec/bcdec.h` | `iOrange/bcdec`, pinned commit above | MIT-licensed decoder used by the diagnostic CPU oracle; trailing whitespace removed |
+| `src/bc_blit_decode.h` | `iOrange/bcdec`, pinned commit above | Original format dispatch, decode normalization, sRGB conversion and RGBA8 target quantization around the decoder API |
+
 Every future direct adaptation must add an SPDX identifier and identify its
 source file and pinned revision in the file header and this table. Ideas and
 observations that lead to an independent implementation should still be cited
@@ -47,7 +62,8 @@ when the reference materially influenced the design.
 Mesa/ACO, Vulkan-Headers, PSBC and the other pinned source dependencies retain
 their own compatible licenses and notices. Generated SDK distributions include
 this GPL license. Third-party source checkouts and generated artifacts are not
-committed to this repository.
+committed to this repository; individually vendored source files retain their
+upstream provenance and license notices as documented above.
 
 `libps5vk.a` is linked statically by the current native application workflow.
 Anyone distributing a linked executable must satisfy GPLv3 corresponding-source

@@ -575,7 +575,7 @@ int main(void)
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS && topo->graphics);
         vkDestroyPipeline(&d,topo,NULL);
         const VkPrimitiveTopology unsupported_topologies[]={
-            VK_PRIMITIVE_TOPOLOGY_POINT_LIST,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+            VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
             VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
             VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
         unsigned before_created=created;
@@ -584,6 +584,11 @@ int main(void)
             assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==
                 VK_ERROR_FEATURE_NOT_PRESENT && !topo && created==before_created);
         }
+        ia.topology=VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+        expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS &&
+            topo && topo->graphics);
+        vkDestroyPipeline(&d,topo,NULL);
         ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS);

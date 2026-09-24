@@ -32,6 +32,7 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_unorm.vert -o build/runtime-graphics/vertex_unorm.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_vertex_format.frag -o build/runtime-graphics/vertex_format.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_texture.frag -o build/runtime-graphics/texture.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_cube_array.frag -o build/runtime-graphics/cube_array.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.1 experiments/graphics/runtime_view_index.frag -o build/runtime-graphics/view_index.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_descriptor_arrays.frag -o build/runtime-graphics/descriptor_arrays.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_fragment_store.frag -o build/runtime-graphics/fragment_store.frag.spv
@@ -58,11 +59,11 @@ VK_COMMAND_SOURCES = $(VK_PIPELINE_SOURCES) src/vk_command.c src/vk_indirect.c
 # objects they record against are the ones the driver itself accepts.
 VK_COMMAND_TEST_SOURCES = $(VK_COMMAND_SOURCES) src/color_attachment_contract.c src/vk_render_pass.c \
         src/vk_image_view.c src/vk_framebuffer.c
-# The queue group owns the image operations: the linear staging readback copy
-# reads the tiled colour surface through the 64KB_R_X offset contract on the CPU
-# after exact GPU completion, so that helper is linked here too.
-VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_sync.c src/vk_buffer_transfer.c src/vk_image_transfer.c src/color_clear.c src/color_detile.c src/depth_detile.c src/vk_query_pool.c src/vk_queue.c src/vk_queue_router.c
-VK_GRAPHICS_SOURCES = src/color_attachment_contract.c src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c src/texture_copy.c src/texture_layout.c
+# The queue group owns image operations and their format-aware block planner:
+# linear staging readback uses 64KB_R_X after GPU completion, while BC block
+# copies use the same mip-layout contract without entering the RGBA8 row path.
+VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_sync.c src/vk_buffer_transfer.c src/vk_image_transfer.c src/color_clear.c src/color_detile.c src/depth_detile.c src/texture_copy.c src/texture_layout.c src/vk_query_pool.c src/vk_queue.c src/vk_queue_router.c
+VK_GRAPHICS_SOURCES = src/color_attachment_contract.c src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c
 VK_DEVICE_SOURCES = $(VK_QUEUE_SOURCES) $(VK_GRAPHICS_SOURCES) src/vk_device.c src/vk_dispatch.c
 NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/queue_ps5.c src/vk_indirect.c src/descriptor_encode.c src/texture_format.c src/dispatch_encode.c src/compute_commands.c tests/test_native_prepare.c
 # graphics_pair.c reads the canonical topology -> primitive mapping from
@@ -123,6 +124,8 @@ check-sanitize:
 	./build/tests/test_vertex_fetch_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_prepare_ps5.c src/texture_format.c src/vertex_descriptor.c tests/test_draw_prepare_ps5.c -o build/tests/test_draw_prepare_ps5_sanitized
 	./build/tests/test_draw_prepare_ps5_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_t07_diagnostic_sanitized
+	./build/tests/test_targets_t07_diagnostic_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc native/input_attachment_gate.c tests/test_input_attachment_gate.c -o build/tests/test_input_attachment_gate_sanitized
 	./build/tests/test_input_attachment_gate_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_batch_ps5.c native/command_arena_ps5.c src/graphics_sync.c tests/test_draw_batch_ps5.c -o build/tests/test_draw_batch_ps5_sanitized
@@ -145,6 +148,8 @@ check-sanitize:
 	./build/tests/test_texture_format_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy_sanitized
 	./build/tests/test_texture_copy_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_d32_gather_copy_sanitized
+	./build/tests/test_d32_gather_copy_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_vk_image.c -o build/tests/test_vk_image_sanitized
 	./build/tests/test_vk_image_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass_sanitized
@@ -183,6 +188,10 @@ check-sanitize:
 	./build/tests/test_buffer_transfer_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear_sanitized
 	./build/tests/test_image_copy_clear_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy_sanitized
+	./build/tests/test_bc_subresource_copy_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_integer_readback_diagnostic.c -o build/tests/test_integer_readback_diagnostic_sanitized
+	./build/tests/test_integer_readback_diagnostic_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_indirect_queue.c -o build/tests/test_indirect_queue_sanitized
 	./build/tests/test_indirect_queue_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) tests/test_vk_indirect.c -o build/tests/test_vk_indirect_sanitized
@@ -246,14 +255,22 @@ check:
 	./build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy
 	./build/tests/test_texture_copy
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_d32_gather_copy
+	./build/tests/test_d32_gather_copy
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format.c -o build/tests/test_texture_format
 	./build/tests/test_texture_format
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_bc_diagnostic_profile.c -o build/tests/test_bc_diagnostic_profile
+	./build/tests/test_bc_diagnostic_profile
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/ps5-agc-gears/src src/texture_format.c src/depth_layout.c src/texture_layout.c src/color_attachment_contract.c native/image_ps5.c native/targets_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c tests/test_d16_diagnostic_profile.c -o build/tests/test_d16_diagnostic_profile
+	./build/tests/test_d16_diagnostic_profile
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/vk_image_view.c src/vk_sampler.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_descriptor.c -o build/tests/test_texture_descriptor
 	./build/tests/test_texture_descriptor
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_layout.c -o build/tests/test_texture_layout
 	./build/tests/test_texture_layout
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler
 	./build/tests/test_vk_sampler
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_bc_diagnostic
+	./build/tests/test_vk_sampler_bc_diagnostic
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/index_emit_ps5.c tests/test_index_emit_ps5.c -o build/tests/test_index_emit_ps5
 	./build/tests/test_index_emit_ps5
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) src/index_fetch.c tests/test_index_fetch.c -o build/tests/test_index_fetch
@@ -289,6 +306,8 @@ check:
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c src/color_attachment_contract.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5
 	./build/tests/test_draw_state_ps5
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c src/color_attachment_contract.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5_d16_diagnostic
+	./build/tests/test_draw_state_ps5_d16_diagnostic
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/viewport_ps5.c tests/test_viewport_ps5.c -o build/tests/test_viewport_ps5
 	./build/tests/test_viewport_ps5
@@ -301,6 +320,8 @@ check:
 	./build/tests/test_graphics_program
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_ps5
 	./build/tests/test_targets_ps5
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_t07_diagnostic
+	./build/tests/test_targets_t07_diagnostic
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/memory_ps5.c tests/test_native_memory_alignment.c -o build/tests/test_native_memory_alignment
 	./build/tests/test_native_memory_alignment
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/depth_layout.c src/texture_format.c src/texture_layout.c native/image_ps5.c tests/test_depth_layout.c -o build/tests/test_depth_layout
@@ -365,6 +386,10 @@ check:
 	./build/tests/test_buffer_transfer
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear
 	./build/tests/test_image_copy_clear
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy
+	./build/tests/test_bc_subresource_copy
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_integer_readback_diagnostic.c -o build/tests/test_integer_readback_diagnostic
+	./build/tests/test_integer_readback_diagnostic
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_cts_draw_case_trace.c -o build/tests/test_cts_draw_case_trace
 	./build/tests/test_cts_draw_case_trace
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_render_pass_initialization_trace.c -o build/tests/test_render_pass_initialization_trace
@@ -452,6 +477,7 @@ test-compiler: build/libpsbc.host.a test-shaders
 	$(MAKE) test-runtime-graphics-native
 	mkdir -p build/tests
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cts_ssbo_local_barrier.comp -o build/test-shaders/cts_ssbo_local_barrier.spv
+	$(GLSLANG) -V --target-env vulkan1.2 -S comp experiments/compute/t08_subgroup_int8_iadd_runtime.comp -o build/test-shaders/t08_subgroup_int8_iadd_runtime.spv
 	$(GLSLANG) -V --target-env vulkan1.2 -S comp experiments/compute/t08_subgroup_iadd_runtime.comp -o build/test-shaders/t08_subgroup_iadd_runtime.spv
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_compiler
 	./build/tests/test_runtime_compiler
@@ -473,6 +499,17 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_dual_source.frag -o build/runtime-graphics/dual_source.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_two_mrt.frag -o build/runtime-graphics/two_mrt.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_core.frag -o build/runtime-graphics/gather_core.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_const_offset.frag -o build/runtime-graphics/gather_const_offset.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_dynamic_offset.frag -o build/runtime-graphics/gather_dynamic_offset.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_four_offsets.frag -o build/runtime-graphics/gather_four_offsets.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_component_0.frag -o build/runtime-graphics/gather_component_0.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_component_1.frag -o build/runtime-graphics/gather_component_1.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_component_2.frag -o build/runtime-graphics/gather_component_2.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_component_3.frag -o build/runtime-graphics/gather_component_3.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_dref.frag -o build/runtime-graphics/gather_dref.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_uint.frag -o build/runtime-graphics/gather_uint.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_sint.frag -o build/runtime-graphics/gather_sint.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_distance.vert -o build/runtime-graphics/clip_distance.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_cull_distance.vert -o build/runtime-graphics/cull_distance.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_distance.vert -o build/runtime-graphics/clip_cull_distance.vert.spv
@@ -543,3 +580,9 @@ upstream-cts-run:
 	@test -n "$(PS5_HOST)" || { echo "PS5_HOST is required" >&2; exit 2; }
 	@test -n "$(LOGS_RUNS_DIR)" || { echo "LOGS_RUNS_DIR is required" >&2; exit 2; }
 	$(PYTHON) tools/run_upstream_cts.py --host "$(PS5_HOST)" --runs-dir "$(LOGS_RUNS_DIR)"
+
+.PHONY: check-bc-subresource-copy
+check-bc-subresource-copy:
+	mkdir -p build/tests
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy
+	./build/tests/test_bc_subresource_copy

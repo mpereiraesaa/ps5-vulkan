@@ -54,8 +54,6 @@ DUMP_BINARY = ROOT / "build/tests/dump_device_reporting"
 # longer resolves marks the row not-audited instead of satisfied, so the matrix
 # cannot keep claiming a gate that has moved or disappeared.
 FEATURE_GATES = {
-    "imageCubeArray": ("src/vk_memory.c", "info->imageType != VK_IMAGE_TYPE_2D",
-                       "only 2D images are created"),
     # independentBlend was promoted on 2026-09-22: the platform reports the bit,
     # the profile advertises two colour attachments, and both upstream leaves
     # that require the feature pass, so it is no longer a gated VK_FALSE report.
@@ -207,6 +205,49 @@ ADVERTISED_FEATURES = {
     },
 }
 
+ADVERTISED_FEATURES["imageCubeArray"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_IMAGE_CUBE_ARRAY;"),
+        ("src/texture_descriptor.c", "VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:"),
+        ("src/texture_descriptor.c", "tiled.bytes!=layer_stride"),
+    ),
+    "detail": ("cube-array image/view negotiation and twelve-face GPU sampling are "
+               "implemented, with unsupported tiled pitches refused at descriptor creation"),
+    "cts": ("dEQP-VK.api.object_management.single.image_view_cube_arr",),
+}
+ADVERTISED_FEATURES["textureCompressionBC"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;"),
+        ("src/texture_format.c", "CAP_SAMP | CAP_LINEAR | CAP_SRC | CAP_DST | CAP_BLIT_SRC"),
+        ("src/graphics_formats.h", "ps5vk_bc_transfer_subresources"),
+    ),
+    "detail": ("sixteen BC formats provide sampled, filtered, copy and blit source "
+               "roles with subresource transfer execution"),
+    "cts": ("dEQP-VK.texture.compressed.bc1_rgb_unorm_block_2d_pot",),
+}
+ADVERTISED_FEATURES["occlusionQueryPrecise"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;"),
+        ("src/vk_query_pool.c", "VK_QUERY_CONTROL_PRECISE_BIT"),
+    ),
+    "detail": "precise occlusion counters complete on GPU and pass the original query oracle",
+    "cts": ("dEQP-VK.query_pool.occlusion_query.basic_precise",),
+}
+ADVERTISED_FEATURES["shaderImageGatherExtended"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;"),
+        ("src/device_profile_report.h", "properties->limits.minTexelGatherOffset = -8;"),
+        ("src/ps5vk_compiler.c", "PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED"),
+    ),
+    "detail": ("constant, dynamic, four-offset, component and Dref gather forms "
+               "execute within the reported -8..7 interval"),
+    "cts": ("dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_npot.clamp_to_edge_repeat",),
+}
+
 ADVERTISED_FEATURES["uniformBufferStandardLayout"] = {
     "citations": (
         ("native/platform_ps5.c", "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT"),
@@ -233,6 +274,22 @@ ADVERTISED_FEATURES["vulkanMemoryModel"] = {
                "queue-family atomics; seven unchanged upstream atomic oracles and a bounded "
                "GPU producer/consumer witness passed"),
     "cts": _MEMORY_MODEL_VOLATILE_CTS,
+}
+
+ADVERTISED_FEATURES["vulkanMemoryModelDeviceScope"] = {
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;"),
+        ("src/vk_device.c", "VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME"),
+        ("src/vk_pipeline.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
+        ("src/ps5vk_compiler.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
+        ("native/runtime_graphics_compiler.c", "enable_vulkan_memory_model_device_scope"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query and opt-in route enables Device-scope "
+               "atomics; an ordinary SDK cross-workgroup GPU witness passed "
+               "twice with artifact-bound results"),
+    # The original message-passing CTS factory rejects API < 1.1 before its
+    # DeviceScope query. This is not a CTS pass or a core-version claim.
+    "cts": (),
 }
 
 ADVERTISED_FEATURES["bufferDeviceAddress"] = {
@@ -731,7 +788,6 @@ def evaluate_feature(name: str, value: bool, profile: str = "graphics") -> tuple
 FEATURE_ABSENT_FORMAT_FAMILY = {
     "textureCompressionETC2": ("src/graphics_formats.h", ("VK_FORMAT_ETC2", "VK_FORMAT_EAC")),
     "textureCompressionASTC_LDR": ("src/graphics_formats.h", ("VK_FORMAT_ASTC",)),
-    "textureCompressionBC": ("src/graphics_formats.h", ("VK_FORMAT_BC", "VK_FORMAT_BC1")),
 }
 
 # Limits whose requirement depends on an advertised feature. The values are the
@@ -1455,6 +1511,17 @@ def evaluate_shader_capabilities(dump: dict) -> list[dict]:
         where, field = advertisement
         advertised = (dump["extensionFeatures"].get(field, False) if where == "extension"
                       else dump["features"].get(field, False) if field else False)
+        if number == 39 and required == "PS5VK_FEATURE_SHADER_INT8_COMPUTE":
+            # The bit is a default-off compiler experiment, never a device
+            # feature. In particular it cannot satisfy public shaderInt8.
+            public_int8 = bool(dump["features"].get("shaderInt8", False))
+            rows.append({"kind": "shader-capability", "capability": name, "number": number,
+                         "action": "requires-private-compute-probe", "file": "src/vk_pipeline.c",
+                         "advertised": public_int8,
+                         "verdict": "violation" if public_int8 else "satisfied",
+                         "detail": "private compute compiler probe; shaderInt8 remains false "
+                                   "and this gate supplies no public feature credit"})
+            continue
         if action == "requires-extension-feature":
             rows.append({"kind": "shader-capability", "capability": name, "number": number,
                          "action": action, "file": "src/vk_pipeline.c",

@@ -129,15 +129,25 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS = 1u << 20,
     PS5VK_FEATURE_VULKAN_MEMORY_MODEL = 1u << 21,
     PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE = 1u << 22,
+    /* T07 features use a separate range so their enabled gates coexist with
+     * the T08 Vulkan 1.0 extension features above. */
+    PS5VK_FEATURE_IMAGE_CUBE_ARRAY = 1u << 25,
+    PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED = 1u << 26,
+    PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE = 1u << 27,
     /* Keep this layout gate independent of the other feature bits. */
     PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
+    PS5VK_FEATURE_TEXTURE_COMPRESSION_BC = 1u << 24,
+    /* Core Vulkan 1.0 narrow shader arithmetic; diagnostic only. */
+    PS5VK_FEATURE_SHADER_INT16 = 1u << 28,
     /* Internal compute Broadcast route. The shipping platform leaves this
      * unset; a private measurement build may exercise the runtime path. It
      * is not a public Vulkan feature or subgroup-properties promise. */
-    PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE = 1u << 25,
+    PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE = 1u << 29,
     /* Independent private compute IAdd route; never a public ARITHMETIC
      * operation or extended-types feature promise. */
-    PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE = 1u << 26,
+    PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE = 1u << 30,
+    /* Internal compute compiler probe only. Never maps to VkPhysicalDeviceFeatures. */
+    PS5VK_FEATURE_SHADER_INT8_COMPUTE = 1u << 31,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

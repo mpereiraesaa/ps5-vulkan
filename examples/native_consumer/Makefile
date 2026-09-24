@@ -60,6 +60,22 @@ endif
 CFLAGS += -DCONSUMER_MIXED_RESOURCES=1
 endif
 
+ifneq ($(CONSUMER_CUBE_ARRAY_WITNESS),)
+ifneq ($(CONSUMER_CONTINUOUS),)
+$(error Cube-array witness requires the finite consumer)
+endif
+CONSUMER_CUBE_ARRAY_BASE_LAYER ?= 0
+CFLAGS += -DCONSUMER_CUBE_ARRAY_WITNESS=1 \
+          -DCONSUMER_CUBE_ARRAY_BASE_LAYER=$(CONSUMER_CUBE_ARRAY_BASE_LAYER)
+CUBE_ARRAY_WITNESS_SHADER = $(BUILD_DIR)/cube_array_witness_shaders.h
+
+$(CUBE_ARRAY_WITNESS_SHADER): ../../tools/prepare_consumer_cube_array_shaders.py \
+                             ../../tools/prepare_consumer_sync_shaders.py \
+                             ../../experiments/graphics/consumer_cube_array.vert \
+                             ../../experiments/graphics/consumer_cube_array.frag | $(BUILD_DIR)
+	python3 ../../tools/prepare_consumer_cube_array_shaders.py --out $@
+endif
+
 LDFLAGS = -L$(PS5_PAYLOAD_SDK)/target/lib \
           -T $(SDK_DIR)/lib/ps5-pie.ld \
           --eh-frame-hdr \
@@ -117,7 +133,8 @@ $(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h sampled_sets.h 
                      dxvk_capability_probe.h dxvk_v262_profile.h FORCE \
                      $(BUILD_DIR)/sampled_set_shaders.h \
                      $(BUILD_DIR)/storage_width_shaders.h \
-                     $(BUILD_DIR)/sync_shaders.h | $(BUILD_DIR)
+                     $(BUILD_DIR)/sync_shaders.h cube_array_witness.h \
+                     $(CUBE_ARRAY_WITNESS_SHADER) | $(BUILD_DIR)
 	PS5_PAYLOAD_SDK=$(PS5_PAYLOAD_SDK) sh $(CLANG_WRAPPER) $(CFLAGS) -c $< -o $@
 
 $(TARGET_PIE): $(BUILD_DIR)/main.o

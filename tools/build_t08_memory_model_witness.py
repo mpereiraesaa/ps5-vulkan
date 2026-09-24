@@ -131,9 +131,8 @@ def main() -> None:
         emit_array(f"t08_{name}_spirv", shader_payloads[name])
         for name in SHADER_NAMES), encoding="utf-8")
 
-    # The diagnostic feature switch affects only this payload's SDK archive.
-    sdk_env = dict(os.environ, PS5VK_MEMORY_MODEL_DIAGNOSTIC="1",
-                   PS5_PAYLOAD_SDK=str(sdk))
+    # The shipping feature route must be exercised without diagnostic switches.
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t08_memory_model_witness/main.c"
@@ -192,6 +191,7 @@ def main() -> None:
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
         "profile": "t08-memory-model-public-sdk-witness",
+        "sdk_profile": "ordinary",
         "scope": scope, "values": 128, "guard_words_per_buffer": 16,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": {name: hashlib.sha256(shader_payloads[name]).hexdigest()
