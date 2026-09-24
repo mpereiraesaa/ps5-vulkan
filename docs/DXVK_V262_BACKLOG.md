@@ -65,10 +65,13 @@ official conformance process remain separate obligations.
 
 ### T07 combined diagnostic status (2026-09-24)
 
-The integrated BC transfer route passed 74/74 original pinned copy leaves,
-including mip and array-layer readback, and separate SDK witnesses checked
-interior multi-layer copies and sampled output. The cube-array image-view CTS
-case passed twice; a SDK witness sampled two cubes, all six faces and a
+The BC diagnostic route passed three focused original selections: 48/48
+compressed-texture sampling, 128/128 compatible blits and 74/74 copies,
+including mip and array-layer readback. Separate SDK witnesses checked
+interior multi-layer copies and sampled output. A 757-case selection combining
+these 250 BC leaves with the 507 frozen cases is prepared but has not run.
+The cube-array image-view CTS case passed twice; a SDK witness sampled two
+cubes, all six faces and a
 nonzero view base twice each. The original precise-occlusion CTS case passed
 twice and in a 508/508 combined selection, and a native API witness checked
 zero, one and three covered samples with result retrieval and reset. The D32

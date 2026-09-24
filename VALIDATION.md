@@ -4876,6 +4876,22 @@ formats.
 
 ## T07 BC mip and array-layer transfer measurement (2026-09-24)
 
+The pinned original BC oracle has also passed in two earlier focused diagnostic
+selections: 48/48 compressed-texture sampling leaves across all 16 Vulkan 1.0
+BC formats (run `run-605956762551796`, eboot SHA-256
+`d3a0622bcd2f9711e939fd5d1f03c998bc6a42379b42d86ec850223347d135be`,
+selection SHA-256
+`ccb00a9543554419ed10aa8e058b1f1368b22b87867fa6cad76c5b8b673b611b`),
+and 128/128 compatible BC-to-RGBA8 blit leaves (run `run-608727480862315`,
+eboot SHA-256
+`db8f1972dd1d2977aa5e8d33ef3a295fa77dccafd3ea5a9fc56898323f2c8a98`,
+selection SHA-256
+`c438338dbcc7a7e613902cff31ff5f0d5bfdab2a533ac7254796c086c9d11117`).
+Both receipts have strict identity, complete QPA and clean closure. The 48-leaf
+receipt predates the full frozen-base metadata correction; its candidate
+selection was focused and omitted the 507 frozen cases. These runs are evidence
+for their original oracles, not a combined shipping acceptance run.
+
 The integrated diagnostic build also passed **74/74 original pinned BC copy
 leaves** in one strict, completed run: 66 image-to-buffer mip/array-layer cases
 covering 11 non-sRGB BC formats, two extents and one, two or five layers, plus
@@ -4946,7 +4962,16 @@ buffer readback leaves exercise every mip and layer, while the SDK consumers
 also exercise whole-subresource and interior multi-layer regions. These runs do
 not establish every image-to-image rectangle and layer combination. The
 shipping `textureCompressionBC` feature bit remains off pending the full T07
-promotion audit.
+promotion audit. The ignored measurement manifest
+`build/upstream-cts/t07-bc-combined-measurement.json` combines the 507 frozen
+cases with all 250 source-derived BC sampling, blit and copy cases: 757 distinct
+cases, selection SHA-256
+`e3bcf6c498f94d90ca5f2487c151c3b649b162ddc73a2a0e3b60c23d423a4b4e`.
+Its BC-only diagnostic package linked 416 translation units and signed eboot
+SHA-256 `69e3e392a7236b3a405a7cde2d8df32a26d364da36894d7091f26e41334c5027`;
+the build manifest records 757 selected cases and the BC diagnostic switch as
+`1`. This selection has not run; it is not the frozen acceptance selection or
+a public feature promotion.
 
 ## T07 D32 comparison-gather diagnostic measurement (2026-09-24)
 
