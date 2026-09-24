@@ -75,6 +75,26 @@ int ps5vk_sampler_core_case(unsigned index, struct ps5vk_sampler_core_case *out)
         {"mirror-v-linear-positive",VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
             VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,VK_FILTER_LINEAR,VK_FILTER_LINEAR,
             0.25f,UINT32_C(0xff0000ff),0,0,1.25f,2},
+        /* The 3D source has two uniform 2x2 slices: red at W=0, green at
+         * W=1. U and V stay at 0.25, so only W can change the output. */
+        {"mirror-w-nearest-negative",VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+            VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,VK_FILTER_NEAREST,VK_FILTER_NEAREST,
+            -0.25f,UINT32_C(0xffff0000),0,0,0.25f,3},
+        {"mirror-w-nearest-inside",VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+            VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,VK_FILTER_NEAREST,VK_FILTER_NEAREST,
+            0.25f,UINT32_C(0xffff0000),0,0,0.25f,3},
+        {"mirror-w-nearest-positive",VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+            VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,VK_FILTER_NEAREST,VK_FILTER_NEAREST,
+            1.25f,UINT32_C(0xff00ff00),0,0,0.25f,3},
+        {"mirror-w-linear-negative",VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+            VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,VK_FILTER_LINEAR,VK_FILTER_LINEAR,
+            -0.375f,UINT32_C(0xffbf4000),0,0,0.25f,3},
+        {"mirror-w-linear-inside",VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+            VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,VK_FILTER_LINEAR,VK_FILTER_LINEAR,
+            0.375f,UINT32_C(0xffbf4000),0,0,0.25f,3},
+        {"mirror-w-linear-positive",VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+            VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,VK_FILTER_LINEAR,VK_FILTER_LINEAR,
+            1.25f,UINT32_C(0xff00ff00),0,0,0.25f,3},
     };
     if(!out || index>=PS5VK_SAMPLER_CORE_CASES)return -1;
     *out=cases[index];return 0;
