@@ -78,7 +78,7 @@ GRAPHICS_PAIR_TEST = -Ithird_party/vulkan-headers/include -Inative -Isrc -I$(LAB
 # the TSan runtime, hence setarch.
 check-thread-sanitize:
 	mkdir -p build/tests
-	$(CC) -std=c11 -g -O1 -Wall -Wextra -Werror -pthread -fsanitize=thread $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_timeline.c -o build/tests/test_vk_timeline_tsan
+	$(CC) -std=c11 -g -O1 -Wall -Wextra -Werror -pthread -fsanitize=thread $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) src/vk_transfer.c tests/test_vk_timeline.c -o build/tests/test_vk_timeline_tsan
 	setarch $$(uname -m) -R ./build/tests/test_vk_timeline_tsan
 .PHONY: compiler-pipelines
 .PHONY: native-compute native-graphics native-runtime-graphics
@@ -119,7 +119,9 @@ compiler-deps:
 	$(PYTHON) tools/prepare_compiler_deps.py
 test-shaders:
 	$(PYTHON) tools/prepare_test_shaders.py
-check-sanitize:
+# ThreadSanitizer for the timeline/queue lock runs as part of the sanitizer
+# gate; it needs only setarch (util-linux) on the host.
+check-sanitize: check-thread-sanitize
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/color_detile.c src/texture_dma.c tests/test_color_rect_clear.c -o build/tests/test_color_rect_clear_sanitized
 	./build/tests/test_color_rect_clear_sanitized
@@ -225,7 +227,7 @@ check-sanitize:
 	./build/tests/test_vk_sync_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_queue.c -o build/tests/test_vk_queue_sanitized
 	./build/tests/test_vk_queue_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_timeline.c -o build/tests/test_vk_timeline_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) src/vk_transfer.c tests/test_vk_timeline.c -o build/tests/test_vk_timeline_sanitized
 	./build/tests/test_vk_timeline_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache_sanitized
 	./build/tests/test_compilation_cache_sanitized
@@ -431,7 +433,7 @@ check:
 	./build/tests/test_vk_sync
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_queue.c -o build/tests/test_vk_queue
 	./build/tests/test_vk_queue
-	$(CC) -std=c11 -Wall -Wextra -Werror -pthread $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_timeline.c -o build/tests/test_vk_timeline
+	$(CC) -std=c11 -Wall -Wextra -Werror -pthread $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) src/vk_transfer.c tests/test_vk_timeline.c -o build/tests/test_vk_timeline
 	./build/tests/test_vk_timeline
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache
 	./build/tests/test_compilation_cache

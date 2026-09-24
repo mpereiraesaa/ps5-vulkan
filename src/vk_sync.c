@@ -142,9 +142,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSignalSemaphoreKHR(VkDevice d,
                 result = INVALID;
     if (result == VK_SUCCESS) semaphore->value = info->value;
     ps5vk_device_unlock(d);
-    /* The host signal only publishes the payload. Queued work waiting on it
-     * is started by the next progress call (a wait, a poll, a counter query or
-     * a submission), so this call never blocks on GPU work. */
+    /* Start the work this signal releases now. An application may signal and
+     * then only read mapped memory or poll other state without calling any
+     * queue wait, so leaving the released records to the next wait would
+     * never run them. The progress hook takes the device lock itself; any
+     * interleaving with another thread's progress is harmless because both
+     * only advance the same ordered queue. The signal itself has executed,
+     * so a failure while starting that work is reported as device loss by
+     * the next call that observes the queue, not as a failed signal. */
+    if (result == VK_SUCCESS) (void)make_progress(d);
     return result;
 }
 
