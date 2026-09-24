@@ -184,7 +184,7 @@ check-sanitize:
 	./build/tests/test_query_pool_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c tests/test_buffer_transfer.c -o build/tests/test_buffer_transfer_sanitized
 	./build/tests/test_buffer_transfer_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 -DPS5VK_D32_SAMPLED_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear_sanitized
 	./build/tests/test_image_copy_clear_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy_sanitized
 	./build/tests/test_bc_subresource_copy_sanitized
@@ -376,7 +376,7 @@ check:
 	./build/tests/test_query_pool
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c tests/test_buffer_transfer.c -o build/tests/test_buffer_transfer
 	./build/tests/test_buffer_transfer
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear
+	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 -DPS5VK_D32_SAMPLED_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear
 	./build/tests/test_image_copy_clear
 	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy
 	./build/tests/test_bc_subresource_copy

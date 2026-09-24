@@ -37,6 +37,18 @@ enum ps5vk_image_domain {
 };
 enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *operation);
 
+static inline VkBool32 ps5vk_d32_gather_barrier(const VkImageMemoryBarrier *b)
+{
+    if (!b || !ps5vk_d32_gather_image(b->image)) return VK_FALSE;
+    return (b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+            b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+            !b->srcAccessMask && b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        (b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+            b->newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+            b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT &&
+            b->dstAccessMask == VK_ACCESS_SHADER_READ_BIT);
+}
+
 /* Array/input-attachment colour surfaces use the native tiled allocation,
  * never the legacy single-layer padded-linear transfer executor. */
 static inline VkBool32 ps5vk_array_color_image(VkImage image)

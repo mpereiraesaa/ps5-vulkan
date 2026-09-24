@@ -1286,6 +1286,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
 {
     VkImage image=b->image;
     const VkImageUsageFlags usage=image->info.usage;
+    if(ps5vk_d32_gather_image(image))return ps5vk_d32_gather_barrier(b);
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
     if(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image))
         return ps5vk_linear_image_barrier(b);
@@ -1495,7 +1496,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
             !image_barrier_profile(b) ||
             /* A depth target is ordered through its depth aspect; every other
              * role in this profile is colour. */
-            b->subresourceRange.aspectMask!=(ps5vk_depth_clear_image(image)?
+            b->subresourceRange.aspectMask!=((ps5vk_depth_clear_image(image) ||
+                ps5vk_d32_gather_image(image))?
                 (VkImageAspectFlags)VK_IMAGE_ASPECT_DEPTH_BIT:
                 (VkImageAspectFlags)VK_IMAGE_ASPECT_COLOR_BIT) ||
             !ps5vk_image_range_resolve(image, &b->subresourceRange, &resolved) ||

@@ -104,7 +104,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
     if(!c || c->state!=PS5VK_RECORDING || c->render_pass || !count || !regions ||
         c->operation_count>PS5VK_MAX_OPERATIONS ||
         count>PS5VK_MAX_OPERATIONS-c->operation_count || !image || image->device!=c->pool->device ||
-        (layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && layout!=VK_IMAGE_LAYOUT_GENERAL)) {invalid(c);return;}
+        (layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && layout!=VK_IMAGE_LAYOUT_GENERAL) ||
+        (ps5vk_d32_gather_image(image) && layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL))
+        {invalid(c);return;}
     VkDevice d=c->pool->device;
     /* Two destinations are real: the sampled role uploaded by the GPU prelude,
      * and the host-visible padded-linear transfer role. */
