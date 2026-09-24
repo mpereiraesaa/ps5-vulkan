@@ -43,14 +43,14 @@ the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 
 ## In progress
 
-Current work adds host query reset, imageless framebuffers, mirror-clamp
-sampling, timeline semaphores and separate depth/stencil layouts. These are
-**not** claims of public support. Default-off builds have native witnesses for
-host query reset and bounded imageless framebuffer use; eight U/V mirror-clamp
+Current work adds imageless framebuffers, mirror-clamp sampling, timeline
+semaphores and separate depth/stencil layouts. `VK_EXT_host_query_reset` is
+public on Vulkan 1.0 with a strict native reset/reuse witness. Default-off
+builds have a native witness for bounded imageless framebuffer use; eight U/V mirror-clamp
 draws passed, while W sampling remains unverified after a 3D upload failure in
-focused CTS. The checked DXVK 2.6.2 matrix currently has **25/62** requirements
+focused CTS. The checked DXVK 2.6.2 matrix currently has **26/62** requirements
 satisfied, and a real DXVK build has not yet run on PS5. See
-[the T09 measurements](VALIDATION.md#t09-diagnostic-measurements-2026-09-24).
+[the T09 measurements](VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25).
 Additional synchronization and descriptor capabilities will follow as needed
 by real consumers.
 

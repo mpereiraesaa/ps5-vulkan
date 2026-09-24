@@ -5482,6 +5482,39 @@ The original CTS leaf
 is identified in the pinned source but has not run against this artifact.
 Public extension and feature reporting remain disabled.
 
+### T09 host query reset public EXT promotion (2026-09-25)
+
+The ordinary Vulkan 1.0 graphics platform now advertises
+`VK_EXT_host_query_reset` and reports `hostQueryReset=1` through
+`VkPhysicalDeviceHostQueryResetFeaturesEXT`; `vkCreateDevice` requires the
+extension and explicit feature opt-in. The Vulkan 1.2 aggregate remains
+unadvertised. The public SDK capability probe run
+`20260924T215614288Z_PPSA99994_ps5vk_0xe6d244aa8b5` verified all 62 rows,
+28 satisfied query values, 34 query blockers and ten device extensions,
+including the tagged EXT feature route. Eboot SHA-256:
+`75df954111879f9a79860b4713ad3a76035c4bd2b3664629ac1cc2d821cba7de`;
+source-log SHA-256:
+`aa731814b25803746542265adea43f9752db864307a849b9345636013df5e3ad`.
+The `ps5log/1` receipt had 70 records, zero gaps and a complete BYE. Its
+build-time matrix SHA-256 was
+`d040f9e0c993aabe2c7eab283bb605f25dc1f6d2590d6b8f1ecf7a6b9a613644`.
+
+The independent shipping SDK graphics run
+`20260924T220133465Z_PPSA99994_ps5vk_0xeb77488067b` passed the strict
+host-reset witness: completed precise occlusion queries gave 1/0/3 samples;
+host reset made all three unavailable without changing old result words; the
+same command buffer then completed new 1/0/3 results with availability one.
+Eboot SHA-256:
+`b96f0a2192c056b18caef61988066ffda507d0cfe5249b284225551edff43aa1`;
+source-log SHA-256:
+`d017a09a63816c0be95ab5207b7f149b7f0080e90bebba2910b8f14ebd60ef87`.
+The `ps5log/1` receipt had 400 records, zero gaps, complete BYE and clean
+title closure. Both windows restored the prior eboot
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+and released the console idle. Firmware 12.02 is owner-reported, not queried
+in either run. The checked DXVK matrix is **26/62 ready with 36 blockers**.
+The original CTS leaf named above has not run and is not a claimed PASS.
+
 ### T09 imageless framebuffer diagnostic measurement (2026-09-24)
 
 One imageless framebuffer accepted two attachment views at separate render

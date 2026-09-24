@@ -318,9 +318,9 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     /* Constant, dynamic, four-offset and Dref forms have GPU readback and
      * original CTS coverage at the required offset limits. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
-#if defined(PS5VK_HOST_QUERY_RESET_DIAGNOSTIC) && PS5VK_HOST_QUERY_RESET_DIAGNOSTIC
+    /* Completed precise occlusion queries and host reset/reuse have a strict
+     * SDK-linked native witness. Expose the Vulkan 1.0 EXT feature route. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
-#endif
 #if defined(PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC) && PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
 #endif

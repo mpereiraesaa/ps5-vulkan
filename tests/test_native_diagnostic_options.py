@@ -224,9 +224,9 @@ class NativeDiagnosticOptions(unittest.TestCase):
 
     def test_host_query_reset_probe_requires_sdk_query_witness(self):
         self.rejected({"PS5VK_HOST_QUERY_RESET_PROBE": "2"},
-                      "requires SDK-linked occlusion query API probe and host-reset diagnostic")
+                      "requires SDK-linked occlusion query API probe")
         self.rejected({"PS5VK_HOST_QUERY_RESET_PROBE": "1"},
-                      "requires SDK-linked occlusion query API probe and host-reset diagnostic")
+                      "requires SDK-linked occlusion query API probe")
 
     def test_gather_probe_is_sdk_linked(self):
         self.rejected({"PS5VK_GRAPHICS_API": "build/graphics/control-gxn440da",
@@ -314,8 +314,7 @@ class NativeDiagnosticOptions(unittest.TestCase):
     def test_t09_diagnostics_are_bounded_and_graphics_only(self):
         from tools.build_upstream_cts import tessellation_build_profile
 
-        for name in ("PS5VK_HOST_QUERY_RESET_DIAGNOSTIC",
-                     "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
+        for name in ("PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
                      "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC"):
             with self.subTest(name=name):
                 self.rejected({name: "1"}, "requires the graphics profile API")

@@ -245,6 +245,29 @@ class DxvkProbeTests(unittest.TestCase):
         fixture.write(records)
         self.assertEqual(2, fixture.validate()["satisfied"])
 
+    def test_host_query_reset_positive_requires_exact_ext_query(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        identifier = "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset"
+        records = list(fixture.records)
+        index = next(i for i, record in enumerate(records) if f"id={identifier} " in record)
+        records[index] = records[index].replace("observed=0 status=blocker",
+                                                 "observed=1 status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                         "satisfied=2 blockers=60")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit host query reset route"):
+            fixture.validate()
+        route = ("DXVK262_HOST_QUERY_RESET_QUERY "
+                 "route=VK_EXT_host_query_reset hostQueryReset=1")
+        records.insert(1, route)
+        fixture.write(records)
+        self.assertEqual(2, fixture.validate()["satisfied"])
+        records[1] = route.replace("hostQueryReset=1", "hostQueryReset=0")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit host query reset route"):
+            fixture.validate()
+
     def test_historical_matrix_snapshot_remains_hash_bound(self):
         fixture = ProbeFixture()
         self.addCleanup(fixture.tmp.cleanup)

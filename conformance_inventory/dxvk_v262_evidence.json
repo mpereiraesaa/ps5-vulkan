@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+    "artifact_sha256": "75df954111879f9a79860b4713ad3a76035c4bd2b3664629ac1cc2d821cba7de",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -26,6 +26,7 @@
       "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
       "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+      "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
       "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
@@ -34,8 +35,8 @@
     ],
     "runs": [
       {
-        "id": "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178",
-        "log_sha256": "3972ab2ecf71688a19b70c361d132c278b70186bc0166bcd941f33d9179503f0"
+        "id": "20260924T215614288Z_PPSA99994_ps5vk_0xe6d244aa8b5",
+        "log_sha256": "aa731814b25803746542265adea43f9752db864307a849b9345636013df5e3ad"
       }
     ],
     "transport": "ps5log/1",
@@ -59,16 +60,87 @@
       {
         "route": "VK_KHR_buffer_device_address",
         "bufferDeviceAddress": "1"
+      },
+      {
+        "route": "VK_EXT_host_query_reset",
+        "hostQueryReset": "1"
       }
     ],
-    "source_matrix_sha256": "b3efcf7012cdef0c4580e739b9719b8c8609dc82b7b6d8f3752feb9b31da8028",
-    "satisfied": 27,
-    "blockers": 35,
+    "source_matrix_sha256": "d040f9e0c993aabe2c7eab283bb605f25dc1f6d2590d6b8f1ecf7a6b9a613644",
+    "satisfied": 28,
+    "blockers": 34,
     "requirements": 62,
     "device_api": "1.0.0",
-    "device_extensions": 9
+    "device_extensions": 10
   },
   "historical_capability_probes": [
+    {
+      "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178",
+          "log_sha256": "3972ab2ecf71688a19b70c361d132c278b70186bc0166bcd941f33d9179503f0"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        },
+        {
+          "route": "VK_KHR_uniform_buffer_standard_layout",
+          "uniformBufferStandardLayout": "1"
+        },
+        {
+          "route": "VK_KHR_vulkan_memory_model",
+          "vulkanMemoryModel": "1",
+          "vulkanMemoryModelDeviceScope": "1"
+        },
+        {
+          "route": "VK_KHR_buffer_device_address",
+          "bufferDeviceAddress": "1"
+        }
+      ],
+      "source_matrix_sha256": "b3efcf7012cdef0c4580e739b9719b8c8609dc82b7b6d8f3752feb9b31da8028",
+      "satisfied": 27,
+      "blockers": 35,
+      "requirements": 62,
+      "device_api": "1.0.0",
+      "device_extensions": 9
+    },
     {
       "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
       "satisfied_ids": [
@@ -1996,13 +2068,13 @@
       "native": {
         "state": "native-evidence",
         "run_ids": [
-          "20260924T194817339Z_PPSA99994_ps5vk_0x771bcbf0e04"
+          "20260924T220133465Z_PPSA99994_ps5vk_0xeb77488067b"
         ],
-        "artifact_sha256": "d74390542e83e45e0010467beb9c5e3cd19b4cdfd776c000c9d14f6b9fae28ac",
+        "artifact_sha256": "b96f0a2192c056b18caef61988066ffda507d0cfe5249b284225551edff43aa1",
         "refs": [
-          "VALIDATION.md#t09-host-query-reset-diagnostic-measurement-2026-09-24"
+          "VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25"
         ],
-        "note": "Default-off SDK witness strictly verified host reset, unavailable results, preserved result words and resubmission of the same query command buffer; the public extension and feature remain closed."
+        "note": "Shipping SDK witness strictly verified EXT host reset, unavailable results, preserved result words and resubmission of the same precise query command buffer."
       }
     },
     "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": {

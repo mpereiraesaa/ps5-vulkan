@@ -205,6 +205,19 @@ static int run_dxvk262_capability_probe(void)
             "DXVK262_BUFFER_DEVICE_ADDRESS_QUERY route=VK_KHR_buffer_device_address "
             "bufferDeviceAddress=%u", device_address.bufferDeviceAddress);
     }
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME)) {
+        VkPhysicalDeviceHostQueryResetFeaturesEXT host_query_reset = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &host_query_reset};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features12.hostQueryReset = host_query_reset.hostQueryReset;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_HOST_QUERY_RESET_QUERY route=VK_EXT_host_query_reset "
+            "hostQueryReset=%u", host_query_reset.hostQueryReset);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",
