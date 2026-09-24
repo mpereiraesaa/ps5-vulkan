@@ -131,8 +131,8 @@ def main():
             raise SystemExit(f"{name} requires the graphics profile API and must be 0 or 1")
         t09_diagnostics[name] = value
     sampler_mirror_case = os.environ.get("PS5VK_SAMPLER_MIRROR_CASE", "-1")
-    if sampler_mirror_case not in ("-1", *(str(n) for n in range(8, 20))):
-        raise SystemExit("PS5VK_SAMPLER_MIRROR_CASE must be -1 or 8..19")
+    if sampler_mirror_case not in ("-1", *(str(n) for n in range(8, 26))):
+        raise SystemExit("PS5VK_SAMPLER_MIRROR_CASE must be -1 or 8..25")
     if sampler_mirror_case != "-1" and (
         not graphics_api or os.environ.get("PS5VK_USE_SDK") != "1"
     ):
@@ -458,6 +458,7 @@ def main():
                 "experiments/graphics/scene3d-array.pipe",
                 "experiments/graphics/scene3d-cube.pipe",
                 "experiments/graphics/scene3d-3d.pipe",
+                "experiments/graphics/scene3d-mirror-w.pipe",
                 "experiments/graphics/scene3d-1d.pipe",
                 "experiments/graphics/scene3d-1d-array.pipe",
                 "experiments/graphics/scene3d-mipmap.pipe")
@@ -465,12 +466,16 @@ def main():
                 "experiments/graphics/scene3d-array.pipe":1,
                 "experiments/graphics/scene3d-cube.pipe":2,
                 "experiments/graphics/scene3d-3d.pipe":3,
+                "experiments/graphics/scene3d-mirror-w.pipe":3,
                 "experiments/graphics/scene3d-1d.pipe":4,
                 "experiments/graphics/scene3d-1d-array.pipe":5,
             }.get(graphics_source,0)
             if scissor_probe=="11" and not image_target:
                 raise SystemExit("Layered sampled diagnostic requires scene3d-array.pipe, scene3d-cube.pipe or scene3d-3d.pipe")
-            if image_target and scissor_probe!="11":
+            mirror_w = int(sampler_mirror_case) >= 20
+            if mirror_w != (graphics_source == "experiments/graphics/scene3d-mirror-w.pipe"):
+                raise SystemExit("W mirror cases require scene3d-mirror-w.pipe and vice versa")
+            if image_target and scissor_probe!="11" and not (mirror_w and scissor_probe=="6"):
                 raise SystemExit("Layered sampled controls require PS5VK_GRAPHICS_SCISSOR_PROBE=11")
             if scissor_probe=="12" and graphics_source!="experiments/graphics/scene3d-mipmap.pipe":
                 raise SystemExit("Mipmap diagnostic requires scene3d-mipmap.pipe")
@@ -961,6 +966,8 @@ def main():
             geometry_fixture={1:"sampled-image-array",2:"sampled-image-cube",
                               3:"sampled-image-3d",4:"sampled-image-1d",
                               5:"sampled-image-1d-array"}.get(image_target)
+            if int(sampler_mirror_case) >= 20:
+                geometry_fixture="sampler-mirror-w-3d"
             if not geometry_fixture:
                 geometry_fixture=("sampler-uv-ladder" if scissor_probe == "4" else
                     ("sampler-core-addressing" if scissor_probe == "6" else

@@ -326,8 +326,8 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.rejected({"PS5VK_SAMPLER_MIRROR_CASE": "8"},
                       "requires an SDK-linked graphics build")
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
-                       "PS5VK_SAMPLER_MIRROR_CASE": "20"},
-                      "must be -1 or 8..19")
+                       "PS5VK_SAMPLER_MIRROR_CASE": "26"},
+                      "must be -1 or 8..25")
         sdk_case = {"PS5VK_GRAPHICS_API": "unused", "PS5VK_USE_SDK": "1",
                     "PS5VK_SAMPLER_MIRROR_CASE": "11"}
         self.rejected(sdk_case, "requires scissor probe 6, draw and no presentation")
