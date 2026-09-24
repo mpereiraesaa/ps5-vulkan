@@ -375,6 +375,13 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
      * repeating the optimal-tiling bits. */
     if (format == VK_FORMAT_R8G8B8A8_UNORM)
         properties.linearTilingFeatures |= VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && \
+    PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
+    /* The bounded BC1/BC3 CPU decode path writes a LINEAR RGBA8 transfer
+     * destination. Publish the blit role only in its build-only profile. */
+    if (format == VK_FORMAT_R8G8B8A8_UNORM)
+        properties.linearTilingFeatures |= VK_FORMAT_FEATURE_BLIT_DST_BIT;
+#endif
     *out = properties;
 }
 

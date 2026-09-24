@@ -42,5 +42,10 @@ int main(void)
             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
         assert(ps5vk_texture_format_image_usage(bc_formats[i], sampled_round_trip));
     }
+    VkFormatProperties destination = {0};
+    ps5vk_texture_format_properties(VK_FORMAT_R8G8B8A8_UNORM, &destination);
+    assert((destination.linearTilingFeatures &
+        (VK_FORMAT_FEATURE_TRANSFER_DST_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT)) ==
+        (VK_FORMAT_FEATURE_TRANSFER_DST_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT));
     return 0;
 }

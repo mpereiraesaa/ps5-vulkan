@@ -17,6 +17,7 @@
 #include "texture_copy.h"
 #include "texture_layout.h"
 #include "graphics_formats.h"
+#include "bc_blit_decode.h"
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
@@ -68,8 +69,8 @@ static VkDevice device;
 static VkCommandPool pool;
 enum { WIDTH = 8, HEIGHT = 4 };
 
-static VkImage make_image_extent(VkFormat format, VkImageUsageFlags usage,
-    uint32_t width, uint32_t height, void **mapped)
+static VkImage make_image_tiled_extent(VkFormat format, VkImageUsageFlags usage,
+    uint32_t width, uint32_t height, VkImageTiling tiling, void **mapped)
 {
     VkImageCreateInfo info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                               .imageType = VK_IMAGE_TYPE_2D,
@@ -77,7 +78,7 @@ static VkImage make_image_extent(VkFormat format, VkImageUsageFlags usage,
                               .extent = {width, height, 1},
                               .mipLevels = 1, .arrayLayers = 1,
                               .samples = VK_SAMPLE_COUNT_1_BIT,
-                              .tiling = VK_IMAGE_TILING_OPTIMAL,
+                              .tiling = tiling,
                               .usage = usage,
                               .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
     VkImage image;
@@ -91,6 +92,13 @@ static VkImage make_image_extent(VkFormat format, VkImageUsageFlags usage,
     assert(vkBindImageMemory(device, image, memory, 0) == VK_SUCCESS);
     if (mapped) assert(vkMapMemory(device, memory, 0, VK_WHOLE_SIZE, 0, mapped) == VK_SUCCESS);
     return image;
+}
+
+static VkImage make_image_extent(VkFormat format, VkImageUsageFlags usage,
+    uint32_t width, uint32_t height, void **mapped)
+{
+    return make_image_tiled_extent(format, usage, width, height,
+        VK_IMAGE_TILING_OPTIMAL, mapped);
 }
 
 static VkImage make_image(VkFormat format, VkImageUsageFlags usage, void **mapped)
@@ -214,6 +222,93 @@ static void bc_block_transfer_round_trip(void)
     vkDestroyBuffer(device, readback, NULL);
     vkDestroyBuffer(device, upload, NULL);
     vkDestroyImage(device, image, NULL);
+}
+
+static void bc_nearest_blit_round_trip(VkFormat format, const uint8_t *block,
+    uint32_t block_bytes, const uint8_t expected[4])
+{
+    enum { W = 8, H = 8, BLOCKS = 4 };
+    const VkImageUsageFlags source_usage = VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    void *source_map = NULL, *upload_map = NULL, *destination_map = NULL;
+    VkImage source = make_image_extent(format, source_usage, W, H, &source_map);
+    VkImage destination = make_image_tiled_extent(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT, W, H, VK_IMAGE_TILING_LINEAR, &destination_map);
+    VkBuffer upload = make_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        BLOCKS * block_bytes, &upload_map);
+    for (uint32_t i = 0; i < BLOCKS; ++i)
+        memcpy((uint8_t *)upload_map + i * block_bytes, block, block_bytes);
+    struct ps5vk_texture_layout destination_layout;
+    assert(ps5vk_texture_layout_for_format(VK_FORMAT_R8G8B8A8_UNORM,
+        W, H, &destination_layout) == VK_SUCCESS);
+    memset(destination_map, 0xa5, (size_t)destination_layout.bytes);
+    VkSubresourceLayout subresource = {0};
+    const VkImageSubresource subresource_id = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
+    vkGetImageSubresourceLayout(device, destination, &subresource_id, &subresource);
+    assert(subresource.rowPitch == destination_layout.row_pitch &&
+        subresource.size == destination_layout.bytes);
+
+    const VkBufferImageCopy upload_region = {
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .imageExtent = {W, H, 1}};
+    VkImageBlit blit = {
+        .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .srcOffsets = {{0, 0, 0}, {W, H, 1}},
+        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .dstOffsets = {{0, 0, 0}, {W, H, 1}},
+    };
+    VkCommandBuffer command = begin();
+    VkImageMemoryBarrier source_initial = transfer_barrier(source,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
+        VK_ACCESS_TRANSFER_WRITE_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &source_initial);
+    vkCmdCopyBufferToImage(command, upload, source,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &upload_region);
+    VkImageMemoryBarrier source_sampled = transfer_barrier(source,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &source_sampled);
+    VkImageMemoryBarrier source_transfer = transfer_barrier(source,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &source_transfer);
+    VkImageMemoryBarrier destination_initial = transfer_barrier(destination,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 0,
+        VK_ACCESS_TRANSFER_WRITE_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &destination_initial);
+    vkCmdBlitImage(command, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        destination, VK_IMAGE_LAYOUT_GENERAL, 1, &blit, VK_FILTER_NEAREST);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 6);
+    struct ps5vk_operation *operation = &command->operations[5];
+    assert(operation->type == PS5VK_BLIT_BC_TO_RGBA8 &&
+        operation->image_blit_filter == VK_FILTER_NEAREST &&
+        operation->owned_payload_size == sizeof(VkImageBlit) &&
+        ps5vk_image_domain(operation) == PS5VK_IMAGE_DOMAIN_LINEAR &&
+        ps5vk_image_linear_validate(device, operation) == VK_SUCCESS);
+    /* The operation owns the region; a later caller edit cannot narrow it. */
+    blit.dstOffsets[1].x = 1;
+    VkImageMemoryBarrier destination_host = transfer_barrier(destination,
+        VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 0, NULL, 1, &destination_host);
+    assert(ps5vk_image_linear_validate(device, operation) == VK_SUCCESS);
+    submit_and_wait(command);
+    for (uint32_t y = 0; y < H; ++y) {
+        const uint8_t *row = (const uint8_t *)destination_map +
+            (VkDeviceSize)y * subresource.rowPitch;
+        for (uint32_t x = 0; x < W; ++x)
+            assert(memcmp(row + x * 4u, expected, 4) == 0);
+        for (VkDeviceSize padding = W * 4u; padding < subresource.rowPitch; ++padding)
+            assert(row[padding] == 0xa5);
+    }
+    vkDestroyBuffer(device, upload, NULL);
+    vkDestroyImage(device, destination, NULL);
+    vkDestroyImage(device, source, NULL);
 }
 
 static void bda_storage_image_trace(void)
@@ -491,6 +586,16 @@ int main(void)
     bda_storage_image_trace();
     readback_return_recording();
     bc_block_transfer_round_trip();
+    const uint8_t bc1_red[8] = {0x00, 0xf8, 0x00, 0x00, 0, 0, 0, 0};
+    const uint8_t bc3_green[16] = {
+        0xff, 0xff, 0, 0, 0, 0, 0, 0,
+        0xe0, 0x07, 0x00, 0x00, 0, 0, 0, 0};
+    const uint8_t red[4] = {255, 0, 0, 255};
+    const uint8_t green[4] = {0, 255, 0, 255};
+    bc_nearest_blit_round_trip(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+        bc1_red, sizeof(bc1_red), red);
+    bc_nearest_blit_round_trip(VK_FORMAT_BC3_UNORM_BLOCK,
+        bc3_green, sizeof(bc3_green), green);
 
     const VkImageUsageFlags transfer_usage =
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;

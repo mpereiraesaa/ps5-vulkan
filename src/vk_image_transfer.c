@@ -11,6 +11,7 @@
 #include "vk_image.h"
 #include "color_clear.h"
 #include "color_detile.h"
+#include "bc_blit_decode.h"
 #include "texture_copy.h"
 #include "texture_layout.h"
 #include <stdint.h>
@@ -140,6 +141,10 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
         return (ps5vk_bc_linear_image(op->copy_image) ||
                 ps5vk_pure_transfer_image(op->copy_image) ||
                 ps5vk_storage_image(op->copy_image)) ?
+            PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
+    case PS5VK_BLIT_BC_TO_RGBA8:
+        return ps5vk_bc_linear_image(op->image_source) &&
+            ps5vk_linear_staging_image(op->image_destination) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_IMAGE_BARRIER:
         return (ps5vk_bc_linear_image(op->image_barrier.image) ||
@@ -324,14 +329,107 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
     op->image_region_count = range_count;
 }
 
+static int bc_blit_decode_format(VkFormat format, enum ps5vk_bc_blit_format *out)
+{
+    if (!out) return 0;
+    switch (format) {
+    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC1_RGBA_UNORM; return 1;
+    case VK_FORMAT_BC3_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC3_UNORM; return 1;
+    default: return 0;
+    }
+}
+
+/* The only admitted blit is a full-size, one-level BC1/BC3 decode into the
+ * existing RGBA8 linear staging image. No scaling, filtering approximation,
+ * arrays, mips or partial regions enter this frontend executor. */
+static VkResult bc_blit_operation_validate(VkDevice d, const struct ps5vk_operation *op)
+{
+    if (!d || !op || op->type != PS5VK_BLIT_BC_TO_RGBA8 ||
+        !op->image_source || !op->image_destination ||
+        op->image_source->device != d || op->image_destination->device != d ||
+        op->image_source == op->image_destination ||
+        !ps5vk_bc_linear_image(op->image_source) ||
+        (op->image_source->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) == 0 ||
+        !ps5vk_linear_staging_image(op->image_destination) ||
+        op->image_blit_filter != VK_FILTER_NEAREST ||
+        op->image_source_layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+        op->image_destination_layout != VK_IMAGE_LAYOUT_GENERAL ||
+        op->image_region_count != 1 || !op->owned_payload ||
+        op->owned_payload_size != sizeof(VkImageBlit) ||
+        op->image_source->info.extent.width != op->image_destination->info.extent.width ||
+        op->image_source->info.extent.height != op->image_destination->info.extent.height)
+        return INVALID;
+
+    enum ps5vk_bc_blit_format decode_format;
+    if (!bc_blit_decode_format(op->image_source->info.format, &decode_format)) return INVALID;
+    VkFormatProperties source_properties = {0}, destination_properties = {0};
+    ps5vk_texture_format_properties(op->image_source->info.format, &source_properties);
+    ps5vk_texture_format_properties(op->image_destination->info.format, &destination_properties);
+    if (!(source_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) ||
+        !(source_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
+        !(destination_properties.linearTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) ||
+        !(destination_properties.linearTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
+        return INVALID;
+
+    const VkImageBlit *r = (const VkImageBlit *)op->owned_payload;
+    const uint32_t width = op->image_source->info.extent.width;
+    const uint32_t height = op->image_source->info.extent.height;
+    if (r->srcSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+        r->dstSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+        r->srcSubresource.mipLevel || r->dstSubresource.mipLevel ||
+        r->srcSubresource.baseArrayLayer || r->dstSubresource.baseArrayLayer ||
+        r->srcSubresource.layerCount != 1 || r->dstSubresource.layerCount != 1 ||
+        r->srcOffsets[0].x || r->srcOffsets[0].y || r->srcOffsets[0].z ||
+        r->dstOffsets[0].x || r->dstOffsets[0].y || r->dstOffsets[0].z ||
+        r->srcOffsets[1].x != (int32_t)width || r->srcOffsets[1].y != (int32_t)height ||
+        r->srcOffsets[1].z != 1 || r->dstOffsets[1].x != (int32_t)width ||
+        r->dstOffsets[1].y != (int32_t)height || r->dstOffsets[1].z != 1)
+        return INVALID;
+
+    void *source_address = NULL, *destination_address = NULL;
+    VkDeviceSize source_bytes = 0, destination_bytes = 0;
+    if (ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
+        ps5vk_image_span(d, op->image_destination, &destination_address,
+            &destination_bytes) != VK_SUCCESS ||
+        spans_overlap(source_address, source_bytes, destination_address, destination_bytes))
+        return INVALID;
+    return VK_SUCCESS;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage(VkCommandBuffer c, VkImage source,
     VkImageLayout source_layout, VkImage destination, VkImageLayout destination_layout,
     uint32_t region_count, const VkImageBlit *regions, VkFilter filter)
 {
-    (void)source; (void)source_layout; (void)destination; (void)destination_layout;
-    (void)region_count; (void)regions; (void)filter;
-    /* Scaling/filtering has no proven GFX1013 packet or bounded CPU contract. */
-    ps5vk_command_invalidate(c);
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || region_count != 1 ||
+        !regions || filter != VK_FILTER_NEAREST) {
+        ps5vk_command_invalidate(c);
+        return;
+    }
+    struct ps5vk_operation probe = {
+        .type = PS5VK_BLIT_BC_TO_RGBA8,
+        .owned_payload = (void *)regions,
+        .owned_payload_size = sizeof(*regions),
+        .image_source = source,
+        .image_destination = destination,
+        .image_source_layout = source_layout,
+        .image_destination_layout = destination_layout,
+        .image_region_count = region_count,
+        .image_blit_filter = filter,
+    };
+    if (bc_blit_operation_validate(c->pool->device, &probe) != VK_SUCCESS) {
+        ps5vk_command_invalidate(c);
+        return;
+    }
+    struct ps5vk_operation *op = ps5vk_command_reserve_operation_with_payload(c,
+        PS5VK_BLIT_BC_TO_RGBA8, PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
+        regions, sizeof(*regions));
+    if (!op) return;
+    op->image_source = source;
+    op->image_destination = destination;
+    op->image_source_layout = source_layout;
+    op->image_destination_layout = destination_layout;
+    op->image_region_count = region_count;
+    op->image_blit_filter = filter;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage(VkCommandBuffer c, VkImage source,
@@ -678,6 +776,8 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
         }
         return VK_SUCCESS;
     }
+    if (op->type == PS5VK_BLIT_BC_TO_RGBA8)
+        return bc_blit_operation_validate(d, op);
     const VkBuffer buffer = op->type == PS5VK_COPY_BUFFER_IMAGE ?
         op->copy_source : op->copy_destination;
     /* The upload direction also accepts the colour-attachment shape that
@@ -790,6 +890,59 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         if (ps5vk_image_flush_range(d, op->image_destination, 0, linear_bytes) != VK_SUCCESS)
             return VK_ERROR_DEVICE_LOST;
         return VK_SUCCESS;
+    }
+    if (op->type == PS5VK_BLIT_BC_TO_RGBA8) {
+        enum ps5vk_bc_blit_format format;
+        struct ps5vk_texture_mip_layout layout;
+        void *source_address = NULL, *destination_address = NULL;
+        VkDeviceSize source_bytes = 0, destination_bytes = 0;
+        const uint32_t width = op->image_source->info.extent.width;
+        const uint32_t height = op->image_source->info.extent.height;
+        uint32_t destination_pitch = 0;
+        VkDeviceSize destination_layout_bytes = 0;
+        if (op->image_source->layout != op->image_source_layout ||
+            op->image_destination->layout != op->image_destination_layout ||
+            !bc_blit_decode_format(op->image_source->info.format, &format) ||
+            ps5vk_texture_mip_layout_for_slices(op->image_source->info.format,
+                width, height, 1, 1, &layout) ||
+            ps5vk_texture_row_layout(4u, width, height, &destination_pitch,
+                &destination_layout_bytes) ||
+            ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->image_destination, &destination_address,
+                &destination_bytes) != VK_SUCCESS ||
+            layout.bytes > source_bytes || destination_layout_bytes > destination_bytes)
+            return VK_ERROR_DEVICE_LOST;
+        const unsigned block_bytes = ps5vk_bc_blit_block_bytes(format);
+        if (!block_bytes || !layout.levels[0].row_pitch || !destination_pitch ||
+            ps5vk_image_invalidate_range(d, op->image_source, 0, layout.bytes) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+        const uint32_t blocks_x = width / 4u + (width % 4u != 0u);
+        const uint32_t blocks_y = height / 4u + (height % 4u != 0u);
+        const unsigned char *source = (const unsigned char *)source_address;
+        unsigned char *destination = (unsigned char *)destination_address;
+        for (uint32_t by = 0; by < blocks_y; ++by) {
+            for (uint32_t bx = 0; bx < blocks_x; ++bx) {
+                const VkDeviceSize block_offset = (VkDeviceSize)by * layout.levels[0].row_pitch +
+                    (VkDeviceSize)bx * block_bytes;
+                if (block_offset > source_bytes || block_bytes > source_bytes - block_offset)
+                    return VK_ERROR_DEVICE_LOST;
+                uint8_t rgba[16][4];
+                if (!ps5vk_bc_blit_decode(format, source + block_offset, rgba))
+                    return VK_ERROR_DEVICE_LOST;
+                for (uint32_t py = 0; py < 4; ++py) {
+                    const uint32_t y = by * 4u + py;
+                    if (y >= height) continue;
+                    for (uint32_t px = 0; px < 4; ++px) {
+                        const uint32_t x = bx * 4u + px;
+                        if (x >= width) continue;
+                        memcpy(destination + (VkDeviceSize)y * destination_pitch +
+                            (VkDeviceSize)x * 4u, rgba[py * 4u + px], 4);
+                    }
+                }
+            }
+        }
+        return ps5vk_image_flush_range(d, op->image_destination, 0,
+            destination_layout_bytes) == VK_SUCCESS ? VK_SUCCESS : VK_ERROR_DEVICE_LOST;
     }
     void *image_address = NULL, *buffer_address = NULL;
     VkDeviceSize image_bytes = 0, buffer_bytes = 0;

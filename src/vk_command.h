@@ -27,7 +27,9 @@ enum ps5vk_operation_type {
      * child keeps its object identity, its pending ownership and its reuse
      * rules instead of a parallel mechanism inventing them. */
     PS5VK_EXECUTE_COMMANDS,
-    PS5VK_CLEAR_ATTACHMENT
+    PS5VK_CLEAR_ATTACHMENT,
+    /* Bounded frontend BC1/BC3 nearest decode into an RGBA8 linear target. */
+    PS5VK_BLIT_BC_TO_RGBA8
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -67,6 +69,7 @@ struct ps5vk_operation {
     VkImage image_source, image_destination;
     VkImageLayout image_source_layout, image_destination_layout;
     uint32_t image_region_count;
+    VkFilter image_blit_filter;
     uint32_t clear_word;
     VkClearRect clear_rect;
     VkImage copy_image;
