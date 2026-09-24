@@ -141,6 +141,16 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_SHADER_INT16 = 1u << 28,
 };
 
+/* The original 32-bit feature mask is full once the T08 shader gates land.
+ * Keep the independent T09 extension capabilities in a separate mask. */
+enum ps5vk_t09_feature_bits {
+    PS5VK_T09_FEATURE_HOST_QUERY_RESET = 1u << 0,
+    PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER = 1u << 1,
+    PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE = 1u << 2,
+    PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE = 1u << 3,
+    PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS = 1u << 4,
+};
+
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table
  * requires 2^16-1 once multiDrawIndirect is supported and exactly 1 otherwise.
  * One helper decides it so the physical limit, the recording bound and the
@@ -232,6 +242,7 @@ struct ps5vk_platform {
     /* Platform opt-in only. A frontend symbol or compiler path is not enough
      * to advertise a Vulkan feature without a native backend contract. */
     uint32_t supported_features;
+    uint32_t supported_features_t09;
     void *context;
     VkResult (*open)(void *, struct ps5vk_memory_backend *);
     void (*close)(struct ps5vk_memory_backend *);
@@ -270,6 +281,7 @@ struct VkDevice_T {
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
+    uint32_t enabled_features_t09;
     VkBool32 device_group_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
