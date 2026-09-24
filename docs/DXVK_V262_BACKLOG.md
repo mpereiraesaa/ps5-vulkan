@@ -133,6 +133,25 @@ a baseline requirement is missing, duplicated or unknown, or if the initially
 satisfied `robustBufferAccess` regresses. It also enforces dependency order and
 the final API promotion gate.
 
+### T08 subgroup profile prerequisites
+
+The pinned registry and original CTS impose different routes for the two T08
+subgroup bits. The actionable format and stage matrix is in
+`conformance_inventory/subgroup_profile_contract.json`; its host checker keeps
+the current public reporting closed while these prerequisites are incomplete.
+
+| Requirement | Legal route and original CTS gate | Current state |
+| --- | --- | --- |
+| `shaderSubgroupExtendedTypes` | `VK_KHR_shader_subgroup_extended_types` requires Vulkan 1.1; the feature is core in 1.2. The original CTS also requires `VK_KHR_shader_float16_int8`, which independently depends on Vulkan 1.1 at this registry pin. Broadcast and arithmetic cases need subgroup `supportedStages` for the tested stage and `supportedOperations` with `BALLOT` and `ARITHMETIC` respectively. The 8/16/64-bit integer and 16-bit float formats need their respective shader features, with storage access for 8/16-bit CTS buffers. | Public bit off; API 1.0; no accepted subgroup CTS or complete native witness. |
+| `subgroupBroadcastDynamicId` | Only `VkPhysicalDeviceVulkan12Features` at this registry pin; the original nonconstant broadcast cases require Vulkan 1.2, SPIR-V 1.5, the feature bit, a supported stage and `BALLOT`. | Public bit off; API 1.0; no extension alias or accepted CTS route. |
+
+`VkPhysicalDeviceSubgroupProperties` supplies `subgroupSize`, `supportedStages`,
+`supportedOperations` and `quadOperationsInAllStages` through properties2.
+The current Vulkan 1.0 KHR query explicitly returns zero for all four fields.
+Compute subgroup support is required by the original CTS;
+other stages depend on their reported masks. The quad field does not establish
+broadcast support. Neither subgroup bit nor `apiVersion` changes in this slice.
+
 ## Readiness versus profile completion
 
 For Vulkan 1.1–1.3 rows, implementation can be ready before the device is
