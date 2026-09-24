@@ -4882,6 +4882,20 @@ The checked four-axis DXVK matrix reaches 25/62 ready, with 37 blockers.
 DeviceScope's CTS axis is `not-mapped`, not `cts-pass`; the bounded witness
 does not establish general Vulkan conformance or all memory-model litmus cases.
 
+The pinned registry permits the `VK_KHR_vulkan_memory_model` feature query and
+device-create chain through `VkPhysicalDeviceVulkanMemoryModelFeatures` when
+`VK_KHR_get_physical_device_properties2` is present. This route does not
+require reporting Vulkan 1.1, but it does not remove the original CTS gate:
+the `ext` message-passing factory checks for Vulkan 1.1 before the
+`vulkanMemoryModelDeviceScope` feature, including its `device` scope cases.
+The API feature consistency cases instead target the Vulkan 1.2/1.3 aggregate
+rules. The next eligible validation requires an independently justified Vulkan
+1.1 public profile, registration and compilation of that unchanged original
+message-passing factory in the CTS runner, and passing selected `ext/device`
+leaves. The bounded KHR witness above cannot substitute for those leaves. The
+public DeviceScope bit is enabled through the extension route with native
+evidence; this is not an original CTS pass or a Vulkan 1.1 core-version claim.
+
 ### Buffer device address
 
 At this measurement stage, the BDA bit stayed false. Its public-SDK diagnostic
