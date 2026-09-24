@@ -1,4 +1,5 @@
 #include "vk_image.h"
+#include "depth_stencil_layout.h"
 #include <string.h>
 
 #if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
@@ -67,9 +68,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
         (c->a != VK_COMPONENT_SWIZZLE_IDENTITY && c->a != VK_COMPONENT_SWIZZLE_A))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkImageSubresourceRange range = info->subresourceRange;
-    VkImageAspectFlags aspect = (image->info.format == VK_FORMAT_D32_SFLOAT ||
-        image->info.format == VK_FORMAT_D16_UNORM) ?
-        VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    /* A view names every aspect its format has. For a combined depth/stencil
+     * image that is the attachment view (DEPTH|STENCIL): a one-aspect view
+     * is legal Vulkan, but it only exists to be sampled, and this profile has
+     * no sampled role for either plane, so it is refused as unsupported. */
+    const VkImageAspectFlags aspect = ps5vk_format_aspects(image->info.format);
+    if (aspect == PS5VK_DEPTH_STENCIL_ASPECTS && range.aspectMask &&
+        !(range.aspectMask & ~aspect) && range.aspectMask != aspect)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (range.aspectMask != aspect || range.baseMipLevel >= image->info.mipLevels)
         return VK_ERROR_UNKNOWN;
     if (range.levelCount == VK_REMAINING_MIP_LEVELS)

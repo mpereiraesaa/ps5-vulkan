@@ -1,6 +1,7 @@
 #include "vk_internal.h"
 #include "vk_descriptor.h"
 #include "vk_image.h"
+#include "depth_stencil_layout.h"
 #include "texture_format.h"
 #include "texture_layout.h"
 
@@ -514,7 +515,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     if(info->extent.depth>dim)dim=info->extent.depth;
     uint32_t levels = 0; for (; dim; dim >>= 1) ++levels;
     if (info->mipLevels > levels ||
-        ((info->format == VK_FORMAT_D32_SFLOAT || info->format == VK_FORMAT_D16_UNORM) ?
+        (ps5vk_format_aspects(info->format) != VK_IMAGE_ASPECT_COLOR_BIT ?
          (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
          (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) return INVALID;
     if ((info->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
