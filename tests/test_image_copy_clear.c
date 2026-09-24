@@ -19,6 +19,7 @@
 #include "graphics_formats.h"
 #include <assert.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,12 +68,13 @@ static VkDevice device;
 static VkCommandPool pool;
 enum { WIDTH = 8, HEIGHT = 4 };
 
-static VkImage make_image(VkFormat format, VkImageUsageFlags usage, void **mapped)
+static VkImage make_image_extent(VkFormat format, VkImageUsageFlags usage,
+    uint32_t width, uint32_t height, void **mapped)
 {
     VkImageCreateInfo info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                               .imageType = VK_IMAGE_TYPE_2D,
                               .format = format,
-                              .extent = {WIDTH, HEIGHT, 1},
+                              .extent = {width, height, 1},
                               .mipLevels = 1, .arrayLayers = 1,
                               .samples = VK_SAMPLE_COUNT_1_BIT,
                               .tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -89,6 +91,11 @@ static VkImage make_image(VkFormat format, VkImageUsageFlags usage, void **mappe
     assert(vkBindImageMemory(device, image, memory, 0) == VK_SUCCESS);
     if (mapped) assert(vkMapMemory(device, memory, 0, VK_WHOLE_SIZE, 0, mapped) == VK_SUCCESS);
     return image;
+}
+
+static VkImage make_image(VkFormat format, VkImageUsageFlags usage, void **mapped)
+{
+    return make_image_extent(format, usage, WIDTH, HEIGHT, mapped);
 }
 
 static VkCommandBuffer begin(void)
@@ -146,6 +153,67 @@ static void submit_and_wait(VkCommandBuffer command)
     assert(vkQueueSubmit(&device->queue, 1, &si, fence) == VK_SUCCESS);
     assert(vkWaitForFences(device, 1, &fence, VK_TRUE, 1000000000ull) == VK_SUCCESS);
     vkDestroyFence(device, fence, NULL);
+}
+
+/* BC upload/readback travels through the block-layout executor, where row
+ * bytes and padded image pitch differ from RGBA8 texel rows. */
+static void bc_block_transfer_round_trip(void)
+{
+    enum { W = 8, H = 8, BLOCK_ROWS = 2, ROW_BYTES = 16 };
+    const VkFormat format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    struct ps5vk_texture_mip_layout layout;
+    assert(ps5vk_texture_mip_layout_for_slices(format, W, H, 1, 1, &layout) == 0);
+    assert(layout.bytes >= (VkDeviceSize)ROW_BYTES * BLOCK_ROWS);
+    void *image_map = NULL, *upload_map = NULL, *readback_map = NULL;
+    VkImage image = make_image_extent(format, usage, W, H, &image_map);
+    VkBuffer upload = make_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        ROW_BYTES * BLOCK_ROWS, &upload_map);
+    VkBuffer readback = make_buffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        ROW_BYTES * BLOCK_ROWS, &readback_map);
+    for (uint32_t i = 0; i < ROW_BYTES * BLOCK_ROWS; ++i)
+        ((uint8_t *)upload_map)[i] = (uint8_t)(i * 29u + 7u);
+    memset(readback_map, 0, ROW_BYTES * BLOCK_ROWS);
+    const VkBufferImageCopy region = {
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .imageExtent = {W, H, 1}};
+    VkCommandBuffer command = begin();
+    VkImageMemoryBarrier initial = transfer_barrier(image, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &initial);
+    vkCmdCopyBufferToImage(command, upload, image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    VkImageMemoryBarrier sampled = transfer_barrier(image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &sampled);
+    VkImageMemoryBarrier read_source = transfer_barrier(image,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &read_source);
+    vkCmdCopyImageToBuffer(command, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        readback, 1, &region);
+    assert(command->state == PS5VK_RECORDING && command->operation_count == 5);
+    assert(ps5vk_image_domain(&command->operations[1]) == PS5VK_IMAGE_DOMAIN_LINEAR &&
+        ps5vk_image_linear_validate(device, &command->operations[1]) == VK_SUCCESS);
+    assert(ps5vk_image_domain(&command->operations[4]) == PS5VK_IMAGE_DOMAIN_LINEAR &&
+        ps5vk_image_linear_validate(device, &command->operations[4]) == VK_SUCCESS);
+    submit_and_wait(command);
+    assert(memcmp(upload_map, readback_map, ROW_BYTES * BLOCK_ROWS) == 0);
+    for (uint32_t row = 0; row < BLOCK_ROWS; ++row) {
+        const uint8_t *image_row = (const uint8_t *)image_map + row * layout.levels[0].row_pitch;
+        assert(memcmp(image_row, (const uint8_t *)upload_map + row * ROW_BYTES,
+            ROW_BYTES) == 0);
+        for (VkDeviceSize pad = ROW_BYTES; pad < layout.levels[0].row_pitch; ++pad)
+            assert(image_row[pad] == 0);
+    }
+    vkDestroyBuffer(device, readback, NULL);
+    vkDestroyBuffer(device, upload, NULL);
+    vkDestroyImage(device, image, NULL);
 }
 
 static void bda_storage_image_trace(void)
@@ -422,6 +490,7 @@ int main(void)
     assert(vkCreateCommandPool(device, &pci, NULL, &pool) == VK_SUCCESS);
     bda_storage_image_trace();
     readback_return_recording();
+    bc_block_transfer_round_trip();
 
     const VkImageUsageFlags transfer_usage =
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;

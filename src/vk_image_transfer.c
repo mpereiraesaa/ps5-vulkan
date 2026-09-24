@@ -11,6 +11,7 @@
 #include "vk_image.h"
 #include "color_clear.h"
 #include "color_detile.h"
+#include "texture_copy.h"
 #include "texture_layout.h"
 #include <stdint.h>
 #include <string.h>
@@ -131,15 +132,18 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
         /* An upload into the colour-attachment shape that declares a transfer
          * destination is frontend work for the same reason the pure transfer
          * role is: padded linear memory the graphics backend never touches. */
-        return (ps5vk_pure_transfer_image(op->copy_image) ||
+        return (ps5vk_bc_linear_image(op->copy_image) ||
+                ps5vk_pure_transfer_image(op->copy_image) ||
                 ps5vk_colour_transfer_image(op->copy_image)) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_COPY_IMAGE_BUFFER:
-        return (ps5vk_pure_transfer_image(op->copy_image) ||
+        return (ps5vk_bc_linear_image(op->copy_image) ||
+                ps5vk_pure_transfer_image(op->copy_image) ||
                 ps5vk_storage_image(op->copy_image)) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_IMAGE_BARRIER:
-        return (ps5vk_pure_transfer_image(op->image_barrier.image) ||
+        return (ps5vk_bc_linear_image(op->image_barrier.image) ||
+                ps5vk_pure_transfer_image(op->image_barrier.image) ||
                 ps5vk_linear_staging_image(op->image_barrier.image) ||
                 ps5vk_storage_image(op->image_barrier.image)) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
@@ -582,7 +586,24 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
     VkDeviceSize bytes = 0;
     if (op->type == PS5VK_IMAGE_BARRIER) {
         const VkImageMemoryBarrier *b = &op->image_barrier;
-        if (ps5vk_storage_image(b->image)) {
+        if (ps5vk_bc_linear_image(b->image)) {
+            const VkImageUsageFlags usage = b->image->info.usage;
+            const int upload = (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+                b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+                b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                !b->srcAccessMask && b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT;
+            const int sample = (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+                b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                b->newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT &&
+                b->dstAccessMask == VK_ACCESS_SHADER_READ_BIT;
+            const int readback = (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+                b->oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                b->srcAccessMask == VK_ACCESS_SHADER_READ_BIT &&
+                b->dstAccessMask == VK_ACCESS_TRANSFER_READ_BIT;
+            if (!upload && !sample && !readback) return INVALID;
+        } else if (ps5vk_storage_image(b->image)) {
             if (b->oldLayout != VK_IMAGE_LAYOUT_UNDEFINED ||
                 b->newLayout != VK_IMAGE_LAYOUT_GENERAL || b->srcAccessMask ||
                 b->dstAccessMask != VK_ACCESS_TRANSFER_WRITE_BIT) return INVALID;
@@ -661,16 +682,20 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
         op->copy_source : op->copy_destination;
     /* The upload direction also accepts the colour-attachment shape that
      * declares a transfer destination; the readback direction does not. */
+    const int bc_role = ps5vk_bc_linear_image(op->copy_image);
     const int image_role = op->type == PS5VK_COPY_BUFFER_IMAGE ?
-        (ps5vk_pure_transfer_image(op->copy_image) ||
+        (bc_role || ps5vk_pure_transfer_image(op->copy_image) ||
          ps5vk_colour_transfer_image(op->copy_image)) :
-        (ps5vk_pure_transfer_image(op->copy_image) ||
+        (bc_role || ps5vk_pure_transfer_image(op->copy_image) ||
          ps5vk_storage_image(op->copy_image));
     if (!image_role ||
         !ps5vk_buffer_usage(d, buffer, op->type == PS5VK_COPY_BUFFER_IMAGE ?
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT : VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
         (op->type == PS5VK_COPY_BUFFER_IMAGE ?
-            !transfer_role_destination(op->copy_image) : !transfer_role_source(op->copy_image)) ||
+            !(bc_role ? !!(op->copy_image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) :
+                transfer_role_destination(op->copy_image)) :
+            !(bc_role ? !!(op->copy_image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) :
+                transfer_role_source(op->copy_image))) ||
         (op->type == PS5VK_COPY_BUFFER_IMAGE ?
             !layout_is_transfer_destination(op->copy_layout) :
             !layout_is_transfer_source(op->copy_layout)) ||
@@ -686,6 +711,11 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
         ps5vk_image_span(d, op->copy_image, &image_address, &destination_bytes) != VK_SUCCESS ||
         spans_overlap(buffer_address, source_bytes, image_address, destination_bytes))
         return INVALID;
+    if (bc_role) {
+        struct ps5vk_texture_copy plan;
+        return ps5vk_texture_copy_plan_for_image(op->copy_image, source_bytes,
+            destination_bytes, &op->copy_region, &plan);
+    }
     struct linear_copy plan;
     if (linear_region_plan(op->copy_image->info.extent.width,
             op->copy_image->info.extent.height, source_bytes, destination_bytes,
@@ -768,6 +798,43 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         ps5vk_buffer_span(d, op->type == PS5VK_COPY_BUFFER_IMAGE ? op->copy_source : op->copy_destination,
             0, VK_WHOLE_SIZE, &buffer_address, &buffer_bytes) != VK_SUCCESS)
         return VK_ERROR_DEVICE_LOST;
+    if (ps5vk_bc_linear_image(op->copy_image)) {
+        struct ps5vk_texture_copy plan;
+        if (ps5vk_texture_copy_plan_for_image(op->copy_image, buffer_bytes,
+                image_bytes, &op->copy_region, &plan) != VK_SUCCESS ||
+            plan.slices != 1 || !plan.rows || !plan.row_bytes)
+            return VK_ERROR_DEVICE_LOST;
+        const VkDeviceSize buffer_span =
+            (VkDeviceSize)(plan.rows - 1u) * plan.source_pitch + plan.row_bytes;
+        const VkDeviceSize image_span =
+            (VkDeviceSize)(plan.rows - 1u) * plan.destination_pitch + plan.row_bytes;
+        if (plan.source_offset > buffer_bytes || buffer_span > buffer_bytes - plan.source_offset ||
+            plan.destination_offset > image_bytes || image_span > image_bytes - plan.destination_offset)
+            return VK_ERROR_DEVICE_LOST;
+        const int upload = op->type == PS5VK_COPY_BUFFER_IMAGE;
+        VkBuffer buffer = upload ? op->copy_source : op->copy_destination;
+        if (!upload && ps5vk_image_invalidate_range(d, op->copy_image,
+                plan.destination_offset, image_span) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+        VkResult result = ps5vk_buffer_cache(d, buffer,
+            plan.source_offset, buffer_span, VK_TRUE);
+        if (result != VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
+        unsigned char *buffer_base = (unsigned char *)buffer_address + plan.source_offset;
+        unsigned char *image_base = (unsigned char *)image_address + plan.destination_offset;
+        for (uint32_t y = 0; y < plan.rows; ++y) {
+            unsigned char *buffer_row = buffer_base + (VkDeviceSize)y * plan.source_pitch;
+            unsigned char *image_row = image_base + (VkDeviceSize)y * plan.destination_pitch;
+            if (upload) memcpy(image_row, buffer_row, plan.row_bytes);
+            else memcpy(buffer_row, image_row, plan.row_bytes);
+        }
+        if (upload)
+            result = ps5vk_image_flush_range(d, op->copy_image,
+                plan.destination_offset, image_span);
+        else
+            result = ps5vk_buffer_cache(d, buffer, plan.source_offset,
+                buffer_span, VK_FALSE);
+        return result == VK_SUCCESS ? VK_SUCCESS : VK_ERROR_DEVICE_LOST;
+    }
     struct linear_copy plan;
     /* The planner's "buffer" side and "image" side are named, not ordered:
      * only the memcpy argument order depends on the direction. */

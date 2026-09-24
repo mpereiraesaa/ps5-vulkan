@@ -21,6 +21,8 @@ int main(void)
         VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
     const VkImageUsageFlags sampled_upload =
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    const VkImageUsageFlags sampled_round_trip = VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
     assert(sizeof(bc_formats) / sizeof(bc_formats[0]) == 16);
     for (unsigned i = 0; i < sizeof(bc_formats) / sizeof(bc_formats[0]); ++i) {
@@ -38,6 +40,7 @@ int main(void)
         assert(ps5vk_texture_format_image_usage(bc_formats[i], VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
         assert(ps5vk_texture_format_image_usage(bc_formats[i],
             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+        assert(ps5vk_texture_format_image_usage(bc_formats[i], sampled_round_trip));
     }
     return 0;
 }

@@ -151,6 +151,24 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
         (layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
          !(layout==VK_IMAGE_LAYOUT_GENERAL && ps5vk_storage_image(image)))) {invalid(c);return;}
     VkDevice d=c->pool->device;
+    /* Block-compressed images use the block-padded linear layout; keep their
+     * readback away from the generic RGBA8 texel-row planner. */
+    if(ps5vk_bc_linear_image(image) &&
+       (image->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
+        void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
+        if(!ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
+           ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
+           ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS) {invalid(c);return;}
+        struct ps5vk_texture_copy plan;
+        if(ps5vk_texture_copy_plan_for_image(image,dst_bytes,src_bytes,
+            &regions[0],&plan)!=VK_SUCCESS) {invalid(c);return;}
+        struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
+            PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
+        if(!op)return;
+        op->copy_destination=destination;op->copy_image=image;
+        op->copy_layout=layout;op->copy_region=regions[0];
+        return;
+    }
     /* The pure transfer role is host-visible memory, so its readback is a
      * frontend copy over the same padded layout. It needs no graphics backend,
      * and it accepts the tight row description the original CTS oracle uses. */

@@ -2,6 +2,7 @@
 #define PS5VK_IMAGE_H
 #include "vk_internal.h"
 #include "color_attachment_contract.h"
+#include "texture_format.h"
 struct VkImage_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
@@ -64,6 +65,23 @@ static inline VkBool32 ps5vk_pure_transfer_image(VkImage image)
         image->info.tiling == VK_IMAGE_TILING_OPTIMAL && image->info.usage &&
         !(image->info.usage &
           ~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+}
+/* Bounded host-linear executor role for block-compressed sampled images.
+ * These images use block-padded mip storage and must never enter the RGBA8
+ * byte-per-texel row copier. */
+static inline VkBool32 ps5vk_bc_linear_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    const VkImageCreateInfo *i = &image->info;
+    const VkImageUsageFlags allowed = VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return ps5vk_texture_format_block_compressed(i->format) &&
+        i->imageType == VK_IMAGE_TYPE_2D && i->tiling == VK_IMAGE_TILING_OPTIMAL &&
+        i->extent.depth == 1 && i->mipLevels == 1 && i->arrayLayers == 1 &&
+        i->samples == VK_SAMPLE_COUNT_1_BIT &&
+        (i->usage & VK_IMAGE_USAGE_SAMPLED_BIT) &&
+        (i->usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
+        !(i->usage & ~allowed);
 }
 /* R32_UINT UAV with the same padded row layout as a one-level texture. */
 static inline VkBool32 ps5vk_storage_image(VkImage image)

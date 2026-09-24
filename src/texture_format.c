@@ -403,6 +403,14 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
     /* Each implemented role contributes an exact combination; a usage the
      * profile has no executable path for is rejected here, before any object
      * exists. */
+    if (ps5vk_texture_format_block_compressed(format) &&
+        (w & (PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_SRC |
+              PS5VK_FORMAT_CAP_TRANSFER_DST)) ==
+            (PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_SRC |
+             PS5VK_FORMAT_CAP_TRANSFER_DST) &&
+        usage == (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+        return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
         (usage == VK_IMAGE_USAGE_SAMPLED_BIT ||
          usage == (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))

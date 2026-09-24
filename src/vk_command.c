@@ -1283,6 +1283,21 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
     VkImage image=b->image;
     const VkImageUsageFlags usage=image->info.usage;
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
+    if(ps5vk_bc_linear_image(image))return
+        ((usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+         b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        ((usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+         b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+         b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+         b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT) ||
+        ((usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+         b->oldLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+         b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+         b->srcAccessMask==VK_ACCESS_SHADER_READ_BIT &&
+         b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT);
     const int upload=(usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))==
         (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
         !(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|

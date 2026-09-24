@@ -59,11 +59,11 @@ VK_COMMAND_SOURCES = $(VK_PIPELINE_SOURCES) src/vk_command.c src/vk_indirect.c
 # objects they record against are the ones the driver itself accepts.
 VK_COMMAND_TEST_SOURCES = $(VK_COMMAND_SOURCES) src/color_attachment_contract.c src/vk_render_pass.c \
         src/vk_image_view.c src/vk_framebuffer.c
-# The queue group owns the image operations: the linear staging readback copy
-# reads the tiled colour surface through the 64KB_R_X offset contract on the CPU
-# after exact GPU completion, so that helper is linked here too.
-VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_sync.c src/vk_buffer_transfer.c src/vk_image_transfer.c src/color_clear.c src/color_detile.c src/depth_detile.c src/vk_query_pool.c src/vk_queue.c src/vk_queue_router.c
-VK_GRAPHICS_SOURCES = src/color_attachment_contract.c src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c src/texture_copy.c src/texture_layout.c
+# The queue group owns image operations and their format-aware block planner:
+# linear staging readback uses 64KB_R_X after GPU completion, while BC block
+# copies use the same mip-layout contract without entering the RGBA8 row path.
+VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_sync.c src/vk_buffer_transfer.c src/vk_image_transfer.c src/color_clear.c src/color_detile.c src/depth_detile.c src/texture_copy.c src/texture_layout.c src/vk_query_pool.c src/vk_queue.c src/vk_queue_router.c
+VK_GRAPHICS_SOURCES = src/color_attachment_contract.c src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c
 VK_DEVICE_SOURCES = $(VK_QUEUE_SOURCES) $(VK_GRAPHICS_SOURCES) src/vk_device.c src/vk_dispatch.c
 NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/queue_ps5.c src/vk_indirect.c src/descriptor_encode.c src/texture_format.c src/dispatch_encode.c src/compute_commands.c tests/test_native_prepare.c
 # graphics_pair.c reads the canonical topology -> primitive mapping from
@@ -182,7 +182,7 @@ check-sanitize:
 	./build/tests/test_query_pool_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c tests/test_buffer_transfer.c -o build/tests/test_buffer_transfer_sanitized
 	./build/tests/test_buffer_transfer_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear_sanitized
 	./build/tests/test_image_copy_clear_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_indirect_queue.c -o build/tests/test_indirect_queue_sanitized
 	./build/tests/test_indirect_queue_sanitized
@@ -366,7 +366,7 @@ check:
 	./build/tests/test_query_pool
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c tests/test_buffer_transfer.c -o build/tests/test_buffer_transfer
 	./build/tests/test_buffer_transfer
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear
+	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear
 	./build/tests/test_image_copy_clear
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_cts_draw_case_trace.c -o build/tests/test_cts_draw_case_trace
 	./build/tests/test_cts_draw_case_trace
