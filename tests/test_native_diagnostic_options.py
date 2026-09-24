@@ -178,6 +178,50 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertIn("const size_t start=25u;", source)
         self.assertIn("binding_offset=%zu", source)
 
+    def test_occlusion_api_probe_is_bounded_to_depth_witness(self):
+        self.rejected({"PS5VK_OCCLUSION_QUERY_API_PROBE": "2"},
+                      "requires runtime graphics, depth-enabled probe 15")
+        self.rejected({"PS5VK_OCCLUSION_QUERY_API_PROBE": "1"},
+                      "requires runtime graphics, depth-enabled probe 15")
+        source = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("#if PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC", source)
+        self.assertIn("PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE", source)
+        build = (ROOT / "tools/build_native.py").read_text()
+        sdk_build = (ROOT / "tools/build_sdk.py").read_text()
+        self.assertIn('os.environ["PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC"] = occlusion_query_api_probe', build)
+        self.assertIn('"-DPS5VK_OCCLUSION_PRECISE_DIAGNOSTIC="', sdk_build)
+        self.assertIn('scissor_probe in ("8", "13", "15") and use_runtime_graphics', build)
+
+    def test_gather_probe_is_sdk_linked_and_default_off(self):
+        self.rejected({"PS5VK_GRAPHICS_API": "build/graphics/control-gxn440da",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1",
+                       "PS5VK_GRAPHICS_SCISSOR_PROBE": "15",
+                       "PS5VK_GATHER_FORM": "1"},
+                      "requires PS5VK_USE_SDK=1")
+        self.rejected({"PS5VK_USE_SDK": "1", "PS5VK_GATHER_FORM": "9"},
+                      "must be 0 through 8")
+        self.rejected({"PS5VK_USE_SDK": "1",
+                       "PS5VK_GRAPHICS_API": "build/graphics/control-gxn440da",
+                       "PS5VK_RUNTIME_GRAPHICS": "1",
+                       "PS5VK_GRAPHICS_DRAW": "1",
+                       "PS5VK_GRAPHICS_SCISSOR_PROBE": "15",
+                       "PS5VK_GATHER_FORM": "1",
+                       "PS5VK_OCCLUSION_DEPTH_PROBE": "1"},
+                      "requires a single runtime-graphics draw")
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("#ifndef PS5VK_GATHER_EXTENDED_DIAGNOSTIC", platform)
+        self.assertIn("PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED", platform)
+        device = (ROOT / "src/vk_device.c").read_text()
+        self.assertIn("VkPhysicalDeviceFeatures, shaderImageGatherExtended", device)
+        native_build = (ROOT / "tools/build_native.py").read_text()
+        sdk_build = (ROOT / "tools/build_sdk.py").read_text()
+        self.assertIn('os.environ["PS5VK_GATHER_EXTENDED_DIAGNOSTIC"] = "1" if gather_form in ("2", "3", "4") else "0"',
+                      native_build)
+        self.assertIn('"-DPS5VK_GATHER_EXTENDED_DIAGNOSTIC="', sdk_build)
+        compiler = (ROOT / "src/ps5vk_compiler.c").read_text()
+        self.assertIn("PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED", compiler)
+
     def test_stale_graphics_library_signature_is_rejected(self):
         parent = ROOT / "build/graphics"
         parent.mkdir(parents=True, exist_ok=True)

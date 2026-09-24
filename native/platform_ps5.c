@@ -16,6 +16,12 @@ static struct ps5vk_program_library ps5vk_compiled_library={0};
 #include <string.h>
 #include <stdatomic.h>
 #include <unistd.h>
+#ifndef PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
+#define PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC 0
+#endif
+#ifndef PS5VK_GATHER_EXTENDED_DIAGNOSTIC
+#define PS5VK_GATHER_EXTENDED_DIAGNOSTIC 0
+#endif
 #ifdef PS5VK_GRAPHICS_API
 #if !defined(PS5VK_RUNTIME_GRAPHICS) || !PS5VK_RUNTIME_GRAPHICS
 #include "graphics_library.h"
@@ -321,6 +327,16 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * build also exposes all five mandatory CTS format roles; the shipping
      * feature mask remains false until those paths are measured. */
     platform->supported_features |= PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
+#endif
+#if PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
+    /* One-off platform negotiation for the public API counter witness only.
+     * The normal build leaves the bit false until focused CTS acceptance. */
+    platform->supported_features |= PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+#endif
+#if PS5VK_GATHER_EXTENDED_DIAGNOSTIC
+    /* One-off negotiation for the isolated image-gather readback binary.
+     * Normal builds keep this core feature false and its limits zero. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
 #endif
 #endif
 #else

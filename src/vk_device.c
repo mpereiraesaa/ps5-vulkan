@@ -104,6 +104,8 @@ static const struct core_feature_bit {
      * mapping it here keeps reporting and logical-device enablement aligned. */
     {offsetof(VkPhysicalDeviceFeatures, occlusionQueryPrecise),
      PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE},
+    {offsetof(VkPhysicalDeviceFeatures, shaderImageGatherExtended),
+     PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,

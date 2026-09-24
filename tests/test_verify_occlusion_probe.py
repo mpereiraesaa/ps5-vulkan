@@ -21,13 +21,14 @@ AVAILABILITY = 1 << 63
 
 
 def build_records(available=16, counter=None, indices=None, first_pair=0,
-                  begin_bit=True, deltas=None):
+                  begin_bit=True, deltas=None, precise=0, depth=0):
     """Return the probe record bodies for a synthetic run."""
     indices = indices if indices is not None else list(range(available))
     deltas = deltas if deltas is not None else [100 + i for i in indices]
     records = []
     base = 0x208980000
-    records.append(("PS5VK_OCCLUSION_PROBE_BEGIN", f"serial=7 base={base:x} pairs=64"))
+    records.append(("PS5VK_OCCLUSION_PROBE_BEGIN",
+                    f"serial=7 base={base:x} pairs=64 precise={precise} depth={depth}"))
     records.append(("PS5VK_OCCLUSION_PROBE_END", f"serial=7 base_plus_8={base + 8:x}"))
     records.append(("PS5VK_GRAPHICS_COMPLETED", f"serial=7 image_bytes=0"))
     total = 0
@@ -54,7 +55,7 @@ def build_records(available=16, counter=None, indices=None, first_pair=0,
 
 
 class ProbeFixture:
-    def __init__(self, records):
+    def __init__(self, records, query_api=False):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.artifact = root / "eboot.bin"
@@ -62,10 +63,20 @@ class ProbeFixture:
         digest = hashlib.sha256(self.artifact.read_bytes()).hexdigest()
         self.manifest = root / "manifest.json"
         self.manifest.write_text(json.dumps({
-            "stage": "graphics-api-native-presentation-reuse",
+            "stage": ("graphics-api-offscreen-draw" if query_api else
+                      "graphics-api-native-presentation-reuse"),
             "submit_enabled": True,
             "scissor_probe": 15,
             "termination": "shell-close-after-cleanup",
+            "occlusion_precise_probe": int(query_api or
+                any("precise=1" in fields for kind, fields in records
+                    if kind == "PS5VK_OCCLUSION_PROBE_BEGIN")),
+            "occlusion_depth_probe": int(query_api or
+                any("depth=1" in fields for kind, fields in records
+                    if kind == "PS5VK_OCCLUSION_PROBE_BEGIN")),
+            "occlusion_query_api_probe": int(query_api),
+            "occlusion_query_secondary": int(query_api),
+            "runtime_sdk": bool(query_api),
             "files": {"eboot.bin": digest},
         }))
         self.run = root / "20260915T000000000Z_PPSA99994_ps5vk_0xdeadbeef"
@@ -119,6 +130,20 @@ class TestOcclusionProbeVerifier(unittest.TestCase):
         manifest = json.loads(self.fixture.manifest.read_text())
         manifest["stage"] = "graphics-api-native-runtime"
         self.fixture.manifest.write_text(json.dumps(manifest))
+        self.assertRaises(ValueError, self.fixture.validate)
+
+    def test_precise_mode_is_bound_to_the_build_and_log(self):
+        self.replace_fixture(build_records(precise=1))
+        self.assertTrue(self.fixture.validate()["geometry"]["precise_counter_mode"])
+        text = self.fixture.log_text.replace("precise=1", "precise=0")
+        self.fixture.rewrite_log(text)
+        self.assertRaises(ValueError, self.fixture.validate)
+
+    def test_depth_mode_is_bound_to_the_build_and_log(self):
+        self.replace_fixture(build_records(depth=1))
+        self.assertFalse(self.fixture.validate()["geometry"]["precise_counter_mode"])
+        text = self.fixture.log_text.replace("depth=1", "depth=0")
+        self.fixture.rewrite_log(text)
         self.assertRaises(ValueError, self.fixture.validate)
 
     def test_rejects_wrong_scissor_probe(self):
@@ -217,6 +242,102 @@ class TestOcclusionProbeVerifier(unittest.TestCase):
                               other.run, self.fixture.manifest, self.fixture.artifact)
         finally:
             other.tmp.cleanup()
+
+    def test_accepts_exact_query_api_witness(self):
+        records = [
+            ("PS5VK_GRAPHICS_API_DEVICE_CREATED", ""),
+            ("PS5VK_GRAPHICS_COMPLETED", "serial=8 image_bytes=0"),
+            ("PS5VK_GRAPHICS_COMPLETED", "serial=9 image_bytes=0"),
+            ("PS5VK_OCCLUSION_QUERY_API_RESULT",
+             "passed_samples=1 availability=1 copied_samples=1 "
+             "copied_availability=1 precise_enabled=1 secondary=1 get_wait=1 "
+             "zero_samples=0 zero_availability=1 zero_copied_samples=0 "
+             "zero_copied_availability=1 three_samples=3 three_availability=1 "
+             "three_copied_samples=3 three_copied_availability=1 "
+             "samples32=1 availability32=1 copied_samples32=1 "
+             "copied_availability32=1 zero_samples32=0 zero_availability32=1 "
+             "zero_copied_samples32=0 zero_copied_availability32=1 "
+             "three_samples32=3 three_availability32=1 three_copied_samples32=3 "
+             "three_copied_availability32=1 copy_wait=1 partial=1 "
+             "same_pool_reset_repeat=1 valid=1"),
+            ("PS5VK_PLATFORM_CLOSE", "rc=0 allocations_bytes=0"),
+        ]
+        fixture = ProbeFixture(records, query_api=True)
+        repeat = ProbeFixture(records, query_api=True)
+        try:
+            result = fixture.validate()
+            self.assertEqual(result["query_api"]["passed_samples"], 1)
+            self.assertEqual(result["query_api"]["zero_samples"], 0)
+            self.assertEqual(result["query_api"]["three_samples32"], 3)
+            self.assertTrue(result["query_api"]["precise_enabled"])
+            self.assertTrue(result["query_api"]["secondary_command_buffer"])
+            self.assertTrue(result["query_api"]["partial"])
+            self.assertTrue(result["query_api"]["same_pool_reset_repeat"])
+            comparison = verifier.compare(fixture.run, repeat.run,
+                manifest_path=fixture.manifest, artifact_path=fixture.artifact)
+            self.assertTrue(comparison["identical"])
+            self.assertEqual(comparison["query_api"], result["query_api"])
+        finally:
+            fixture.tmp.cleanup()
+            repeat.tmp.cleanup()
+
+    def test_query_api_witness_rejects_inexact_or_unavailable_results(self):
+        base = [
+            ("PS5VK_GRAPHICS_API_DEVICE_CREATED", ""),
+            ("PS5VK_GRAPHICS_COMPLETED", "serial=8 image_bytes=0"),
+            ("PS5VK_GRAPHICS_COMPLETED", "serial=9 image_bytes=0"),
+            ("PS5VK_OCCLUSION_QUERY_API_RESULT",
+             "passed_samples=1 availability=1 copied_samples=1 "
+             "copied_availability=1 precise_enabled=1 secondary=1 get_wait=1 "
+             "zero_samples=0 zero_availability=1 zero_copied_samples=0 "
+             "zero_copied_availability=1 three_samples=3 three_availability=1 "
+             "three_copied_samples=3 three_copied_availability=1 "
+             "samples32=1 availability32=1 copied_samples32=1 "
+             "copied_availability32=1 zero_samples32=0 zero_availability32=1 "
+             "zero_copied_samples32=0 zero_copied_availability32=1 "
+             "three_samples32=3 three_availability32=1 three_copied_samples32=3 "
+             "three_copied_availability32=1 copy_wait=1 partial=1 "
+             "same_pool_reset_repeat=1 valid=1"),
+            ("PS5VK_PLATFORM_CLOSE", "rc=0 allocations_bytes=0"),
+        ]
+        for field, expected, wrong in (("passed_samples", "1", "3"),
+                             ("availability", "1", "0"),
+                             ("copied_samples", "1", "0"),
+                             ("copy_wait", "1", "0"),
+                             ("precise_enabled", "1", "0"),
+                             ("secondary", "1", "0"),
+                             ("zero_samples", "0", "1"),
+                             ("zero_availability", "1", "0"),
+                             ("zero_copied_samples", "0", "2"),
+                             ("zero_copied_availability", "1", "0"),
+                             ("three_samples", "3", "2"),
+                             ("three_availability", "1", "0"),
+                             ("three_copied_samples", "3", "0"),
+                             ("three_copied_availability", "1", "0"),
+                             ("samples32", "1", "2"),
+                             ("availability32", "1", "0"),
+                             ("copied_samples32", "1", "0"),
+                             ("copied_availability32", "1", "0"),
+                             ("zero_samples32", "0", "1"),
+                             ("zero_availability32", "1", "0"),
+                             ("zero_copied_samples32", "0", "1"),
+                             ("zero_copied_availability32", "1", "0"),
+                             ("three_samples32", "3", "2"),
+                             ("three_availability32", "1", "0"),
+                             ("three_copied_samples32", "3", "0"),
+                             ("three_copied_availability32", "1", "0"),
+                             ("partial", "1", "0"),
+                             ("same_pool_reset_repeat", "1", "0")):
+            records = list(base)
+            kind, line = records[3]
+            records[3] = (kind, line.replace(f"{field}={expected}",
+                                             f"{field}={wrong}"))
+            fixture = ProbeFixture(records, query_api=True)
+            try:
+                with self.subTest(field=field):
+                    self.assertRaises(ValueError, fixture.validate)
+            finally:
+                fixture.tmp.cleanup()
 
 
 if __name__ == "__main__":

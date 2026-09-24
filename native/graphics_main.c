@@ -82,6 +82,15 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #ifndef PS5VK_RUNTIME_GRAPHICS
 #define PS5VK_RUNTIME_GRAPHICS 0
 #endif
+#ifndef PS5VK_OCCLUSION_DEPTH_PROBE
+#define PS5VK_OCCLUSION_DEPTH_PROBE 0
+#endif
+#ifndef PS5VK_OCCLUSION_QUERY_API_PROBE
+#define PS5VK_OCCLUSION_QUERY_API_PROBE 0
+#endif
+#ifndef PS5VK_GATHER_FORM
+#define PS5VK_GATHER_FORM 0
+#endif
 #ifndef PS5VK_INPUT_ATTACHMENT_PROBE
 #define PS5VK_INPUT_ATTACHMENT_PROBE 0
 #endif
@@ -174,6 +183,10 @@ static uint64_t scene_now_ns(void)
 }
 static unsigned diagnostic_iterations(void)
 {
+#if PS5VK_OCCLUSION_QUERY_API_PROBE || PS5VK_GATHER_FORM
+    /* These diagnostic modes each carry one artifact-bound transaction. */
+    return 1;
+#endif
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)return 4;
     if(PS5VK_GRAPHICS_WITNESSES)
         return PS5VK_GRAPHICS_WITNESSES==2?4u:6u;
@@ -207,6 +220,7 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     struct texture_fixture t={0};
     VkFormat format=VK_FORMAT_R8G8B8A8_UNORM;
     uint32_t width=2,height=2,slices=1,bytes_per_texel=4;
+    if(PS5VK_GATHER_FORM)width=height=64;
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
         struct ps5vk_integer_sampled_case c;
         if(ps5vk_integer_sampled_case(PS5VK_INTEGER_SAMPLED_SIGN==2,
@@ -322,7 +336,18 @@ static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer 
         if(ps5vk_sampler_core_case(probe_case,&c))fail("sampler-core-case",-1);
         checkerboard=c.checkerboard;
     }
-    if(PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
+    if(PS5VK_GATHER_FORM) {
+        for(unsigned y=0;y<t->height;++y)for(unsigned x=0;x<t->width;++x) {
+            uint8_t *texel=(uint8_t *)mapped+((size_t)y*t->width+x)*4;
+            texel[0]=(uint8_t)x;
+            texel[1]=(uint8_t)y;
+            texel[2]=(uint8_t)(3u*x+5u*y);
+            texel[3]=255;
+        }
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_GATHER_INPUT extent=%ux%u channels=R:x,G:y,B:3x+5y,A:255",
+            t->width,t->height);
+    } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==10) {
         struct ps5vk_integer_sampled_case c;
         if(ps5vk_integer_sampled_case(PS5VK_INTEGER_SAMPLED_SIGN==2,
                                       probe_case,&c) || c.format!=t->format)
@@ -415,13 +440,17 @@ static void texture_upload(VkDevice d,struct texture_fixture *t,VkCommandBuffer 
     barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
     vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&barrier);
+    const char *pattern=PS5VK_GATHER_FORM?"gather-grid":"rgb-cycle";
+    if(!PS5VK_GATHER_FORM) {
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==10)pattern="integer-sampled-solid";
+        else if(PS5VK_GRAPHICS_SCISSOR_PROBE==9)pattern="sampled-format-checkerboard";
+        else if(PS5VK_GRAPHICS_SCISSOR_PROBE==7)pattern="sampled-format-solid";
+        else if(PS5VK_GRAPHICS_SCISSOR_PROBE==12)pattern="mipmap-rgb";
+        else if(PS5VK_IMAGE_TARGET)pattern="layered-rgb";
+        else if(checkerboard)pattern="checkerboard";
+    }
     ps5log_printf(PS5LOG_MARK,"PS5VK_TEXTURE_UPLOAD frame=%u pattern=%s width=%u height=%u slices=%u levels=%u format=%u",
-        frame,PS5VK_GRAPHICS_SCISSOR_PROBE==10?"integer-sampled-solid":
-        (PS5VK_GRAPHICS_SCISSOR_PROBE==9?"sampled-format-checkerboard":
-        (PS5VK_GRAPHICS_SCISSOR_PROBE==7?"sampled-format-solid":
-        (PS5VK_GRAPHICS_SCISSOR_PROBE==12?"mipmap-rgb":
-        (PS5VK_IMAGE_TARGET?"layered-rgb":(checkerboard?"checkerboard":"rgb-cycle"))))),
-        t->width,t->height,t->slices,t->mip_levels,t->format);
+        frame,pattern,t->width,t->height,t->slices,t->mip_levels,t->format);
 }
 static void texture_destroy(VkDevice d,struct texture_fixture *t)
 {
@@ -429,6 +458,39 @@ static void texture_destroy(VkDevice d,struct texture_fixture *t)
     vkDestroyImageView(d,t->view,NULL);vkDestroyImage(d,t->image,NULL);vkFreeMemory(d,t->memory,NULL);
     vkDestroyBuffer(d,t->upload,NULL);vkFreeMemory(d,t->upload_memory,NULL);
 }
+#if PS5VK_GATHER_FORM
+static uint8_t gather_texel_component(unsigned component,int x,int y)
+{
+    if(component==0)return (uint8_t)x;
+    if(component==1)return (uint8_t)y;
+    if(component==2)return (uint8_t)(3*x+5*y);
+    return 255;
+}
+static uint32_t gather_expected_pixel(void)
+{
+    static const int corner_x[4]={0,1,1,0};
+    static const int corner_y[4]={1,1,0,0};
+    static const int offsets_x[4]={-8,7,-8,7};
+    static const int offsets_y[4]={-8,-8,7,7};
+    const unsigned selected_component=PS5VK_GATHER_FORM==1?0u:
+        (PS5VK_GATHER_FORM>=5?(unsigned)(PS5VK_GATHER_FORM-5):2u);
+    const int single_x=PS5VK_GATHER_FORM==2?-8:
+        (PS5VK_GATHER_FORM==3?((960&1)*2-1):0);
+    const int single_y=PS5VK_GATHER_FORM==2?7:0;
+    uint8_t gathered[4];
+    for(unsigned i=0;i<4;++i) {
+        const int ox=PS5VK_GATHER_FORM==4?offsets_x[i]:single_x;
+        const int oy=PS5VK_GATHER_FORM==4?offsets_y[i]:single_y;
+        const int corner=PS5VK_GATHER_FORM==4?3:(int)i;
+        gathered[i]=gather_texel_component(selected_component,
+            31+corner_x[corner]+ox,31+corner_y[corner]+oy);
+    }
+    /* VK_FORMAT_B8G8R8A8_UNORM readback words are AARRGGBB in host integer
+     * order; the shader result channels are the gather vector's RGBA order. */
+    return (uint32_t)gathered[3]<<24|(uint32_t)gathered[0]<<16|
+        (uint32_t)gathered[1]<<8|gathered[2];
+}
+#endif
 struct binding_fixture {
     VkBuffer buffers[16];
     VkDeviceMemory memory[16];
@@ -470,9 +532,13 @@ static void binding_fixture_destroy(VkDevice d,struct binding_fixture *f)
         vkDestroyBuffer(d,f->buffers[b],NULL);vkFreeMemory(d,f->memory[b],NULL);
     }
 }
-static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass pass,
+static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
+    VkPipeline precise_count_pipeline, VkRenderPass pass,
     VkPipelineLayout layout,VkDescriptorSetLayout set_layout,unsigned witness_index)
 {
+#if !PS5VK_OCCLUSION_QUERY_API_PROBE
+    (void)precise_count_pipeline;
+#endif
     VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.imageType=VK_IMAGE_TYPE_2D,
         .format=VK_FORMAT_B8G8R8A8_UNORM,.extent={1920,1080,1},.mipLevels=1,.arrayLayers=1,
         .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
@@ -720,8 +786,50 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     VkCommandBufferAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
     VkCommandBuffer cb; CHECK(vkAllocateCommandBuffers(d,&ai,&cb));
+    VkCommandBuffer query_cb=VK_NULL_HANDLE;
+    VkCommandBuffer draw_cb=cb;
     VkCommandBufferBeginInfo bi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     CHECK(vkBeginCommandBuffer(cb,&bi));
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+    VkQueryPool api_query_pool=VK_NULL_HANDLE;
+    VkBuffer api_query_buffer=VK_NULL_HANDLE;
+    VkDeviceMemory api_query_memory=VK_NULL_HANDLE;
+    void *api_query_map=NULL;
+    VkMappedMemoryRange api_query_range={0};
+    if(!depth_image || PS5VK_GRAPHICS_SCISSOR_PROBE!=15)
+        fail("occlusion-query-api-depth-target",-1);
+    VkQueryPoolCreateInfo query_pool_info={.sType=VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .queryType=VK_QUERY_TYPE_OCCLUSION,.queryCount=3};
+    CHECK(vkCreateQueryPool(d,&query_pool_info,NULL,&api_query_pool));
+    VkBufferCreateInfo query_buffer_info={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size=72,.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .sharingMode=VK_SHARING_MODE_EXCLUSIVE};
+    CHECK(vkCreateBuffer(d,&query_buffer_info,NULL,&api_query_buffer));
+    VkMemoryRequirements query_buffer_requirements;
+    vkGetBufferMemoryRequirements(d,api_query_buffer,&query_buffer_requirements);
+    VkMemoryAllocateInfo query_memory_info={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=query_buffer_requirements.size,.memoryTypeIndex=0};
+    CHECK(vkAllocateMemory(d,&query_memory_info,NULL,&api_query_memory));
+    CHECK(vkBindBufferMemory(d,api_query_buffer,api_query_memory,0));
+    CHECK(vkMapMemory(d,api_query_memory,0,VK_WHOLE_SIZE,0,&api_query_map));
+    memset(api_query_map,0x5a,72);
+    api_query_range=(VkMappedMemoryRange){.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory=api_query_memory,.size=VK_WHOLE_SIZE};
+    CHECK(vkFlushMappedMemoryRanges(d,1,&api_query_range));
+    vkCmdResetQueryPool(cb,api_query_pool,0,3);
+    VkCommandBufferAllocateInfo query_ai=ai;
+    query_ai.level=VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+    CHECK(vkAllocateCommandBuffers(d,&query_ai,&query_cb));
+    VkCommandBufferInheritanceInfo query_inherit={
+        .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .renderPass=pass,.framebuffer=fb,.occlusionQueryEnable=VK_FALSE};
+    VkCommandBufferBeginInfo query_bi={
+        .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags=VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+        .pInheritanceInfo=&query_inherit};
+    CHECK(vkBeginCommandBuffer(query_cb,&query_bi));
+    draw_cb=query_cb;
+#endif
     if(set_layout)texture_upload(d,&texture,cb,
         PS5VK_GRAPHICS_CONTINUOUS?ps5vk_scene_pattern(elapsed):
         (PS5VK_GRAPHICS_SCISSOR_PROBE==5?frame:(PS5VK_GRAPHICS_SCENE?frame/60:frame)),
@@ -792,37 +900,85 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
         clears[0].color.float32[0]=clears[0].color.float32[1]=clears[0].color.float32[2]=0.25f;
     clears[0].color.float32[3]=1.0f;
     if(depth_image || PS5VK_GRAPHICS_SCENE){ri.clearValueCount=depth_image?2:1;ri.pClearValues=clears;}
-    vkCmdBeginRenderPass(cb,&ri,VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
-    if(set_layout)vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&texture.set,0,NULL);
+    vkCmdBeginRenderPass(cb,&ri,
+        PS5VK_OCCLUSION_QUERY_API_PROBE ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS :
+                                          VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(draw_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+    if(set_layout)vkCmdBindDescriptorSets(draw_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&texture.set,0,NULL);
     VkDeviceSize vertex_offset=PS5VK_GRAPHICS_SCISSOR_PROBE==8?25u:24u;
     unsigned draw_count=1;
-    if(vertex_buffer)vkCmdBindVertexBuffers(cb,0,1,&vertex_buffer,&vertex_offset);
+    if(vertex_buffer)vkCmdBindVertexBuffers(draw_cb,0,1,&vertex_buffer,&vertex_offset);
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==13)
         for(unsigned b=0;b<16;++b)
-            if(bindings.mask&(1u<<b))vkCmdBindVertexBuffers(cb,b,1,&bindings.buffers[b],&bindings.offsets[b]);
+            if(bindings.mask&(1u<<b))vkCmdBindVertexBuffers(draw_cb,b,1,&bindings.buffers[b],&bindings.offsets[b]);
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+    vkCmdBeginQuery(draw_cb,api_query_pool,0,VK_QUERY_CONTROL_PRECISE_BIT);
+#endif
     if(index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8 &&
        !(PS5VK_RUNTIME_GRAPHICS && PS5VK_GRAPHICS_SCISSOR_PROBE==12)) {
-        vkCmdBindIndexBuffer(cb,index_buffer,4,(frame&1)?VK_INDEX_TYPE_UINT32:VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(draw_cb,index_buffer,4,(frame&1)?VK_INDEX_TYPE_UINT32:VK_INDEX_TYPE_UINT16);
         if(PS5VK_GRAPHICS_SCENE) {
             struct ps5vk_scene_draw draws[2];
             draw_count=ps5vk_scene_draws(PS5VK_GRAPHICS_SCENE_SPLIT,draws);
             if(PS5VK_GRAPHICS_SCISSOR_PROBE>=3){draw_count=1;draws[0]=(struct ps5vk_scene_draw){3,2,-2};}
             if(!draw_count)fail("scene-draw-plan",-1);
             for(unsigned j=0;j<draw_count;++j)
-                vkCmdDrawIndexed(cb,draws[j].count,1,draws[j].first_index,draws[j].base_vertex,0);
+                vkCmdDrawIndexed(draw_cb,draws[j].count,1,draws[j].first_index,draws[j].base_vertex,0);
             ps5log_printf(PS5LOG_MARK,"PS5VK_SCENE_DRAW_PLAN frame=%u split=%u draws=%u total_indices=%u",frame,PS5VK_GRAPHICS_SCENE_SPLIT,draw_count,PS5VK_GRAPHICS_SCISSOR_PROBE>=3?3u:72u);
-        } else vkCmdDrawIndexed(cb,6,1,2,-2,0);
-    } else vkCmdDraw(cb,3,1,0,0);
-    vkCmdEndRenderPass(cb); CHECK(vkEndCommandBuffer(cb));
+        } else vkCmdDrawIndexed(draw_cb,6,1,2,-2,0);
+    } else vkCmdDraw(draw_cb,3,1,0,0);
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+    vkCmdEndQuery(draw_cb,api_query_pool,0);
+    /* A second precise query with no draw is the zero-result control. */
+    vkCmdBeginQuery(draw_cb,api_query_pool,1,VK_QUERY_CONTROL_PRECISE_BIT);
+    vkCmdEndQuery(draw_cb,api_query_pool,1);
+    /* Three identical draws into the same covered pixel produce an exact 3. */
+    vkCmdBindPipeline(draw_cb,VK_PIPELINE_BIND_POINT_GRAPHICS,precise_count_pipeline);
+    vkCmdBeginQuery(draw_cb,api_query_pool,2,VK_QUERY_CONTROL_PRECISE_BIT);
+    vkCmdDraw(draw_cb,3,1,0,0);
+    vkCmdDraw(draw_cb,3,1,0,0);
+    vkCmdDraw(draw_cb,3,1,0,0);
+    vkCmdEndQuery(draw_cb,api_query_pool,2);
+    CHECK(vkEndCommandBuffer(query_cb));
+    VkCommandBuffer query_children[]={query_cb};
+    vkCmdExecuteCommands(cb,1,query_children);
+#endif
+    vkCmdEndRenderPass(cb);
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+    vkCmdCopyQueryPoolResults(cb,api_query_pool,0,3,api_query_buffer,0,16,
+        VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WITH_AVAILABILITY_BIT|
+        VK_QUERY_RESULT_WAIT_BIT);
+    vkCmdCopyQueryPoolResults(cb,api_query_pool,0,3,api_query_buffer,48,8,
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT|VK_QUERY_RESULT_WAIT_BIT);
+#endif
+    CHECK(vkEndCommandBuffer(cb));
     unsigned prelude=set_layout?(texture.mip_levels+2):0;
-    if (cb->operation_count!=prelude+2+draw_count)fail("recorded-operation-count",-1);
+    unsigned query_ops=PS5VK_OCCLUSION_QUERY_API_PROBE?2u:0u;
+    unsigned recorded_draws=draw_count+(PS5VK_OCCLUSION_QUERY_API_PROBE?0u:0u);
+    unsigned expected_primary_ops=prelude+2+recorded_draws+query_ops;
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+    expected_primary_ops=prelude+6u; /* reset, render-pass/execute/end, two copies */
+    if(query_cb->operation_count!=10u)
+        fail("secondary-query-operation-count",-1);
+    if(query_cb->operations[0].type!=PS5VK_QUERY_BEGIN ||
+       query_cb->operations[2].type!=PS5VK_QUERY_END ||
+       query_cb->operations[3].type!=PS5VK_QUERY_BEGIN ||
+       query_cb->operations[4].type!=PS5VK_QUERY_END ||
+       query_cb->operations[5].type!=PS5VK_QUERY_BEGIN ||
+       query_cb->operations[9].type!=PS5VK_QUERY_END)
+        fail("secondary-query-scope-shape",-1);
+#endif
+    if (cb->operation_count!=expected_primary_ops)
+        fail("recorded-operation-count",-1);
+#if !PS5VK_OCCLUSION_QUERY_API_PROBE
+    unsigned draw_base=prelude;
     for(unsigned j=0;j<draw_count;++j)
-        if(cb->operations[prelude+1+j].type!=
+        if(cb->operations[draw_base+1+j].type!=
            ((index_buffer && PS5VK_GRAPHICS_SCISSOR_PROBE!=8 &&
              !(PS5VK_RUNTIME_GRAPHICS && PS5VK_GRAPHICS_SCISSOR_PROBE==12))?
              PS5VK_DRAW_INDEXED:PS5VK_DRAW))
-            fail("recorded-draw",-1);
+        fail("recorded-draw",-1);
+#endif
 #if PS5VK_GRAPHICS_DRAW
     void *mapped;
     CHECK(vkMapMemory(d,memory,0,VK_WHOLE_SIZE,0,&mapped));
@@ -844,6 +1000,49 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.commandBufferCount=1,.pCommandBuffers=&cb};
     CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
     CHECK(vkQueueWaitIdle(queue));
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+    /* Re-submit this exact command buffer after completion. Its recorded
+     * vkCmdResetQueryPool must make these same three query slots writable
+     * again before the second begin/end sequence. */
+    CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
+    CHECK(vkQueueWaitIdle(queue));
+    CHECK(vkInvalidateMappedMemoryRanges(d,1,&api_query_range));
+    uint64_t query_values[6]={0,0,UINT64_MAX,0,UINT64_MAX,0};
+    CHECK(vkGetQueryPoolResults(d,api_query_pool,0,3,sizeof(query_values),
+        query_values,16,VK_QUERY_RESULT_64_BIT|
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT|VK_QUERY_RESULT_WAIT_BIT));
+    uint32_t query_values32[6]={0,0,UINT32_MAX,0,UINT32_MAX,0};
+    CHECK(vkGetQueryPoolResults(d,api_query_pool,0,3,sizeof(query_values32),
+        query_values32,8,VK_QUERY_RESULT_WITH_AVAILABILITY_BIT|
+        VK_QUERY_RESULT_WAIT_BIT|VK_QUERY_RESULT_PARTIAL_BIT));
+    if(query_values[0]!=1 || query_values[1]!=1 || query_values[2]!=0 ||
+       query_values[3]!=1 || query_values[4]!=3 || query_values[5]!=1 ||
+       query_values32[0]!=1 || query_values32[1]!=1 || query_values32[2]!=0 ||
+       query_values32[3]!=1 || query_values32[4]!=3 || query_values32[5]!=1 ||
+       ((uint64_t *)api_query_map)[0]!=1 ||
+       ((uint64_t *)api_query_map)[1]!=1 || ((uint64_t *)api_query_map)[2]!=0 ||
+       ((uint64_t *)api_query_map)[3]!=1 ||
+       ((uint64_t *)api_query_map)[4]!=3 || ((uint64_t *)api_query_map)[5]!=1)
+        fail("occlusion-query-api-result",-1);
+    uint32_t *copied32=(uint32_t *)((uint8_t *)api_query_map+48);
+    if(copied32[0]!=1 || copied32[1]!=1 || copied32[2]!=0 || copied32[3]!=1 ||
+       copied32[4]!=3 || copied32[5]!=1)
+        fail("occlusion-query-api-copy32",-1);
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_OCCLUSION_QUERY_API_RESULT passed_samples=%llu availability=%llu copied_samples=%llu copied_availability=%llu zero_samples=%llu zero_availability=%llu zero_copied_samples=%llu zero_copied_availability=%llu three_samples=%llu three_availability=%llu three_copied_samples=%llu three_copied_availability=%llu samples32=%u availability32=%u copied_samples32=%u copied_availability32=%u zero_samples32=%u zero_availability32=%u zero_copied_samples32=%u zero_copied_availability32=%u three_samples32=%u three_availability32=%u three_copied_samples32=%u three_copied_availability32=%u precise_enabled=1 secondary=1 get_wait=1 copy_wait=1 partial=1 same_pool_reset_repeat=1 valid=1",
+        (unsigned long long)query_values[0],(unsigned long long)query_values[1],
+        (unsigned long long)((uint64_t *)api_query_map)[0],
+        (unsigned long long)((uint64_t *)api_query_map)[1],
+        (unsigned long long)query_values[2],(unsigned long long)query_values[3],
+        (unsigned long long)((uint64_t *)api_query_map)[2],
+        (unsigned long long)((uint64_t *)api_query_map)[3],
+        (unsigned long long)query_values[4],(unsigned long long)query_values[5],
+        (unsigned long long)((uint64_t *)api_query_map)[4],
+        (unsigned long long)((uint64_t *)api_query_map)[5],
+        query_values32[0],query_values32[1],copied32[0],copied32[1],
+        query_values32[2],query_values32[3],copied32[2],copied32[3],
+        query_values32[4],query_values32[5],copied32[4],copied32[5]);
+#endif
     if(image->layout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
        (depth_image && depth_image->layout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
         fail("render-pass-layout-commit",-1);
@@ -1053,6 +1252,20 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
             witness_index,c.name,c.expected_bgra,expected,other,valid);
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE)valid=stats.changed<=
         (uint64_t)pipeline->scissor.extent.width*pipeline->scissor.extent.height && !stats.bad_alpha && !stats.bad_sum;
+#if PS5VK_GATHER_FORM
+    const uint32_t gather_expected=gather_expected_pixel();
+    size_t first_changed=SIZE_MAX;
+    for(size_t pixel=0;pixel<words;++pixel)
+        if(pixels[pixel]!=background) { first_changed=pixel;break; }
+    const uint32_t gather_actual=first_changed==SIZE_MAX?0:pixels[first_changed];
+    valid=stats.changed==1 && first_changed!=SIZE_MAX &&
+        gather_actual==gather_expected;
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GATHER_READBACK form=%u expected_bgra=%08x actual_bgra=%08x changed_words=%llu first_word_index=%llu valid=%d",
+        PS5VK_GATHER_FORM,gather_expected,gather_actual,
+        (unsigned long long)stats.changed,
+        (unsigned long long)(first_changed==SIZE_MAX?0:first_changed),valid);
+#endif
     ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_API_READBACK changed_words=%llu total_words=%zu bad_alpha=%llu bad_sum=%llu viewport=%ux%u valid=%d",
         (unsigned long long)stats.changed,words,(unsigned long long)stats.bad_alpha,(unsigned long long)stats.bad_sum,
         (unsigned)pipeline->viewport.width,(unsigned)pipeline->viewport.height,valid);
@@ -1088,7 +1301,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
             if(region.unexpected)fail("region-color",-1);
         }
     }
-    if(set_layout && PS5VK_GRAPHICS_SCISSOR_PROBE!=6 &&
+    if(set_layout && !PS5VK_GATHER_FORM && PS5VK_GRAPHICS_SCISSOR_PROBE!=6 &&
        PS5VK_GRAPHICS_SCISSOR_PROBE!=7 && PS5VK_GRAPHICS_SCISSOR_PROBE!=9 &&
        PS5VK_GRAPHICS_SCISSOR_PROBE!=10) {
         size_t histogram[3]={0},unexpected=0;
@@ -1179,7 +1392,14 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline, VkRenderPass 
     ps5vk_native_release_draw(&prepared);
     CHECK(ps5vk_command_arena_release(&arena));
 #endif
-    vkDestroyCommandPool(d,pool,NULL); vkDestroyFramebuffer(d,fb,NULL); vkDestroyImageView(d,view,NULL);
+    vkDestroyCommandPool(d,pool,NULL);
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+    vkUnmapMemory(d,api_query_memory);
+    vkDestroyBuffer(d,api_query_buffer,NULL);
+    vkFreeMemory(d,api_query_memory,NULL);
+    vkDestroyQueryPool(d,api_query_pool,NULL);
+#endif
+    vkDestroyFramebuffer(d,fb,NULL); vkDestroyImageView(d,view,NULL);
     }
 #if PS5VK_GRAPHICS_PRESENT
     CHECK(ps5vk_native_present_close(&presentation));
@@ -4404,6 +4624,13 @@ int main(void)
     if(!device_features.fragmentStoresAndAtomics)
         fail("fragment-store-diagnostic-feature",-1);
 #endif
+#if PS5VK_GATHER_FORM
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_GATHER_PROFILE extended=%u min_offset=%d max_offset=%u",
+        device_features.shaderImageGatherExtended,
+        device_props.limits.minTexelGatherOffset,
+        device_props.limits.maxTexelGatherOffset);
+#endif
     const uint32_t expected_viewports=device_features.multiViewport?
         (uint32_t)PS5VK_MULTI_VIEWPORT_COUNT:1u;
     if(device_props.limits.maxImageDimension1D<PS5VK_MAX_IMAGE_1D ||
@@ -4444,7 +4671,7 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
-#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE || PS5VK_SAMPLE_RATE_PROBE
+#if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE || PS5VK_SAMPLE_RATE_PROBE || PS5VK_OCCLUSION_QUERY_API_PROBE || (PS5VK_GATHER_FORM>=2 && PS5VK_GATHER_FORM<=4)
     VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
     requested_features.drawIndirectFirstInstance=VK_TRUE;
@@ -4476,6 +4703,12 @@ int main(void)
      * vkCreateDevice accept a request for it, and the front end refuses the
      * state on a build whose platform reports no such capability. */
     requested_features.sampleRateShading=VK_TRUE;
+#endif
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+    requested_features.occlusionQueryPrecise=VK_TRUE;
+#endif
+#if PS5VK_GATHER_FORM>=2 && PS5VK_GATHER_FORM<=4
+    requested_features.shaderImageGatherExtended=VK_TRUE;
 #endif
     di.pEnabledFeatures=&requested_features;
 #endif
@@ -4825,6 +5058,9 @@ int main(void)
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
     use_depth=0;
 #endif
+#if defined(PS5VK_OCCLUSION_DEPTH_PROBE) && PS5VK_OCCLUSION_DEPTH_PROBE
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==15)use_depth=1;
+#endif
     if(use_depth)subpass.pDepthStencilAttachment=&depthref;
     VkRenderPassCreateInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,.attachmentCount=use_depth?2:1,.pAttachments=attachments,
         .subpassCount=1,.pSubpasses=&subpass};
@@ -4839,13 +5075,15 @@ int main(void)
             VK_FORMAT_R32G32B32A32_SINT,0},
         {1,0,VK_FORMAT_R32G32B32_SFLOAT,12}};
     struct ps5vk_set_signature runtime_sampled={0};
-    if(PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
+#if PS5VK_GRAPHICS_SCISSOR_PROBE==12 || PS5VK_GATHER_FORM
+    {
         runtime_sampled.count=1;runtime_sampled.binding[0].count=1;
         runtime_sampled.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
         runtime_sampled.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         for(unsigned binding_index=1;binding_index<PS5VK_MAX_BINDINGS;++binding_index)
             runtime_sampled.binding[binding_index].first=1;
     }
+#endif
     struct ps5vk_graphics_key runtime_key={
         .vertex={.words=PS5VK_GRAPHICS_SCISSOR_PROBE==12?ps5vk_runtime_mipmap_vertex:
                 (PS5VK_GRAPHICS_SCISSOR_PROBE==8?ps5vk_runtime_vertex_sint:ps5vk_runtime_vertex),
@@ -4864,6 +5102,29 @@ int main(void)
         .vertex_attributes=(PS5VK_GRAPHICS_SCISSOR_PROBE==8 || PS5VK_GRAPHICS_SCISSOR_PROBE==12)?runtime_attributes:NULL,
         .descriptor_set_count=PS5VK_GRAPHICS_SCISSOR_PROBE==12?1:0,
         .descriptor_sets=PS5VK_GRAPHICS_SCISSOR_PROBE==12?&runtime_sampled:NULL};
+    if(PS5VK_GATHER_FORM) {
+        const uint32_t *words=PS5VK_GATHER_FORM==1?ps5vk_runtime_gather_core_fragment:
+            (PS5VK_GATHER_FORM==2?ps5vk_runtime_gather_const_offset_fragment:
+            (PS5VK_GATHER_FORM==3?ps5vk_runtime_gather_dynamic_offset_fragment:
+            (PS5VK_GATHER_FORM==4?ps5vk_runtime_gather_four_offsets_fragment:
+            (PS5VK_GATHER_FORM==5?ps5vk_runtime_gather_component_0_fragment:
+            (PS5VK_GATHER_FORM==6?ps5vk_runtime_gather_component_1_fragment:
+            (PS5VK_GATHER_FORM==7?ps5vk_runtime_gather_component_2_fragment:
+             ps5vk_runtime_gather_component_3_fragment))))));
+        const size_t word_count=PS5VK_GATHER_FORM==1?
+            sizeof(ps5vk_runtime_gather_core_fragment)/4:
+            (PS5VK_GATHER_FORM==2?sizeof(ps5vk_runtime_gather_const_offset_fragment)/4:
+            (PS5VK_GATHER_FORM==3?sizeof(ps5vk_runtime_gather_dynamic_offset_fragment)/4:
+            (PS5VK_GATHER_FORM==4?sizeof(ps5vk_runtime_gather_four_offsets_fragment)/4:
+            (PS5VK_GATHER_FORM==5?sizeof(ps5vk_runtime_gather_component_0_fragment)/4:
+            (PS5VK_GATHER_FORM==6?sizeof(ps5vk_runtime_gather_component_1_fragment)/4:
+            (PS5VK_GATHER_FORM==7?sizeof(ps5vk_runtime_gather_component_2_fragment)/4:
+             sizeof(ps5vk_runtime_gather_component_3_fragment)/4))))));
+        runtime_key.fragment=(struct ps5vk_graphics_module_key){
+            .words=words,.word_count=word_count,.entry="main"};
+        runtime_key.descriptor_set_count=1;
+        runtime_key.descriptor_sets=&runtime_sampled;
+    }
     VkVertexInputBindingDescription multiple_bindings[16];
     VkVertexInputAttributeDescription multiple_attributes[16];
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==13) {
@@ -4975,7 +5236,11 @@ int main(void)
         ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_COMPUTE_CONTROL phase=before-graphics iteration=%u",iteration);
         ps5vk_compute_regression(device);
 #endif
-        if(PS5VK_GRAPHICS_WITNESSES) {
+        if(PS5VK_GATHER_FORM) {
+            depth.depthTestEnable=VK_FALSE;
+            viewport.width=1920;viewport.height=1080;
+            scissor=(VkRect2D){{960,540},{1,1}};
+        } else if(PS5VK_GRAPHICS_WITNESSES) {
             depth.depthTestEnable=PS5VK_GRAPHICS_WITNESSES==2?VK_FALSE:VK_TRUE;
             viewport.width=1920;viewport.height=1080;
             scissor=(VkRect2D){{(int32_t)ps5vk_scene_witnesses[witness_index].x,(int32_t)ps5vk_scene_witnesses[witness_index].y},{1,1}};
@@ -4983,6 +5248,13 @@ int main(void)
             depth.depthTestEnable=VK_FALSE;
             scissor=PS5VK_GRAPHICS_SCISSOR_PROBE==6 && witness_index>=6 ?
                 (VkRect2D){{960,540},{1,1}}:(VkRect2D){{0,0},{1920,1080}};
+        } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==15 && PS5VK_OCCLUSION_DEPTH_PROBE) {
+            /* Center of the deterministic planar triangle, after the
+             * runtime-profile depth attachment is explicitly enabled. One
+             * single-sample scissor pixel is the exact positive-count witness. */
+            depth.depthTestEnable=VK_TRUE;
+            viewport.width=1920;viewport.height=1080;
+            scissor=(VkRect2D){{960,540},{1,1}};
         } else if(PS5VK_GRAPHICS_SCISSOR_PROBE>=2) {
             unsigned region=iteration%5;
             depth.depthTestEnable=iteration<5;
@@ -4994,8 +5266,21 @@ int main(void)
             viewport.width=(float)(1920-iteration*480);viewport.height=(float)(1080-iteration*270);
         }
         VkPipeline pipeline; CHECK(vkCreateGraphicsPipelines(device,0,1,&pi,NULL,&pipeline));
+        VkPipeline precise_count_pipeline=pipeline;
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+        VkBool32 saved_depth_test=depth.depthTestEnable;
+        VkBool32 saved_depth_write=depth.depthWriteEnable;
+        depth.depthTestEnable=VK_FALSE;
+        depth.depthWriteEnable=VK_FALSE;
+        CHECK(vkCreateGraphicsPipelines(device,0,1,&pi,NULL,&precise_count_pipeline));
+        depth.depthTestEnable=saved_depth_test;
+        depth.depthWriteEnable=saved_depth_write;
+#endif
         ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_API_PIPELINE_CREATED iteration=%u",iteration);
-        prepare_recorded_draw(device,pipeline,pass,layout,set_layout,witness_index);
+        prepare_recorded_draw(device,pipeline,precise_count_pipeline,pass,layout,set_layout,witness_index);
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
+        vkDestroyPipeline(device,precise_count_pipeline,NULL);
+#endif
         vkDestroyPipeline(device,pipeline,NULL);
         ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_API_PIPELINE_DESTROYED iteration=%u",iteration);
 #if PS5VK_GRAPHICS_DRAW

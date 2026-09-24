@@ -200,13 +200,19 @@ def main():
             "-DPS5VK_RUNTIME_GRAPHICS=1", "-DPS5VK_NO_OFFLINE_LIBRARY=1",
             # The diagnostic probes are environment-declared for the whole
             # payload: the runtime library the SDK builds compiles the same
-            # sources the native build does, so the optional-stage negotiation
-            # gate must see the same diagnostic decision. The value is passed
+            # sources the native build does, so feature negotiation gates must
+            # see the same diagnostic decisions. The values are passed
             # through from the caller (build_native.py sets it for its probe
             # builds); the shipping default stays zero.
+            *(["-DPS5VK_OCCLUSION_PRECISE_DIAGNOSTIC=" +
+               os.environ["PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC"]]
+              if os.environ.get("PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC") else []),
             *(["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" +
                os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"]]
               if os.environ.get("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC") else []),
+            *(["-DPS5VK_GATHER_EXTENDED_DIAGNOSTIC=" +
+               os.environ["PS5VK_GATHER_EXTENDED_DIAGNOSTIC"]]
+              if os.environ.get("PS5VK_GATHER_EXTENDED_DIAGNOSTIC") else []),
             *(["-DPS5VK_TESS_PROBE=" + os.environ["PS5VK_TESS_PROBE"]]
               if os.environ.get("PS5VK_TESS_PROBE") else []),
             # Legacy experiment flags remain attributable in old build recipes.
