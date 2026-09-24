@@ -41,7 +41,10 @@ static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend;
 VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
-        .max_allocation = 1u << 22, .queue_flags = VK_QUEUE_COMPUTE_BIT};
+        .max_allocation = 1u << 22, .queue_flags = VK_QUEUE_COMPUTE_BIT,
+        /* The platform reports the capability; the device must still keep
+         * the extension closed until VK_KHR_create_renderpass2 is exposed. */
+        .supported_features_t09 = PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU", .vendor_id = 0x1002u, .heap_size = 1u << 22,
         .allocation_granularity = 1, .buffer_image_granularity = 1,
@@ -236,6 +239,43 @@ int main(void)
         VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 0,
         1u << 22, &image_props) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+
+    /* Exposure: closed until the create_renderpass2 route exists. */
+    {
+        uint32_t extensions = 0;
+        assert(vkEnumerateDeviceExtensionProperties(physical, NULL, &extensions, NULL) == VK_SUCCESS);
+        VkExtensionProperties listed[16];
+        assert(extensions <= 16);
+        assert(vkEnumerateDeviceExtensionProperties(physical, NULL, &extensions, listed) == VK_SUCCESS);
+        for (uint32_t i = 0; i < extensions; ++i)
+            assert(strcmp(listed[i].extensionName, VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME));
+        VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures separate = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES,
+            .separateDepthStencilLayouts = VK_TRUE};
+        VkPhysicalDeviceFeatures2 features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &separate};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &features);
+        assert(!separate.separateDepthStencilLayouts);
+        float one = 1.0f;
+        VkDeviceQueueCreateInfo q = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount = 1, .pQueuePriorities = &one};
+        const char *name = VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME;
+        VkDeviceCreateInfo with_extension = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .queueCreateInfoCount = 1, .pQueueCreateInfos = &q,
+            .enabledExtensionCount = 1, .ppEnabledExtensionNames = &name};
+        VkDevice refused;
+        assert(vkCreateDevice(physical, &with_extension, NULL, &refused) ==
+               VK_ERROR_EXTENSION_NOT_PRESENT);
+        separate.separateDepthStencilLayouts = VK_TRUE;
+        VkDeviceCreateInfo with_feature = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &separate, .queueCreateInfoCount = 1, .pQueueCreateInfos = &q};
+        assert(vkCreateDevice(physical, &with_feature, NULL, &refused) ==
+               VK_ERROR_FEATURE_NOT_PRESENT);
+        separate.separateDepthStencilLayouts = VK_FALSE;
+        assert(vkCreateDevice(physical, &with_feature, NULL, &refused) == VK_SUCCESS);
+        assert(!refused->enabled_features_t09);
+        vkDestroyDevice(refused, NULL);
+    }
 
     float priority = 1.0f;
     VkDeviceQueueCreateInfo qci = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,

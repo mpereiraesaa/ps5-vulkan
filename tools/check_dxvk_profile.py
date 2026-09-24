@@ -205,6 +205,7 @@ def implemented_device_extensions() -> set[str]:
     for name in (
         "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
         "PS5VK_TIMELINE_DIAGNOSTIC",
+        "PS5VK_DEPTH_STENCIL_DIAGNOSTIC",
     ):
         guard = f"#if defined({name}) && {name}"
         if guard in platform_source:
@@ -240,6 +241,8 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT"},
         "VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE"},
+        "VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS"},
     }
     unmapped = sorted(tokens - gates.keys())
     if unmapped:
