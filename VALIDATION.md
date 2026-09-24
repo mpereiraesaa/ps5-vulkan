@@ -1,5 +1,21 @@
 # Runtime graphics validation
 
+## Current evidence policy (2026-09-24)
+
+This file preserves dated hardware receipts, including failed candidates; a
+historical requirement to run every selected CTS leaf twice is not the current
+delivery rule. For a new capability, require a public-API contract, positive
+and negative host tests, and **one** strict native run tied to the exact build
+artifact, with a deterministic GPU-visible oracle and clean lifecycle. Repeat a
+run when its result is ambiguous, flaky, or changed by a fix, not merely to
+produce a second identical receipt. Focused upstream CTS is valuable for
+regression and diagnosis but an absent or unmapped CTS case is not, by itself,
+a reason to withhold an otherwise measured bounded capability. A real failing
+applicable CTS result must remain visible and be investigated; this policy
+does not turn failures into passes. None of these project checks is a claim of
+Vulkan conformance or a complete core-version implementation. The ordinary
+device still reports Vulkan 1.0.
+
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
@@ -1674,7 +1690,7 @@ new CTS or hardware claim was attached to the original structural slice.
 Secondary command buffers and one bounded two-subpass profile left that list
 later through the native evidence recorded below.
 
-## Current capability gap ledger (unsupported, not planned)
+## Current capability gap ledger (bounded or unsupported)
 
 The 137/137 figure above is structural. This ledger is the current list of
 exported boundaries that do not execute the general Vulkan operation their name
@@ -1690,12 +1706,15 @@ drift away from the documents again.
 
 <!-- capability-gap-ledger:begin -->
 
-- `vkCmdBlitImage` — unsupported. No GPU scaling or filtering path exists, no
-  blit feature bit is advertised, and the call records nothing.
-- `vkCmdResolveImage` — unsupported. Multisample image creation is not
-  implemented, and a single-sample copy is never accepted as a resolve.
-- `vkCmdClearAttachments` — unsupported. There is no in-render-pass attachment
-  clear path.
+- `vkCmdBlitImage` — bounded. The T07 BC-to-RGBA8 path accepts selected
+  compressed source shapes, mip/layer ranges and nearest/linear filtering;
+  general format, scaling and blit combinations remain unsupported.
+- `vkCmdResolveImage` — unsupported as a standalone command. The separately
+  measured 2x/4x colour-attachment resolve path does not make this entry point
+  a general image resolve.
+- `vkCmdClearAttachments` — bounded. One BGRA8/RGBA8 colour attachment or a
+  D16 depth attachment may be cleared over validated in-pass rectangles;
+  other aspects, formats, attachment combinations and scopes are unsupported.
 - `vkCmdClearDepthStencilImage` — bounded, not general. The whole subresource of
   a one-sample `VK_FORMAT_D32_SFLOAT` 2D target clears to a depth value in
   `[0,1]`, and that single shape is qualified on hardware. Stencil aspects,
@@ -1722,10 +1741,10 @@ drift away from the documents again.
 - `vkQueueBindSparse` — unsupported. No queue advertises
   `VK_QUEUE_SPARSE_BINDING_BIT`, and the call fails closed without mutating
   queue, fence or semaphore state.
-- Real query results — unsupported. Only bounded occlusion pools are created.
-  Reset is ordered and observable, but `vkGetQueryPoolResults` reports
-  `VK_NOT_READY` with an untouched destination, and occlusion begin/end,
-  `vkCmdCopyQueryPoolResults` and timestamp writes are fail-closed.
+- Real query results — bounded. Occlusion begin/end, result retrieval and
+  `vkCmdCopyQueryPoolResults` publish measured counts; the precise path has a
+  public-SDK witness. Timestamp and pipeline-statistics pools remain
+  unsupported, and `vkCmdWriteTimestamp` stays fail-closed because
   `timestampValidBits` is reported as zero.
 
 <!-- capability-gap-ledger:end -->
