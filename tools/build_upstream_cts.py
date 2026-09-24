@@ -48,6 +48,7 @@ def tessellation_build_profile(environment):
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
             "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
             "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC",
+            "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
         )
     }
     return {

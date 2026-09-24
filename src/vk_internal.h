@@ -135,6 +135,9 @@ enum ps5vk_feature_bits {
      * unset; a private measurement build may exercise the runtime path. It
      * is not a public Vulkan feature or subgroup-properties promise. */
     PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE = 1u << 25,
+    /* Independent private compute IAdd route; never a public ARITHMETIC
+     * operation or extended-types feature promise. */
+    PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE = 1u << 26,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

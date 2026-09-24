@@ -4682,7 +4682,17 @@ payload. Firmware was not recorded in these receipts. This proves one bounded
 16-bit subgroup types, other stages or operations, original CTS, either public
 T08 feature bit, or a higher public `apiVersion`.
 
-The ordinary build of this exact code then passed its unchanged frozen
+An independent default-off diagnostic gate now admits compute
+`OpGroupNonUniformIAdd` only with `GroupNonUniform` and
+`GroupNonUniformArithmetic` capabilities. The host frontend accepts that
+single operation through pipeline creation and rejects it in the ordinary
+profile, under the Broadcast-only switch, without Arithmetic capability,
+outside compute, or when replaced by an unmeasured operation. The pinned
+compiler's separate typed arithmetic tests establish code generation, but
+this new runtime gate has no GPU readback or original CTS Pass yet. It does
+not report the public `ARITHMETIC` operation bit or either T08 feature.
+
+The earlier default-off Broadcast-only build passed its unchanged frozen
 upstream acceptance selection: **507 Pass, zero Fail, zero NotSupported, zero
 missing or unexpected** in strict run `run-626719354771127`. Signed eboot
 SHA-256 `3f86fcea1ccc275720ff73605722dc1ee0e03955b5fb7f3d17e70cc4964b1ccd`,
@@ -4693,6 +4703,7 @@ and log SHA-256 `66c5d6a48c932ca2b71b5b48f24f953287516feea8e2b63aaa55a6d1671072e
 bind that run to the default-off profile. The title closed and the previous
 payload was restored. This selection contains no applicable subgroup leaf;
 its result proves neutral acceptance, not subgroup conformance.
+The newer IAdd-gate head still needs the same hardware acceptance run.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a

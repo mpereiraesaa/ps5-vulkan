@@ -22,6 +22,10 @@ class SubgroupWitnessTests(unittest.TestCase):
                          "1")
         self.assertFalse(ordinary["experimental"])
         self.assertTrue(diagnostic["experimental"])
+        iadd = tessellation_build_profile({"PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1"})
+        self.assertEqual(ordinary["switches"]["PS5VK_SUBGROUP_IADD_DIAGNOSTIC"], "0")
+        self.assertEqual(iadd["switches"]["PS5VK_SUBGROUP_IADD_DIAGNOSTIC"], "1")
+        self.assertTrue(iadd["experimental"])
 
     def setUp(self):
         self.log = (

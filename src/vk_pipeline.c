@@ -18,15 +18,18 @@ static int module_valid(const uint32_t *words, size_t count)
     return 1;
 }
 /* The shipping Vulkan 1.0 profile reports no subgroup stages or operations.
- * A private compute-only measurement build can pass its one measured Ballot
- * Broadcast operation through the normal runtime pipeline. Keep every other
- * operation, stage and incomplete capability declaration fail-closed. */
+ * Private compute-only builds admit only independently selected Broadcast and
+ * IAdd diagnostics. Each operation needs its own SPIR-V capability; no public
+ * subgroup operation or feature follows from either internal switch. */
 static int subgroup_module_unsupported(const uint32_t *words, size_t count,
                                        uint32_t platform_features)
 {
     const int broadcast_compute =
         !!(platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE);
-    int basic = 0, ballot = 0, broadcast = 0, compute_entry = 0;
+    const int iadd_compute =
+        !!(platform_features & PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE);
+    int basic = 0, ballot = 0, arithmetic = 0, broadcast = 0, iadd = 0;
+    int compute_entry = 0;
     int other_entry = 0, subgroup = 0;
     for (size_t at = 5; at < count; at += words[at] >> 16) {
         uint32_t opcode = words[at] & 0xffffu;
@@ -37,9 +40,11 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
                 capability == 4423u || capability == 4431u ||
                 capability == 5297u || capability == 6026u) {
                 subgroup = 1;
-                if (!broadcast_compute ||
-                    (capability != 61u && capability != 64u)) return 1;
+                if ((capability != 61u && capability != 63u && capability != 64u) ||
+                    (capability == 63u && !iadd_compute) ||
+                    (capability == 64u && !broadcast_compute)) return 1;
                 if (capability == 61u) basic = 1;
+                if (capability == 63u) arithmetic = 1;
                 if (capability == 64u) ballot = 1;
             }
         }
@@ -51,12 +56,14 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
             opcode == 4431u || opcode == 5110u || opcode == 5111u ||
             opcode == 5296u) {
             subgroup = 1;
-            if (!broadcast_compute || opcode != 337u) return 1;
-            broadcast = 1;
+            if (opcode == 337u && broadcast_compute) broadcast = 1;
+            else if (opcode == 349u && iadd_compute) iadd = 1;
+            else return 1;
         }
     }
-    return subgroup && (!basic || !ballot || !broadcast ||
-                        !compute_entry || other_entry);
+    return subgroup && (!basic || !compute_entry || other_entry ||
+                        (!broadcast && !iadd) || (broadcast != ballot) ||
+                        (iadd != arithmetic));
 }
 VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
                             const char *name, uint32_t *out)
