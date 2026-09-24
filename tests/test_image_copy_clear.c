@@ -69,14 +69,14 @@ static VkDevice device;
 static VkCommandPool pool;
 enum { WIDTH = 8, HEIGHT = 4 };
 
-static VkImage make_image_tiled_extent(VkFormat format, VkImageUsageFlags usage,
-    uint32_t width, uint32_t height, VkImageTiling tiling, void **mapped)
+static VkImage make_image_subresources(VkFormat format, VkImageUsageFlags usage,
+    uint32_t width, uint32_t height, uint32_t mips, uint32_t layers, VkImageTiling tiling, void **mapped)
 {
     VkImageCreateInfo info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                               .imageType = VK_IMAGE_TYPE_2D,
                               .format = format,
                               .extent = {width, height, 1},
-                              .mipLevels = 1, .arrayLayers = 1,
+                              .mipLevels = mips, .arrayLayers = layers,
                               .samples = VK_SAMPLE_COUNT_1_BIT,
                               .tiling = tiling,
                               .usage = usage,
@@ -92,6 +92,12 @@ static VkImage make_image_tiled_extent(VkFormat format, VkImageUsageFlags usage,
     assert(vkBindImageMemory(device, image, memory, 0) == VK_SUCCESS);
     if (mapped) assert(vkMapMemory(device, memory, 0, VK_WHOLE_SIZE, 0, mapped) == VK_SUCCESS);
     return image;
+}
+
+static VkImage make_image_tiled_extent(VkFormat format, VkImageUsageFlags usage,
+    uint32_t width, uint32_t height, VkImageTiling tiling, void **mapped)
+{
+    return make_image_subresources(format, usage, width, height, 1, 1, tiling, mapped);
 }
 
 static VkImage make_image_extent(VkFormat format, VkImageUsageFlags usage,
@@ -444,6 +450,82 @@ static void bc_optimal_transfer_blit(VkImageLayout source_layout, VkImageLayout 
     vkDestroyImage(device,destination,NULL);vkDestroyImage(device,source,NULL);
 }
 
+/* The same image has odd base dimensions, five mips, and three layers.
+ * Every source subresource carries a distinct solid RGB565 endpoint. */
+static void bc_source_subresources(VkFormat format, VkFilter filter)
+{
+    void *src_map=NULL, *dst_map=NULL;
+    VkImage source=make_image_subresources(format,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        17,9,5,3,VK_IMAGE_TILING_OPTIMAL,&src_map);
+    VkImage destination=make_image_tiled_extent(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT,8,8,VK_IMAGE_TILING_LINEAR,&dst_map);
+    struct ps5vk_texture_mip_layout layout;
+    assert(!ps5vk_texture_mip_layout_for_slices(format,17,9,3,5,&layout));
+    memset(src_map,0xa5,(size_t)layout.bytes);
+    const unsigned block_bytes=format==VK_FORMAT_BC1_RGBA_UNORM_BLOCK ? 8 : 16;
+    for(unsigned layer=0;layer<3;++layer) for(unsigned mip=0;mip<5;++mip) {
+        unsigned width=17>>mip, height=9>>mip;
+        if(!width)width=1;
+        if(!height)height=1;
+        uint8_t block[16]={0};
+        if(block_bytes==16)block[0]=255;
+        uint8_t *color=block+(block_bytes==16 ? 8 : 0);
+        /* Red endpoint varies over all15 subresources. */
+        unsigned r=1+layer*5+mip;
+        color[1]=(uint8_t)(r<<3);
+        for(unsigned y=0;y<(height+3)/4;++y) for(unsigned x=0;x<(width+3)/4;++x)
+            memcpy((uint8_t *)src_map+layer*layout.layer_stride+layout.levels[mip].offset+
+                y*layout.levels[mip].row_pitch+x*block_bytes,block,block_bytes);
+    }
+    uint8_t *snapshot=malloc((size_t)layout.bytes); assert(snapshot);
+    memcpy(snapshot,src_map,(size_t)layout.bytes);
+    source->layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    destination->layout=VK_IMAGE_LAYOUT_GENERAL;
+    for(unsigned layer=0;layer<3;++layer) for(unsigned mip=0;mip<5;++mip) {
+        unsigned width=17>>mip,height=9>>mip;
+        if(!width)width=1;
+        if(!height)height=1;
+        memset(dst_map,0xa5,8*256);
+        VkImageBlit blit={.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,mip,layer,1},
+            .srcOffsets={{0,0,0},{(int)width,(int)height,1}},
+            .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+            .dstOffsets={{0,0,0},{8,8,1}}};
+        VkCommandBuffer command=begin();
+        vkCmdBlitImage(command,source,source->layout,destination,destination->layout,1,&blit,filter);
+        assert(command->state==PS5VK_RECORDING);
+        submit_and_wait(command);
+        unsigned red=((1+layer*5+mip)*527+23)>>6;
+        for(unsigned y=0;y<8;++y) {
+            const uint8_t *row=(const uint8_t *)dst_map+y*256;
+            for(unsigned x=0;x<8;++x)
+                assert(row[x*4]==red && row[x*4+1]==0 && row[x*4+2]==0 && row[x*4+3]==255);
+            for(unsigned x=32;x<256;++x)assert(row[x]==0xa5);
+        }
+        assert(!memcmp(src_map,snapshot,(size_t)layout.bytes));
+    }
+    /* Bounds use Vulkan's floor mip extent, not padded storage dimensions.
+     * Invalid indices must be rejected before a shift or an address is used. */
+    for(unsigned invalid=0;invalid<6;++invalid) {
+        VkImageBlit blit={.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,1,2,1},
+            .srcOffsets={{0,0,0},{8,4,1}},
+            .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+            .dstOffsets={{0,0,0},{8,8,1}}};
+        if(invalid==0)blit.srcSubresource.mipLevel=5;
+        if(invalid==1)blit.srcSubresource.mipLevel=UINT32_MAX;
+        if(invalid==2)blit.srcSubresource.baseArrayLayer=3;
+        if(invalid==3)blit.srcOffsets[1].x=9;
+        if(invalid==4)blit.srcOffsets[1].y=5;
+        if(invalid==5)blit.srcSubresource.layerCount=2;
+        VkCommandBuffer command=begin();
+        vkCmdBlitImage(command,source,source->layout,destination,destination->layout,1,&blit,filter);
+        assert(command->state!=PS5VK_RECORDING && command->operation_count==0);
+        assert(!memcmp(src_map,snapshot,(size_t)layout.bytes));
+    }
+    free(snapshot);
+    vkDestroyImage(device,destination,NULL); vkDestroyImage(device,source,NULL);
+}
+
 static void bc_all_formats_blit(void)
 {
     const uint8_t zero[16]={0};
@@ -739,6 +821,8 @@ int main(void)
         for(unsigned general_destination=0;general_destination<2;++general_destination)
             bc_optimal_transfer_blit(general_source ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 general_destination ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, srgb);
+    bc_source_subresources(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,VK_FILTER_NEAREST);
+    bc_source_subresources(VK_FORMAT_BC3_UNORM_BLOCK,VK_FILTER_LINEAR);
     bc_all_formats_blit();
     for (int variant=0;variant<6;++variant) {
         bc_scaled_blit(VK_FILTER_NEAREST,variant,0);
