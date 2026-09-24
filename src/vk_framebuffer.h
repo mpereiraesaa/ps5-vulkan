@@ -79,7 +79,8 @@ static inline uint32_t ps5vk_framebuffer_attachment_view_count(
 static inline VkBool32 ps5vk_framebuffer_attachment_valid(VkFramebuffer fb,
     VkRenderPass pass, uint32_t attachment, VkImageView view)
 {
-    if (!fb || !pass || attachment >= fb->attachment_count || !view ||
+    if (!fb || !pass || attachment >= fb->attachment_count ||
+        attachment >= pass->attachment_count || !view ||
         view->device != fb->device || !view->image || !view->image->memory ||
         view->range.levelCount != 1 ||
         view->format != pass->attachments[attachment].format ||

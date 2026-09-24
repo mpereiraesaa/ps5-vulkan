@@ -808,6 +808,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
             attachment_begin = (const VkRenderPassAttachmentBeginInfo *)next;
         } else { invalid(c); return; }
     }
+    /* A compatible render pass may describe fewer attachments than the
+     * framebuffer. This implementation requires positional equality, and the
+     * view validator indexes pass->attachments by framebuffer slot. */
+    if (fb->attachment_count != pass->attachment_count) { invalid(c); return; }
     if (fb->imageless) {
         if (!attachment_begin || attachment_begin->attachmentCount != fb->attachment_count ||
             (fb->attachment_count && !attachment_begin->pAttachments)) { invalid(c); return; }
@@ -822,8 +826,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
      * the executing framebuffer contract too: when the subpass declares one,
      * the framebuffer has to carry it at the same index (DXVK262-T06). */
     const struct ps5vk_subpass *first=ps5vk_render_pass_subpass(pass, 0);
-    if (fb->attachment_count != pass->attachment_count ||
-        fb->color_count != first->color_count ||
+    if (fb->color_count != first->color_count ||
         fb->resolve_count != first->resolve_count ||
         (fb->resolve_count && fb->resolve_attachments[0] != first->resolve[0].attachment) ||
         fb->depth_attachment != first->depth.attachment ||

@@ -1417,6 +1417,38 @@ static void imageless_framebuffer_recording(void)
     assert(vkEndCommandBuffer(c) == VK_SUCCESS);
     assert(!views[0].framebuffers && !views[1].framebuffers);
 
+    /* A valid two-slot imageless framebuffer cannot begin with a pass that
+     * describes only one slot. Check both the helper's index bound and the
+     * command path before it can inspect the second pass attachment. */
+    VkAttachmentDescription two_descriptions[2] = {attachment, attachment};
+    struct VkRenderPass_T two_pass = pass;
+    two_pass.attachment_count = 2;
+    two_pass.attachments = two_descriptions;
+    VkFramebufferAttachmentImageInfo two_infos[2] = {image_info, image_info};
+    VkFramebufferAttachmentsCreateInfo two_attachments = attachments;
+    two_attachments.attachmentImageInfoCount = 2;
+    two_attachments.pAttachmentImageInfos = two_infos;
+    VkFramebufferCreateInfo two_create = create;
+    two_create.pNext = &two_attachments;
+    two_create.renderPass = &two_pass;
+    two_create.attachmentCount = 2;
+    VkFramebuffer two_fb = NULL;
+    format = VK_FORMAT_B8G8R8A8_UNORM;
+    assert(vkCreateFramebuffer(&d, &two_create, NULL, &two_fb) == VK_SUCCESS);
+    assert(!ps5vk_framebuffer_attachment_valid(two_fb, &pass, 1, &views[1]));
+    VkImageView both_views[2] = {&views[0], &views[1]};
+    VkRenderPassAttachmentBeginInfo two_begin_attachments = begin_attachments;
+    two_begin_attachments.attachmentCount = 2;
+    two_begin_attachments.pAttachments = both_views;
+    begin.framebuffer = two_fb;
+    begin.pNext = &two_begin_attachments;
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass(c, &begin, VK_SUBPASS_CONTENTS_INLINE);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 0);
+    begin.framebuffer = fb;
+    begin.pNext = &begin_attachments;
+    vkDestroyFramebuffer(&d, two_fb, NULL);
+
     /* Supplied views are checked at begin, including their usage and layers. */
     views[1].image->info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
