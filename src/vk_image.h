@@ -3,6 +3,7 @@
 #include "vk_internal.h"
 #include "color_attachment_contract.h"
 #include "texture_format.h"
+#include "texture_layout.h"
 struct VkImage_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
@@ -78,10 +79,28 @@ static inline VkBool32 ps5vk_bc_linear_image(VkImage image)
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     return ps5vk_texture_format_block_compressed(i->format) &&
         i->imageType == VK_IMAGE_TYPE_2D && i->tiling == VK_IMAGE_TILING_OPTIMAL &&
-        i->extent.depth == 1 && i->mipLevels == 1 && i->arrayLayers == 1 &&
+        i->extent.depth == 1 && i->mipLevels && i->mipLevels <= PS5VK_MAX_TEXTURE_MIP_LEVELS &&
+        i->arrayLayers &&
         i->samples == VK_SAMPLE_COUNT_1_BIT &&
         (i->usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
         !(i->usage & ~allowed);
+}
+/* Padded RGBA8 backing shared by sampled uploads and BC blit destinations.
+ * Keep this separate from the base-level clear/image-copy role. */
+static inline VkBool32 ps5vk_rgba_linear_image(VkImage image)
+{
+    if (!image) return VK_FALSE;
+    const VkImageCreateInfo *i = &image->info;
+    const VkImageUsageFlags allowed = VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return (i->format == VK_FORMAT_R8G8B8A8_UNORM || i->format == VK_FORMAT_R8G8B8A8_SRGB) &&
+        i->imageType == VK_IMAGE_TYPE_2D && i->tiling == VK_IMAGE_TILING_OPTIMAL &&
+        i->extent.depth == 1 && i->mipLevels && i->mipLevels <= PS5VK_MAX_TEXTURE_MIP_LEVELS &&
+        i->arrayLayers && i->samples == VK_SAMPLE_COUNT_1_BIT &&
+        (i->usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
+        !(i->usage & ~allowed) &&
+        (!(i->usage & VK_IMAGE_USAGE_SAMPLED_BIT) ||
+         (i->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT));
 }
 /* R32_UINT UAV with the same padded row layout as a one-level texture. */
 static inline VkBool32 ps5vk_storage_image(VkImage image)

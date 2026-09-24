@@ -102,6 +102,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
     VkImageLayout layout,uint32_t count,const VkBufferImageCopy *regions)
 {
     if(!c || c->state!=PS5VK_RECORDING || c->render_pass || !count || !regions ||
+        c->operation_count>PS5VK_MAX_OPERATIONS ||
         count>PS5VK_MAX_OPERATIONS-c->operation_count || !image || image->device!=c->pool->device ||
         (layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && layout!=VK_IMAGE_LAYOUT_GENERAL)) {invalid(c);return;}
     VkDevice d=c->pool->device;
@@ -146,48 +147,39 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage image,
     VkImageLayout layout,VkBuffer destination,uint32_t count,const VkBufferImageCopy *regions)
 {
-    if(!c || c->state!=PS5VK_RECORDING || c->render_pass || count!=1 || !regions ||
-        c->operation_count==PS5VK_MAX_OPERATIONS || !image || image->device!=c->pool->device ||
+    if(!c || c->state!=PS5VK_RECORDING || c->render_pass || !count || !regions ||
+        c->operation_count>PS5VK_MAX_OPERATIONS ||
+        count>PS5VK_MAX_OPERATIONS-c->operation_count || !image || image->device!=c->pool->device ||
         (layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
-         !(layout==VK_IMAGE_LAYOUT_GENERAL && ps5vk_storage_image(image)))) {invalid(c);return;}
+         !(layout==VK_IMAGE_LAYOUT_GENERAL && (ps5vk_storage_image(image) ||
+             ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image))))) {invalid(c);return;}
     VkDevice d=c->pool->device;
-    /* Block-compressed images use the block-padded linear layout; keep their
-     * readback away from the generic RGBA8 texel-row planner. */
-    if(ps5vk_bc_linear_image(image) &&
-       (image->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
-        void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
-        if(!ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
-           ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
-           ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS) {invalid(c);return;}
-        struct ps5vk_texture_copy plan;
-        if(ps5vk_texture_copy_plan_for_image(image,dst_bytes,src_bytes,
-            &regions[0],&plan)!=VK_SUCCESS) {invalid(c);return;}
-        struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
-            PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
-        if(!op)return;
-        op->copy_destination=destination;op->copy_image=image;
-        op->copy_layout=layout;op->copy_region=regions[0];
+    /* Both directions use the same format-aware mip/layer plan. Validate
+     * every region before reserving operations so failure stays atomic. */
+    if ((ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image) ||
+         ps5vk_storage_image(image)) &&
+        (image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
+        void *src, *dst;
+        VkDeviceSize src_bytes, dst_bytes;
+        if (!ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
+            ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
+            ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS ||
+            overlaps((uintptr_t)src,src_bytes,(uintptr_t)dst,dst_bytes)) {invalid(c);return;}
+        for (uint32_t i=0;i<count;++i) {
+            struct ps5vk_texture_copy plan;
+            if (ps5vk_texture_copy_plan_for_image(image,dst_bytes,src_bytes,
+                    &regions[i],&plan)!=VK_SUCCESS) {invalid(c);return;}
+        }
+        struct ps5vk_operation *ops=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
+            PS5VK_OPERATION_OUTSIDE_RENDER_PASS,count);
+        if (!ops) return;
+        for (uint32_t i=0;i<count;++i) {
+            ops[i].copy_destination=destination;ops[i].copy_image=image;
+            ops[i].copy_layout=layout;ops[i].copy_region=regions[i];
+        }
         return;
     }
-    /* The pure transfer role is host-visible memory, so its readback is a
-     * frontend copy over the same padded layout. It needs no graphics backend,
-     * and it accepts the tight row description the original CTS oracle uses. */
-    if((ps5vk_pure_transfer_image(image) || ps5vk_storage_image(image)) &&
-       (image->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
-        void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
-        if(!ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
-           ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
-           ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS) {invalid(c);return;}
-        struct ps5vk_texture_copy plan;
-        if(ps5vk_texture_copy_plan_for_format(image->info.format,image->info.extent.width,image->info.extent.height,
-            dst_bytes,src_bytes,&regions[0],&plan)!=VK_SUCCESS) {invalid(c);return;}
-        struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
-            PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
-        if(!op)return;
-        op->copy_destination=destination;op->copy_image=image;
-        op->copy_layout=layout;op->copy_region=regions[0];
-        return;
-    }
+    if (count!=1) {invalid(c);return;}
     /* The depth readback: the same whole-surface shape as the colour one, over
      * the DEPTH aspect of a D32 attachment that declares the transfer source
      * role. It reaches the graphics backend like the colour readback does,

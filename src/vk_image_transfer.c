@@ -172,12 +172,12 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
          * destination is frontend work for the same reason the pure transfer
          * role is: padded linear memory the graphics backend never touches. */
         return (ps5vk_bc_linear_image(op->copy_image) ||
-                ps5vk_pure_transfer_image(op->copy_image) ||
+                ps5vk_rgba_linear_image(op->copy_image) ||
                 ps5vk_colour_transfer_image(op->copy_image)) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_COPY_IMAGE_BUFFER:
         return (ps5vk_bc_linear_image(op->copy_image) ||
-                ps5vk_pure_transfer_image(op->copy_image) ||
+                ps5vk_rgba_linear_image(op->copy_image) ||
                 ps5vk_storage_image(op->copy_image)) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_BLIT_BC_TO_RGBA8:
@@ -857,19 +857,20 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
         op->copy_source : op->copy_destination;
     /* The upload direction also accepts the colour-attachment shape that
      * declares a transfer destination; the readback direction does not. */
-    const int bc_role = ps5vk_bc_linear_image(op->copy_image);
+    const int padded_role = ps5vk_bc_linear_image(op->copy_image) ||
+        ps5vk_rgba_linear_image(op->copy_image);
     const int image_role = op->type == PS5VK_COPY_BUFFER_IMAGE ?
-        (bc_role || ps5vk_pure_transfer_image(op->copy_image) ||
+        (padded_role || ps5vk_pure_transfer_image(op->copy_image) ||
          ps5vk_colour_transfer_image(op->copy_image)) :
-        (bc_role || ps5vk_pure_transfer_image(op->copy_image) ||
+        (padded_role || ps5vk_pure_transfer_image(op->copy_image) ||
          ps5vk_storage_image(op->copy_image));
     if (!image_role ||
         !ps5vk_buffer_usage(d, buffer, op->type == PS5VK_COPY_BUFFER_IMAGE ?
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT : VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
         (op->type == PS5VK_COPY_BUFFER_IMAGE ?
-            !(bc_role ? !!(op->copy_image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) :
+            !(padded_role ? !!(op->copy_image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) :
                 transfer_role_destination(op->copy_image)) :
-            !(bc_role ? !!(op->copy_image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) :
+            !(padded_role ? !!(op->copy_image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) :
                 transfer_role_source(op->copy_image))) ||
         (op->type == PS5VK_COPY_BUFFER_IMAGE ?
             !layout_is_transfer_destination(op->copy_layout) :
@@ -877,16 +878,15 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
         ps5vk_image_span(d, op->copy_image, &address, &bytes) != VK_SUCCESS ||
         ps5vk_buffer_span(d, buffer, 0, VK_WHOLE_SIZE, &address, &bytes) != VK_SUCCESS)
         return INVALID;
-    /* The region mapping is role-independent: both directions describe one
-     * RGBA8 base-level 2D area between a tightly described buffer row and the
-     * padded image row. */
+    /* The region mapping is role-independent: both directions use the same
+     * checked format-aware subresource plan for the padded backing. */
     VkDeviceSize source_bytes = 0, destination_bytes = 0;
     void *buffer_address = NULL, *image_address = NULL;
     if (ps5vk_buffer_span(d, buffer, 0, VK_WHOLE_SIZE, &buffer_address, &source_bytes) != VK_SUCCESS ||
         ps5vk_image_span(d, op->copy_image, &image_address, &destination_bytes) != VK_SUCCESS ||
         spans_overlap(buffer_address, source_bytes, image_address, destination_bytes))
         return INVALID;
-    if (bc_role) {
+    if (padded_role) {
         struct ps5vk_texture_copy plan;
         return ps5vk_texture_copy_plan_for_image(op->copy_image, source_bytes,
             destination_bytes, &op->copy_region, &plan);
@@ -1067,15 +1067,17 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         ps5vk_buffer_span(d, op->type == PS5VK_COPY_BUFFER_IMAGE ? op->copy_source : op->copy_destination,
             0, VK_WHOLE_SIZE, &buffer_address, &buffer_bytes) != VK_SUCCESS)
         return VK_ERROR_DEVICE_LOST;
-    if (ps5vk_bc_linear_image(op->copy_image)) {
+    if (ps5vk_bc_linear_image(op->copy_image) || ps5vk_rgba_linear_image(op->copy_image)) {
         struct ps5vk_texture_copy plan;
         if (ps5vk_texture_copy_plan_for_image(op->copy_image, buffer_bytes,
                 image_bytes, &op->copy_region, &plan) != VK_SUCCESS ||
-            plan.slices != 1 || !plan.rows || !plan.row_bytes)
+            !plan.slices || !plan.rows || !plan.row_bytes)
             return VK_ERROR_DEVICE_LOST;
         const VkDeviceSize buffer_span =
+            (VkDeviceSize)(plan.slices - 1u) * plan.source_slice_pitch +
             (VkDeviceSize)(plan.rows - 1u) * plan.source_pitch + plan.row_bytes;
         const VkDeviceSize image_span =
+            (VkDeviceSize)(plan.slices - 1u) * plan.destination_slice_pitch +
             (VkDeviceSize)(plan.rows - 1u) * plan.destination_pitch + plan.row_bytes;
         if (plan.source_offset > buffer_bytes || buffer_span > buffer_bytes - plan.source_offset ||
             plan.destination_offset > image_bytes || image_span > image_bytes - plan.destination_offset)
@@ -1090,9 +1092,12 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         if (result != VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
         unsigned char *buffer_base = (unsigned char *)buffer_address + plan.source_offset;
         unsigned char *image_base = (unsigned char *)image_address + plan.destination_offset;
+        for (uint32_t z = 0; z < plan.slices; ++z)
         for (uint32_t y = 0; y < plan.rows; ++y) {
-            unsigned char *buffer_row = buffer_base + (VkDeviceSize)y * plan.source_pitch;
-            unsigned char *image_row = image_base + (VkDeviceSize)y * plan.destination_pitch;
+            unsigned char *buffer_row = buffer_base + (VkDeviceSize)z * plan.source_slice_pitch +
+                (VkDeviceSize)y * plan.source_pitch;
+            unsigned char *image_row = image_base + (VkDeviceSize)z * plan.destination_slice_pitch +
+                (VkDeviceSize)y * plan.destination_pitch;
             if (upload) memcpy(image_row, buffer_row, plan.row_bytes);
             else memcpy(buffer_row, image_row, plan.row_bytes);
         }
