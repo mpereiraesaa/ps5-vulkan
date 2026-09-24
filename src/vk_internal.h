@@ -131,6 +131,8 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE = 1u << 22,
     /* Keep this layout gate independent of the other feature bits. */
     PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
+    /* Internal compute compiler probe only. Never maps to VkPhysicalDeviceFeatures. */
+    PS5VK_FEATURE_SHADER_INT8_COMPUTE = 1u << 27,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

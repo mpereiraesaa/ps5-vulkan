@@ -1455,6 +1455,17 @@ def evaluate_shader_capabilities(dump: dict) -> list[dict]:
         where, field = advertisement
         advertised = (dump["extensionFeatures"].get(field, False) if where == "extension"
                       else dump["features"].get(field, False) if field else False)
+        if number == 39 and required == "PS5VK_FEATURE_SHADER_INT8_COMPUTE":
+            # The bit is a default-off compiler experiment, never a device
+            # feature. In particular it cannot satisfy public shaderInt8.
+            public_int8 = bool(dump["features"].get("shaderInt8", False))
+            rows.append({"kind": "shader-capability", "capability": name, "number": number,
+                         "action": "requires-private-compute-probe", "file": "src/vk_pipeline.c",
+                         "advertised": public_int8,
+                         "verdict": "violation" if public_int8 else "satisfied",
+                         "detail": "private compute compiler probe; shaderInt8 remains false "
+                                   "and this gate supplies no public feature credit"})
+            continue
         if action == "requires-extension-feature":
             rows.append({"kind": "shader-capability", "capability": name, "number": number,
                          "action": action, "file": "src/vk_pipeline.c",

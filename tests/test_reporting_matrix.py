@@ -88,6 +88,16 @@ class TestReportingMatrix(unittest.TestCase):
             capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_int8_compute_probe_is_not_public_shader_int8(self):
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        rows = [row for row in data["shader_capabilities"]
+                if row.get("capability") == "Int8"]
+        self.assertEqual({row["profile"] for row in rows}, {"compute", "graphics"})
+        for row in rows:
+            self.assertEqual(row["action"], "requires-private-compute-probe")
+            self.assertFalse(row["advertised"])
+            self.assertEqual(row["verdict"], "satisfied")
+
     def test_sampled_descriptor_floors_are_reported_and_still_bound(self):
         """The four sampled-descriptor floors are satisfied in graphics only."""
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())

@@ -252,6 +252,46 @@ int main(void)
         free(t08_code);
         free(spirv);
     }
+    /* The owned typed subgroup shader keeps Int8 behind the internal probe.
+     * This proves compiler lowering only; Vulkan 1.2 eligibility and GPU
+     * execution require separate evidence before public feature reporting. */
+    size_t int8_bytes = 0;
+    uint32_t *int8_spv = read_file(
+        "build/test-shaders/t08_subgroup_int8_iadd_runtime.spv", &int8_bytes);
+    assert(int8_spv);
+    VkBool32 has_int8 = VK_FALSE, has_arithmetic = VK_FALSE, has_iadd = VK_FALSE;
+    for (size_t at = 5; at < int8_bytes / 4;) {
+        size_t length = int8_spv[at] >> 16;
+        uint32_t opcode = int8_spv[at] & 0xffffu;
+        assert(length && length <= int8_bytes / 4 - at);
+        if (opcode == 17u && length == 2) {
+            has_int8 |= int8_spv[at + 1] == 39u;
+            has_arithmetic |= int8_spv[at + 1] == 63u;
+        }
+        has_iadd |= opcode == 349u; /* OpGroupNonUniformIAdd */
+        at += length;
+    }
+    assert(has_int8 && has_arithmetic && has_iadd);
+    struct VkPipelineLayout_T int8_layout = {0};
+    int8_layout.set_count = 1;
+    int8_layout.sets[0].count = 1;
+    int8_layout.sets[0].binding[0].count = 1;
+    int8_layout.sets[0].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    int8_layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    struct ps5vk_compiled_program int8_program = {0};
+    uint32_t *int8_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(int8_spv, int8_bytes / 4,
+        "main", &int8_layout, NULL, 0, &int8_program, &int8_code) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!int8_code);
+    assert(ps5vk_runtime_compile_compute_features(int8_spv, int8_bytes / 4,
+        "main", &int8_layout, NULL, PS5VK_FEATURE_SHADER_INT8_COMPUTE,
+        &int8_program, &int8_code) == VK_SUCCESS);
+    assert(int8_code && int8_program.code_words && int8_program.gfx == 1013 &&
+           int8_program.wave_size == 32);
+    free(int8_code);
+    free(int8_spv);
+
     /* The original ssbo_local_barrier_multiple_groups shader uses GLSL450
      * OpMemoryModel and Device-scope barriers. Advertising the separate KHR
      * base feature on the logical device must not reinterpret that legacy

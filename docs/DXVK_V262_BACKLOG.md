@@ -63,6 +63,14 @@ official conformance process remain separate obligations.
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
 | 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
 
+T08 has three satisfied requirements on `main`: buffer device address,
+standard uniform-buffer layout and the base Vulkan memory model. DeviceScope
+and both subgroup bits remain blockers. The Int8 compute compiler probe is
+default off and supplies no public subgroup, `shaderInt8` or API-version
+credit; its next gates are a combined runtime GPU readback and original CTS
+under a legal Vulkan 1.1/1.2 profile, including the required narrow-type
+feature and storage contracts.
+
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
 is stable while readiness and completion are derived from the live matrix, so implemented
