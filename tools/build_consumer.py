@@ -143,6 +143,8 @@ def main():
                         help="Build the compact UBO GPU witness entry point")
     parser.add_argument("--cube-array-witness", action="store_true",
                         help="Build the finite two-cube/six-face sampled-image witness")
+    parser.add_argument("--imageless-framebuffer-witness", action="store_true",
+                        help="Build the finite diagnostic two-view framebuffer witness")
     parser.add_argument("--cube-array-base-layer", type=int, choices=(0, 1), default=0,
                         help="Cube witness view base; 1 also tests 13-layer storage")
     parser.add_argument("--cube-array-tiled-attachment", action="store_true",
@@ -150,6 +152,12 @@ def main():
     parser.add_argument("--bc-filter-format", choices=__import__("prepare_consumer_bc_filter").FORMATS)
     parser.add_argument("--bc-subresource-profile", choices=__import__("prepare_consumer_bc_subresource").PROFILES)
     args = parser.parse_args()
+    if args.imageless_framebuffer_witness and any((
+            args.bc_subresource_profile, args.bc_filter_format,
+            args.cube_array_witness, args.continuous, args.shared_stage_samplers,
+            args.single_set_samplers, args.mixed_resources, args.texel_rgba8,
+            args.texel_formats, args.dxvk_v262_probe, args.ubo_standard_layout)):
+        parser.error("Imageless framebuffer witness is an independent finite profile")
     if args.bc_subresource_profile and any((args.bc_filter_format, args.cube_array_witness,
                                            args.continuous, args.shared_stage_samplers,
                                            args.single_set_samplers, args.mixed_resources,
@@ -303,6 +311,8 @@ def main():
         cflags.append(f"-DCONSUMER_CUBE_ARRAY_BASE_LAYER={args.cube_array_base_layer}")
         if args.cube_array_tiled_attachment:
             cflags.append("-DCONSUMER_CUBE_ARRAY_TILED_ATTACHMENT=1")
+    if args.imageless_framebuffer_witness:
+        cflags.append("-DCONSUMER_IMAGELESS_FRAMEBUFFER_WITNESS=1")
     if args.bc_filter_format:
         subprocess.run([sys.executable, str(ROOT / "tools/prepare_consumer_bc_filter.py"),
                         "--format", args.bc_filter_format, "--out", str(BUILD_DIR)], check=True)
@@ -604,6 +614,23 @@ def main():
                 "fragment_spirv_sha256": hashlib.sha256(
                     cube_array_shader_header.with_suffix(".frag.spv").read_bytes()
                 ).hexdigest(),
+            },
+        }
+    if args.imageless_framebuffer_witness:
+        artifact = {
+            "title": "PPSA99994",
+            "profile": "imageless-framebuffer-witness",
+            "submit_enabled": True,
+            "files": files,
+            "imageless_framebuffer": {
+                "feature": "VkPhysicalDeviceImagelessFramebufferFeatures.imagelessFramebuffer",
+                "diagnostic_only": True,
+                "views": 2,
+                "framebuffers": 1,
+                "submissions": 2,
+                "extent": [64, 64],
+                "format": "VK_FORMAT_R8G8B8A8_UNORM",
+                "pixels_per_view": 4096,
             },
         }
     if args.bc_filter_format:

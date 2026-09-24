@@ -43,6 +43,13 @@ ifneq ($(CONSUMER_DXVK262_PROBE),)
 CFLAGS += -DCONSUMER_DXVK262_PROBE=1
 endif
 
+ifneq ($(CONSUMER_IMAGELESS_FRAMEBUFFER_WITNESS),)
+ifneq ($(CONSUMER_CONTINUOUS),)
+$(error Imageless framebuffer witness requires the finite consumer)
+endif
+CFLAGS += -DCONSUMER_IMAGELESS_FRAMEBUFFER_WITNESS=1
+endif
+
 ifneq ($(CONSUMER_SINGLE_SET_SAMPLERS),)
 ifneq ($(CONSUMER_CONTINUOUS),)
 $(error Single-set qualification requires the finite consumer)
@@ -134,6 +141,7 @@ $(BUILD_DIR)/main.o: main.c shaders.h resource_shader.h ps5log.h sampled_sets.h 
                      $(BUILD_DIR)/sampled_set_shaders.h \
                      $(BUILD_DIR)/storage_width_shaders.h \
                      $(BUILD_DIR)/sync_shaders.h cube_array_witness.h \
+                     imageless_framebuffer_witness.h \
                      $(CUBE_ARRAY_WITNESS_SHADER) | $(BUILD_DIR)
 	PS5_PAYLOAD_SDK=$(PS5_PAYLOAD_SDK) sh $(CLANG_WRAPPER) $(CFLAGS) -c $< -o $@
 
