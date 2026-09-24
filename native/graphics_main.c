@@ -258,6 +258,10 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     VkImageCreateFlags image_flags=0;
     if(PS5VK_IMAGE_TARGET) {
         width=height=64;slices=PS5VK_IMAGE_TARGET==2?6:3;
+#if PS5VK_SAMPLER_MIRROR_CASE >= 20
+        /* Two 2x2 slices make W the only varying sampled coordinate. */
+        width=height=slices=2;
+#endif
         if(PS5VK_IMAGE_TARGET>=4) {
             width=PS5VK_IMAGE_TARGET==4?192:64;height=1;
             slices=PS5VK_IMAGE_TARGET==4?1:3;
@@ -298,6 +302,7 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
         if(ps5vk_sampler_core_case(probe_case,&c))fail("sampler-core-case",-1);
         if(c.mirror_axis==1)si.addressModeU=c.address_mode;
         else if(c.mirror_axis==2)si.addressModeV=c.address_mode;
+        else if(c.mirror_axis==3)si.addressModeW=c.address_mode;
         else si.addressModeU=si.addressModeV=si.addressModeW=c.address_mode;
         si.borderColor=c.border_color;
         si.magFilter=c.mag_filter;
