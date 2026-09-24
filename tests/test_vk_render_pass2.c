@@ -223,9 +223,10 @@ static void single_subpass_equivalence(struct VkDevice_T *d)
     refused(d, &info2, VK_ERROR_UNKNOWN);
     external2.sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
 
-    /* Extension structures this device does not implement are refused, not
-     * ignored: separate stencil layouts on an attachment or a reference, a
-     * depth/stencil resolve on a subpass, a synchronization2 barrier on a
+    /* Extension structures this device did not enable or does not implement
+     * are refused, not ignored: separate stencil layouts on an attachment or
+     * a reference (the feature is off here), a depth/stencil resolve on a
+     * subpass, a synchronization2 barrier on a
      * dependency, and anything chained to the create info itself. */
     VkAttachmentDescriptionStencilLayout stencil_layouts = {
         .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT,
@@ -625,6 +626,165 @@ static void input_aspect_create_info(struct VkDevice_T *d)
     assert(d->graphics_objects == objects);
 }
 
+/* VK_KHR_separate_depth_stencil_layouts through the version-2 entry point,
+ * and VK_KHR_maintenance2's mixed layouts through the version-1 one. Both end
+ * in the same owned per-aspect table. */
+static void separate_stencil_layouts(struct VkDevice_T *d)
+{
+    VkAttachmentDescription2 attachments[2] = {
+        {.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
+         .format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+        {.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
+         .format = VK_FORMAT_D32_SFLOAT_S8_UINT, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL}};
+    VkAttachmentDescriptionStencilLayout attachment_stencil = {
+        .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT,
+        .stencilInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .stencilFinalLayout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL};
+    attachments[1].pNext = &attachment_stencil;
+    VkAttachmentReference2 color = reference2(0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0);
+    VkAttachmentReference2 depth = reference2(1, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, 0);
+    VkAttachmentReferenceStencilLayout reference_stencil = {
+        .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT,
+        .stencilLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL};
+    depth.pNext = &reference_stencil;
+    VkSubpassDescription2 sub = {.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2,
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1, .pColorAttachments = &color,
+        .pDepthStencilAttachment = &depth};
+    VkRenderPassCreateInfo2 info = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2,
+        .attachmentCount = 2, .pAttachments = attachments, .subpassCount = 1,
+        .pSubpasses = &sub};
+
+    /* The structures need the negotiated feature. */
+    d->enabled_features_t09 = 0;
+    refused(d, &info, VK_ERROR_FEATURE_NOT_PRESENT);
+    d->enabled_features_t09 = PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS;
+
+    VkRenderPass pass = VK_NULL_HANDLE;
+    assert(vkCreateRenderPass2KHR(d, &info, &counting, &pass) == VK_SUCCESS);
+    VkImageLayout id, is, rd, rs, fd, fs;
+    assert(ps5vk_render_pass_depth_stencil_layouts(pass, 0, 1, &id, &is, &rd, &rs, &fd, &fs));
+    assert(id == VK_IMAGE_LAYOUT_UNDEFINED && is == VK_IMAGE_LAYOUT_UNDEFINED);
+    assert(rd == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL &&
+           rs == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL);
+    assert(fd == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL &&
+           fs == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL);
+    /* Owned: the caller's structures may change afterwards. */
+    reference_stencil.stencilLayout = VK_IMAGE_LAYOUT_GENERAL;
+    assert(pass->stencil.reference[0] == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL);
+    reference_stencil.stencilLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+    vkDestroyRenderPass(d, pass, &counting);
+    assert(live_allocations == 0);
+
+    /* Only the attachment chains a structure: the reference's stencil half is
+     * the projection of its combined layout. A DEPTH_* reference layout has
+     * no stencil projection, so the pass is invalid without the structure. */
+    depth.pNext = NULL;
+    refused(d, &info, VK_ERROR_UNKNOWN);
+    depth.layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
+    assert(vkCreateRenderPass2KHR(d, &info, &counting, &pass) == VK_SUCCESS);
+    assert(ps5vk_render_pass_depth_stencil_layouts(pass, 0, 1, &id, &is, &rd, &rs, &fd, &fs));
+    assert(rd == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL &&
+           rs == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL);
+    vkDestroyRenderPass(d, pass, &counting);
+    depth.layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depth.pNext = &reference_stencil;
+
+    /* Only the reference chains one: the attachment's DEPTH_* final layout
+     * cannot be split. */
+    attachments[1].pNext = NULL;
+    refused(d, &info, VK_ERROR_UNKNOWN);
+    attachments[1].pNext = &attachment_stencil;
+
+    /* The stencil structures name stencil or aspect-neutral layouts only. */
+    attachment_stencil.stencilFinalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    refused(d, &info, VK_ERROR_UNKNOWN);
+    attachment_stencil.stencilFinalLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    refused(d, &info, VK_ERROR_UNKNOWN);
+    attachment_stencil.stencilFinalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    refused(d, &info, VK_ERROR_UNKNOWN);
+    attachment_stencil.stencilFinalLayout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
+    reference_stencil.stencilLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+    refused(d, &info, VK_ERROR_UNKNOWN);
+    reference_stencil.stencilLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+    /* LOAD of an UNDEFINED stencil half reads nothing. */
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    refused(d, &info, VK_ERROR_UNKNOWN);
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+
+    /* A second copy, a stencil reference structure on a colour reference, and
+     * any other structure stay refused. */
+    VkAttachmentDescriptionStencilLayout second = attachment_stencil;
+    attachment_stencil.pNext = &second;
+    refused(d, &info, VK_ERROR_FEATURE_NOT_PRESENT);
+    attachment_stencil.pNext = NULL;
+    color.pNext = &reference_stencil;
+    refused(d, &info, VK_ERROR_FEATURE_NOT_PRESENT);
+    color.pNext = NULL;
+    VkMemoryBarrier2 foreign = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
+    reference_stencil.pNext = &foreign;
+    refused(d, &info, VK_ERROR_FEATURE_NOT_PRESENT);
+    reference_stencil.pNext = NULL;
+    d->enabled_features_t09 = 0;
+
+    /* Version 1 with a maintenance2 mixed layout: read per aspect. */
+    const VkAttachmentDescription v1_attachments[2] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+        {.format = VK_FORMAT_D32_SFLOAT_S8_UINT, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL}};
+    const VkAttachmentReference v1_color = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference v1_depth = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    const VkSubpassDescription v1_sub = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1, .pColorAttachments = &v1_color,
+        .pDepthStencilAttachment = &v1_depth};
+    const VkRenderPassCreateInfo v1 = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 2, .pAttachments = v1_attachments, .subpassCount = 1,
+        .pSubpasses = &v1_sub};
+    const unsigned objects = d->graphics_objects;
+    d->maintenance2_extension_enabled = VK_FALSE;
+    pass = (VkRenderPass)(uintptr_t)1;
+    assert(vkCreateRenderPass(d, &v1, NULL, &pass) == VK_ERROR_UNKNOWN && !pass &&
+           d->graphics_objects == objects);
+    d->maintenance2_extension_enabled = VK_TRUE;
+    assert(vkCreateRenderPass(d, &v1, NULL, &pass) == VK_SUCCESS);
+    assert(ps5vk_render_pass_depth_stencil_layouts(pass, 0, 1, &id, &is, &rd, &rs, &fd, &fs));
+    assert(rd == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+           rs == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL);
+    assert(fd == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL &&
+           fs == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL);
+    vkDestroyRenderPass(d, pass, NULL);
+    /* The reference may be mixed too; a separate DEPTH_* layout is not a
+     * maintenance2 layout and stays refused without the feature. */
+    v1_depth.layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
+    assert(vkCreateRenderPass(d, &v1, NULL, &pass) == VK_SUCCESS);
+    assert(pass->stencil.reference[0] == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL);
+    vkDestroyRenderPass(d, pass, NULL);
+    v1_depth.layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    pass = (VkRenderPass)(uintptr_t)1;
+    assert(vkCreateRenderPass(d, &v1, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
+    d->maintenance2_extension_enabled = VK_FALSE;
+    assert(d->graphics_objects == objects);
+}
+
 int main(void)
 {
     struct VkDevice_T d = {0};
@@ -635,6 +795,7 @@ int main(void)
     input_attachment_equivalence(&d);
     multiview_equivalence(&d);
     input_aspect_create_info(&d);
+    separate_stencil_layouts(&d);
     assert(d.graphics_objects == 0 && d.lifetime_errors == 0 && live_allocations == 0);
     puts("vk render pass 2 tests passed");
     return 0;
