@@ -45,8 +45,9 @@ static void pin(struct ps5vk_submission *s, int acquire)
             struct ps5vk_operation *op = &c->operations[k];
             if (event_operation(op->type)) continue;
             if (op->type == PS5VK_BEGIN_RENDER_PASS) {
-                if (acquire) { ++op->render_pass->pending; ++op->framebuffer->pending; }
-                else { --op->render_pass->pending; --op->framebuffer->pending; }
+                VkFramebuffer original = ps5vk_framebuffer_original(op->framebuffer);
+                if (acquire) { ++op->render_pass->pending; ++original->pending; }
+                else { --op->render_pass->pending; --original->pending; }
                 for (uint32_t n = 0; n < op->framebuffer->attachment_count; ++n) {
                     VkImageView view = op->framebuffer->attachments[n];
                     if (acquire) { ++view->pending; ++view->image->pending; }
@@ -306,14 +307,15 @@ static int continuation_child_valid(VkDevice d, VkCommandBuffer primary,
         /* Recorded for the subpass it is executing in, exactly. */
         child->inheritance.subpass != subpass ||
         (child->inheritance.framebuffer &&
-         child->inheritance.framebuffer != framebuffer)) return 0;
+         child->inheritance.framebuffer != ps5vk_framebuffer_original(framebuffer))) return 0;
     VkQueryPool query_pool = VK_NULL_HANDLE;
     uint32_t query_index = 0;
     for (unsigned j = 0; j < child->operation_count; ++j) {
         const struct ps5vk_operation *op = &child->operations[j];
         if (op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) {
             if (!ps5vk_render_pass_compatible(op->render_pass, active) ||
-                (op->framebuffer && op->framebuffer != framebuffer) ||
+                (op->framebuffer && ps5vk_framebuffer_original(op->framebuffer) !=
+                    ps5vk_framebuffer_original(framebuffer)) ||
                 op->subpass != subpass ||
                 ps5vk_query_operation_validate(d, op) != VK_SUCCESS)
                 return 0;
@@ -333,7 +335,8 @@ static int continuation_child_valid(VkDevice d, VkCommandBuffer primary,
         if (op->type != PS5VK_DRAW && op->type != PS5VK_DRAW_INDEXED &&
             !ps5vk_indirect_graphics_operation(op->type)) return 0;
         if (!ps5vk_render_pass_compatible(op->render_pass, active) ||
-            (op->framebuffer && op->framebuffer != framebuffer) ||
+            (op->framebuffer && ps5vk_framebuffer_original(op->framebuffer) !=
+                ps5vk_framebuffer_original(framebuffer)) ||
             !draw_operation_valid(d, op)) return 0;
     }
     /* inheritedQueries is not advertised. A secondary-local query must be
