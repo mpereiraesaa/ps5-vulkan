@@ -20,8 +20,9 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
 {
     VkImage image=view->image;
     const struct ps5vk_texture_format *format=ps5vk_texture_format_lookup(view->format);
+    const VkBool32 d32_gather=ps5vk_d32_gather_image(image);
     if(!format || !ps5vk_texture_format_sampled_image(view->format) || image->info.format!=view->format ||
-        view->range.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || !view->range.levelCount ||
+        (view->range.aspectMask!=(d32_gather?VK_IMAGE_ASPECT_DEPTH_BIT:VK_IMAGE_ASPECT_COLOR_BIT)) || !view->range.levelCount ||
         view->range.baseMipLevel>=image->info.mipLevels ||
         view->range.levelCount>image->info.mipLevels-view->range.baseMipLevel ||
         !view->range.layerCount || image->info.mipLevels>PS5VK_MAX_TEXTURE_MIP_LEVELS)
@@ -114,6 +115,7 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     words[3]=ps5vk_texture_format_dst_sel(format)|type_word|
         (view->range.baseMipLevel<<12)|
         ((view->range.baseMipLevel+view->range.levelCount-1)<<16);
+    if(d32_gather) words[3]|=24u<<20; /* GFX10 64KB_Z_X depth mip tail */
     words[4]=dimension_word;
     words[5]=(4u<<20)|((image->info.mipLevels-1)<<4);
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
@@ -125,6 +127,12 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     const VkImageUsageFlags usage=view->image->info.usage;
     if(!(usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
        (usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(ps5vk_d32_gather_image(view->image)!=sampler->compare_enable)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(ps5vk_d32_gather_image(view->image) &&
+       (!view->range.levelCount || view->range.baseMipLevel ||
+        view->range.levelCount!=7u || view->range.aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t words[12];
     VkResult rc=image_resource_words(d,view,words);

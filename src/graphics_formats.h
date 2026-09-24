@@ -13,6 +13,9 @@
 #include "vk_internal.h"
 #include "texture_format.h"
 #include "texture_layout.h"
+#ifndef PS5VK_D32_SAMPLED_DIAGNOSTIC
+#define PS5VK_D32_SAMPLED_DIAGNOSTIC 0
+#endif
 
 struct ps5vk_vertex_format {
     uint32_t bytes, components;
@@ -172,6 +175,17 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
             .maxResourceSize=budget};
         return VK_SUCCESS;
     }
+#if PS5VK_D32_SAMPLED_DIAGNOSTIC
+    if(format==VK_FORMAT_D32_SFLOAT && type==VK_IMAGE_TYPE_2D &&
+       tiling==VK_IMAGE_TILING_OPTIMAL && !flags &&
+       usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+        if(!budget)return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        *out=(VkImageFormatProperties){.maxExtent={64,64,1},.maxMipLevels=7,
+            .maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
+#endif
     if(tiling!=VK_IMAGE_TILING_OPTIMAL || !budget ||
        !ps5vk_graphics_image_usage_with_flags(format,type,tiling,usage,flags))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
@@ -236,8 +250,14 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
     } else if(attachment || depth_clear_target) {
         if(type!=VK_IMAGE_TYPE_2D || flags)return VK_ERROR_FORMAT_NOT_SUPPORTED;
-        width=height=format==VK_FORMAT_B8G8R8A8_UNORM?
-            PS5VK_MAX_COLOR_DIMENSION:PS5VK_MAX_IMAGE_2D;
+        if (format == VK_FORMAT_D16_UNORM) {
+            /* Diagnostic resource profile from the pinned sync clear leaf:
+             * exact 128x128 optimal depth-only attachment. */
+            width=height=128;
+        } else {
+            width=height=format==VK_FORMAT_B8G8R8A8_UNORM?
+                PS5VK_MAX_COLOR_DIMENSION:PS5VK_MAX_IMAGE_2D;
+        }
         if(input_attachment_shape) layers=PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR;
     } else if(transfer_only && type==VK_IMAGE_TYPE_2D && !flags) {
         width=height=PS5VK_MAX_IMAGE_2D;

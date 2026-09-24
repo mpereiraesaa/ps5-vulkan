@@ -71,12 +71,12 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
             result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x1800)) | UINT32_C(0x0800);
         /* CB_COLOR0_INFO.NUMBER_TYPE (bits [10:8]) names how the hardware
          * interprets the 8_8_8_8 lanes the builder selected: UNORM for the
-         * normalized targets, UINT for the integer one. Pinned gfx103 table:
-         * NUMBER_UNORM = 0, NUMBER_UINT = 4; tests/test_color_attachment_
+         * normalized targets, UINT or SINT for integer targets. Pinned gfx103 table:
+         * NUMBER_UNORM = 0, NUMBER_UINT = 4, NUMBER_SINT = 5; tests/test_color_attachment_
          * offsets.py recomputes the field and the values from that table. */
         if (ps5vk_color_target_format_is_integer(view->format))
             result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x700)) |
-                                      (UINT32_C(4) << 8u);
+                                      ((view->format == VK_FORMAT_R8G8B8A8_SINT ? 5u : 4u) << 8u);
         /* The target's sample geometry, in the word the shared builder clears
          * (DXVK262-T06). */
         rc = color_target_samples(result.registers, image->info.samples);
@@ -156,7 +156,7 @@ VkResult ps5vk_native_layer_target(VkDevice d, VkImageView view, uint32_t layer,
             result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x1800)) | UINT32_C(0x0800);
         if (ps5vk_color_target_format_is_integer(view->format))
             result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x700)) |
-                                      (UINT32_C(4) << 8u);
+                                      ((view->format == VK_FORMAT_R8G8B8A8_SINT ? 5u : 4u) << 8u);
         rc = color_target_samples(result.registers, image->info.samples);
         if (rc != VK_SUCCESS) return rc;
         result.count = PS5_COLOR_REGISTER_COUNT;

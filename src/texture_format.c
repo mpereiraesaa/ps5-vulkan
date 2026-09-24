@@ -30,6 +30,22 @@
 #define CAP_VERTEX PS5VK_FORMAT_CAP_VERTEX_BUFFER
 #define CAP_UTEXEL PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER
 #define CAP_STORAGE_IMAGE PS5VK_FORMAT_CAP_STORAGE_IMAGE
+#ifndef PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC
+#define PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC 0
+#endif
+#ifndef PS5VK_D32_SAMPLED_DIAGNOSTIC
+#define PS5VK_D32_SAMPLED_DIAGNOSTIC 0
+#endif
+#if PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC
+#define RGBA8_SINT_ATTACHMENT_CAP CAP_INTEGER_TARGET
+#else
+#define RGBA8_SINT_ATTACHMENT_CAP 0
+#endif
+#if PS5VK_D32_SAMPLED_DIAGNOSTIC
+#define D32_SAMPLED_CAP (CAP_SAMP | CAP_DST)
+#else
+#define D32_SAMPLED_CAP 0
+#endif
 
 /* Sampled row: the GFX1013 word/selectors/texel size are the pinned GPL
  * encoding. ENABLED carries additional directly qualified roles. */
@@ -145,7 +161,8 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED(VK_FORMAT_R8G8B8A8_UINT, 4, UINT32_C(0x03c00000), 4, 5, 6, 7,
             CAP_VERTEX | CAP_UTEXEL | CAP_INTEGER_TARGET, CAP_INTEGER_TARGET),
     SAMPLED(VK_FORMAT_R8G8B8A8_SINT, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
-            CAP_VERTEX | CAP_UTEXEL, 0),
+            CAP_VERTEX | CAP_UTEXEL | RGBA8_SINT_ATTACHMENT_CAP,
+            RGBA8_SINT_ATTACHMENT_CAP),
     SAMPLED(VK_FORMAT_R16_UINT, 2, UINT32_C(0x00b00000), 4, 0, 0, 1,
             CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16_SINT, 2, UINT32_C(0x00c00000), 4, 0, 0, 1,
@@ -220,7 +237,10 @@ static const struct ps5vk_texture_format formats[] = {
      * surface readback, which does need pixel addressing and now has it -
      * src/depth_detile.c carries the SW_64K_Z_X equation. No sampled role and
      * no blit role is claimed: neither has an implemented path. */
-    BUFFER(VK_FORMAT_D32_SFLOAT, CAP_DEPTH | CAP_DST | CAP_SRC),
+    {VK_FORMAT_D32_SFLOAT, 4, UINT32_C(0x01600000), {4, 0, 0, 1},
+     CAP_DEPTH | CAP_DST | CAP_SRC | D32_SAMPLED_CAP,
+     CAP_DEPTH | CAP_DST | CAP_SRC | D32_SAMPLED_CAP,
+     PS5VK_FORMAT_PROVENANCE_GFX10_FORMAT_ENUM, 1, 1, 4},
     /* Narrow diagnostic depth-attachment profile: exactly one 128x128 D16
      * surface. It has no transfer, sampled-image or stencil role. Its
      * capability is exposed only by the default-off native diagnostic. */
@@ -416,6 +436,11 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
 {
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
     if (!entry || !usage) return VK_FALSE;
+#if PS5VK_D32_SAMPLED_DIAGNOSTIC
+    /* The diagnostic Dref source is uploaded before sampling. */
+    if (format == VK_FORMAT_D32_SFLOAT && usage == VK_IMAGE_USAGE_SAMPLED_BIT)
+        return VK_FALSE;
+#endif
     const uint32_t w = format_witnessed_capabilities(entry);
     const VkImageUsageFlags attachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     const VkImageUsageFlags depth = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;

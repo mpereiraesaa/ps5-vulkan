@@ -4,6 +4,12 @@
 #include "color_attachment_contract.h"
 #include "texture_format.h"
 #include "texture_layout.h"
+#ifndef PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC
+#define PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC 0
+#endif
+#ifndef PS5VK_D32_SAMPLED_DIAGNOSTIC
+#define PS5VK_D32_SAMPLED_DIAGNOSTIC 0
+#endif
 struct VkImage_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
@@ -284,9 +290,52 @@ static inline VkBool32 ps5vk_depth_readback_image(VkImage image)
                                VK_IMAGE_USAGE_TRANSFER_DST_BIT));
 }
 
+static inline VkBool32 ps5vk_basic_colour_readback_image(VkImage image)
+{
+    const VkImageUsageFlags exact = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    return image && image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D && image->info.mipLevels == 1 &&
+        image->info.arrayLayers == 1 && image->info.extent.depth == 1 &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.usage == exact && !image->info.flags;
+}
+
+static inline VkBool32 ps5vk_integer_colour_readback_image(VkImage image)
+{
+    const VkImageUsageFlags exact = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    return image &&
+        (image->info.format == VK_FORMAT_R8G8B8A8_UINT ||
+         (PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC &&
+          image->info.format == VK_FORMAT_R8G8B8A8_SINT)) &&
+        image->info.imageType == VK_IMAGE_TYPE_2D && image->info.mipLevels == 1 &&
+        image->info.arrayLayers == 1 && image->info.extent.depth == 1 &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.usage == exact && !image->info.flags;
+}
+
+static inline VkBool32 ps5vk_d32_gather_image(VkImage image)
+{
+    const VkImageUsageFlags exact = VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return PS5VK_D32_SAMPLED_DIAGNOSTIC && image &&
+        image->info.format == VK_FORMAT_D32_SFLOAT &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.extent.width == 64 && image->info.extent.height == 64 &&
+        image->info.extent.depth == 1 && image->info.mipLevels == 7 &&
+        image->info.arrayLayers == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL && !image->info.flags &&
+        image->info.usage == exact;
+}
+
 static inline VkBool32 ps5vk_colour_readback_image(VkImage image)
 {
-    return ps5vk_colour_transfer_image(image) ||
+    return ps5vk_basic_colour_readback_image(image) ||
+        ps5vk_integer_colour_readback_image(image) ||
+        ps5vk_colour_transfer_image(image) ||
         ps5vk_input_attachment_readback_image(image);
 }
 #endif
