@@ -76,8 +76,98 @@ static VkResult image_requirements(VkDevice device,
     return VK_SUCCESS;
 }
 
+static void host_query_reset_negotiation(void)
+{
+    const char *instance_extension =
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+    const char *device_extension = VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME;
+    VkInstanceCreateInfo ici = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    VkInstance instance;
+    assert(vkCreateInstance(&ici, NULL, &instance) == VK_SUCCESS);
+    uint32_t count = 1;
+    VkPhysicalDevice physical;
+    assert(vkEnumeratePhysicalDevices(instance, &count, &physical) == VK_SUCCESS);
+    physical->platform.supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
+    float priority = 1.0f;
+    VkDeviceQueueCreateInfo qci = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                                   .queueCount = 1, .pQueuePriorities = &priority};
+    VkDeviceCreateInfo dci = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+                              .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
+                              .enabledExtensionCount = 1,
+                              .ppEnabledExtensionNames = &device_extension};
+    VkPhysicalDeviceHostQueryResetFeaturesEXT requested = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT,
+        .hostQueryReset = VK_TRUE};
+    VkDevice device = VK_NULL_HANDLE;
+    dci.pNext = &requested;
+    assert(vkCreateDevice(physical, &dci, NULL, &device) ==
+           VK_ERROR_EXTENSION_NOT_PRESENT && !device);
+    vkDestroyInstance(instance, NULL);
+
+    ici.enabledExtensionCount = 1;
+    ici.ppEnabledExtensionNames = &instance_extension;
+    assert(vkCreateInstance(&ici, NULL, &instance) == VK_SUCCESS);
+    count = 1;
+    assert(vkEnumeratePhysicalDevices(instance, &count, &physical) == VK_SUCCESS);
+    VkPhysicalDeviceHostQueryResetFeaturesEXT reported = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT};
+    VkPhysicalDeviceFeatures2KHR features2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
+        .pNext = &reported};
+    vkGetPhysicalDeviceFeatures2KHR(physical, &features2);
+    assert(reported.hostQueryReset == VK_FALSE);
+    VkExtensionProperties extensions[32];
+    count = 32;
+    assert(vkEnumerateDeviceExtensionProperties(physical, NULL, &count,
+        extensions) == VK_SUCCESS);
+    for (uint32_t i = 0; i < count; ++i)
+        assert(strcmp(extensions[i].extensionName, device_extension));
+    assert(vkCreateDevice(physical, &dci, NULL, &device) ==
+           VK_ERROR_EXTENSION_NOT_PRESENT && !device);
+
+    physical->platform.supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
+    vkGetPhysicalDeviceFeatures2KHR(physical, &features2);
+    assert(reported.hostQueryReset == VK_TRUE);
+    count = 32;
+    assert(vkEnumerateDeviceExtensionProperties(physical, NULL, &count,
+        extensions) == VK_SUCCESS);
+    VkBool32 found = VK_FALSE;
+    for (uint32_t i = 0; i < count; ++i)
+        found |= !strcmp(extensions[i].extensionName, device_extension);
+    assert(found);
+
+    dci.enabledExtensionCount = 0;
+    dci.ppEnabledExtensionNames = NULL;
+    assert(vkCreateDevice(physical, &dci, NULL, &device) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    dci.enabledExtensionCount = 1;
+    dci.ppEnabledExtensionNames = &device_extension;
+    requested.hostQueryReset = VK_FALSE;
+    assert(vkCreateDevice(physical, &dci, NULL, &device) == VK_SUCCESS);
+    assert(!vkGetDeviceProcAddr(device, "vkResetQueryPoolEXT"));
+    vkDestroyDevice(device, NULL);
+
+    requested.hostQueryReset = VK_TRUE;
+    assert(vkCreateDevice(physical, &dci, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET);
+    assert(vkGetDeviceProcAddr(device, "vkResetQueryPoolEXT") ==
+           (PFN_vkVoidFunction)vkResetQueryPoolEXT);
+    vkDestroyDevice(device, NULL);
+
+    VkPhysicalDeviceHostQueryResetFeaturesEXT duplicate = requested;
+    requested.pNext = &duplicate;
+    assert(vkCreateDevice(physical, &dci, NULL, &device) ==
+           VK_ERROR_UNKNOWN && !device);
+    requested.pNext = NULL;
+    requested.hostQueryReset = 2;
+    assert(vkCreateDevice(physical, &dci, NULL, &device) ==
+           VK_ERROR_UNKNOWN && !device);
+    vkDestroyInstance(instance, NULL);
+}
+
 int main(void)
 {
+    host_query_reset_negotiation();
     VkPhysicalDevice physical = physical_device();
     VkDevice device = make_device(physical);
 

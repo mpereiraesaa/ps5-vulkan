@@ -985,7 +985,9 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     unsigned recorded_draws=draw_count+(PS5VK_OCCLUSION_QUERY_API_PROBE?0u:0u);
     unsigned expected_primary_ops=prelude+2+recorded_draws+query_ops;
 #if PS5VK_OCCLUSION_QUERY_API_PROBE
-    expected_primary_ops=prelude+6u; /* reset, render-pass/execute/end, two copies */
+    /* Host reset is outside the command stream; the original variant has
+     * one extra recorded reset before render-pass/execute/end and copies. */
+    expected_primary_ops=prelude+(PS5VK_HOST_QUERY_RESET_PROBE?5u:6u);
     if(query_cb->operation_count!=10u)
         fail("secondary-query-operation-count",-1);
     if(query_cb->operations[0].type!=PS5VK_QUERY_BEGIN ||
