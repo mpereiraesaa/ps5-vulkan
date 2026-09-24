@@ -57,6 +57,9 @@ FEATURE_GATES = {
     "imageCubeArray": ("src/vk_image_view.c",
                        "!(d->enabled_features&PS5VK_FEATURE_IMAGE_CUBE_ARRAY)",
                        "cube-array views require the enabled feature bit"),
+    "textureCompressionBC": ("src/texture_format.c",
+                             "PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC",
+                             "BC format roles require the default-off diagnostic switch"),
     # independentBlend was promoted on 2026-09-22: the platform reports the bit,
     # the profile advertises two colour attachments, and both upstream leaves
     # that require the feature pass, so it is no longer a gated VK_FALSE report.
@@ -732,7 +735,6 @@ def evaluate_feature(name: str, value: bool, profile: str = "graphics") -> tuple
 FEATURE_ABSENT_FORMAT_FAMILY = {
     "textureCompressionETC2": ("src/graphics_formats.h", ("VK_FORMAT_ETC2", "VK_FORMAT_EAC")),
     "textureCompressionASTC_LDR": ("src/graphics_formats.h", ("VK_FORMAT_ASTC",)),
-    "textureCompressionBC": ("src/graphics_formats.h", ("VK_FORMAT_BC", "VK_FORMAT_BC1")),
 }
 
 # Limits whose requirement depends on an advertised feature. The values are the

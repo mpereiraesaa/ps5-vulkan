@@ -1702,7 +1702,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_FORMAT_BC family in src/graphics_formats.h",
+      "detail": "BC format roles require the default-off diagnostic switch (src/texture_format.c)",
       "feature": "textureCompressionBC",
       "kind": "feature",
       "profile": "graphics",
@@ -2877,7 +2877,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "no VK_FORMAT_BC family in src/graphics_formats.h",
+      "detail": "BC format roles require the default-off diagnostic switch (src/texture_format.c)",
       "feature": "textureCompressionBC",
       "kind": "feature",
       "profile": "compute",
