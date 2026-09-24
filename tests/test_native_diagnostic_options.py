@@ -305,6 +305,28 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
 
+    def test_t09_diagnostics_are_bounded_and_graphics_only(self):
+        for name in ("PS5VK_HOST_QUERY_RESET_DIAGNOSTIC",
+                     "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
+                     "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC"):
+            with self.subTest(name=name):
+                self.rejected({name: "1"}, "requires the graphics profile API")
+                self.rejected({"PS5VK_GRAPHICS_API": "unused", name: "2"},
+                              "must be 0 or 1")
+        self.rejected({"PS5VK_SAMPLER_MIRROR_CASE": "8"},
+                      "requires an SDK-linked graphics build")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_SAMPLER_MIRROR_CASE": "20"},
+                      "must be -1 or 8..19")
+        sdk_case = {"PS5VK_GRAPHICS_API": "unused", "PS5VK_USE_SDK": "1",
+                    "PS5VK_SAMPLER_MIRROR_CASE": "11"}
+        self.rejected(sdk_case, "requires scissor probe 6, draw and no presentation")
+        self.rejected({**sdk_case, "PS5VK_GRAPHICS_SCISSOR_PROBE": "6"},
+                      "requires scissor probe 6, draw and no presentation")
+        self.rejected({**sdk_case, "PS5VK_GRAPHICS_SCISSOR_PROBE": "6",
+                       "PS5VK_GRAPHICS_DRAW": "1", "PS5VK_GRAPHICS_PRESENT": "1"},
+                      "requires scissor probe 6, draw and no presentation")
+
     def test_sample_rate_diagnostic_is_graphics_only(self):
         """The sampleRateShading bit is SHIPPING; the switch is not its gate.
 
