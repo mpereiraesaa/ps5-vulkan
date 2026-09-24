@@ -4654,6 +4654,11 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
+The unchanged arithmetic factory first requires subgroup support and
+`VK_SUBGROUP_FEATURE_ARITHMETIC_BIT` in `supportedOperations`, then checks the
+operand format and any 8/16-bit uniform-buffer storage requirement. Package
+registration alone does not satisfy these gates or validate an oracle.
+
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
 `subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
 Add and Min cases and graphics-stage subgroup operations beyond the bounded
@@ -4662,8 +4667,9 @@ diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
 
 The focused CTS package now links and registers the unchanged original
-`subgroups.ballot_broadcast` factory, but the frozen 507-case acceptance
-selection still contains no subgroup leaf. A separate diagnostic selection
+`subgroups.ballot_broadcast` and `subgroups.arithmetic` factories, but the
+frozen 507-case acceptance selection still contains no subgroup leaf. A
+separate diagnostic selection
 added the pinned mustpass cases `compute.subgroupbroadcast_i8vec4` and
 `compute.subgroupbroadcast_nonconst_uint` to the 507 controls. Run
 `run-619192142197878` reported 507 Pass and both subgroup leaves
