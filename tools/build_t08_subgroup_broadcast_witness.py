@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Build the bounded SDK compute Broadcast diagnostic witness."""
+"""Build bounded SDK compute Broadcast or IAdd diagnostic witnesses."""
 
+import argparse
 import hashlib
 import json
 import os
@@ -21,7 +22,7 @@ def run(*command: str, env: dict | None = None) -> None:
     subprocess.run(command, cwd=ROOT, env=env, check=True)
 
 
-def checked_spirv(payload: bytes) -> None:
+def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
     if len(payload) % 4:
         raise ValueError("SPIR-V length is not word aligned")
     words = struct.unpack(f"<{len(payload) // 4}I", payload)
@@ -43,12 +44,19 @@ def checked_spirv(payload: bytes) -> None:
         elif 333 <= opcode <= 366:
             subgroup_ops.append(opcode)
         index += size
-    if (not {61, 64}.issubset(capabilities) or subgroup_ops != [337] or
+    expected_capabilities = {61, 64 if operation == "broadcast" else 63}
+    expected_opcode = 337 if operation == "broadcast" else 349
+    if (not expected_capabilities.issubset(capabilities) or
+            subgroup_ops != [expected_opcode] or
             entry_models != [5]):
-        raise ValueError("shader lacks compute GroupNonUniformBroadcast contract")
+        raise ValueError(f"shader lacks compute GroupNonUniform{operation} contract")
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--operation", choices=("broadcast", "iadd"),
+                        default="broadcast")
+    operation = parser.parse_args().operation
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
@@ -59,23 +67,26 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    build = ROOT / "build/t08-subgroup-broadcast-witness"
+    build = ROOT / f"build/t08-subgroup-{operation}-witness"
     dist = build / "dist/PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
 
-    shader_source = ROOT / "experiments/compute/t08_subgroup_broadcast_runtime.comp"
-    shader_file = build / "broadcast.spv"
+    shader_source = ROOT / f"experiments/compute/t08_subgroup_{operation}_runtime.comp"
+    shader_file = build / f"{operation}.spv"
     run(glslang, "-V", "--target-env", "vulkan1.2", str(shader_source),
         "-o", str(shader_file))
     shader = shader_file.read_bytes()
-    checked_spirv(shader)
-    (build / "t08_subgroup_broadcast_shader.h").write_text(
-        "#include <stdint.h>\n" + emit_array("t08_subgroup_broadcast_spirv", shader),
+    checked_spirv(shader, operation)
+    (build / f"t08_subgroup_{operation}_shader.h").write_text(
+        "#include <stdint.h>\n" + emit_array(f"t08_subgroup_{operation}_spirv", shader),
         encoding="utf-8")
 
     sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk),
-                   PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC="1")
+                   PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC=(
+                       "1" if operation == "broadcast" else "0"),
+                   PS5VK_SUBGROUP_IADD_DIAGNOSTIC=(
+                       "1" if operation == "iadd" else "0"))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t08_subgroup_broadcast_witness/main.c"
@@ -84,6 +95,7 @@ def main() -> None:
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         "-MD", "-MP", "-MF", str(dep),
+        *(["-DT08_SUBGROUP_IADD_WITNESS=1"] if operation == "iadd" else []),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger), "-c", str(source), "-o", str(obj), env=sdk_env)
     dependencies = dep.read_text()
@@ -121,16 +133,19 @@ def main() -> None:
 
     param = json.loads((lab / "projects/ps5-agc-gears/sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
-                 contentId="UP9000-PPSA99994_00-PS5VKSGRT0000001")
+                 contentId=("UP9000-PPSA99994_00-PS5VKSGRT0000001" if
+                            operation == "broadcast" else
+                            "UP9000-PPSA99994_00-PS5VKSGIA0000001"))
     param["localizedParameters"]["en-US"]["titleName"] = (
-        "PS5 Vulkan Subgroup Broadcast Witness")
+        f"PS5 Vulkan Subgroup {operation.upper() if operation == 'iadd' else 'Broadcast'} Witness")
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": "t08-subgroup-broadcast-diagnostic-witness",
+        "profile": f"t08-subgroup-{operation}-diagnostic-witness",
+        "operation": operation,
         "outputs": 128, "subgroups": 4,
         "source_lanes": [7, 19, 31, 1],
         "public_profile": "vulkan-1.0-subgroup-disabled",

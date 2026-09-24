@@ -31,8 +31,9 @@ T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
 `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` disabled. A
 default-off diagnostic compute route has twice read back 128 exact 32-bit
 `OpGroupNonUniformBroadcast` results with runtime source IDs and clean guards.
-An independent default-off compute IAdd gate has host pipeline evidence only;
-it has no GPU readback or applicable original CTS Pass.
+An independent default-off compute IAdd gate has host pipeline evidence and a
+signed SDK-linked witness staged for 128-word readback; it has no GPU readback
+or applicable original CTS Pass.
 The Broadcast result advances implementation evidence only: the Vulkan 1.1
 extended-types contract still needs narrow types and its applicable original
 CTS, while the Vulkan 1.2 dynamic-ID contract still needs a legal public API

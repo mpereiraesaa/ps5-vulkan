@@ -1,7 +1,21 @@
 #define _DEFAULT_SOURCE 1
 #include <ps5vk/ps5vk.h>
 #include "ps5log.h"
+#ifdef T08_SUBGROUP_IADD_WITNESS
+#include "t08_subgroup_iadd_shader.h"
+#define WITNESS_SPIRV t08_subgroup_iadd_spirv
+#define WITNESS_START "T08_SUBGROUP_IADD_START"
+#define WITNESS_RESULT "T08_SUBGROUP_IADD_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_IADD_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_IADD_FAILURE"
+#else
 #include "t08_subgroup_broadcast_shader.h"
+#define WITNESS_SPIRV t08_subgroup_broadcast_spirv
+#define WITNESS_START "T08_SUBGROUP_START"
+#define WITNESS_RESULT "T08_SUBGROUP_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_FAILURE"
+#endif
 
 #include <stdint.h>
 #include <time.h>
@@ -66,12 +80,12 @@ static int witness(void)
     vkGetDeviceQueue(device, 0, 0, &queue);
     REQUIRE(queue, "queue exists");
     ps5log_printf(PS5LOG_MARK,
-        "T08_SUBGROUP_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.0");
+        WITNESS_START " subgroups=4 outputs=128 ids=7,19,31,1 api=1.0");
 
     VkShaderModuleCreateInfo shader_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = sizeof(t08_subgroup_broadcast_spirv),
-        .pCode = t08_subgroup_broadcast_spirv,
+        .codeSize = sizeof(WITNESS_SPIRV),
+        .pCode = WITNESS_SPIRV,
     };
     TRY(vkCreateShaderModule(device, &shader_info, NULL, &module));
     VkDescriptorSetLayoutBinding binding = {
@@ -215,8 +229,12 @@ static int witness(void)
         guards += words[i] != sentinel;
     for (uint32_t i = 0; i < OUTPUTS; ++i) {
         uint32_t subgroup = i / 32;
+#ifdef T08_SUBGROUP_IADD_WITNESS
+        uint32_t expected = 32u * source_lanes[subgroup] + 496u;
+#else
         uint32_t expected = (subgroup / 2) * 1000u +
                             (subgroup % 2) * 100u + source_lanes[subgroup];
+#endif
         uint32_t actual = words[OUTPUT_OFFSET + i];
         mismatches += actual != expected;
         digest = digest_word(digest, actual);
@@ -224,7 +242,7 @@ static int witness(void)
     for (uint32_t i = OUTPUT_OFFSET + OUTPUTS; i < WORDS; ++i)
         guards += words[i] != sentinel;
     ps5log_printf(PS5LOG_MARK,
-        "T08_SUBGROUP_RESULT outputs=%u mismatches=%u guards=%u digest=%08x fence=complete",
+        WITNESS_RESULT " outputs=%u mismatches=%u guards=%u digest=%08x fence=complete",
         OUTPUTS, mismatches, guards, digest);
     REQUIRE(!mismatches && !guards, "exact GPU outputs and guards");
 
@@ -234,7 +252,7 @@ cleanup:
         completed = VK_TRUE;
     if (submitted && !completed) {
         ps5log_printf(PS5LOG_ERR,
-            "T08_SUBGROUP_FAILURE call=%s result=%d retirement=pending",
+            WITNESS_FAILURE " call=%s result=%d retirement=pending",
             failed ? failed : "fence", (int)result);
         return 1;
     }
@@ -252,10 +270,10 @@ cleanup:
     if (device) vkDestroyDevice(device, NULL);
     if (instance) vkDestroyInstance(instance, NULL);
     if (result == VK_SUCCESS)
-        ps5log_printf(PS5LOG_MARK, "T08_SUBGROUP_RETIRED resources=clean");
+        ps5log_printf(PS5LOG_MARK, WITNESS_RETIRED " resources=clean");
     else
         ps5log_printf(PS5LOG_ERR,
-            "T08_SUBGROUP_FAILURE call=%s result=%d retirement=attempted",
+            WITNESS_FAILURE " call=%s result=%d retirement=attempted",
             failed ? failed : "unknown", (int)result);
     return result == VK_SUCCESS ? 0 : 1;
 #undef TRY

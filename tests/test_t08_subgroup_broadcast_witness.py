@@ -64,6 +64,30 @@ class SubgroupWitnessTests(unittest.TestCase):
             verify(self.log, self.receipt,
                    dict(self.artifact, public_profile="vulkan-1.2"))
 
+    def test_iadd_exact_readback_contract(self):
+        digest = expected_digest("iadd")
+        log = (
+            b"T08_SUBGROUP_IADD_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.0\n"
+            + ("T08_SUBGROUP_IADD_RESULT outputs=128 mismatches=0 guards=0 "
+               f"digest={digest:08x} fence=complete\n").encode()
+            + b"T08_SUBGROUP_IADD_RETIRED resources=clean\n"
+        )
+        receipt = dict(self.receipt, sha256=hashlib.sha256(log).hexdigest())
+        artifact = dict(self.artifact,
+                        profile="t08-subgroup-iadd-diagnostic-witness",
+                        operation="iadd")
+        result = verify(log, receipt, artifact)
+        self.assertEqual(result["operation"], "iadd")
+        self.assertEqual(result["digest"], f"{digest:08x}")
+        wrong = log.replace(f"digest={digest:08x}".encode(), b"digest=00000000")
+        with self.assertRaisesRegex(ValueError, "subgroup data"):
+            verify(wrong, dict(receipt, sha256=hashlib.sha256(wrong).hexdigest()),
+                   artifact)
+        with self.assertRaisesRegex(ValueError, "subgroup data"):
+            verify(log, receipt, dict(artifact,
+                                     profile="t08-subgroup-broadcast-diagnostic-witness",
+                                     operation="broadcast"))
+
 
 if __name__ == "__main__":
     unittest.main()

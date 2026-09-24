@@ -4689,7 +4689,12 @@ single operation through pipeline creation and rejects it in the ordinary
 profile, under the Broadcast-only switch, without Arithmetic capability,
 outside compute, or when replaced by an unmeasured operation. The pinned
 compiler's separate typed arithmetic tests establish code generation, but
-this new runtime gate has no GPU readback or original CTS Pass yet. It does
+the SDK-linked IAdd witness now builds as signed eboot SHA-256
+`2c9c39aa085ed628af1e1c809d394d6cf6ccc9b5139a93ad509673a7b7ad0f7a`.
+Its shader reads four host-provided seeds, reduces each 32-lane subgroup,
+and checks 128 output words plus untouched guards after a bounded fence.
+The strict ps5log/1 verifier is host-tested; the new witness has no GPU
+readback or original CTS Pass yet. It does
 not report the public `ARITHMETIC` operation bit or either T08 feature.
 
 The earlier default-off Broadcast-only build passed its unchanged frozen
