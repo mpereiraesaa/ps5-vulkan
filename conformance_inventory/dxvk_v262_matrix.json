@@ -870,7 +870,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:imageCubeArray",
       "implementation": {
-        "detail": "only 2D images are created (src/vk_memory.c)",
+        "detail": "cube-array views require the enabled feature bit (src/vk_image_view.c)",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],

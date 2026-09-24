@@ -54,8 +54,9 @@ DUMP_BINARY = ROOT / "build/tests/dump_device_reporting"
 # longer resolves marks the row not-audited instead of satisfied, so the matrix
 # cannot keep claiming a gate that has moved or disappeared.
 FEATURE_GATES = {
-    "imageCubeArray": ("src/vk_memory.c", "info->imageType != VK_IMAGE_TYPE_2D",
-                       "only 2D images are created"),
+    "imageCubeArray": ("src/vk_image_view.c",
+                       "!(d->enabled_features&PS5VK_FEATURE_IMAGE_CUBE_ARRAY)",
+                       "cube-array views require the enabled feature bit"),
     # independentBlend was promoted on 2026-09-22: the platform reports the bit,
     # the profile advertises two colour attachments, and both upstream leaves
     # that require the feature pass, so it is no longer a gated VK_FALSE report.

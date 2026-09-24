@@ -5061,3 +5061,48 @@ Both titles closed cleanly and the canonical payload was restored. Firmware
 was not recorded. Together with the original CTS result above, this covers a
 bounded precise-query implementation; the shipping feature bit and frozen CTS
 selection remain unchanged pending the remaining T07 promotion checks.
+
+## T07 cube-array combined-branch diagnostic evidence (2026-09-24)
+
+On combined T07 source commit `3394040`, the unchanged pinned
+`dEQP-VK.api.object_management.single.image_view_cube_arr` case passed twice
+with its original support gate and oracle. The one-case selection SHA-256 was
+`839aa4c357c295af5378757f9df0a2dc37227c0a19fa3dd0b1efcae122abae3b`,
+and both runs used signed eboot SHA-256
+`7975fe24502c17bc284cf4576d416c5d520b7849f4a54e1984894263f1c3eee5`:
+
+- `run-634212869010775`, QPA SHA-256
+  `8e6168719e0a7f7f0f18bf16bdab90616e1203ab8314f491879c394d9c8e57f7`.
+- `run-634251931735986`, QPA SHA-256
+  `a297d23c6c0ee1d2adc095f8145aa3859df5beb9692fd0100cd6bb0e74cba4a2`.
+
+Each strict receipt recorded 1 Pass with no Fail, NotSupported, missing or
+unexpected leaf; it verified report completion, exact identity and clean title
+closure. An independent SDK-linked witness then sampled two cubes across all
+six faces, checking 12,288 colour pixels with zero mismatches per run:
+
+- Base layer 0, signed eboot SHA-256
+  `c746eb84578fa9fd78e23c867c0f7db3dbdc91cd71f02503f76419e2f8e27f14`:
+  logs `20260924T140242166Z_PPSA99994_ps5vk_0x240f6b75fdc70`
+  (SHA-256 `7268f908a01c79c56fc91f80394562f27d42fc0b83ee4168bc5094564964e04c`)
+  and `20260924T140304268Z_PPSA99994_ps5vk_0x240fbdd2205a3`
+  (SHA-256 `e94e58fe5a4ad8a3049a29e89eb90c364d9b5bde4c52216be685beb903ceb094`).
+- Base layer 1 in 13-layer storage, signed eboot SHA-256
+  `e0a48b9cbcc4122a9967968bb974bfbd3a93a3f59d9e8401107d4bd0de0369f0`:
+  logs `20260924T140351870Z_PPSA99994_ps5vk_0x24106f264848f`
+  (SHA-256 `fa38a0b02d20d2d56c540d49d46b623878c16a14a5629ef92a75c3294bcd21d4`)
+  and `20260924T140418640Z_PPSA99994_ps5vk_0x2410d2ddfcc54`
+  (SHA-256 `e7f6556779acc8bf18c2462429ea7a91e2b064c5f36a02cc1f5bddfac83a05f7`).
+
+The SDK verifier checked artifact identity, fence completion, ps5log/1
+integrity and clean lifecycle for each run; the canonical payload was restored
+after each. Firmware was not recorded. This evidence qualifies the diagnostic
+cube-array path, including a nonzero view base. Public `imageCubeArray`
+reporting and frozen CTS selection remain unchanged pending their promotion
+audit and combined acceptance. One promotion blocker is already concrete:
+`vkGetPhysicalDeviceImageFormatProperties` accepts the cube-compatible RGBA8
+`SAMPLED | COLOR_ATTACHMENT` usage used by the object-management CTS, but
+`ps5vk_texture_descriptor` refuses a sampled descriptor for any image that
+also has `COLOR_ATTACHMENT` usage. The CTS above checks view creation, not
+sampling from that tiled attachment. Public reporting must stay off until the
+advertised usage has a working descriptor and a native sampling witness.

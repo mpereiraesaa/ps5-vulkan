@@ -988,7 +988,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "only 2D images are created (src/vk_memory.c)",
+      "detail": "cube-array views require the enabled feature bit (src/vk_image_view.c)",
       "feature": "imageCubeArray",
       "kind": "feature",
       "profile": "graphics",
@@ -2163,7 +2163,7 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
-      "detail": "only 2D images are created (src/vk_memory.c)",
+      "detail": "cube-array views require the enabled feature bit (src/vk_image_view.c)",
       "feature": "imageCubeArray",
       "kind": "feature",
       "profile": "compute",
