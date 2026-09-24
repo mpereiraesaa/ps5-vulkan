@@ -117,6 +117,23 @@ def main():
     sample_rate_diagnostic = os.environ.get("PS5VK_SAMPLE_RATE_DIAGNOSTIC", "0")
     if sample_rate_diagnostic not in ("0", "1") or (sample_rate_diagnostic == "1" and not graphics_api):
         raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
+    t09_diagnostics = {}
+    for name in (
+        "PS5VK_HOST_QUERY_RESET_DIAGNOSTIC",
+        "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
+        "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
+    ):
+        value = os.environ.get(name, "0")
+        if value not in ("0", "1") or (value == "1" and not graphics_api):
+            raise SystemExit(f"{name} requires the graphics profile API and must be 0 or 1")
+        t09_diagnostics[name] = value
+    sampler_mirror_case = os.environ.get("PS5VK_SAMPLER_MIRROR_CASE", "-1")
+    if sampler_mirror_case not in ("-1", *(str(n) for n in range(8, 20))):
+        raise SystemExit("PS5VK_SAMPLER_MIRROR_CASE must be -1 or 8..19")
+    if sampler_mirror_case != "-1" and (
+        not graphics_api or os.environ.get("PS5VK_USE_SDK") != "1"
+    ):
+        raise SystemExit("PS5VK_SAMPLER_MIRROR_CASE requires an SDK-linked graphics build")
     clip_cull_probe = os.environ.get("PS5VK_CLIP_CULL_PROBE", "0")
     if clip_cull_probe not in ("0", "1") or (clip_cull_probe == "1" and not graphics_api):
         raise SystemExit("PS5VK_CLIP_CULL_PROBE requires the graphics profile API and must be 0 or 1")
@@ -382,7 +399,8 @@ def main():
     use_runtime_compiler = compute and os.environ.get("PS5VK_RUNTIME_COMPILER") != "0"
     use_runtime_graphics = os.environ.get("PS5VK_RUNTIME_GRAPHICS") == "1"
     use_runtime_sdk = os.environ.get("PS5VK_USE_SDK") == "1"
-    if use_runtime_sdk and not use_runtime_graphics and d16_depth_witness != "1":
+    if (use_runtime_sdk and not use_runtime_graphics and
+            d16_depth_witness != "1" and sampler_mirror_case == "-1"):
         raise SystemExit("SDK-linked diagnostic requires runtime graphics")
     if use_runtime_graphics and not graphics_api:
         raise SystemExit("Runtime graphics requires a graphics API build")
@@ -495,6 +513,8 @@ def main():
             common += ["-DPS5VK_LAYER_PROBE=" + layer_probe]
             common += ["-DPS5VK_MULTIVIEW_DIAGNOSTIC=" + multiview_diagnostic]
             common += ["-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=" + sample_rate_diagnostic]
+            common += [f"-D{name}={value}" for name, value in t09_diagnostics.items()]
+            common += ["-DPS5VK_SAMPLER_MIRROR_CASE=" + sampler_mirror_case]
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
             common += ["-DPS5VK_INPUT_ATTACHMENT_PROBE=" + input_attachment_probe]
@@ -835,7 +855,7 @@ def main():
         # Only application/test-oracle objects remain outside libps5vk.a.
         # The harness can inspect internals, but cannot supply backend objects.
         application_sources = {"graphics_main", "compute_main", "scene_geometry",
-                               "scene_region", "sampled_format_probe", "integer_sampled_probe", "vertex_format_probe",
+                               "scene_region", "sampler_core_probe", "sampled_format_probe", "integer_sampled_probe", "vertex_format_probe",
                                "triangle_readback", "fragment_store_probe"}
         application_sources.add("dual_source_probe")
         application_sources.add("two_mrt_probe")
@@ -866,8 +886,9 @@ def main():
     extra_libs = []
     if use_runtime_sdk:
         extra_libs.append(str(ROOT / "dist-sdk/lib/libps5vk.a"))
-    if use_runtime_compiler or use_runtime_graphics or (
-            use_runtime_sdk and d16_depth_witness == "1"):
+    if (use_runtime_compiler or use_runtime_graphics or
+            (use_runtime_sdk and d16_depth_witness == "1") or
+            (use_runtime_sdk and sampler_mirror_case != "-1")):
         psbc_lib = ROOT / ("dist-sdk/lib/libpsbc.a" if use_runtime_sdk else "build/libpsbc.ps5.a")
         if not psbc_lib.is_file():
             run(sys.executable, str(ROOT / "tools/build_psbc.py"), "--target=ps5")
@@ -909,6 +930,11 @@ def main():
                 "inspection_hold": os.environ.get("PS5VK_INSPECT") == "1",
                 "submit_enabled": os.environ.get("PS5VK_SUBMIT") == "1",
                 "foundation": pin, "files": {}}
+    if sampler_mirror_case != "-1":
+        manifest["sampler_mirror_case"] = int(sampler_mirror_case)
+    if any(value == "1" for value in t09_diagnostics.values()):
+        manifest["t09_diagnostics"] = {name: value == "1"
+                                       for name, value in t09_diagnostics.items()}
     if use_runtime_sdk:
         manifest["sdk_archive_sha256"] = {
             name: hashlib.sha256((ROOT / "dist-sdk/lib" / name).read_bytes()).hexdigest()

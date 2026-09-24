@@ -1014,6 +1014,8 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiObjectManagementTests.cpp",
         # Original compressed image sampling cases and upstream reference oracle.
         cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureCompressedFormatTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureFilteringTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/imageless_framebuffer/vktImagelessFramebufferTests.cpp",
         focused_sources / "vktApiCopiesAndBlittingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp",
         # Original UBO block-layout factory, shader bodies and result oracle.
