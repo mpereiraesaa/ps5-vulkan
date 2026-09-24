@@ -63,6 +63,17 @@ official conformance process remain separate obligations.
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
 | 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
 
+For T08's extended subgroup Int16 operands, a separate change packages the
+pinned original Vulkan 1.0 compute indexing factory as an independent
+`shaderInt16` prerequisite. Its `opaccesschain_u16` leaf reports
+`NotSupported` under the shipping core bit. A local build combining that
+factory with the default-off Int16 diagnostic route passed the original
+128-value GPU oracle twice after forwarding `shaderInt16` to PSBC. Exact
+artifact and QPA identities are in `VALIDATION.md`. The frozen acceptance
+selection remains 507 cases. Public `shaderInt16`, subgroup features and
+`apiVersion` stay off; the broader Int16 operand matrix, subgroup properties,
+original subgroup CTS and combined profile still need evidence.
+
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
 is stable while readiness and completion are derived from the live matrix, so implemented

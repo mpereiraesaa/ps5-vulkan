@@ -4654,12 +4654,34 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
-The host route for core `shaderInt16` now maps the legacy and Features2 query,
+The host route for core `shaderInt16` maps the legacy and Features2 query,
 device opt-in, shader-module gate, compute pipeline gate and compiler feature
-mask. The platform bit remains false. Promotion needs an original applicable
-Int16 CTS leaf plus a native GPU result for the narrow operation, followed by
-the combined subgroup profile checks; host contracts alone cannot establish
-shader arithmetic or subgroup correctness.
+mask. The compute adapter forwards that bit to PSBC's `enable_int16` option.
+A host fixture declares only `Int16` and `Shader` capabilities, with 32-bit
+storage buffers: it is rejected without `shaderInt16` and compiles with it.
+The ordinary platform bit remains false. The original CTS measurement below
+establishes one bounded GPU prerequisite, followed by outstanding combined
+subgroup profile checks; it does not establish subgroup correctness.
+
+An isolated diagnostic build combined this route with the unchanged pinned
+indexing factory from the separate original-CTS registration change. With
+`PS5VK_SHADER_INT16_DIAGNOSTIC=1`, the original Vulkan 1.0
+`spirv_assembly.instruction.compute.indexing.input.struct.opaccesschain_u16`
+leaf passed its 128-value GPU oracle twice on the same signed eboot SHA-256
+`b602a2d71019d08c4a290007b746675173cbeb80ca0b5654228c1b0da0fcf345`.
+The one-leaf selection SHA-256 was
+`a49a36073c093f0e5e13f88d7b36be9255c5235cfa17c3c11583fe486d8286b9`:
+run `run-633858541401345` had QPA SHA-256
+`99d80d69b7f863cca7cb3ad2498891b153fa3d876359f854d11ca27bacfdc452`,
+and run `run-633899483926515` had QPA SHA-256
+`00bc3640af0723be07938ddcef7b52ac4758e872e76dff4b0b5c5c7864e866a2`.
+Both strict receipts recorded one Pass, zero Fail/NotSupported/missing or
+unexpected cases, and clean title closure. A preceding diagnostic eboot
+`25e0ed2ca670870214cfc8ec33c03cc972ced1614c7a320346d6ed7cd990588b`
+reached pipeline creation but failed with `VK_ERROR_UNKNOWN` because the
+compiler adapter had not forwarded the Int16 option. These measurements do
+not promote public `shaderInt16`, either subgroup bit, or `apiVersion`.
+Firmware was not independently recorded in these receipts.
 
 The unchanged frozen upstream acceptance selection on this default-off route
 passed 507/507 original cases, with zero Fail, NotSupported, missing,
