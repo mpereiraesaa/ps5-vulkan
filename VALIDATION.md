@@ -5521,6 +5521,31 @@ source-log SHA-256. Firmware was not re-probed for these runs.
 These draws establish the bounded W path's native evidence, so the DXVK row's
 native axis is now `native-evidence`. The two original CTS leaves still have
 the pre-sampling `Fail` described above and need a rerun after the 3D upload
-blocker is fixed; no CTS PASS is claimed. The ordinary public
+blocker is fixed. The ordinary public
 `samplerMirrorClampToEdge` feature and `VK_KHR_sampler_mirror_clamp_to_edge`
 extension remain disabled, so the DXVK requirement remains blocked.
+
+### T09 sampler mirror clamp compact CTS measurement (2026-09-24)
+
+The pinned upstream
+`dEQP-VK.pipeline.monolithic.sampler.view_type.3d.format.r8g8b8a8_unorm.address_modes.all_mode_mirror_clamp_to_edge`
+leaf uploads an 8×8×8 RGBA8 3D image and samples varying W coordinates. Its
+unchanged upstream oracle reported `Pass` (1/1 selected, no missing cases),
+and the strict runner verified a clean title close. The measurement used the
+default-off sampler diagnostic build; the public feature remained disabled.
+Firmware was not re-probed for this run.
+
+Run ID:
+`20260924T225630973Z_PPSA99994_upstream-cts_0x11b7346e8255`;
+signed eboot SHA-256:
+`ddc59b40852806bee34f144358bc28386acfd067714edbfb4a8f17c0b1999cb1`;
+case-list SHA-256:
+`67d8bfece3acc7305bd211738997b8cfbf2746bc0421ba2719d1372f8a03b627`;
+strict receipt SHA-256:
+`d2e41e12ded0dbc968fb3a91cd6b1f5c1d6bb923d7d200b73da3c11082fc59e2`;
+QPA SHA-256:
+`4d717869c9625040243787e90bdabbe507fd483e54b52af408c8fe64feb15226`;
+source-log SHA-256:
+`106d61194a9f65021088c4fa1b96af838c14d08951452c5b6c2555b6508b9442`.
+The two larger 3D filtering leaves above remain `Fail` at image upload before
+sampling; this compact PASS does not change their recorded verdicts.
