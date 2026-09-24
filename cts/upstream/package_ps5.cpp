@@ -3,8 +3,10 @@
 #include "vktApiFeatureInfo.hpp"
 #include "vktApiBufferViewAccessTests.hpp"
 #include "vktApiPipelineTests.hpp"
+#include "vktApiObjectManagementTests.hpp"
 #include "vktApiCopiesAndBlittingTests.hpp"
 #include "vktApiFillBufferTests.hpp"
+#include "vktTextureCompressedFormatTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
 #include "vktBindingBufferDeviceAddressTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
@@ -37,6 +39,8 @@
 #include "vktFragmentOperationsTests.hpp"
 #include "vktRenderPassTests.hpp"
 #include "vktUniformBlockTests.hpp"
+#include "vktQueryPoolTests.hpp"
+#include "vktShaderRenderTextureGatherTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -136,12 +140,23 @@ void FocusedVkTestPackage::init(void)
         bufferViewGroup->addChild(vkt::api::createBufferViewAccessTests(m_testCtx));
         apiGroup->addChild(bufferViewGroup.release());
         apiGroup->addChild(vkt::api::createPipelineTests(m_testCtx));
+        // Keep the original image-view factory and support gate registered;
+        // the focused cases manifest selects only the cube-array leaf.
+        apiGroup->addChild(vkt::api::createObjectManagementTests(m_testCtx));
         // Original upstream buffer-copy and fill/update cases. The build-time
         // focused copy module prunes only unrelated image/blit/resolve
         // registration so the package stays within the PS5 application heap.
         apiGroup->addChild(vkt::api::createCopiesAndBlittingTests(m_testCtx));
         apiGroup->addChild(vkt::api::createFillAndUpdateBufferTests(m_testCtx));
         addChild(apiGroup.release());
+    }
+
+    // Original compressed-texture tests and their support gates/oracles. The
+    // focused cases manifest selects only the BC1/BC3 sampling leaves.
+    {
+        de::MovePtr<tcu::TestCaseGroup> textureGroup(new tcu::TestCaseGroup(m_testCtx, "texture"));
+        textureGroup->addChild(vkt::texture::createTextureCompressedFormatTests(m_testCtx));
+        addChild(textureGroup.release());
     }
 
     // binding_model.shader_access group
@@ -324,6 +339,17 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::compute::createIndirectComputeDispatchTests(
             m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
         addChild(computeGroup.release());
+    }
+
+    // Original Vulkan 1.0 occlusion-query and shader texture-gather factories.
+    // Their support checks and result oracles stay upstream; the packaged case
+    // list selects the small measured leaves for these feature rows.
+    addChild(vkt::QueryPool::createTests(m_testCtx, "query_pool"));
+    {
+        de::MovePtr<tcu::TestCaseGroup> shaderRenderGroup(
+            new tcu::TestCaseGroup(m_testCtx, "shaderrender"));
+        shaderRenderGroup->addChild(vkt::sr::createTextureGatherTests(m_testCtx));
+        addChild(shaderRenderGroup.release());
     }
 
     // pipeline.push_constant group. The upstream factory is registered without

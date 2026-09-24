@@ -24,6 +24,16 @@ size_t ps5vk_graphics_occlusion_event(uint32_t *out,size_t capacity,uint64_t add
         (uint32_t)address,(uint32_t)(address>>32)};
     memcpy(out,words,sizeof(words));return 4;
 }
+size_t ps5vk_graphics_occlusion_control(uint32_t *out,size_t capacity,int precise)
+{
+    if(!out || capacity<3 || (precise!=0 && precise!=1))return 0;
+    /* GFX10 precise-query state from the register's generated field map:
+     * PERFECT_ZPASS_COUNTS, DISABLE_CONSERVATIVE_ZPASS_COUNTS, the first
+     * ZPASS counter, and both even/odd slice enables. */
+    const uint32_t words[3]={UINT32_C(0xC0016900),1u,
+        precise?UINT32_C(0x11000106):UINT32_C(0x1)};
+    memcpy(out,words,sizeof(words));return 3;
+}
 size_t ps5vk_graphics_register_probe(uint32_t *out,size_t capacity,uint64_t destination)
 {
     const size_t bytes=PS5VK_GRAPHICS_PROBE_REGISTERS*4;

@@ -24,7 +24,8 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 20/62 ready with 42 blockers. The ordered table preserves the
+live matrix is 24/62 ready with 38 blockers after T07's four resource and
+precise-query features passed the ordinary 829-case selection twice. The ordered table preserves the
 original tranche membership.
 
 Tranche delivery and DXVK profile scoring are different gates. The current
@@ -62,6 +63,62 @@ official conformance process remain separate obligations.
 | 13 | T13 — VK_EXT_robustness2 | 3 | Null descriptors and robust resource access. |
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
 | 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
+
+### T07 combined diagnostic status before public reporting (2026-09-24)
+
+The BC diagnostic route passed three focused original selections: 48/48
+compressed-texture sampling, 128/128 compatible blits and 74/74 copies,
+including mip and array-layer readback. Separate SDK witnesses checked
+interior multi-layer copies and sampled output. A 757-case selection combining
+these 250 BC leaves with the 507 frozen cases is prepared but has not run.
+The cube-array image-view CTS case passed twice; a SDK witness sampled two
+cubes, all six faces and a
+nonzero view base twice each. The original precise-occlusion CTS case passed
+twice and in a 508/508 combined selection, and a native API witness checked
+zero, one and three covered samples with result retrieval and reset. The D32
+comparison-gather leaf passed twice. Exact receipts and artifact hashes are
+recorded in [VALIDATION.md](../VALIDATION.md).
+
+These are bounded diagnostic results. All four T07 feature bits remain off in
+the shipping profile. The cube-compatible sampled colour-attachment role has
+a host-tested tiled descriptor and a packaged render-to-sample witness, but
+that witness has not run on hardware. A 577-case measurement selection now
+includes all 70 applicable original extended-gather leaves alongside the 507
+frozen cases, but it has not run. The complete public feature, frozen CTS and
+combined acceptance audit remain pending.
+
+### T07 public reporting candidate (2026-09-24)
+
+The ordinary build in the T07 candidate now reports `imageCubeArray`,
+`textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise` without diagnostic switches. Its public SDK capability
+probe passed with eboot SHA-256
+`c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae`
+in run `20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2`.
+That probe observed 26/62 requested values; it checks reporting, not execution.
+
+The frozen selection now includes 829 original upstream cases. The ordinary
+CTS package has eboot SHA-256
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`
+and case-list SHA-256
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+Its strict PS5 acceptance remains pending. The four T07 rows therefore remain
+blocked on the CTS axis, and the checked DXVK matrix stays at 20/62 ready with
+42 blockers. [VALIDATION.md](../VALIDATION.md#t07-public-reporting-candidate-2026-09-24)
+separates the candidate from the earlier diagnostic runs.
+
+### T07 public CTS promotion (2026-09-24)
+
+On owner-reported firmware 12.02, the ordinary package above completed two
+strict 829/829 Pass runs, `run-3158572987094` and `run-3231483363368`, with
+zero Fail, NotSupported, missing, unexpected or duplicate cases. The four
+T07 groups each passed twice: cube arrays 1/1, BC 250/250, extended gather
+70/70 and precise occlusion 1/1. Both reports verified the exact eboot and
+selection hashes, complete QPA, clean log transport and normal title closure.
+The four rows now satisfy API, implementation, original CTS and native-evidence
+axes; the checked matrix is **24/62 ready with 38 blockers**. The earlier
+candidate paragraph records its status before these runs. Full receipt and
+artifact hashes are in [VALIDATION.md](../VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
 
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership

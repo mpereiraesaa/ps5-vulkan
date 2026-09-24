@@ -29,9 +29,9 @@ UNASSIGNED_FORMAT_TABLES = {
     "formats-mandatory-features-astc",
 }
 UNASSIGNED_FORMAT_TABLE_DIGEST = (
-    # The 2026-09-15 direct UTEXEL matrix intentionally qualifies owned rows
-    # across the 2-byte, 4-byte, 16-bit, 32-bit and 64-bit tables.
-    "529b68fbd880f0cf9a4a49cbe3631302790217100c569ee658288fb9864b69a7")
+    # T07 qualifies BC sample/filter/transfer, RGBA8 blit destinations and the
+    # bounded D16/D32 roles across the audited format tables.
+    "fb9bebc979b41d80f0872e8f1eeff71c174422431788d58ad4933b86bc88f7d8")
 
 
 def unassigned_format_table_digest(rows):

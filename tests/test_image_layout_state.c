@@ -44,4 +44,20 @@ int main(void)
     assert(ps5vk_layout_transition(&targets,&color,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)==VK_SUCCESS);
     assert(ps5vk_layout_commit(&targets)==VK_SUCCESS);
     assert(ps5vk_layout_transition(&targets,&color,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)!=VK_SUCCESS);
+    /* Whole-image native commits keep optional subresource state coherent. */
+    VkImageLayout cells[6]={0};
+    struct VkImage_T layered={.info={.mipLevels=2,.arrayLayers=3},.subresource_layouts=cells};
+    struct ps5vk_layout_state upload={0};
+    assert(ps5vk_layout_transition(&upload,&layered,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)==VK_SUCCESS);
+    assert(ps5vk_layout_commit(&upload)==VK_SUCCESS);
+    for(unsigned i=0;i<6;++i)assert(cells[i]==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkImageSubresourceRange selected={VK_IMAGE_ASPECT_COLOR_BIT,1,1,2,1};
+    assert(ps5vk_image_layout_transition(&layered,&selected,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
+    assert(ps5vk_layout_require(&upload,&layered,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)!=VK_SUCCESS);
+    assert(ps5vk_layout_transition(&upload,&layered,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)==VK_SUCCESS);
+    assert(ps5vk_layout_commit(&upload)==VK_SUCCESS);
+    for(unsigned i=0;i<6;++i)assert(cells[i]==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }

@@ -176,10 +176,27 @@ class DxvkMatrixTests(unittest.TestCase):
             rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"]["native"])
         # Three multiview rows, the three T03 draw rows, the clip/cull pair, the
         # independently witnessed fragment-storage and dual-source features, and
-        # the four T05 rasterization and viewport features advance; API 1.3
-        # remains a separate blocker.
-        self.assertEqual(20, document["summary"]["satisfied"])
-        self.assertEqual(42, document["summary"]["blocker"])
+        # the four T05 rasterization and viewport features, and the four T07
+        # resource/query features advance; API 1.3 remains a separate blocker.
+        self.assertEqual(24, document["summary"]["satisfied"])
+        self.assertEqual(38, document["summary"]["blocker"])
+
+    def test_t07_public_rows_have_all_four_axes_and_original_cts_cases(self):
+        rows = {row["id"]: row for row in matrix.generate()["requirements"]}
+        for feature, count in (
+            ("imageCubeArray", 1),
+            ("textureCompressionBC", 250),
+            ("shaderImageGatherExtended", 70),
+            ("occlusionQueryPrecise", 1),
+        ):
+            with self.subTest(feature=feature):
+                row = rows["feature:VkPhysicalDeviceFeatures:" + feature]
+                self.assertEqual("satisfied", row["verdict"])
+                self.assertEqual("satisfied", row["api"]["state"])
+                self.assertEqual("implemented", row["implementation"]["state"])
+                self.assertEqual("cts-pass", row["cts"]["state"])
+                self.assertEqual(count, len(row["cts"]["cases"]))
+                self.assertEqual("native-evidence", row["native"]["state"])
 
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
@@ -188,8 +205,8 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(20, document["summary"]["satisfied"])
-        self.assertEqual(42, document["summary"]["blocker"])
+        self.assertEqual(24, document["summary"]["satisfied"])
+        self.assertEqual(38, document["summary"]["blocker"])
         self.assertEqual(
             [
                          "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
@@ -199,13 +216,17 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
                          "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
                          "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+                         "feature:VkPhysicalDeviceFeatures:imageCubeArray",
                          "feature:VkPhysicalDeviceFeatures:independentBlend",
                          "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
                          "feature:VkPhysicalDeviceFeatures:multiViewport",
+                         "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
                          "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
                          "feature:VkPhysicalDeviceFeatures:sampleRateShading",
                          "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
                          "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+                         "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+                         "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
                          "feature:VkPhysicalDeviceVulkan11Features:multiview",
                          "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
                          "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
@@ -255,8 +276,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(20, document["summary"]["satisfied"])
-                self.assertEqual(42, document["summary"]["blocker"])
+                self.assertEqual(24, document["summary"]["satisfied"])
+                self.assertEqual(38, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 

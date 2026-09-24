@@ -72,12 +72,24 @@ def rows(records, name):
 
 def validate_artifact(manifest_path, artifact_path):
     manifest = json.loads(Path(manifest_path).read_text())
-    require(manifest.get("stage") == EXPECTED_STAGE, "manifest stage")
+    if manifest.get("occlusion_query_api_probe") == 1:
+        require(manifest.get("stage") == "graphics-api-offscreen-draw" and
+                manifest.get("runtime_sdk") is True and
+                manifest.get("occlusion_query_secondary") == 1,
+                "query API witness must use the SDK-linked secondary-buffer path")
+    else:
+        require(manifest.get("stage") == EXPECTED_STAGE, "manifest stage")
     require(manifest.get("submit_enabled") is True, "manifest submit")
     require(manifest.get("scissor_probe") == EXPECTED_SCISSOR_PROBE,
             "manifest must build the occlusion probe scenario")
     require(manifest.get("termination") == EXPECTED_TERMINATION,
             "manifest termination")
+    if "occlusion_precise_probe" in manifest:
+        require(manifest["occlusion_precise_probe"] in (0, 1),
+                "manifest precise-counter mode")
+    if "occlusion_depth_probe" in manifest:
+        require(manifest["occlusion_depth_probe"] in (0, 1),
+                "manifest depth-counter mode")
     digest = hashlib.sha256(Path(artifact_path).read_bytes()).hexdigest()
     require(manifest.get("files", {}).get("eboot.bin") == digest,
             "artifact does not match the manifest it was built from")
@@ -88,6 +100,9 @@ def validate(path, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
     require(artifact_path is not None, "an artifact path is required")
     artifact_digest = validate_artifact(manifest_path, artifact_path)
     receipt, records, hello, lines = parse(path)
+    manifest = json.loads(Path(manifest_path).read_text())
+    if manifest.get("occlusion_query_api_probe", 0):
+        return validate_query_api(path, records, manifest, artifact_digest)
     begin = rows(records, "PS5VK_OCCLUSION_PROBE_BEGIN")
     end = rows(records, "PS5VK_OCCLUSION_PROBE_END")
     pairs = rows(records, "PS5VK_OCCLUSION_PROBE_PAIR")
@@ -95,6 +110,14 @@ def validate(path, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
     completed = rows(records, "PS5VK_GRAPHICS_COMPLETED")
     close = rows(records, "PS5VK_PLATFORM_CLOSE")
     require(len(begin) == 1 and len(end) == 1 and len(slot) == 1, "one probe round")
+    precise_mode = manifest.get("occlusion_precise_probe")
+    if precise_mode is not None:
+        require(begin[0][1].get("precise") == str(precise_mode),
+                "logged precise-counter mode must match the build manifest")
+    depth_mode = manifest.get("occlusion_depth_probe")
+    if depth_mode is not None:
+        require(begin[0][1].get("depth") == str(depth_mode),
+                "logged depth-counter mode must match the build manifest")
     require(len(close) == 1, "exactly one platform close")
     require(close[0][1].get("rc") == "0" and
             close[0][1].get("allocations_bytes") == "0", "clean platform close")
@@ -145,18 +168,113 @@ def validate(path, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
         "highest_pair": highest_pair,
         "mask": f"0x{mask:016x}",
         "counter": counter,
+        "precise_counter_mode": bool(precise_mode) if precise_mode is not None else None,
         "max_render_backends_lower_bound": first_pair + available,
         "artifact_eboot_sha256": artifact_digest,
     }
     return {"ok": True, "geometry": geometry, "log": str(path)}
 
 
+def validate_query_api(path, records, manifest, artifact_digest):
+    """Validate the Vulkan query API witness instead of the raw counter probe."""
+    require(manifest.get("occlusion_query_api_probe") == 1,
+            "manifest query API mode")
+    require(manifest.get("occlusion_precise_probe") == 1 and
+            manifest.get("occlusion_depth_probe") == 1,
+            "query API witness requires the measured precise depth mode")
+    result = rows(records, "PS5VK_OCCLUSION_QUERY_API_RESULT")
+    created = rows(records, "PS5VK_GRAPHICS_API_DEVICE_CREATED")
+    completed = rows(records, "PS5VK_GRAPHICS_COMPLETED")
+    close = rows(records, "PS5VK_PLATFORM_CLOSE")
+    require(len(result) == 1, "exactly one query API result")
+    require(len(created) == 1, "exactly one graphics API device creation")
+    require(len(completed) >= 2, "original and same-pool repeat submissions completed")
+    require(len(close) == 1 and close[0][1].get("rc") == "0" and
+            close[0][1].get("allocations_bytes") == "0", "clean platform close")
+    fields = result[0][1]
+    expected = {
+        "passed_samples": "1",
+        "availability": "1",
+        "copied_samples": "1",
+        "copied_availability": "1",
+        "zero_samples": "0",
+        "zero_availability": "1",
+        "zero_copied_samples": "0",
+        "zero_copied_availability": "1",
+        "three_samples": "3",
+        "three_availability": "1",
+        "three_copied_samples": "3",
+        "three_copied_availability": "1",
+        "samples32": "1",
+        "availability32": "1",
+        "copied_samples32": "1",
+        "copied_availability32": "1",
+        "zero_samples32": "0",
+        "zero_availability32": "1",
+        "zero_copied_samples32": "0",
+        "zero_copied_availability32": "1",
+        "three_samples32": "3",
+        "three_availability32": "1",
+        "three_copied_samples32": "3",
+        "three_copied_availability32": "1",
+        "precise_enabled": "1",
+        "secondary": "1",
+        "get_wait": "1",
+        "copy_wait": "1",
+        "partial": "1",
+        "same_pool_reset_repeat": "1",
+        "valid": "1",
+    }
+    for key, value in expected.items():
+        require(fields.get(key) == value, f"query API {key} must equal {value}")
+    require(created[0][0] < completed[-1][0] < result[0][0] < close[0][0],
+            "query result follows completed submission and precedes clean close")
+    return {
+        "ok": True,
+        "query_api": {
+            "passed_samples": 1,
+            "availability": 1,
+            "copied_samples": 1,
+            "copied_availability": 1,
+            "zero_samples": 0,
+            "zero_availability": 1,
+            "zero_copied_samples": 0,
+            "zero_copied_availability": 1,
+            "three_samples": 3,
+            "three_availability": 1,
+            "three_copied_samples": 3,
+            "three_copied_availability": 1,
+            "samples32": 1,
+            "availability32": 1,
+            "copied_samples32": 1,
+            "copied_availability32": 1,
+            "zero_samples32": 0,
+            "zero_availability32": 1,
+            "zero_copied_samples32": 0,
+            "zero_copied_availability32": 1,
+            "three_samples32": 3,
+            "three_availability32": 1,
+            "three_copied_samples32": 3,
+            "three_copied_availability32": 1,
+            "precise_enabled": True,
+            "secondary_command_buffer": True,
+            "get_wait": True,
+            "copy_wait": True,
+            "partial": True,
+            "same_pool_reset_repeat": True,
+            "artifact_eboot_sha256": artifact_digest,
+        },
+        "log": str(path),
+    }
+
+
 def compare(first, second, manifest_path=DEFAULT_MANIFEST, artifact_path=None):
     a = validate(first, manifest_path, artifact_path)
     b = validate(second, manifest_path, artifact_path)
-    require(a["geometry"] == b["geometry"],
-            f"two runs disagree: {a['geometry']} vs {b['geometry']}")
-    return {"ok": True, "identical": True, "geometry": a["geometry"]}
+    key = "query_api" if "query_api" in a else "geometry"
+    require(key in b and a[key] == b[key],
+            f"two runs disagree: {a.get(key)} vs {b.get(key)}")
+    return {"ok": True, "identical": True, key: a[key]}
 
 
 def main():

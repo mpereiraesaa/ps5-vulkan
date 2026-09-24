@@ -1909,8 +1909,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
-the code path that enforces them, 141 mandatory format-feature cells satisfied
-with 521 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 148 mandatory format-feature cells satisfied
+with 514 documented per-format blockers, 60 format-query consistency
 checks, and eighteen shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -4873,3 +4873,389 @@ receipt; it was closed and is not counted as an acceptance run. Firmware was
 not independently recorded in these T08 receipts. The bounded result does
 not claim capture replay, multiple-device addressing or additional image
 formats.
+
+## T07 BC mip and array-layer transfer measurement (2026-09-24)
+
+The pinned original BC oracle has also passed in two earlier focused diagnostic
+selections: 48/48 compressed-texture sampling leaves across all 16 Vulkan 1.0
+BC formats (run `run-605956762551796`, eboot SHA-256
+`d3a0622bcd2f9711e939fd5d1f03c998bc6a42379b42d86ec850223347d135be`,
+selection SHA-256
+`ccb00a9543554419ed10aa8e058b1f1368b22b87867fa6cad76c5b8b673b611b`),
+and 128/128 compatible BC-to-RGBA8 blit leaves (run `run-608727480862315`,
+eboot SHA-256
+`db8f1972dd1d2977aa5e8d33ef3a295fa77dccafd3ea5a9fc56898323f2c8a98`,
+selection SHA-256
+`c438338dbcc7a7e613902cff31ff5f0d5bfdab2a533ac7254796c086c9d11117`).
+Both receipts have strict identity, complete QPA and clean closure. The 48-leaf
+receipt predates the full frozen-base metadata correction; its candidate
+selection was focused and omitted the 507 frozen cases. These runs are evidence
+for their original oracles, not a combined shipping acceptance run.
+
+An independent public SDK consumer exercised linear GPU sampling for all 16
+Vulkan 1.0 BC formats, one signed executable per format. Its final v3 reference
+uses normalized S3TC endpoint equations and bilinear filtering before the
+final RGBA8 conversion, with a fixed tolerance of two. All 16 strict native
+receipts passed: 65,536 pixels checked, zero mismatches, completed fences and
+clean closure. The ignored `build/bc-filter-v3/matrix.json` lists each format's
+executable SHA-256, receipt, source-log SHA-256 and independent reference
+hashes. All 16 archived executables and logs still match those records. These
+SDK results support the diagnostic sampled/filter roles; they do not replace
+the original CTS oracle or establish a shipping feature bit.
+
+The integrated diagnostic build also passed **74/74 original pinned BC copy
+leaves** in one strict, completed run: 66 image-to-buffer mip/array-layer cases
+covering 11 non-sRGB BC formats, two extents and one, two or five layers, plus
+eight compatible image-to-image cases. The unchanged CTS comparison reported
+zero Fail, NotSupported, missing or unexpected cases. Selection SHA-256 was
+`803a997a7a1a442c26d13585f07fae986031772d6f82ad193236dee21209c1f6`;
+eboot SHA-256 was
+`52790dffd9f6d11a1ad133254dd59fc5591d2ac9f6cb07bb63aa035dc5f7eec4`.
+Run `run-614985225661286` completed with QPA SHA-256
+`b7c176a7b8be8a559ef75ff36ca1bc6e4d94ec232488cae5588bd4cd48d42e94`.
+These original image-to-image cases use one mip and layer per image; the SDK
+consumer below supplies the separate mip/layer image-copy evidence.
+
+The integrated `6084d7e` branch passed `make check`. Its BC diagnostic build
+ran the eight original 2D BC image-copy leaves from the pinned CTS twice:
+**8 Pass, zero Fail, zero NotSupported, zero missing or unexpected** in each
+strict receipt. The two source/destination pairs were BC1 RGBA UNORM to BC4
+SNORM and BC3 UNORM to BC7 SRGB, each under all four GENERAL/OPTIMAL layout
+combinations. The selection SHA-256 was
+`912f2de20fd71bbf53813d991c196b376b5d91d860e425b495ae233e3b2241d2`;
+the diagnostic eboot SHA-256 was
+`a9d8592e16568a2564952b69705205be8ab501d19264f2972242422def213c52`.
+Run `run-621336816316363` produced QPA SHA-256
+`26d734132da166dbb261f76b76f2c9d8d57bf7e91e3acfb1d7342a5da0f635c4`;
+run `run-621372577415670` produced
+`1a826cacb66a751b5229bbb3fa85155c1654668cfb4fec0f56a93b84e08fc49b`.
+Both verified their exact build identity, QPA completion and clean title close.
+
+Four public SDK consumers, built from the integrated tree with isolated headers
+and symbols, each passed twice on hardware. Every run checked all 12 BC
+subresources byte for byte, preserved the other 11, sampled 4096 destination
+pixels with zero mismatches, completed its fence and closed cleanly:
+
+| Profile | Selected mip/layer and operation | Eboot SHA-256 |
+| --- | --- | --- |
+| `bc1-layer` | mip 0, layer 1, buffer to image | `50c0ce6b9396c109e241c824e07ec64e0211a6e1068df22d0abbd957333c0185` |
+| `bc1-mip` | mip 1, layer 2, buffer to image | `0e61ccfd6bda79c91aa0adb7e4fbc0a9d99c4b4cdbe4514d211d077656c51449` |
+| `bc1-imagecopy` | mip 1, layer 0 to layer 2, image to image | `49d13e039ee763d75e67e1338950a5a656a52863e27082baadc899282041e313` |
+| `bc3-tail` | mip 3, layer 2, buffer to image | `1bb1eb171279c2c8ebd0b73647af69cf4bcf5e67df4062261a176ec2c30cdd03` |
+
+The integrated `651a913` SDK consumer adds `bc1-partial-layers`: a BC1 image
+of 37×29 texels with four mips and three layers. One buffer-to-image region
+copies an 8×4 interior rectangle at offset (4,4) in mip 1 across layers 1–2;
+a second image-to-buffer region reads that rectangle with different row and
+layer strides. The independent oracle checks all 12 subresources, the two
+changed layers, untouched exterior blocks, readback padding and guards, then
+samples 4096 pixels from layer 1. Both strict hardware runs reported zero byte
+or pixel mismatches, maximum colour error 1 within tolerance 1, completed
+fences and clean closure. They used signed eboot SHA-256
+`0748c9c98708eb37ec6cd08853e4f1c8d53040d7aedcfa7892d3dc11df6c15c8`:
+
+- `20260924T124622442Z_PPSA99994_ps5vk_0x23ccc6ee08330`, log SHA-256
+  `0d8d81a68621cfa10a5c11c8105668774bb91820c1c990bce7cc178566391323`.
+- `20260924T124642084Z_PPSA99994_ps5vk_0x23cd10195fc3d`, log SHA-256
+  `2ac42d3fe9ea442fcec591d24c3d96945dbdd762e89655698f625659be720255`.
+
+The ordinary shipping build also passed the unchanged frozen selection in
+`run-621753906663208`: **507 Pass, zero Fail, zero NotSupported, zero missing
+or unexpected**, eboot SHA-256
+`d125d01918c88e763e7517dc6218ea71a211f21f116a8c6721653b19d9527eb1`,
+QPA SHA-256 `ea79a4561087966ad8d5c44332b48baa18673a5fa688863e961f95507256ac51`,
+with exact identity, completed report and clean close. The canonical eboot was
+restored after every run. Firmware was not recorded in these receipts.
+
+The original image-to-image CTS leaves exercise one mip and layer per image;
+the SDK image-copy witness exercises distinct layers at mip 1. The original
+buffer readback leaves exercise every mip and layer, while the SDK consumers
+also exercise whole-subresource and interior multi-layer regions. These runs do
+not establish every image-to-image rectangle and layer combination. The
+shipping `textureCompressionBC` feature bit remains off pending the full T07
+promotion audit. The ignored measurement manifest
+`build/upstream-cts/t07-bc-combined-measurement.json` combines the 507 frozen
+cases with all 250 source-derived BC sampling, blit and copy cases: 757 distinct
+cases, selection SHA-256
+`e3bcf6c498f94d90ca5f2487c151c3b649b162ddc73a2a0e3b60c23d423a4b4e`.
+Its BC-only diagnostic package linked 416 translation units and signed eboot
+SHA-256 `69e3e392a7236b3a405a7cde2d8df32a26d364da36894d7091f26e41334c5027`;
+the build manifest records 757 selected cases and the BC diagnostic switch as
+`1`. The combined diagnostic selection passed **757/757** original cases with
+zero Fail, NotSupported, missing or unexpected cases in
+`20260924T154900553Z_PPSA99994_upstream-cts_0x246c3c80f0d8f`. Its strict
+receipt verified exact identity, report completion and clean closure. This is
+a measurement selection; the frozen acceptance selection and public bit remain
+unchanged.
+
+## T07 D32 comparison-gather diagnostic measurement (2026-09-24)
+
+The isolated D32 route in `5067a1b` accepts a bounded 64×64, seven-mip
+sampled-depth image, full-mip buffer uploads and the exact transfer-to-sampling
+barrier sequence. The host byte oracle verifies every depth texel and untouched
+allocation byte; `make check` passed after the diagnostic build identity was
+wired in `984703e`.
+
+The original pinned `depth32f` comparison-gather CTS leaf passed twice with its
+unchanged image oracle: **1 Pass, zero Fail, zero NotSupported, zero missing or
+unexpected** in each strict receipt. Selection SHA-256 was
+`3564731db031196812cb5ecc800d943a13679e48bac0155b7af1adeb8a8b28c0`;
+diagnostic eboot SHA-256 was
+`f2f1d42fcc1fb3ec3409ec378ec8cbebda896925e2e4588c2896ab230866344f`.
+Run `run-623668162749001` yielded QPA SHA-256
+`a064613e54bc6a519694de937f06d49c4b493884bad6ce43f6950434515f5695`;
+repeat `run-623701544102072` yielded
+`36f95dd349633253c9a29fc04fa0199b750a3408de6f27b10ba4d893c629377d`.
+Both verified exact build identity, report completion and clean title closure;
+the canonical eboot was restored after each run. Firmware was not recorded.
+
+This diagnostic selection contains one D32 comparison-gather leaf. It does
+not establish the other typed gather profiles or public
+`shaderImageGatherExtended` reporting, which remains off pending the full T07
+audit.
+
+The current frozen manifest identifies 70 applicable original extended-gather
+leaves: 45 RGBA8 forms and 25 typed forms using RGBA8 signed/unsigned integer
+or D32 comparison. An ignored measurement manifest at
+`build/upstream-cts/t07-full-gather-measurement.json` combines all 70 with the
+507 frozen cases. Its 577-case selection SHA-256 is
+`464a436cd07eeb3c0471bf475d7001463f52f5f1e6424b06bf8725f40f83b8bd`.
+The package linked 416 translation units and signed eboot SHA-256
+`f6cece12464758ef08a9d8d18bb8f997cc067b9b62dc116f4eea1b3f23b888b7`;
+its build manifest records the gather, RGBA8 integer attachment and D32
+sampled diagnostic switches as `1`, with BC off. A separate 532-case selection
+of only the 25 typed leaves uses the same executable but a different selection
+SHA-256, `5702b90f15a93d623277846891b1bd47d4765f3f02a4b6f646b38a573d333b2a`.
+The complete 577-case selection passed twice with zero Fail, NotSupported,
+missing or unexpected cases on signed eboot SHA-256
+`16607e56d97cbb5c5df0502aa341bb4daab2e6880d84aa08b7107e28e2555751`:
+`20260924T161005906Z_PPSA99994_upstream-cts_0x247ea63df31f6` and
+`20260924T161103848Z_PPSA99994_upstream-cts_0x247f7e176f2d4`. Both strict
+receipts verified the original QPA oracle, exact identity and clean closure.
+The twelve earlier RGBA8 SINT refusals came from out-of-range integer clear
+values. Vulkan leaves their converted result undefined; the driver now accepts
+them using a deterministic low-byte conversion. Independent SDK-linked GPU
+readbacks passed constant, dynamic and four-offset forms in runs
+`20260924T160859672Z_PPSA99994_ps5vk_0x247daf8292e93`,
+`20260924T160915319Z_PPSA99994_ps5vk_0x247de9ca34ded` and
+`20260924T160929553Z_PPSA99994_ps5vk_0x247e1ed220fc3`. Public reporting
+and the frozen selection remain unchanged pending promotion.
+
+## T07 D16 depth attachment diagnostic witness (2026-09-24)
+
+The isolated 128×128 D16 attachment route now records the exact
+UNDEFINED-to-depth-attachment barrier and bounded full-surface depth clear;
+host tests reject wrong aspects, partial rectangles and unsupported dependency
+scopes. The native diagnostic SDK and SDK-linked offscreen witness built from
+this tree. The witness uses a render-pass load clear and depth-tested draw; the
+original synchronization CTS `vkCmdClearAttachments` path still needs its own
+upstream run and is not inferred from this witness.
+
+Signed eboot SHA-256
+`effb18b754835b2c878c8a1917c0ccd3ffd6bc1491037bf7cabea1b600a7f2df`
+passed the strict artifact-bound witness twice. Each run queried the bounded
+D16 format, rendered two frames at 128×128, observed 2888 changed colour
+pixels after a depth clear to 1.0 and zero after a clear to 0.0, completed the
+GPU submissions, reported no readback mismatches, released all allocations and
+closed cleanly:
+
+- `20260924T113700629Z_PPSA99994_ps5vk_0x2390372da9382`, log SHA-256
+  `06c81851c0e2554b74f777030d27760717d1266710c2e42fa3865e7a9dd5b1ab`.
+- `20260924T113722973Z_PPSA99994_ps5vk_0x23908a69edcad`, log SHA-256
+  `f38a16c42f8d76f7ce8bebc213bb7694de60fd8be6479395b9781e8b1e67d4b9`.
+
+The first diagnostic attempt used an auxiliary 1920×1080 region scan on this
+128×128 target and ended before the second frame; it is not counted as
+evidence. That scan is now excluded from the D16 variant, whose independent
+depth oracle remains active. The canonical eboot was restored after all three
+attempts. Firmware was not recorded. Public feature reporting remains
+unchanged.
+
+## T07 precise occlusion original CTS measurement (2026-09-24)
+
+The unchanged pinned `dEQP-VK.query_pool.occlusion_query.basic_precise` case
+uses a 128×128 D16 depth attachment and an RGBA8 colour attachment read back
+after rendering. The diagnostic path now accepts the case's exact colour
+barriers in both the recorder and native executor. Its rasterizer enables
+depth bias with all factors zero; the native draw path programs the D16
+fixed-depth bias format and continues to reject nonzero D16 bias factors.
+The corresponding host tests cover the admitted shapes and nearby refusals.
+
+The original CTS case passed twice with the upstream oracle unchanged: run
+`run-632898402692343` (QPA SHA-256
+`7d74fdcb4b14babe9eff66131af7617c8d3e09ed0006f7ef8cdc0647b7592ba4`)
+and run `run-632934419376926` (QPA SHA-256
+`72125c75b71eef1cd8aa0ebf422d0db532747d73c8695908bc367cd8bce0e67a`).
+Both strict receipts recorded 1 Pass, zero Fail, zero NotSupported, exact
+selection identity, complete report and clean title closure. The one-case
+selection SHA-256 was
+`a356b3c615fd7ed79f0e6f744e7fd7825bb13209645006e091a4e95a42d6dafc`.
+
+The same signed eboot SHA-256
+`a39b620eae748e7f688880e4b3c13604b9d21675b22d216c6a0f66b9b2b7b998`
+then passed a measurement selection containing the 507 frozen acceptance
+leaves plus this precise case: **508/508 Pass**, zero Fail, zero NotSupported,
+zero missing or unexpected. Run `run-633094482815947` recorded QPA SHA-256
+`70f78ac11d6bc61b12c45006306a7248d0a7da5b9972e982fc218e67e73932f4`
+and selection SHA-256
+`60bf95c41062832cffc3f6e95f5ee19c6ac47cce1c007b5c5fddec6b85a09d85`;
+identity, report completion and clean closure were verified. The canonical
+payload was restored after each run. Firmware was not recorded.
+
+This is diagnostic evidence for one original precise-query leaf and a neutral
+507-case regression. The frozen selection and public `occlusionQueryPrecise`
+reporting have not been promoted; the full T07 capability audit remains open.
+
+## T07 precise occlusion native API witness (2026-09-24)
+
+The SDK-linked native diagnostic uses a depth-tested draw and the Vulkan
+occlusion-query API with the precise bit enabled. Its independent verifier
+requires direct and copied 32-bit and 64-bit counts of zero, one and three,
+availability for each result, wait and partial-result paths, secondary-command
+execution, a same-pool reset and repeat, completed submissions, zero leaked
+allocations, ps5log/1 integrity and an exact match to the signed eboot.
+
+The signed eboot SHA-256
+`1975dd0757438c9a4df8121c3a9576bb041cc8c18031f0c6488fa71045eefae5`
+passed that verifier twice with identical query results:
+
+- `20260924T135031940Z_PPSA99994_ps5vk_0x2404cb3638f3e`, log SHA-256
+  `6e49354fd07c2e952c0d32d73cadbf66a6405770a0bb94f6c6151945e9c2ed87`.
+- `20260924T135057995Z_PPSA99994_ps5vk_0x24052c4740042`, log SHA-256
+  `65c632958ceb03ada66c9e3dd6ca38375c7fcff3d21a4fc9ca55845c657ea771`.
+
+Both titles closed cleanly and the canonical payload was restored. Firmware
+was not recorded. Together with the original CTS result above, this covers a
+bounded precise-query implementation; the shipping feature bit and frozen CTS
+selection remain unchanged pending the remaining T07 promotion checks.
+
+## T07 cube-array combined-branch diagnostic evidence (2026-09-24)
+
+On combined T07 source commit `3394040`, the unchanged pinned
+`dEQP-VK.api.object_management.single.image_view_cube_arr` case passed twice
+with its original support gate and oracle. The one-case selection SHA-256 was
+`839aa4c357c295af5378757f9df0a2dc37227c0a19fa3dd0b1efcae122abae3b`,
+and both runs used signed eboot SHA-256
+`7975fe24502c17bc284cf4576d416c5d520b7849f4a54e1984894263f1c3eee5`:
+
+- `run-634212869010775`, QPA SHA-256
+  `8e6168719e0a7f7f0f18bf16bdab90616e1203ab8314f491879c394d9c8e57f7`.
+- `run-634251931735986`, QPA SHA-256
+  `a297d23c6c0ee1d2adc095f8145aa3859df5beb9692fd0100cd6bb0e74cba4a2`.
+
+Each strict receipt recorded 1 Pass with no Fail, NotSupported, missing or
+unexpected leaf; it verified report completion, exact identity and clean title
+closure. An independent SDK-linked witness then sampled two cubes across all
+six faces, checking 12,288 colour pixels with zero mismatches per run:
+
+- Base layer 0, signed eboot SHA-256
+  `c746eb84578fa9fd78e23c867c0f7db3dbdc91cd71f02503f76419e2f8e27f14`:
+  logs `20260924T140242166Z_PPSA99994_ps5vk_0x240f6b75fdc70`
+  (SHA-256 `7268f908a01c79c56fc91f80394562f27d42fc0b83ee4168bc5094564964e04c`)
+  and `20260924T140304268Z_PPSA99994_ps5vk_0x240fbdd2205a3`
+  (SHA-256 `e94e58fe5a4ad8a3049a29e89eb90c364d9b5bde4c52216be685beb903ceb094`).
+- Base layer 1 in 13-layer storage, signed eboot SHA-256
+  `e0a48b9cbcc4122a9967968bb974bfbd3a93a3f59d9e8401107d4bd0de0369f0`:
+  logs `20260924T140351870Z_PPSA99994_ps5vk_0x24106f264848f`
+  (SHA-256 `fa38a0b02d20d2d56c540d49d46b623878c16a14a5629ef92a75c3294bcd21d4`)
+  and `20260924T140418640Z_PPSA99994_ps5vk_0x2410d2ddfcc54`
+  (SHA-256 `e7f6556779acc8bf18c2462429ea7a91e2b064c5f36a02cc1f5bddfac83a05f7`).
+
+The SDK verifier checked artifact identity, fence completion, ps5log/1
+integrity and clean lifecycle for each run; the canonical payload was restored
+after each. Firmware was not recorded. This evidence qualifies the diagnostic
+cube-array path, including a nonzero view base. Public `imageCubeArray`
+reporting and frozen CTS selection remain unchanged pending their promotion
+audit and combined acceptance. The audit found that
+`vkGetPhysicalDeviceImageFormatProperties` accepts the cube-compatible RGBA8
+`SAMPLED | COLOR_ATTACHMENT` usage used by the object-management CTS, while
+the old descriptor path refused its sampled role. A host regression reproduced
+that refusal. The CTS above checks view creation, not sampling from that tiled
+attachment. A native 4×4 render-to-sample probe exposed a layer-pitch mismatch:
+the target used 128 KiB per layer while the sampler advanced 64 KiB, so eleven
+of twelve faces read the wrong colour. The descriptor now refuses that shape
+before it can silently render wrong pixels. At 256×256 the pitches match; the
+independent tiled attachment-to-sample witness passed twice with twelve correct
+faces and 12,288 correct pixels, including strict artifact and lifecycle
+verification in `20260924T160809323Z_PPSA99994_ps5vk_0x247cf3f1ba220` on
+eboot SHA-256
+`941ba1a5aac7d7a69745efec339807adc2539ed150923646033177b03f9fc097`.
+Public reporting and the frozen selection remain unchanged pending promotion
+and combined shipping acceptance.
+
+## T07 four-axis pre-promotion audit (2026-09-24)
+
+At this audit point, the ordinary build reported all four T07 core feature bits
+false. A host
+contract confirms that each bit, when supplied by the platform, appears in
+both physical-device feature query routes, can be enabled through a logical
+device, and fails device creation when unsupported. That host result proves
+the negotiation wiring, not permission to advertise any bit. The evidence
+above leaves these promotion gates open:
+
+| Feature | Public query and device | Executable path and refusal | Original CTS oracle | Artifact-bound PS5 witness and remaining gate |
+| --- | --- | --- | --- | --- |
+| `imageCubeArray` | Host negotiation passes; shipping bit off. | Transfer-backed arrays sample two cubes, including a nonzero view base. The tiled path samples 256×256 attachment faces and refuses incompatible smaller pitches. | Original image-view leaf passed twice; it checks view creation, not tiled attachment sampling. | Transfer-backed SDK witness passed twice per view base; tiled 256×256 witness passed twice with 12,288 correct pixels. Public promotion and shipping acceptance remain. |
+| `textureCompressionBC` | Host negotiation passes; shipping bit and format roles off. | Diagnostic sampling, blit and mip/layer copy paths are bounded by format, layout and region checks. | Original focused selections passed 48/48 sampling, 128/128 blit and 74/74 copy; combined selection passed 757/757. | SDK filter and mip/layer witnesses passed on diagnostic builds. Public format roles, feature bit and shipping acceptance remain. |
+| `shaderImageGatherExtended` | Host negotiation passes; shipping bit off. | Diagnostic compiler accepts bounded gather forms; RGBA8 integer attachment and D32 comparison roles remain build-gated. | All 70 eligible original gather leaves passed in a 577/577 combined selection twice. | Native constant, dynamic and four-offset GPU readbacks passed. Public roles, bit and shipping acceptance remain. |
+| `occlusionQueryPrecise` | Host negotiation passes; shipping bit off. | Diagnostic query state, ZPASS and bounded result read/copy paths passed host and native checks. | Original D16 precise case passed twice and in a 508/508 combined selection. | SDK-linked API witness passed twice with 0/1/3 samples and result variants. Promotion still needs an enabled shipping build, frozen CTS update and exact post-promotion acceptance. |
+
+No row is promoted by the passing subset of another row. All new combined
+selection candidates remain measurements until their strict hardware receipts
+and the ordinary shipping build agree.
+
+## T07 public reporting candidate (2026-09-24)
+
+The ordinary graphics build now reports `imageCubeArray`,
+`textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise` without T07 diagnostic switches. A public SDK
+capability probe signed as eboot SHA-256
+`c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae`
+passed the strict native-query verifier in
+`20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2` (source log SHA-256
+`a4b19620f2d9d3d9b03f5808a837bb9264ab994696c87f665417d13ddb972c60`).
+It observed 26 of the 62 DXVK baseline requirements at their requested values,
+four more than the prior public probe; 36 remain query blockers. The probe
+checks advertised values, not execution.
+
+The frozen upstream selection now contains 829 original cases: the previous
+507 plus 250 BC sampling/blit/copy cases, 70 gather cases, one precise-query
+case and one cube-array image-view case. Its case-list SHA-256 is
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+The ordinary CTS package signed eboot SHA-256
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`;
+shipping hardware acceptance of that package remains pending. The checked
+four-axis DXVK matrix therefore remains at 20/62 ready and 42 blockers.
+
+## T07 public upstream CTS promotion (2026-09-24)
+
+On firmware **12.02** (owner-reported), the ordinary public T07 build ran the
+frozen 829-case original upstream CTS selection twice. The eboot SHA-256 was
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`;
+the selection SHA-256 was
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+No T07 diagnostic switch was used. Both strict receipts verified the exact
+payload and selection, full QPA, case identities and title lifecycle. Each
+reported **829 Pass, zero Fail, zero NotSupported, zero missing, zero unexpected
+and zero duplicate** cases. The original CTS oracles were unchanged.
+
+| Strict receipt | Logging run | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- |
+| `run-3158572987094` | `20260924T182430756Z_PPSA99994_upstream-cts_0x2df693153d2` | `fdb0e8c0a8d9f4ee1025dca852bb76e1808de13304836f3679384a4a9272b4a6` | `3fecac2d959988f5187864bca1afdbdb2dbdc77f8976cd7320e6235886d6b367` |
+| `run-3231483363368` | `20260924T182543668Z_PPSA99994_upstream-cts_0x2f0634174f1` | `48a30ff0f1dbd164d5cbb0aaa656375d8a4eac21710185167a99c4de7db84b12` | `98c00e1b2b01657fe238ade5fda5680e11c5d58948b46144c07227c767fd963a` |
+
+The source logs used ps5log/1, closed with BYE and had zero sequence gaps. The
+T07 groups passed in **both** runs: `imageCubeArray` 1/1,
+`textureCompressionBC` 250/250 (48 sampling, 128 blit, 74 image/mip copies),
+`shaderImageGatherExtended` 70/70 and `occlusionQueryPrecise` 1/1. The full
+frozen selection passed with the four public bits enabled. The public ABI probe
+in the preceding section observed 26/62 requested query values; the joined
+four-axis DXVK matrix now has **24/62 satisfied and 38 blockers**. Native
+witness receipts and hashes for each feature are recorded in the T07 sections
+above and bound in `conformance_inventory/dxvk_v262_evidence.json`.
+
+The console window restored the previous ordinary payload, whose exact-self
+eboot SHA-256 was
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
+The wrapper released the console and the subsequent status reported
+`running=none`.
