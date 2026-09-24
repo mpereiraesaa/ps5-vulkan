@@ -1183,6 +1183,10 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineVertexUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineReferenceRenderer.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMakeUtil.cpp",
+        # Upstream sampler address-mode factory for the 8x8x8 3D W leaf.
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineSamplerTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineImageSamplingInstance.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineSamplerBorderSwizzleTests.cpp",
         # Genuine upstream blend factory, including the dual-source family.
         # The package registers the family under the monolithic construction
         # group and cases.txt selects the leaves, exactly as for the other
