@@ -33,7 +33,6 @@ static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
     struct ps5vk_texture_copy *out)
 {
     if(!r || !out)return VK_ERROR_UNKNOWN;
-#if PS5VK_D32_SAMPLED_DIAGNOSTIC
     /* The source-derived Dref gather upload is a whole-subresource copy for
      * each level of one 64x64 D32 mip tail. The destination is tiled 64KB_Z_X,
      * so this validates buffer packing only; the queue executor scatters each
@@ -58,7 +57,6 @@ static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
             extent*4u,extent,0,0,1};
         return VK_SUCCESS;
     }
-#endif
     /* Formats without an implemented sampled or compressed-block layout have
      * no transfer-copy plan (colour/depth/vertex-only rows stay rejected). */
     if(!ps5vk_texture_format_sampled_encoding(format) &&

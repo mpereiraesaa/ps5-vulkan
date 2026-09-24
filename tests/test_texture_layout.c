@@ -75,11 +75,10 @@ int main(void)
     i.arrayLayers=5;
     assert(ps5vk_native_image_requirements(NULL,&i,&r)!=VK_SUCCESS && !r.size);
 
-    /* Only formats with an implemented padded-linear encoding have layout
-     * arithmetic: the colour attachment, the depth target, the vertex-only
-     * rows and unknown formats are rejected rather than defaulted. */
+    /* Only formats with a sampled encoding have this generic arithmetic.
+     * D32 has one for descriptors, though image creation uses tiled storage. */
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_B8G8R8A8_UNORM,4,4,&l));
-    assert(ps5vk_texture_layout_for_format(VK_FORMAT_D32_SFLOAT,4,4,&l));
+    assert(!ps5vk_texture_layout_for_format(VK_FORMAT_D32_SFLOAT,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_R32G32B32_SFLOAT,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_A2B10G10R10_UNORM_PACK32,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_UNDEFINED,4,4,&l));

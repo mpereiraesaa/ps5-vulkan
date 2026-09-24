@@ -198,21 +198,9 @@ def main():
             "-DPS5VK_TARGET_PS5=1",
             "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
             "-DPS5VK_RUNTIME_GRAPHICS=1", "-DPS5VK_NO_OFFLINE_LIBRARY=1",
-            # The diagnostic probes are environment-declared for the whole
-            # payload: the runtime library the SDK builds compiles the same
-            # sources the native build does, so feature negotiation gates must
-            # see the same diagnostic decisions. The values are passed
-            # through from the caller (build_native.py sets it for its probe
-            # builds); the shipping default stays zero.
-            *(["-DPS5VK_OCCLUSION_PRECISE_DIAGNOSTIC=" +
-               os.environ["PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC"]]
-              if os.environ.get("PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC") else []),
             *(["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" +
                os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"]]
               if os.environ.get("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC") else []),
-            *(["-DPS5VK_GATHER_EXTENDED_DIAGNOSTIC=" +
-               os.environ["PS5VK_GATHER_EXTENDED_DIAGNOSTIC"]]
-              if os.environ.get("PS5VK_GATHER_EXTENDED_DIAGNOSTIC") else []),
             *(["-DPS5VK_TESS_PROBE=" + os.environ["PS5VK_TESS_PROBE"]]
               if os.environ.get("PS5VK_TESS_PROBE") else []),
             # Legacy experiment flags remain attributable in old build recipes.
@@ -262,28 +250,6 @@ def main():
             raise SystemExit("PS5VK_MEMORY_MODEL_DIAGNOSTIC must be 0 or 1")
         if memory_model_diagnostic == "1":
             native_cflags.append("-DPS5VK_MEMORY_MODEL_DIAGNOSTIC=1")
-        cube_array_diagnostic = os.environ.get("PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC", "0")
-        if cube_array_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC must be 0 or 1")
-        if cube_array_diagnostic == "1":
-            native_cflags.append("-DPS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC=1")
-        bc_diagnostic = os.environ.get("PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC", "0")
-        if bc_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC must be 0 or 1")
-        if bc_diagnostic == "1":
-            native_cflags.append("-DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1")
-        d16_depth_diagnostic = os.environ.get("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC", "0")
-        if d16_depth_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC must be 0 or 1")
-        if d16_depth_diagnostic == "1":
-            native_cflags.append("-DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1")
-        for name in ("PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC",
-                     "PS5VK_D32_SAMPLED_DIAGNOSTIC"):
-            value = os.environ.get(name, "0")
-            if value not in ("0", "1"):
-                raise SystemExit(f"{name} must be 0 or 1")
-            if value == "1":
-                native_cflags.append(f"-D{name}=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:

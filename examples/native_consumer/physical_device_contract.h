@@ -93,13 +93,7 @@ static void report_physical_device_contract(VkInstance instance,
         VK_FORMAT_R32_UINT, &texel);
     vkGetPhysicalDeviceFormatProperties(physical_device,
         VK_FORMAT_UNDEFINED, &unsupported);
-    /* The BC witnesses use the diagnostic SDK that also exposes
-     * RGBA8 destinations for BC blits. Keep the exact shipping query intact. */
-    VkFormatFeatureFlags bc_blit_dst = 0;
-#if (defined(CONSUMER_BC_FILTER_WITNESS) && CONSUMER_BC_FILTER_WITNESS) || \
-    (defined(CONSUMER_BC_SUBRESOURCE_WITNESS) && CONSUMER_BC_SUBRESOURCE_WITNESS)
-    bc_blit_dst = VK_FORMAT_FEATURE_BLIT_DST_BIT;
-#endif
+    const VkFormatFeatureFlags bc_blit_dst = VK_FORMAT_FEATURE_BLIT_DST_BIT;
     REQUIRE(!bgra.linearTilingFeatures &&
             bgra.bufferFeatures == VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT &&
             bgra.optimalTilingFeatures == VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT &&
@@ -127,7 +121,8 @@ static void report_physical_device_contract(VkInstance instance,
             depth.optimalTilingFeatures ==
                 (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                  VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
-                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) &&
+                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) &&
             texel.bufferFeatures == (VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT |
                                      VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) &&
             !texel.linearTilingFeatures &&

@@ -124,7 +124,7 @@ check-sanitize:
 	./build/tests/test_vertex_fetch_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_prepare_ps5.c src/texture_format.c src/vertex_descriptor.c tests/test_draw_prepare_ps5.c -o build/tests/test_draw_prepare_ps5_sanitized
 	./build/tests/test_draw_prepare_ps5_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 -DPS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_t07_diagnostic_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_t07_diagnostic_sanitized
 	./build/tests/test_targets_t07_diagnostic_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc native/input_attachment_gate.c tests/test_input_attachment_gate.c -o build/tests/test_input_attachment_gate_sanitized
 	./build/tests/test_input_attachment_gate_sanitized
@@ -148,7 +148,7 @@ check-sanitize:
 	./build/tests/test_texture_format_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy_sanitized
 	./build/tests/test_texture_copy_sanitized
-	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -DPS5VK_D32_SAMPLED_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_d32_gather_copy_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_d32_gather_copy_sanitized
 	./build/tests/test_d32_gather_copy_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_vk_image.c -o build/tests/test_vk_image_sanitized
 	./build/tests/test_vk_image_sanitized
@@ -186,11 +186,11 @@ check-sanitize:
 	./build/tests/test_query_pool_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c tests/test_buffer_transfer.c -o build/tests/test_buffer_transfer_sanitized
 	./build/tests/test_buffer_transfer_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 -DPS5VK_D32_SAMPLED_DIAGNOSTIC=1 -DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear_sanitized
 	./build/tests/test_image_copy_clear_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy_sanitized
 	./build/tests/test_bc_subresource_copy_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -DPS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_integer_readback_diagnostic.c -o build/tests/test_integer_readback_diagnostic_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_integer_readback_diagnostic.c -o build/tests/test_integer_readback_diagnostic_sanitized
 	./build/tests/test_integer_readback_diagnostic_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_indirect_queue.c -o build/tests/test_indirect_queue_sanitized
 	./build/tests/test_indirect_queue_sanitized
@@ -255,13 +255,13 @@ check:
 	./build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy
 	./build/tests/test_texture_copy
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_D32_SAMPLED_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_d32_gather_copy
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_d32_gather_copy
 	./build/tests/test_d32_gather_copy
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format.c -o build/tests/test_texture_format
 	./build/tests/test_texture_format
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_bc_diagnostic_profile.c -o build/tests/test_bc_diagnostic_profile
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_bc_diagnostic_profile.c -o build/tests/test_bc_diagnostic_profile
 	./build/tests/test_bc_diagnostic_profile
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/ps5-agc-gears/src src/texture_format.c src/depth_layout.c src/texture_layout.c src/color_attachment_contract.c native/image_ps5.c native/targets_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c tests/test_d16_diagnostic_profile.c -o build/tests/test_d16_diagnostic_profile
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/ps5-agc-gears/src src/texture_format.c src/depth_layout.c src/texture_layout.c src/color_attachment_contract.c native/image_ps5.c native/targets_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c tests/test_d16_diagnostic_profile.c -o build/tests/test_d16_diagnostic_profile
 	./build/tests/test_d16_diagnostic_profile
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/vk_image_view.c src/vk_sampler.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_descriptor.c -o build/tests/test_texture_descriptor
 	./build/tests/test_texture_descriptor
@@ -269,7 +269,7 @@ check:
 	./build/tests/test_texture_layout
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler
 	./build/tests/test_vk_sampler
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_bc_diagnostic
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_bc_diagnostic
 	./build/tests/test_vk_sampler_bc_diagnostic
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/index_emit_ps5.c tests/test_index_emit_ps5.c -o build/tests/test_index_emit_ps5
 	./build/tests/test_index_emit_ps5
@@ -306,7 +306,7 @@ check:
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c src/color_attachment_contract.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5
 	./build/tests/test_draw_state_ps5
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c src/color_attachment_contract.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5_d16_diagnostic
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c src/color_attachment_contract.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5_d16_diagnostic
 	./build/tests/test_draw_state_ps5_d16_diagnostic
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/viewport_ps5.c tests/test_viewport_ps5.c -o build/tests/test_viewport_ps5
@@ -320,7 +320,7 @@ check:
 	./build/tests/test_graphics_program
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_ps5
 	./build/tests/test_targets_ps5
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 -DPS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_t07_diagnostic
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/targets_ps5.c native/image_ps5.c src/depth_layout.c src/texture_format.c src/texture_layout.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c tests/test_targets_ps5.c -o build/tests/test_targets_t07_diagnostic
 	./build/tests/test_targets_t07_diagnostic
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/memory_ps5.c tests/test_native_memory_alignment.c -o build/tests/test_native_memory_alignment
 	./build/tests/test_native_memory_alignment
@@ -384,11 +384,11 @@ check:
 	./build/tests/test_query_pool
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c tests/test_buffer_transfer.c -o build/tests/test_buffer_transfer
 	./build/tests/test_buffer_transfer
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 -DPS5VK_D32_SAMPLED_DIAGNOSTIC=1 -DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear
 	./build/tests/test_image_copy_clear
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy
 	./build/tests/test_bc_subresource_copy
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_integer_readback_diagnostic.c -o build/tests/test_integer_readback_diagnostic
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_integer_readback_diagnostic.c -o build/tests/test_integer_readback_diagnostic
 	./build/tests/test_integer_readback_diagnostic
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_cts_draw_case_trace.c -o build/tests/test_cts_draw_case_trace
 	./build/tests/test_cts_draw_case_trace
@@ -582,5 +582,5 @@ upstream-cts-run:
 .PHONY: check-bc-subresource-copy
 check-bc-subresource-copy:
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy
 	./build/tests/test_bc_subresource_copy

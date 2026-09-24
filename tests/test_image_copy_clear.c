@@ -170,7 +170,6 @@ static void submit_and_wait(VkCommandBuffer command)
     vkDestroyFence(device, fence, NULL);
 }
 
-#if PS5VK_D32_SAMPLED_DIAGNOSTIC
 static void d32_gather_mip_tail_upload(void)
 {
     const VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -299,7 +298,6 @@ static void d32_gather_mip_tail_upload(void)
     vkDestroyImage(device, image, NULL);
     vkFreeMemory(device, im, NULL);
 }
-#endif
 
 /* BC upload/readback travels through the block-layout executor, where row
  * bytes and padded image pitch differ from RGBA8 texel rows. */
@@ -1157,9 +1155,7 @@ int main(void)
     VkCommandPoolCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                    .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
     assert(vkCreateCommandPool(device, &pci, NULL, &pool) == VK_SUCCESS);
-#if PS5VK_D32_SAMPLED_DIAGNOSTIC
     d32_gather_mip_tail_upload();
-#endif
     for(int srgb=0;srgb<2;++srgb)
     for(unsigned general_source=0;general_source<2;++general_source)
         for(unsigned general_destination=0;general_destination<2;++general_destination)

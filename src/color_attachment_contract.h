@@ -87,10 +87,7 @@ static inline int ps5vk_color_target_format_supported(VkFormat format)
          * render into R8G8B8A8_UINT plus R8G8B8A8_UNORM and now pass on
          * hardware (measured 2026-09-22). */
         format == VK_FORMAT_R8G8B8A8_UINT) return 1;
-#if defined(PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC) && \
-    PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC
     if (format == VK_FORMAT_R8G8B8A8_SINT) return 1;
-#endif
     return 0;
 }
 
@@ -100,12 +97,7 @@ static inline int ps5vk_color_target_format_supported(VkFormat format)
 static inline int ps5vk_color_target_format_is_integer(VkFormat format)
 {
     return format == VK_FORMAT_R8G8B8A8_UINT ||
-#if defined(PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC) && \
-    PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC
         format == VK_FORMAT_R8G8B8A8_SINT;
-#else
-        0;
-#endif
 }
 
 /* Whether this build actually SERVES an integer colour target. It is a

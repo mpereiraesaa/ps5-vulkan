@@ -133,7 +133,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                          * passes at both served counts. This dump
                                          * mirrors the console initializer, so the
                                          * published matrix is the console's. */
-                                        PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+                                        PS5VK_FEATURE_SAMPLE_RATE_SHADING |
+                                        PS5VK_FEATURE_IMAGE_CUBE_ARRAY |
+                                        PS5VK_FEATURE_TEXTURE_COMPRESSION_BC |
+                                        PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
+                                        PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

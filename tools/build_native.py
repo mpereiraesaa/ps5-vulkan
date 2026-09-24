@@ -87,8 +87,6 @@ def main():
     if d16_depth_witness == "1" and (not graphics_api or scissor_probe != "14" or
             os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
         raise SystemExit("PS5VK_D16_DEPTH_WITNESS requires graphics API, draw and PS5VK_GRAPHICS_SCISSOR_PROBE=14")
-    if d16_depth_witness == "1" and os.environ.get("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC") != "1":
-        raise SystemExit("D16 depth witness requires PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 for its SDK")
     if d16_depth_witness == "1" and os.environ.get("PS5VK_USE_SDK") != "1":
         raise SystemExit("D16 depth witness must be SDK-linked with PS5VK_USE_SDK=1")
     mip_view_base=os.environ.get("PS5VK_MIP_VIEW_BASE","0")
@@ -483,11 +481,8 @@ def main():
             common += ["-DPS5VK_GRAPHICS_SCISSOR_PROBE=" + scissor_probe]
             common += ["-DPS5VK_OCCLUSION_PRECISE_PROBE=" + occlusion_precise_probe]
             common += ["-DPS5VK_OCCLUSION_DEPTH_PROBE=" + occlusion_depth_probe]
-            common += ["-DPS5VK_OCCLUSION_PRECISE_DIAGNOSTIC=" + occlusion_query_api_probe]
             common += ["-DPS5VK_OCCLUSION_QUERY_API_PROBE=" + occlusion_query_api_probe]
             common += ["-DPS5VK_GATHER_FORM=" + gather_form]
-            common += ["-DPS5VK_GATHER_EXTENDED_DIAGNOSTIC=" +
-                       ("1" if gather_form in ("2", "3", "4") else "0")]
             common += ["-DPS5VK_D16_DEPTH_WITNESS=" + d16_depth_witness]
             common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
             common += ["-DPS5VK_MIP_FORCE_LOD=" + mip_force_lod]
@@ -836,10 +831,6 @@ def main():
             ROOT / "src/spirv_graphics_interface.c",
             ROOT / "native/runtime_graphics_ps5.c", ROOT / "src/ps5_compiler_shims.c")]
     if use_runtime_sdk:
-        # The SDK compiles the platform feature gate into libps5vk.a. Keep this
-        # one-off query API permission in step with the native witness objects.
-        os.environ["PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC"] = occlusion_query_api_probe
-        os.environ["PS5VK_GATHER_EXTENDED_DIAGNOSTIC"] = "1" if gather_form in ("2", "3", "4") else "0"
         run(sys.executable, ROOT / "tools/build_sdk.py")
         # Only application/test-oracle objects remain outside libps5vk.a.
         # The harness can inspect internals, but cannot supply backend objects.
@@ -961,8 +952,7 @@ def main():
                             occlusion_depth_probe=int(occlusion_depth_probe),
                             occlusion_query_api_probe=int(occlusion_query_api_probe),
                             d16_depth_witness=int(d16_depth_witness),
-                            d16_depth_attachment_diagnostic=int(
-                                os.environ.get("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC", "0")),
+                            d16_depth_attachment_supported=1,
                             scissor_register_load="indirect-plus-direct-replay" if int(scissor_probe) else "indirect",
                             scene_draw_partition="two-36-index-draws" if scene_split == "1" else "single-draw",
                             exit_control=exit_control, keep_agc_module=keep_agc_module,

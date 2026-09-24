@@ -741,7 +741,6 @@ static void check_gather_compiler_forms(void)
         ps5vk_runtime_graphics_free(NULL,out);
         free((void *)key.vertex.words);free((void *)key.fragment.words);
     }
-#if defined(PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC) && PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC
     const struct {
         const char *shader;
         VkFormat color_format;
@@ -778,7 +777,6 @@ static void check_gather_compiler_forms(void)
         ps5vk_runtime_graphics_free(NULL,out);
         free((void *)key.vertex.words);free((void *)key.fragment.words);
     }
-#endif
     puts("Image gather compiler forms: core selectors are baseline; gather offsets including depth-reference gather require the gated feature");
 }
 
@@ -2753,10 +2751,9 @@ int main(void)
      * accepted topology compiles; everything else stays fail-closed, before the
      * compiler is reached. */
     const VkPrimitiveTopology unsupported_topologies[]={
-        /* Point and line topologies resolve, but a pipeline WITHOUT a geometry
-         * stage has no witness for rasterizing them directly, so they are
-         * refused like the families the resolver does not carry at all. */
-        VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+        /* Lines still need geometry. The remaining families have no plain
+         * graphics resolver or hardware witness. Point-list rasterization is
+         * served by the ordinary pipeline. */
         VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
         VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
@@ -2778,10 +2775,8 @@ int main(void)
            primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST);
     assert(ps5vk_agc_primitive_type(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,&primitive_type)==0 &&
            primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
-    /* The resolver carries points and lines (they feed a geometry stage), while
-     * the plain-pipeline list above is refused for a different reason: no
-     * geometry stage. The native link gate names the resolver's whole set, so a
-     * value the key resolves can never be refused by the linker's own check. */
+    /* The native link gate names the resolver's whole set, so a value the key
+     * resolves can never be refused by the linker's own check. */
     for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
         const int resolved=!ps5vk_agc_primitive_type(unsupported_topologies[i],&primitive_type);
         assert(!resolved || ps5vk_agc_primitive_needs_geometry(primitive_type));
@@ -2798,6 +2793,12 @@ int main(void)
     assert(ps5vk_runtime_graphics_supported(&key) && ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==
         PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP);
+    ps5vk_runtime_graphics_free(NULL,out);out=NULL;
+    key.topology=VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    assert(ps5vk_runtime_graphics_supported(&key) &&
+           ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==
+           PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST);
     ps5vk_runtime_graphics_free(NULL,out);out=NULL;
     for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
         key.topology=unsupported_topologies[i];

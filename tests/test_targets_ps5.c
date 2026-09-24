@@ -54,7 +54,6 @@ int main(void)
     assert(ps5vk_native_target(&device, &view, NULL, &target) == VK_ERROR_UNKNOWN && !target.count);
     base -= 64; view.format=image.info.format=VK_FORMAT_R8G8B8A8_UNORM;
     assert(ps5vk_native_target(&device, &view, NULL, &target) == VK_ERROR_FORMAT_NOT_SUPPORTED);
-#if defined(PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC) && PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC
     /* Exact CTS D16 depth-only target: 128x128, one layer, one 64 KiB tile. */
     view.format=image.info.format=VK_FORMAT_D16_UNORM;
     image.info.extent=(VkExtent3D){128u,128u,1u};
@@ -69,7 +68,6 @@ int main(void)
            target.count==PS5_DEPTH_REGISTER_COUNT &&
            target.registers[20].offset==0x010u &&
            (target.registers[20].value&3u)==1u);
-#endif
     image.info.extent=(VkExtent3D){32u,32u,1u};
     image.info.format=view.format=VK_FORMAT_D32_SFLOAT;
     span_bytes=131072u;
@@ -95,11 +93,9 @@ int main(void)
            (target.registers[2].value&(1u<<17)) &&
            (target.registers[2].value&(1u<<18)) &&
            !(target.registers[2].value&(1u<<15)));
-#if defined(PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC) && PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC
     image.info.format=view.format=VK_FORMAT_R8G8B8A8_SINT;
     assert(ps5vk_native_target(&device,&view,defaults,&target)==VK_SUCCESS &&
            ((target.registers[2].value>>8)&7u)==5u);
-#endif
     image.info.format=view.format=VK_FORMAT_B8G8R8A8_UNORM;
     image.info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     assert(ps5vk_native_target(&device,&view,defaults,&target)==VK_SUCCESS);

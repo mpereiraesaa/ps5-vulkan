@@ -201,10 +201,6 @@ def main():
     if not args.use_staged_sdk or not (DIST_SDK / "lib/libps5vk.a").is_file():
         print("Staging current SDK with tools/build_sdk.py...")
         build_env = dict(os.environ)
-        if args.bc_filter_format or args.bc_subresource_profile:
-            build_env["PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC"] = "1"
-        if args.cube_array_witness:
-            build_env["PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC"] = "1"
         subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")],
                        env=build_env, check=True)
 

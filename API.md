@@ -205,7 +205,7 @@ a storage or transfer-only image.
 ## Images and sampling
 
 The GFX1013 texture-format table records exact descriptor encodings, Vulkan
-component completion and texel sizes for thirty-nine public sampled formats, adapted
+component completion and texel sizes for 61 public sampled formats, adapted
 from the pinned GPLv3 `ps5-opengl` reference and then validated against Vulkan
 oracles on PS5. Two byte-identical runs of each promoted tranche established
 image creation, transfer upload, descriptor sampling and deterministic
@@ -214,7 +214,9 @@ readback. Each format query exposes only the operations actually established.
 | Format | Supported role |
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
-| `VK_FORMAT_D32_SFLOAT` | Depth attachment (depth aspect only), a whole-subresource, one-sample depth-only clear target written as a transfer destination, and a whole-surface readback read as a transfer source over the depth aspect |
+| `VK_FORMAT_D32_SFLOAT` | Depth attachment (depth aspect only), whole-subresource transfer-destination clear and transfer-source readback over the depth aspect, plus bounded 64×64 sampled depth for Dref gather |
+| `VK_FORMAT_D16_UNORM` | One 128×128 depth attachment with no sampled, transfer or stencil role |
+| Vulkan 1.0 BC1–BC7 formats (16 variants) | Sampled/upload images with nearest/linear filtering, compatible blit sources and bounded mip/layer transfers |
 | `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8_SNORM`, `VK_FORMAT_R8G8_UNORM`, `VK_FORMAT_R8G8_SNORM` | Sampled/upload image with nearest/linear filtering and Vulkan completion of missing components |
 | `VK_FORMAT_R8G8B8A8_UNORM` | Sampled/upload image with nearest/linear filtering and hardware-validated explicit mip LOD, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
 | `VK_FORMAT_R8G8B8A8_SNORM`, `VK_FORMAT_R8G8B8A8_SRGB` | Sampled/upload image with signed-normalized or hardware sRGB conversion and nearest/linear filtering |
@@ -229,6 +231,11 @@ readback. Each format query exposes only the operations actually established.
 | `VK_FORMAT_A8B8G8R8_UNORM_PACK32`, `VK_FORMAT_A8B8G8R8_SNORM_PACK32`, `VK_FORMAT_A8B8G8R8_SRGB_PACK32` | Packed sampled/upload image with native conversion and nearest/linear filtering; no color-attachment or storage-image role |
 | `VK_FORMAT_A8B8G8R8_UINT_PACK32`, `VK_FORMAT_A8B8G8R8_SINT_PACK32` | Packed typed integer sampled/upload image, nearest only |
 | 41 normalized, integer and floating-point rows across the `R8`, `R8G8`, `R8G8B8A8`, packed `A8B8G8R8`, `B10G11R11`, `R16`, `R16G16`, `R16G16B16A16`, `R32`, `R32G32` and `R32G32B32A32` families | Uniform texel buffers directly validated with typed compute `texelFetch`; the exact list and receipts are in `conformance_inventory/physical_format_validation.json` and `VALIDATION.md` |
+
+RGBA8 UINT/SINT also serve four-component color attachments with transfer-source
+readback for integer gather cases. `shaderImageGatherExtended` reports the
+bounded texel-gather offset interval -8 through 7; D32 comparison gather uses
+the sampled-depth profile above.
 
 The shared layout and query path exposes bounded complete mip chains for these
 sampled formats. Direct multi-level hardware evidence currently covers 2D
@@ -274,8 +281,10 @@ stays refused before any state is mutated. `linearTilingFeatures` and
 `vkGetPhysicalDeviceImageFormatProperties` report exactly this one shape and
 nothing else.
 
-Nearest and linear sampling have native deterministic readback evidence for all
-24 filterable sampled formats. 20 additional signed and unsigned
+The public table has 40 filterable sampled formats. Nearest and linear sampling
+have native deterministic readback evidence for the
+original 24 filterable formats. The sixteen BC formats have original CTS
+sampling coverage and focused native filtering witnesses. 20 additional signed and unsigned
 integer rows have typed `isampler2D`/`usampler2D` nearest-sampling evidence and
 do not expose linear filtering. R8 and RG8 verify Vulkan completion of missing
 components;
@@ -290,7 +299,7 @@ separate nearest-versus-linear magnification and minification discriminators;
 both float and integer variants of the six fixed `VkBorderColor` enums map to
 those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
 unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
-is advertised only for the 24 validated filterable rows. Valid sampled
+is advertised only for the 40 validated filterable rows. Valid sampled
 images can carry complete mip chains up to the per-type query limit. A
 public-SDK-linked 2D RGBA8 witness uploaded three levels and selected all three
 with runtime-compiled explicit LOD, producing deterministic GPU readback.
@@ -307,11 +316,11 @@ backed by descriptor/layout arithmetic and allocation bounds; the hardware
 witnesses use small resources and are not exhaustive tests at those maximum
 dimensions. The multi-level hardware witness is 2D RGBA8; it does not establish
 layered mip selection, anisotropy or general descriptor arrays. A separate
-default-off T07 diagnostic sampled both cubes and all twelve cube-array faces,
-including a view starting at layer one, with exact GPU readback. The advertised
-cube-compatible `SAMPLED | COLOR_ATTACHMENT` role now has a host-tested tiled
-descriptor candidate; rendering into that attachment and sampling it remains
-pending native validation, so `imageCubeArray` is still reported false.
+cube-array path sampled two cubes and all twelve faces, including a view
+starting at layer one, with exact GPU readback. A separate 256×256 tiled
+attachment witness sampled all twelve rendered faces; descriptors refuse
+smaller incompatible layer pitches. The graphics profile reports
+`imageCubeArray` true.
 
 ## Compute
 
@@ -690,15 +699,15 @@ profile can honestly create:
   cannot be destroyed while a query pool child remains.
 - `vkCmdResetQueryPool`, `vkCmdBeginQuery`, `vkCmdEndQuery` and
   `vkCmdCopyQueryPoolResults` record bounded ordered operations. The native
-  graphics path publishes real occlusion counts; its default-off precise
-  diagnostic passed an original upstream query oracle twice and a separate
+  graphics path publishes real occlusion counts; the precise path passed an
+  original upstream query oracle twice and a separate
   SDK-linked witness for zero, one and three covered samples, both result
   widths, availability, wait/partial and reset/reuse.
 - `vkGetQueryPoolResults` preserves unavailable result words, reports
   availability separately, and reads published counts after completion.
   The bounded `WAIT_BIT` and `PARTIAL_BIT` paths are exercised by the witness.
-  `VK_QUERY_CONTROL_PRECISE_BIT` requires the logical device to enable
-  `occlusionQueryPrecise`, which the shipping platform still reports false.
+  `VK_QUERY_CONTROL_PRECISE_BIT` requires the logical device to enable the
+  advertised `occlusionQueryPrecise` feature.
 - `vkCmdWriteTimestamp` remains fail closed; no CPU-derived timestamp is
   substituted for a native result. Secondary command-buffer inheritance of
   occlusion query state remains refused by this profile.
@@ -821,11 +830,10 @@ secondary, a child that is neither pending nor executable, a self-reference, a
 pending or repeated child that was not recorded for simultaneous use, and any
 of the scope mismatches above.
 
-Accordingly the driver refuses what it would not honour, and only that:
-`occlusionQueryEnable`,
-`queryFlags` and `pipelineStatistics`, because this device reports
-`occlusionQueryPrecise` and `pipelineStatisticsQuery` false and executes no
-query at all. Members Vulkan defines as ignored are not refused. Recording a
+Accordingly the driver refuses `occlusionQueryEnable`, `queryFlags` and
+`pipelineStatistics` in secondary inheritance because it does not execute
+inherited occlusion queries or pipeline statistics. Primary precise occlusion
+queries are supported. Members Vulkan defines as ignored are not refused. Recording a
 primary-only command into a secondary - `vkCmdBeginRenderPass`,
 `vkCmdEndRenderPass`, `vkCmdNextSubpass` - or nesting `vkCmdExecuteCommands`
 poisons the recording transactionally, leaving no partial operation behind.

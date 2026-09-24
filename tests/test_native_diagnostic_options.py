@@ -11,19 +11,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeDiagnosticOptions(unittest.TestCase):
-    def test_t07_depth_and_integer_build_switches_are_attributed(self):
+    def test_t07_promoted_switches_are_retired(self):
         from tools.build_upstream_cts import tessellation_build_profile
 
-        names = ("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC",
+        names = ("PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC",
+                 "PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC",
+                 "PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC",
+                 "PS5VK_GATHER_EXTENDED_DIAGNOSTIC",
+                 "PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC",
                  "PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC",
                  "PS5VK_D32_SAMPLED_DIAGNOSTIC")
         profile = tessellation_build_profile({name: "1" for name in names})
-        self.assertTrue(profile["experimental"])
+        self.assertFalse(profile["experimental"])
         sdk = (ROOT / "tools/build_sdk.py").read_text()
         for name in names:
-            self.assertEqual(profile["switches"][name], "1")
-            self.assertIn(name, sdk)
-            self.assertEqual(tessellation_build_profile({})["switches"][name], "0")
+            self.assertNotIn(name, profile["switches"])
+            self.assertNotIn(name, sdk)
+            self.assertNotIn(name, (ROOT / "native/platform_ps5.c").read_text())
 
     def test_promoted_fragment_feature_has_no_diagnostic_switch(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
@@ -198,15 +202,15 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.rejected({"PS5VK_OCCLUSION_QUERY_API_PROBE": "1"},
                       "requires runtime graphics, depth-enabled probe 15")
         source = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertIn("#if PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC", source)
         self.assertIn("PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE", source)
+        self.assertNotIn("PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC", source)
         build = (ROOT / "tools/build_native.py").read_text()
         sdk_build = (ROOT / "tools/build_sdk.py").read_text()
-        self.assertIn('os.environ["PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC"] = occlusion_query_api_probe', build)
-        self.assertIn('"-DPS5VK_OCCLUSION_PRECISE_DIAGNOSTIC="', sdk_build)
+        self.assertNotIn("PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC", build)
+        self.assertNotIn("PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC", sdk_build)
         self.assertIn('scissor_probe in ("8", "13", "15") and use_runtime_graphics', build)
 
-    def test_gather_probe_is_sdk_linked_and_default_off(self):
+    def test_gather_probe_is_sdk_linked(self):
         self.rejected({"PS5VK_GRAPHICS_API": "build/graphics/control-gxn440da",
                        "PS5VK_RUNTIME_GRAPHICS": "1",
                        "PS5VK_GRAPHICS_DRAW": "1",
@@ -224,15 +228,14 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_OCCLUSION_DEPTH_PROBE": "1"},
                       "requires a single runtime-graphics draw")
         platform = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertIn("#ifndef PS5VK_GATHER_EXTENDED_DIAGNOSTIC", platform)
         self.assertIn("PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED", platform)
+        self.assertNotIn("PS5VK_GATHER_EXTENDED_DIAGNOSTIC", platform)
         device = (ROOT / "src/vk_device.c").read_text()
         self.assertIn("VkPhysicalDeviceFeatures, shaderImageGatherExtended", device)
         native_build = (ROOT / "tools/build_native.py").read_text()
         sdk_build = (ROOT / "tools/build_sdk.py").read_text()
-        self.assertIn('os.environ["PS5VK_GATHER_EXTENDED_DIAGNOSTIC"] = "1" if gather_form in ("2", "3", "4") else "0"',
-                      native_build)
-        self.assertIn('"-DPS5VK_GATHER_EXTENDED_DIAGNOSTIC="', sdk_build)
+        self.assertNotIn("PS5VK_GATHER_EXTENDED_DIAGNOSTIC", native_build)
+        self.assertNotIn("PS5VK_GATHER_EXTENDED_DIAGNOSTIC", sdk_build)
         compiler = (ROOT / "src/ps5vk_compiler.c").read_text()
         self.assertIn("PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED", compiler)
 
@@ -246,7 +249,7 @@ class NativeDiagnosticOptions(unittest.TestCase):
                       "requires graphics API, draw and PS5VK_GRAPHICS_SCISSOR_PROBE=14")
         source = (ROOT / "native/graphics_main.c").read_text()
         builder = (ROOT / "tools/build_native.py").read_text()
-        self.assertIn("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 for its SDK", builder)
+        self.assertNotIn("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC", builder)
         self.assertIn('use_runtime_sdk and d16_depth_witness == "1"', builder)
         self.assertIn("PS5VK_USE_SDK=1", builder)
         self.assertIn("use_runtime_graphics or continuous == \"1\"", builder)

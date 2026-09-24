@@ -23,7 +23,7 @@ class D16DepthWitnessTest(unittest.TestCase):
             manifest.write_text(json.dumps({
                 "stage": "graphics-api-offscreen-draw", "runtime_sdk": True,
                 "submit_enabled": True, "scissor_probe": 14,
-                "d16_depth_witness": 1, "d16_depth_attachment_diagnostic": 1,
+                "d16_depth_witness": 1, "d16_depth_attachment_supported": 1,
                 "graphics": {"source": "experiments/graphics/scene3d.pipe"},
                 "files": {"eboot.bin": digest},
             }))

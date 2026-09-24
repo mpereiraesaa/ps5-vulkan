@@ -10,21 +10,6 @@
 #include "vk_sampler.h"
 #include "graphics_limits.h"
 #include <float.h>
-#ifndef PS5VK_D32_SAMPLED_DIAGNOSTIC
-#define PS5VK_D32_SAMPLED_DIAGNOSTIC 0
-#endif
-#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && \
-    PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
-#include <string.h>
-#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
-#include "ps5log.h"
-#define BC_SAMPLER_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
-#else
-#define BC_SAMPLER_MARK(...) ((void)0)
-#endif
-#else
-#define BC_SAMPLER_MARK(...) ((void)0)
-#endif
 static int address_mode(VkSamplerAddressMode mode)
 {
     switch(mode) {
@@ -66,27 +51,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
     *out=VK_NULL_HANDLE;
     if(!d || !info || info->sType!=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO)return VK_ERROR_UNKNOWN;
     const VkSamplerCreateFlags unsupported_flags = info->flags;
-    const VkBool32 compare_allowed = PS5VK_D32_SAMPLED_DIAGNOSTIC &&
-        info->compareEnable && info->compareOp >= VK_COMPARE_OP_NEVER &&
+    const VkBool32 compare_allowed = info->compareEnable &&
+        info->compareOp >= VK_COMPARE_OP_NEVER &&
         info->compareOp <= VK_COMPARE_OP_ALWAYS;
-#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && \
-    PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC && \
-    defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
-    {
-        uint32_t bias_bits, min_lod_bits, max_lod_bits;
-        memcpy(&bias_bits, &info->mipLodBias, sizeof(bias_bits));
-        memcpy(&min_lod_bits, &info->minLod, sizeof(min_lod_bits));
-        memcpy(&max_lod_bits, &info->maxLod, sizeof(max_lod_bits));
-        BC_SAMPLER_MARK("PS5VK_SAMPLER site=create flags=%08x unsupported=%08x pnext=%u gfx=%u aniso=%u compare=%u unnorm=%u bias=%08x lod=%08x/%08x mip=%u filter=%u/%u address=%u/%u/%u border=%u",
-            (unsigned)info->flags, (unsigned)unsupported_flags, info->pNext != NULL,
-            d->graphics_enabled, info->anisotropyEnable, info->compareEnable,
-            info->unnormalizedCoordinates, bias_bits, min_lod_bits, max_lod_bits,
-            (unsigned)info->mipmapMode, (unsigned)info->magFilter,
-            (unsigned)info->minFilter, (unsigned)info->addressModeU,
-            (unsigned)info->addressModeV, (unsigned)info->addressModeW,
-            (unsigned)info->borderColor);
-    }
-#endif
     /* Reject rather than clamp unsupported state or silently enable
      * approximate sampling behavior. */
     if(!d->graphics_enabled || info->pNext || unsupported_flags || info->anisotropyEnable ||

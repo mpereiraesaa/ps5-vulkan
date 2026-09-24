@@ -58,7 +58,12 @@ int main(void)
     vkDestroySampler(&d,sampler,NULL);info.mipLodBias=0;
 #define BAD(field,value) do { VkSamplerCreateInfo bad=info;bad.field=value;sampler=(VkSampler)(uintptr_t)1; \
     assert(vkCreateSampler(&d,&bad,NULL,&sampler)!=VK_SUCCESS && !sampler && !d.graphics_objects); } while(0)
-    BAD(pNext,&info);BAD(flags,1);BAD(anisotropyEnable,VK_TRUE);BAD(compareEnable,VK_TRUE);
+    BAD(pNext,&info);BAD(flags,1);BAD(anisotropyEnable,VK_TRUE);
+    VkSamplerCreateInfo compare=info;
+    compare.compareEnable=VK_TRUE;
+    compare.compareOp=VK_COMPARE_OP_LESS_OR_EQUAL;
+    assert(vkCreateSampler(&d,&compare,NULL,&sampler)==VK_SUCCESS);
+    vkDestroySampler(&d,sampler,NULL);
     BAD(flags,VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
     BAD(unnormalizedCoordinates,VK_TRUE);BAD(mipLodBias,NAN);BAD(mipLodBias,2.01f);
     BAD(mipLodBias,-2.01f);BAD(minLod,NAN);BAD(maxLod,INFINITY);

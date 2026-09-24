@@ -235,29 +235,6 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
         (unsigned long long)j->serial,count,j->words,j->readback.count);
     return VK_SUCCESS;
 fail:
-#if defined(PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC) && PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
-    for(unsigned i=0;i<count;++i) {
-        const struct ps5vk_operation *op=&cb->operations[first+i];
-        if(op->type==PS5VK_IMAGE_BARRIER) {
-            const VkImageMemoryBarrier *b=&op->image_barrier;
-            ps5log_printf(PS5LOG_ERR,
-                "PS5VK_PRECISE_TRANSFER_OP index=%u type=image_barrier format=%u usage=%08x extent=%ux%ux%u old=%u new=%u src=%08x dst=%08x stages=%08x/%08x",
-                i,b->image->info.format,b->image->info.usage,b->image->info.extent.width,
-                b->image->info.extent.height,b->image->info.extent.depth,b->oldLayout,b->newLayout,
-                b->srcAccessMask,b->dstAccessMask,op->src_stage,op->dst_stage);
-        } else if(op->type==PS5VK_CLEAR_DEPTH_STENCIL_IMAGE || op->type==PS5VK_CLEAR_COLOR_IMAGE) {
-            VkImage image=op->image_destination;
-            ps5log_printf(PS5LOG_ERR,
-                "PS5VK_PRECISE_TRANSFER_OP index=%u type=%u format=%u usage=%08x extent=%ux%ux%u layout=%u",
-                i,op->type,image?image->info.format:0,image?image->info.usage:0,
-                image?image->info.extent.width:0,image?image->info.extent.height:0,
-                image?image->info.extent.depth:0,op->image_destination_layout);
-        } else {
-            ps5log_printf(PS5LOG_ERR,"PS5VK_PRECISE_TRANSFER_OP index=%u type=%u stages=%08x/%08x access=%08x/%08x",
-                i,op->type,op->src_stage,op->dst_stage,op->src_access,op->dst_access);
-        }
-    }
-#endif
     ps5log_printf(PS5LOG_ERR,"PS5VK_UPLOAD_PREPARE_FAILED serial=%llu site=%u rc=%d",
         (unsigned long long)j->serial,readback?readback_site:0u,rc);
     release(d,j);return rc;

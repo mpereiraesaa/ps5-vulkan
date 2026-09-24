@@ -17,8 +17,9 @@ def validate(log_path, manifest_path, artifact_path):
             manifest.get("submit_enabled") is True and
             manifest.get("scissor_probe") == 14 and
             manifest.get("d16_depth_witness") == 1 and
-            manifest.get("d16_depth_attachment_diagnostic") == 1,
-            "D16 SDK-linked diagnostic artifact")
+            (manifest.get("d16_depth_attachment_supported") == 1 or
+             manifest.get("d16_depth_attachment_diagnostic") == 1),
+            "D16 SDK-linked artifact")
     require(manifest.get("files", {}).get("eboot.bin") == digest,
             "signed eboot hash")
     require(manifest.get("graphics", {}).get("source") ==

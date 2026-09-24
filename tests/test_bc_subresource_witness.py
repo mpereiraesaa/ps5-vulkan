@@ -195,10 +195,8 @@ class BCConsumerPhysicalQueryTests(unittest.TestCase):
             main.write_text(source)
             for name, flags in (
                 ('shipping', []),
-                ('filter', ['-DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1',
-                            '-DCONSUMER_BC_FILTER_WITNESS=1']),
-                ('subresource', ['-DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1',
-                                 '-DCONSUMER_BC_SUBRESOURCE_WITNESS=1'])):
+                ('filter', ['-DCONSUMER_BC_FILTER_WITNESS=1']),
+                ('subresource', ['-DCONSUMER_BC_SUBRESOURCE_WITNESS=1'])):
                 with self.subTest(profile=name):
                     binary=Path(directory)/name
                     compiled = subprocess.run(['cc','-std=c11','-ffunction-sections','-fdata-sections',

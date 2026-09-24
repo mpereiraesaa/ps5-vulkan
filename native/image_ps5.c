@@ -103,8 +103,9 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
          info->extent.depth != 1 || info->mipLevels != 7 ||
          info->arrayLayers != 1 || info->samples != VK_SAMPLE_COUNT_1_BIT ||
          info->tiling != VK_IMAGE_TILING_OPTIMAL || info->flags ||
-         info->usage != (VK_IMAGE_USAGE_SAMPLED_BIT |
-             VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
+         (info->usage != VK_IMAGE_USAGE_SAMPLED_BIT &&
+          info->usage != (VK_IMAGE_USAGE_SAMPLED_BIT |
+              VK_IMAGE_USAGE_TRANSFER_DST_BIT))))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     if (info->format == VK_FORMAT_D16_UNORM &&
         !ps5vk_texture_format_witnessed(info->format,

@@ -54,12 +54,6 @@ DUMP_BINARY = ROOT / "build/tests/dump_device_reporting"
 # longer resolves marks the row not-audited instead of satisfied, so the matrix
 # cannot keep claiming a gate that has moved or disappeared.
 FEATURE_GATES = {
-    "imageCubeArray": ("src/vk_image_view.c",
-                       "!(d->enabled_features&PS5VK_FEATURE_IMAGE_CUBE_ARRAY)",
-                       "cube-array views require the enabled feature bit"),
-    "textureCompressionBC": ("src/texture_format.c",
-                             "PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC",
-                             "BC format roles require the default-off diagnostic switch"),
     # independentBlend was promoted on 2026-09-22: the platform reports the bit,
     # the profile advertises two colour attachments, and both upstream leaves
     # that require the feature pass, so it is no longer a gated VK_FALSE report.
@@ -209,6 +203,49 @@ ADVERTISED_FEATURES = {
                    "and maxDrawIndexedIndexValue reports 2^32-1"),
         "cts": ("dEQP-VK.info.device_mandatory_features",),
     },
+}
+
+ADVERTISED_FEATURES["imageCubeArray"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_IMAGE_CUBE_ARRAY;"),
+        ("src/texture_descriptor.c", "VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:"),
+        ("src/texture_descriptor.c", "tiled.bytes!=layer_stride"),
+    ),
+    "detail": ("cube-array image/view negotiation and twelve-face GPU sampling are "
+               "implemented, with unsupported tiled pitches refused at descriptor creation"),
+    "cts": ("dEQP-VK.api.object_management.single.image_view_cube_arr",),
+}
+ADVERTISED_FEATURES["textureCompressionBC"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;"),
+        ("src/texture_format.c", "CAP_SAMP | CAP_LINEAR | CAP_SRC | CAP_DST | CAP_BLIT_SRC"),
+        ("src/graphics_formats.h", "ps5vk_bc_transfer_subresources"),
+    ),
+    "detail": ("sixteen BC formats provide sampled, filtered, copy and blit source "
+               "roles with subresource transfer execution"),
+    "cts": ("dEQP-VK.texture.compressed.bc1_rgb_unorm_block_2d_pot",),
+}
+ADVERTISED_FEATURES["occlusionQueryPrecise"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;"),
+        ("src/vk_query_pool.c", "VK_QUERY_CONTROL_PRECISE_BIT"),
+    ),
+    "detail": "precise occlusion counters complete on GPU and pass the original query oracle",
+    "cts": ("dEQP-VK.query_pool.occlusion_query.basic_precise",),
+}
+ADVERTISED_FEATURES["shaderImageGatherExtended"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;"),
+        ("src/device_profile_report.h", "properties->limits.minTexelGatherOffset = -8;"),
+        ("src/ps5vk_compiler.c", "PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED"),
+    ),
+    "detail": ("constant, dynamic, four-offset, component and Dref gather forms "
+               "execute within the reported -8..7 interval"),
+    "cts": ("dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_npot.clamp_to_edge_repeat",),
 }
 
 ADVERTISED_FEATURES["uniformBufferStandardLayout"] = {

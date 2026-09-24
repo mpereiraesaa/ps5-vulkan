@@ -325,14 +325,13 @@ static void lifecycle(void)
     for(unsigned usage=0;usage<256;++usage) {
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_B8G8R8A8_UNORM,usage)==
             (usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
-        /* The depth target is an attachment, the destination of the whole-
-         * subresource vkCmdClearDepthStencilImage, the source of the
-         * whole-surface readback, or a combination of those. Every form is the
-         * tiled depth surface; no other combination exists, and in particular
-         * the transfer source never appears without the attachment, because a
-         * standalone D32 transfer image has no role here. */
+        /* D32 also has a separate bounded sampled-depth role for Dref gather.
+         * The depth attachment forms remain tiled, and transfer source never
+         * appears without the attachment. */
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_D32_SFLOAT,usage)==
-            (usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT ||
+            (usage==VK_IMAGE_USAGE_SAMPLED_BIT ||
+             usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT ||
              usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
              usage==(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
                      VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
@@ -430,12 +429,16 @@ static void lifecycle(void)
                 usage==(VK_IMAGE_USAGE_STORAGE_BIT|
                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                         VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            const VkBool32 bounded_d32_sampled =
+                image_formats[f]==VK_FORMAT_D32_SFLOAT &&
+                (usage==VK_IMAGE_USAGE_SAMPLED_BIT ||
+                 usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT));
             assert(result==VK_SUCCESS &&
-                ip.maxExtent.width==(storage_image_shape?8u:(f==0?16383u:16384u)));
+                ip.maxExtent.width==(storage_image_shape?8u:
+                    bounded_d32_sampled?64u:(f==0?16383u:16384u)));
             assert(ip.maxExtent.height==ip.maxExtent.width && ip.maxExtent.depth==1);
-            /* Every D32 role is the tiled depth surface, including the target
-             * created only as the destination of a whole-subresource depth
-             * clear, so all of them are attachment-shaped: one mip, one layer. */
+            /* D32 sampling has its own bounded descriptor profile; other D32
+             * roles use the tiled depth attachment and readback surface. */
             const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 ||
                 image_formats[f]==VK_FORMAT_D32_SFLOAT;
@@ -447,8 +450,11 @@ static void lifecycle(void)
                 PS5VK_FORMAT_CAP_TRANSFER_SRC) && usage &&
                 !(usage&~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
                                              VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-            const uint32_t expected_mips=!attachment &&
-                (usage&VK_IMAGE_USAGE_SAMPLED_BIT)?15u:1u;
+            const VkBool32 multi_transfer = transfer_only &&
+                ps5vk_bc_transfer_subresources(image_formats[f]);
+            const uint32_t expected_mips=bounded_d32_sampled?7u:
+                ((!attachment && (usage&VK_IMAGE_USAGE_SAMPLED_BIT)) ||
+                 multi_transfer)?15u:1u;
             /* The one input-attachment shape the pinned multiview helper needs
              * reports the measured six-view layer floor; every other attachment
              * (and the pure transfer role) stays single-layer, so the query and
@@ -461,7 +467,8 @@ static void lifecycle(void)
                         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
             const uint32_t expected_layers = input_attachment_shape ?
                 PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR :
-                (attachment||transfer_only||storage_image_shape?1u:
+                (bounded_d32_sampled||attachment||storage_image_shape||
+                 (transfer_only&&!multi_transfer)?1u:
                     PS5VK_MAX_IMAGE_ARRAY_LAYERS);
             assert(ip.maxMipLevels==expected_mips &&
                 ip.maxArrayLayers==expected_layers &&
@@ -581,15 +588,21 @@ static void lifecycle(void)
              * applicable leaves passed with it reported. */
             optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
-                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT;
+        else if(formats[n]==VK_FORMAT_R8G8B8A8_SRGB)
+            optimal_bits|=VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT;
         else if(formats[n]==VK_FORMAT_D32_SFLOAT)
             /* TRANSFER_DST is the whole-subresource depth clear and
              * TRANSFER_SRC is the whole-surface readback, which 64KB_Z_X has
              * had since its pixel addressing was implemented. */
-            optimal_bits=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+            optimal_bits=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
-        else if(formats[n]==VK_FORMAT_R8G8B8A8_UINT)
+        else if(formats[n]==VK_FORMAT_R8G8B8A8_UINT ||
+                formats[n]==VK_FORMAT_R8G8B8A8_SINT)
             /* DXVK262-T06 independentBlend is promoted, so the integer colour
              * target the two upstream leaves draw into reports its colour
              * attachment role (and the transfer source its readback needs)
@@ -600,7 +613,8 @@ static void lifecycle(void)
         /* One format publishes a linear-tiling role: RGBA8 carries the transfer
          * destination of the pinned host-readback staging image. */
         const VkFormatFeatureFlags linear_bits = formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?
-            (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT : 0;
+            (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT) : 0;
         assert(fp.linearTilingFeatures==linear_bits && fp.bufferFeatures==buffer_bits &&
             fp.optimalTilingFeatures==optimal_bits);
     }
@@ -682,7 +696,8 @@ static void lifecycle(void)
         /* RGBA8 is also the one linear-tiling staging row; the other vertex
          * formats publish nothing there. */
         assert(fp.linearTilingFeatures==(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM ?
-            (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT : 0));
+            (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT) : 0));
         VkFormatFeatureFlags expected_optimal=0;
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
             expected_optimal=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
@@ -697,7 +712,8 @@ static void lifecycle(void)
         if(vertex_formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
             expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
-                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
+                VK_FORMAT_FEATURE_BLIT_DST_BIT;
         else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
             expected_optimal=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         assert(fp.optimalTilingFeatures==expected_optimal);

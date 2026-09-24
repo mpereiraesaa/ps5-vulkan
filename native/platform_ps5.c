@@ -16,12 +16,6 @@ static struct ps5vk_program_library ps5vk_compiled_library={0};
 #include <string.h>
 #include <stdatomic.h>
 #include <unistd.h>
-#ifndef PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
-#define PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC 0
-#endif
-#ifndef PS5VK_GATHER_EXTENDED_DIAGNOSTIC
-#define PS5VK_GATHER_EXTENDED_DIAGNOSTIC 0
-#endif
 #ifdef PS5VK_GRAPHICS_API
 #if !defined(PS5VK_RUNTIME_GRAPHICS) || !PS5VK_RUNTIME_GRAPHICS
 #include "graphics_library.h"
@@ -313,31 +307,17 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * the front end, the pipeline key and the native per-target programming
      * already carry the bound. */
     platform->supported_features |= PS5VK_FEATURE_INDEPENDENT_BLEND;
-#if defined(PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC) && PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC
-    /* Private measurement build only: let the public SDK cube-array witness
-     * negotiate its view and shader. The default shipping mask stays false
-     * until image creation, all-face sampling, applicable CTS and acceptance
-     * evidence are complete. tools/build_sdk.py leaves this switch off unless
-     * the dedicated witness explicitly requests it. */
+    /* Two-cube GPU readback and the applicable upstream case qualify this bit.
+     * Unsupported tiled layer pitches still fail at descriptor creation. */
     platform->supported_features |= PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
-#endif
-#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && \
-    PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
-    /* Measurement-only gate for the full Vulkan 1.0 BC format matrix. The
-     * build also exposes all five mandatory CTS format roles; the shipping
-     * feature mask remains false until those paths are measured. */
+    /* BC sampling, filtering and transfer roles passed with the frozen CTS
+     * selection; format queries expose only the implemented roles. */
     platform->supported_features |= PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
-#endif
-#if PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
-    /* One-off platform negotiation for the public API counter witness only.
-     * The normal build leaves the bit false until focused CTS acceptance. */
+    /* Precise occlusion has native counter evidence and applicable CTS. */
     platform->supported_features |= PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
-#endif
-#if PS5VK_GATHER_EXTENDED_DIAGNOSTIC
-    /* One-off negotiation for the isolated image-gather readback binary.
-     * Normal builds keep this core feature false and its limits zero. */
+    /* Constant, dynamic, four-offset and Dref forms have GPU readback and
+     * applicable CTS coverage at the required offset limits. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
-#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

@@ -14,9 +14,6 @@
 
 #include <string.h>
 
-#if defined(PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC) && PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
-#include "ps5log.h"
-#endif
 
 #define INVALID VK_ERROR_UNKNOWN
 
@@ -256,9 +253,6 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResetQueryPool(VkCommandBuffer command,
 static void unsupported_query_command(VkCommandBuffer command, unsigned site)
 {
     (void)site;
-#if defined(PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC) && PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC
-    ps5log_printf(PS5LOG_MARK, "PS5VK_QUERY_RECORD_REFUSE site=%u", site);
-#endif
     ps5vk_command_invalidate(command);
 }
 

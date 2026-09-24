@@ -1909,8 +1909,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
-the code path that enforces them, 141 mandatory format-feature cells satisfied
-with 521 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 148 mandatory format-feature cells satisfied
+with 514 documented per-format blockers, 60 format-query consistency
 checks, and eighteen shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -5183,9 +5183,10 @@ eboot SHA-256
 Public reporting and the frozen selection remain unchanged pending promotion
 and combined shipping acceptance.
 
-## T07 four-axis promotion audit (2026-09-24)
+## T07 four-axis pre-promotion audit (2026-09-24)
 
-The ordinary build reports all four T07 core feature bits false. A host
+At this audit point, the ordinary build reported all four T07 core feature bits
+false. A host
 contract confirms that each bit, when supplied by the platform, appears in
 both physical-device feature query routes, can be enabled through a logical
 device, and fails device creation when unsupported. That host result proves
@@ -5202,3 +5203,26 @@ above leaves these promotion gates open:
 No row is promoted by the passing subset of another row. All new combined
 selection candidates remain measurements until their strict hardware receipts
 and the ordinary shipping build agree.
+
+## T07 public reporting candidate (2026-09-24)
+
+The ordinary graphics build now reports `imageCubeArray`,
+`textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise` without T07 diagnostic switches. A public SDK
+capability probe signed as eboot SHA-256
+`c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae`
+passed the strict native-query verifier in
+`20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2` (source log SHA-256
+`a4b19620f2d9d3d9b03f5808a837bb9264ab994696c87f665417d13ddb972c60`).
+It observed 26 of the 62 DXVK baseline requirements at their requested values,
+four more than the prior public probe; 36 remain query blockers. The probe
+checks advertised values, not execution.
+
+The frozen upstream selection now contains 829 original cases: the previous
+507 plus 250 BC sampling/blit/copy cases, 70 gather cases, one precise-query
+case and one cube-array image-view case. Its case-list SHA-256 is
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+The ordinary CTS package signed eboot SHA-256
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`;
+shipping hardware acceptance of that package remains pending. The checked
+four-axis DXVK matrix therefore remains at 20/62 ready and 42 blockers.

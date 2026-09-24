@@ -31,8 +31,8 @@ results; visual output is not the sole correctness signal.
 - Extension-negotiated 8-bit and 16-bit storage-buffer access
 - Push constants and scalar specialization constants in compute and runtime graphics
 - Vulkan pipeline-cache objects with a normative header export (no portable compiled-code records yet)
-- Occlusion query pools with bounded native counter diagnostics; precise-query
-  reporting remains disabled pending T07 promotion. Empty sparse image queries
+- Occlusion query pools with bounded native counters and precise-query support;
+  empty sparse image queries
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list and
   triangle-strip draws (the strip has host coverage but no native witness yet);
@@ -56,12 +56,13 @@ results; visual output is not the sole correctness signal.
   per-sample reads of the multisampled attachment as an input attachment.
   Multisampled depth attachments, multisampled sampled images and 8x and above
   are not served
-- 44 sampled texture formats spanning 8/16/32-bit UNORM,
+- 61 sampled texture formats spanning 8/16/32-bit UNORM,
   SNORM, signed/unsigned integer and floating-point families, RGBA8 sRGB,
-  A8B8G8R8 packed color/integer, RGB9E5 and B10G11R11 packed floating point, with GPU
+  A8B8G8R8 packed color/integer, RGB9E5 and B10G11R11 packed floating point,
+  sixteen BC formats and bounded D32 depth sampling, with GPU
   upload transitions and deterministic hardware readback; core repeat,
   mirrored-repeat, edge/border clamp and the six fixed border-color enums are
-  implemented. Nearest/linear filtering is validated for the 24
+  implemented. Nearest/linear filtering is validated for the 40
   filterable rows; the 20 integer rows use typed samplers and correctly
   remain nearest-only. A three-level RGBA8 chain has deterministic explicit-LOD
   GPU readback through the staged public SDK; signed sampler LOD bias is

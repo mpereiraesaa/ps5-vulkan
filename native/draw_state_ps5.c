@@ -107,10 +107,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
         PS5VK_DRAW_UNSUPPORTED();
     int depth_format_supported = p->depth_format == VK_FORMAT_D32_SFLOAT;
-#if defined(PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC) && PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC
     depth_format_supported |= p->depth_format == VK_FORMAT_D16_UNORM &&
         width == 128u && height == 128u;
-#endif
     if (p->depth_format == VK_FORMAT_UNDEFINED ? depth != NULL :
         (!depth_format_supported || !depth || depth->count != PS5_DEPTH_REGISTER_COUNT ||
          (p->depth_format == VK_FORMAT_D16_UNORM && raster->depth_bias_enable &&

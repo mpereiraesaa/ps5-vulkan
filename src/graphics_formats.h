@@ -13,9 +13,6 @@
 #include "vk_internal.h"
 #include "texture_format.h"
 #include "texture_layout.h"
-#ifndef PS5VK_D32_SAMPLED_DIAGNOSTIC
-#define PS5VK_D32_SAMPLED_DIAGNOSTIC 0
-#endif
 
 struct ps5vk_vertex_format {
     uint32_t bytes, components;
@@ -136,17 +133,11 @@ static inline int ps5vk_graphics_image_usage_with_flags(
         ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_COLOR_ATTACHMENT);
 }
 
-/* Multi-subresource transfer storage for the BC diagnostic and its RGBA8
- * destinations. Publication remains gated by the measured profile. */
+/* Multi-subresource transfer storage for BC and its RGBA8 destinations. */
 static inline VkBool32 ps5vk_bc_transfer_subresources(VkFormat format)
 {
-#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
     return ps5vk_texture_format_block_compressed(format) ||
         format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB;
-#else
-    (void)format;
-    return VK_FALSE;
-#endif
 }
 
 /* Implementation ceilings from the encoders/layout arithmetic, not a hardware
@@ -175,17 +166,16 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
             .maxResourceSize=budget};
         return VK_SUCCESS;
     }
-#if PS5VK_D32_SAMPLED_DIAGNOSTIC
     if(format==VK_FORMAT_D32_SFLOAT && type==VK_IMAGE_TYPE_2D &&
        tiling==VK_IMAGE_TILING_OPTIMAL && !flags &&
-       usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+       (usage==VK_IMAGE_USAGE_SAMPLED_BIT ||
+        usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))) {
         if(!budget)return VK_ERROR_FORMAT_NOT_SUPPORTED;
         *out=(VkImageFormatProperties){.maxExtent={64,64,1},.maxMipLevels=7,
             .maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
             .maxResourceSize=budget};
         return VK_SUCCESS;
     }
-#endif
     if(tiling!=VK_IMAGE_TILING_OPTIMAL || !budget ||
        !ps5vk_graphics_image_usage_with_flags(format,type,tiling,usage,flags))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
