@@ -2552,9 +2552,15 @@
           "20260924T200659933Z_PPSA99994_ps5vk_0x8771b94f5a5": "606c13b15c8eb7b0dfa3e1fa602cb749cc252e0e16738ea5879c3f945766c7f0",
           "20260924T200845944Z_PPSA99994_ps5vk_0x88fca4e620b": "ef3294f797ae6bbd370d303f0d3d65ff35d04c23616d163e42ef299666cb9b16",
           "20260924T201032029Z_PPSA99994_ps5vk_0x8a87d58b6b4": "394bd73f7ec9937ac2d6c4226062d65139f111e7f632e734588e9ff9087b7179",
-          "20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12": "192d0289da708c5cc1f6cc81752b9be6cd812c4d3de9c6d289b613598d57b5f2"
+          "20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12": "192d0289da708c5cc1f6cc81752b9be6cd812c4d3de9c6d289b613598d57b5f2",
+          "20260924T215415552Z_PPSA99994_ps5vk_0xe517f2f1704": "d0319cafd2af347c4e764ea87e4596b4886beeaa48d806e5affe435786060295",
+          "20260924T215647835Z_PPSA99994_ps5vk_0xe74f3dab544": "b2e07979c046c4e7d5d3eb5f5ce23a8f8ffa5900e05e920ee73c9f681752b744",
+          "20260924T220203376Z_PPSA99994_ps5vk_0xebe6b628f46": "f55991e7cc49a15ecd17dcdde5b923957ce7858fdf0134c5e7b675873edd6c2c",
+          "20260924T220213923Z_PPSA99994_ps5vk_0xec0dff2da2b": "02b71c58dfff32fe6471b063e49cd30cc433209aea8fecf8b23383c3b8b8f848",
+          "20260924T220222966Z_PPSA99994_ps5vk_0xec2faf6f3b7": "889455cad4f286701dc3b7dcbf134eaa87bf6c537c56f139b1b7fef2fcc38b27",
+          "20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69": "377e0711d350702fdc2f34b76a44979625f0ce9c58544cd158c6ab7d0bc60bdc"
         },
-        "note": "Eight strict default-off SDK U/V nearest and linear witnesses each matched 373248 pixels; W remains unverified because two focused original 3D CTS leaves failed in image upload before sampling. Public KHR remains closed.",
+        "note": "Eight strict default-off SDK U/V and six W nearest/linear draw witnesses each matched 373248 pixels with clean lifecycle. Two focused original 3D CTS leaves failed in image upload before sampling, so no CTS PASS is claimed. Public sampler feature and KHR extension remain closed.",
         "refs": [
           "VALIDATION.md#t09-sampler-mirror-clamp-diagnostic-measurement-2026-09-24"
         ],
@@ -2566,9 +2572,15 @@
           "20260924T200332043Z_PPSA99994_ps5vk_0x846b48a0f41",
           "20260924T200447187Z_PPSA99994_ps5vk_0x858336e3bd6",
           "20260924T200845944Z_PPSA99994_ps5vk_0x88fca4e620b",
-          "20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12"
+          "20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12",
+          "20260924T215415552Z_PPSA99994_ps5vk_0xe517f2f1704",
+          "20260924T220203376Z_PPSA99994_ps5vk_0xebe6b628f46",
+          "20260924T220213923Z_PPSA99994_ps5vk_0xec0dff2da2b",
+          "20260924T215647835Z_PPSA99994_ps5vk_0xe74f3dab544",
+          "20260924T220222966Z_PPSA99994_ps5vk_0xec2faf6f3b7",
+          "20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
       "verdict": "blocker"
     },
@@ -3973,8 +3985,8 @@
         "satisfied": 30
       },
       "native": {
-        "blocker": 34,
-        "satisfied": 28
+        "blocker": 33,
+        "satisfied": 29
       }
     },
     "requirements": 62,

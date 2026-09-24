@@ -33,8 +33,10 @@ The ordinary Vulkan 1.0 build exposes `VK_EXT_host_query_reset` and its
 precise-query reset/reuse witness. The Vulkan 1.2 aggregate remains unadvertised.
 T09 diagnostic builds can enable `imagelessFramebuffer` and
 `samplerMirrorClampToEdge` independently for bounded SDK tests. Imageless
-framebuffers have a native API witness, while mirror clamp has U/V draw witnesses only;
-the W path is still unverified. `VK_KHR_imageless_framebuffer` also requires
+framebuffers have a native API witness, and mirror clamp has bounded U/V and W
+draw witnesses. Two original 3D W CTS leaves failed during image upload before
+sampling and have not passed. The mirror-clamp public feature and KHR extension
+remain disabled. `VK_KHR_imageless_framebuffer` also requires
 the Vulkan 1.0 extension dependency chain before it can be advertised. These
 measurements do not claim that DXVK can create a device or run yet; see
 [the exact T09 evidence](VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25).
