@@ -321,6 +321,12 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * factory rejects Vulkan 1.0 before querying this extension feature. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
 #endif
+#if defined(PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC) && PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC
+    /* Private Vulkan 1.0 measurement only: admit compute Ballot Broadcast
+     * through the runtime pipeline without reporting subgroup properties or
+     * either T08 subgroup feature. Public API eligibility remains blocked. */
+    platform->supported_features |= PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+#endif
     /* Vulkan 1.0 exposes the KHR route through device-group creation and
      * properties2. The bounded address witness and two unchanged original
      * buffer-address compute leaves execute through the R32_UINT output. */

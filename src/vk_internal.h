@@ -131,6 +131,10 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE = 1u << 22,
     /* Keep this layout gate independent of the other feature bits. */
     PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
+    /* Internal compute Broadcast route. The shipping platform leaves this
+     * unset; a private measurement build may exercise the runtime path. It
+     * is not a public Vulkan feature or subgroup-properties promise. */
+    PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE = 1u << 25,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

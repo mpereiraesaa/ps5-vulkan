@@ -4661,6 +4661,27 @@ vertex and fragment Broadcast draws remain unproven on hardware. These
 diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
 
+A default-off native diagnostic gate now admits only compute
+`OpGroupNonUniformBroadcast` with both `GroupNonUniform` and
+`GroupNonUniformBallot` capabilities through shader-module and pipeline
+creation. The host contract verifies the shipping rejection and rejects an
+unmeasured Shuffle operation, a missing Ballot capability and a vertex entry
+even in the diagnostic build. An SDK-linked diagnostic witness then compiled
+the actual compute shader, loaded four different source lane IDs from a GPU
+buffer and read back 128 exact Broadcast values, with zero value and guard
+mismatches, digest `a4d88c85`, bounded fence completion, and clean resource
+retirement. Both runs used signed eboot SHA-256
+`57bf96fc6c01eec081178e3b41b775b91492089633ef724108fbe0b4e3e2be4b`:
+`20260924T114110339Z_PPSA99994_ps5vk_0x2393d9689c7a3` (log SHA-256
+`29eb5e268601d1f23c614c099b5ffbcc4878cbda42f4e0faab16a3dfdcbb140b`)
+and `20260924T114129742Z_PPSA99994_ps5vk_0x239421af4a690` (log SHA-256
+`a82a5479fa71b9376f073ad3e2fb79dabbbc9ca9e698e4266b381a345e8b3cd8`).
+Each run verified artifact identity, closed the title and restored the prior
+payload. Firmware was not recorded in these receipts. This proves one bounded
+32-bit compute Broadcast path with runtime IDs. It does not prove 8-bit or
+16-bit subgroup types, other stages or operations, original CTS, either public
+T08 feature bit, or a higher public `apiVersion`.
+
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
 nested struct. Two workgroups produced 64 exact values with zero mismatches and

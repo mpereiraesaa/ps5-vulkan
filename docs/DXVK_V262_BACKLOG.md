@@ -27,6 +27,15 @@ tessellation and clip/cull distances, and its integrated native run passed
 live matrix is 20/62 ready with 42 blockers. The ordered table preserves the
 original tranche membership.
 
+T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
+`shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` disabled. A
+default-off diagnostic compute route has twice read back 128 exact 32-bit
+`OpGroupNonUniformBroadcast` results with runtime source IDs and clean guards.
+That bounded result advances implementation evidence only: the Vulkan 1.1
+extended-types contract still needs narrow types and its applicable original
+CTS, while the Vulkan 1.2 dynamic-ID contract still needs a legal public API
+route and applicable original CTS. Neither row is counted ready or satisfied.
+
 Tranche delivery and DXVK profile scoring are different gates. The current
 matrix still leaves `geometryShader` and `tessellationShader` as blockers:
 their native witness receipts have not been admitted to the DXVK evidence
