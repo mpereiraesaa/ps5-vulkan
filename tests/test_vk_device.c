@@ -804,6 +804,16 @@ static void lifecycle(void)
         vkGetPhysicalDeviceProperties2KHR(p, &properties2);
         assert(mv_properties.maxMultiviewViewCount == PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR);
         assert(mv_properties.maxMultiviewInstanceIndex == PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR);
+        /* VK_KHR_maintenance2 point clipping: the Vulkan 1.0 rule, reported in
+         * the same chain without disturbing the structure before it. */
+        VkPhysicalDevicePointClippingProperties clipping = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES,
+            .pointClippingBehavior = (VkPointClippingBehavior)0x7FFFFFFF};
+        mv_properties.pNext = &clipping;
+        vkGetPhysicalDeviceProperties2KHR(p, &properties2);
+        assert(clipping.pointClippingBehavior == VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES);
+        assert(mv_properties.maxMultiviewViewCount == PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR);
+        mv_properties.pNext = NULL;
         /* Without the capability both answers are zero and the extension is not
          * enumerated at all. */
         p->platform.supported_features &= ~(uint32_t)PS5VK_FEATURE_MULTIVIEW;
