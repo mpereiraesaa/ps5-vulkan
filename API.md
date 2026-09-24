@@ -28,14 +28,16 @@ records. Current Vulkan 1.1+ structures being queryable as C types does not
 mean the driver advertises them; the reported device version remains Vulkan
 1.0 until their contracts are implemented and validated.
 
-T09 diagnostic builds can enable `hostQueryReset`, `imagelessFramebuffer` and
-`samplerMirrorClampToEdge` independently for bounded SDK tests. The ordinary
-public build reports all three false. Host reset and imageless framebuffers
-have native API witnesses, while mirror clamp has U/V draw witnesses only;
+The ordinary Vulkan 1.0 build exposes `VK_EXT_host_query_reset` and its
+`VkPhysicalDeviceHostQueryResetFeaturesEXT` opt-in, backed by a completed
+precise-query reset/reuse witness. The Vulkan 1.2 aggregate remains unadvertised.
+T09 diagnostic builds can enable `imagelessFramebuffer` and
+`samplerMirrorClampToEdge` independently for bounded SDK tests. Imageless
+framebuffers have a native API witness, while mirror clamp has U/V draw witnesses only;
 the W path is still unverified. `VK_KHR_imageless_framebuffer` also requires
 the Vulkan 1.0 extension dependency chain before it can be advertised. These
 measurements do not claim that DXVK can create a device or run yet; see
-[the exact T09 evidence](VALIDATION.md#t09-diagnostic-measurements-2026-09-24).
+[the exact T09 evidence](VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25).
 
 ## Core feature negotiation
 

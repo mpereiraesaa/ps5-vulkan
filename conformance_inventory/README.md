@@ -334,21 +334,23 @@ A row is satisfied when the API, implementation and native axes are positive
 and no applicable CTS leaf was observed failing. CTS is regression evidence: a
 missing or unrun leaf does not block, an observed failure does. Unknown or
 absent API, implementation or native evidence is a blocker. The checked
-matrix currently records 25/62 satisfied (`robustBufferAccess`, three multiview requirements, the three indirect and
+matrix currently records 26/62 satisfied (`robustBufferAccess`, three multiview requirements, the three indirect and
 indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
 `fullDrawIndexUint32`, the `shaderClipDistance`/`shaderCullDistance` pair,
 `fragmentStoresAndAtomics`, `dualSrcBlend`, `independentBlend`,
 `sampleRateShading`, `uniformBufferStandardLayout`, base `vulkanMemoryModel`,
 `vulkanMemoryModelDeviceScope`
-and bounded `bufferDeviceAddress`
-through their Vulkan 1.0 KHR routes, and the four rasterization and viewport features
+and bounded `bufferDeviceAddress` through their Vulkan 1.0 KHR routes,
+`hostQueryReset` through its Vulkan 1.0 EXT route, and the four rasterization and viewport features
 `depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`, plus
 `imageCubeArray`, `textureCompressionBC`, `shaderImageGatherExtended` and
-`occlusionQueryPrecise`) and 37
+`occlusionQueryPrecise`) and 36
 blockers.
 
-The T09 `hostQueryReset` and `imagelessFramebuffer` rows have bounded,
-default-off implementations and native witnesses, but remain API blockers.
+The T09 `hostQueryReset` row is public through `VK_EXT_host_query_reset` with
+an ordinary SDK probe and shipping native reset/reuse witness. The
+`imagelessFramebuffer` row has a bounded, default-off implementation and native
+witness but remains an API blocker.
 `samplerMirrorClampToEdge` has eight passing U/V draw witnesses; its native
 axis remains a blocker because W has not reached sampling in the focused 3D
 CTS attempt. These diagnostic runs do not increase the satisfied count.

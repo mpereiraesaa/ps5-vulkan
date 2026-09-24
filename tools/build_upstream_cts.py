@@ -46,7 +46,6 @@ def tessellation_build_profile(environment):
             # concurrent `make check` restaged the SDK without the switch
             # reported every selected leaf NotSupported for sampleRateShading.
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
-            "PS5VK_HOST_QUERY_RESET_DIAGNOSTIC",
             "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
             "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
         )

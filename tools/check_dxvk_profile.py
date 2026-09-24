@@ -37,12 +37,9 @@ MEMORY_MODEL_IDS = {
         "vulkanMemoryModelDeviceScope",
 }
 BDA_ID = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
+HOST_QUERY_RESET_ID = "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset"
 DEVICE_SCOPE_ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
 DIAGNOSTIC_IMPLEMENTATIONS = {
-    "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset": (
-        ("src/vk_device.c", "PS5VK_T09_FEATURE_HOST_QUERY_RESET"),
-        ("src/vk_query_pool.c", "vkResetQueryPool"),
-    ),
     "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": (
         ("src/vk_device.c", "PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER"),
         ("src/vk_framebuffer.c", "VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT"),
@@ -146,6 +143,29 @@ def standard_ubo_axes(row: dict, query: dict, extensions: set[str],
              "detail": "Reviewed KHR feature query, opt-in and layout validation."})
 
 
+def host_query_reset_axes(row: dict, query: dict, extensions: set[str],
+                          feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    if row["id"] != HOST_QUERY_RESET_ID:
+        return None
+    if query.get("route") != "VK_EXT_host_query_reset":
+        raise ValueError("host query reset public query route is absent")
+    value = query.get("hostQueryReset")
+    if not isinstance(value, bool):
+        raise ValueError("invalid host query reset public query value")
+    extension = "VK_EXT_host_query_reset" in extensions
+    report = feature_reports.get("hostQueryReset", {})
+    implemented = (value and extension and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if value and extension else "blocker",
+             "observed": value and extension, "expected": row["expected"],
+             "via": "VK_EXT_host_query_reset" if extension else None,
+             "detail": "EXT feature query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised."},
+            {"state": "implemented" if implemented else "missing",
+             "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_query_pool.c",
+                      "conformance_inventory/reporting_matrix.json"],
+             "detail": "Reviewed EXT feature query, opt-in, range and pending-use validation."})
+
+
 def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, dict] | None:
     """Resolve only the three reviewed core/KHR equivalent semantics.
 
@@ -209,7 +229,6 @@ def implemented_device_extensions() -> set[str]:
     # Strip only this explicitly named conditional block, and fail closed if
     # its preprocessor boundary is malformed rather than counting its bits.
     for name in (
-        "PS5VK_HOST_QUERY_RESET_DIAGNOSTIC",
         "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
         "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
     ):
@@ -498,6 +517,11 @@ def generate() -> dict:
             extensions, feature_reports)
         if buffer_address is not None:
             api, implementation = buffer_address
+        host_query_reset = host_query_reset_axes(requirement,
+            reporting["profiles"]["graphics"].get("host_query_reset_query", {}),
+            extensions, feature_reports)
+        if host_query_reset is not None:
+            api, implementation = host_query_reset
         diagnostic = diagnostic_implementation(identifier)
         if diagnostic is not None:
             implementation = diagnostic

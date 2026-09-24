@@ -24,9 +24,10 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 25/62 ready with 37 blockers after T07's four resource and
-precise-query features passed the ordinary 829-case selection twice and T08
-DeviceScope passed its ordinary SDK KHR witness and public query. The ordered table preserves the
+live matrix is 26/62 ready with 36 blockers after T07's four resource and
+precise-query features passed the ordinary 829-case selection twice, T08
+DeviceScope passed its SDK KHR witness, and T09 host query reset passed its
+public EXT query and shipping reset/reuse witness. The ordered table preserves the
 original tranche membership.
 
 Tranche delivery and DXVK profile scoring are different gates. The current
@@ -172,6 +173,20 @@ matrix remains **25/62 ready with 37 blockers**. The full run identities,
 artifact hashes and remaining KHR dependency and W coverage limits are in
 [VALIDATION.md](../VALIDATION.md#t09-diagnostic-measurements-2026-09-24).
 This tranche does not claim that DXVK itself runs yet.
+
+### T09 public host query reset (2026-09-25)
+
+The ordinary Vulkan 1.0 graphics build exposes `VK_EXT_host_query_reset` and
+reports `hostQueryReset=1` through `VkPhysicalDeviceHostQueryResetFeaturesEXT`.
+A public SDK capability probe strictly verified the EXT route and ten device
+extensions; a separate shipping SDK graphics run completed precise occlusion
+queries, reset them on the host, observed availability zero with preserved old
+result words, and reused the same command buffer for new 1/0/3 results. The
+four-axis row is satisfied and the checked matrix is **26/62 ready with 36
+blockers**. The exact original CTS leaf is identified but has not run; the
+Vulkan 1.2 aggregate and API 1.3 requirement remain unadvertised. Run IDs,
+hashes and lifecycle evidence are in
+[VALIDATION.md](../VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25).
 
 ## Readiness versus profile completion
 

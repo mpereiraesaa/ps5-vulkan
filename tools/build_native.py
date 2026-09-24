@@ -72,9 +72,8 @@ def main():
         raise SystemExit("PS5VK_OCCLUSION_QUERY_API_PROBE requires runtime graphics, depth-enabled probe 15")
     host_query_reset_probe = os.environ.get("PS5VK_HOST_QUERY_RESET_PROBE", "0")
     if host_query_reset_probe not in ("0", "1") or (host_query_reset_probe == "1" and
-            (occlusion_query_api_probe != "1" or os.environ.get("PS5VK_USE_SDK") != "1" or
-             os.environ.get("PS5VK_HOST_QUERY_RESET_DIAGNOSTIC") != "1")):
-        raise SystemExit("PS5VK_HOST_QUERY_RESET_PROBE requires SDK-linked occlusion query API probe and host-reset diagnostic")
+            (occlusion_query_api_probe != "1" or os.environ.get("PS5VK_USE_SDK") != "1")):
+        raise SystemExit("PS5VK_HOST_QUERY_RESET_PROBE requires SDK-linked occlusion query API probe")
     gather_form = os.environ.get("PS5VK_GATHER_FORM", "0")
     if gather_form not in ("0", "1", "2", "3", "4", "5", "6", "7", "8"):
         raise SystemExit("PS5VK_GATHER_FORM must be 0 through 8")
@@ -124,7 +123,6 @@ def main():
         raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
     t09_diagnostics = {}
     for name in (
-        "PS5VK_HOST_QUERY_RESET_DIAGNOSTIC",
         "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
         "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
     ):

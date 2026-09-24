@@ -246,7 +246,6 @@ def main():
         if sample_rate_diagnostic == "1":
             native_cflags.append("-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
         for name in (
-            "PS5VK_HOST_QUERY_RESET_DIAGNOSTIC",
             "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
             "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
         ):
