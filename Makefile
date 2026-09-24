@@ -163,6 +163,8 @@ check-sanitize:
 	./build/tests/test_vk_image_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass_sanitized
 	./build/tests/test_vk_render_pass_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass2.c -o build/tests/test_vk_render_pass2_sanitized
+	./build/tests/test_vk_render_pass2_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/multiview_witness.c tests/test_multiview_witness.c -o build/tests/test_multiview_witness_sanitized
 	./build/tests/test_multiview_witness_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/platform_host.c src/vk_alloc.c tests/test_multiview_capability.c -o build/tests/test_multiview_capability_sanitized
@@ -343,6 +345,8 @@ check:
 	./build/tests/test_vk_image
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass
 	./build/tests/test_vk_render_pass
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass2.c -o build/tests/test_vk_render_pass2
+	./build/tests/test_vk_render_pass2
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/multiview_witness.c tests/test_multiview_witness.c -o build/tests/test_multiview_witness
 	./build/tests/test_multiview_witness
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/platform_host.c src/vk_alloc.c tests/test_multiview_capability.c -o build/tests/test_multiview_capability

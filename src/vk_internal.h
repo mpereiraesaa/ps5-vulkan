@@ -290,6 +290,10 @@ struct VkDevice_T {
     uint32_t enabled_features;
     uint32_t enabled_features_t09;
     VkBool32 device_group_extension_enabled;
+    /* VK_KHR_create_renderpass2 was enabled on this device. The KHR render
+     * pass 2 entry points refuse, and the proc-address lookup hides them,
+     * unless it was. */
+    VkBool32 create_renderpass2_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the

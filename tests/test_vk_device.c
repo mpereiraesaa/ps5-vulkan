@@ -2037,6 +2037,17 @@ static void device_group_dispatch_command_gate(void)
     assert(!vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMask"));
 }
 
+static void create_renderpass2_command_gate(void)
+{
+    struct VkDevice_T d = {0};
+    assert(!vkGetDeviceProcAddr(&d, "vkCreateRenderPass2KHR"));
+    d.create_renderpass2_extension_enabled = VK_TRUE;
+    assert(vkGetDeviceProcAddr(&d, "vkCreateRenderPass2KHR") ==
+           (PFN_vkVoidFunction)vkCreateRenderPass2KHR);
+    /* This device still reports Vulkan 1.0: no core-1.2 command alias. */
+    assert(!vkGetDeviceProcAddr(&d, "vkCreateRenderPass2"));
+}
+
 static void buffer_address_khr_device_route(void)
 {
     const char *instance_names[] = {
@@ -2229,6 +2240,7 @@ int main(void)
     single_device_group_creation();
     buffer_address_command_gate();
     device_group_dispatch_command_gate();
+    create_renderpass2_command_gate();
     buffer_address_khr_device_route();
     uniform_buffer_standard_layout_route();
     puts("Vulkan device lifecycle: pass (host backend only)");
