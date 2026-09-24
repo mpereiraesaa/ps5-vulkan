@@ -23,6 +23,8 @@ class ImagelessFramebufferWitnessTests(unittest.TestCase):
         self.messages = [
             "PS5VK_CONSUMER_IMAGELESS_RESULT views=2 same_framebuffer=1 pixels=4096 "
             "first_mismatches=0 second_mismatches=0 valid=1",
+            "PS5VK_CONSUMER_IMAGELESS_DRAW_RESULT views=2 draws=2 "
+            "drawn_pixels=2048 clear_pixels=6144 mismatches=0 valid=1",
             "PS5VK_CONSUMER_TEST_SUCCESS",
             "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1",
             "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1",
@@ -43,10 +45,21 @@ class ImagelessFramebufferWitnessTests(unittest.TestCase):
 
     def test_exact_run(self):
         self.assertEqual(self.run_validation()["pixels_checked"], 8192)
+        self.assertEqual(self.run_validation()["drawn_pixels_checked"], 2048)
 
     def test_pixel_mismatch(self):
         self.messages[0] = self.messages[0].replace("second_mismatches=0", "second_mismatches=1")
         with self.assertRaisesRegex(ValueError, "IMAGELESS_RESULT"):
+            self.run_validation()
+
+    def test_missing_draw(self):
+        self.messages.pop(1)
+        with self.assertRaisesRegex(ValueError, "IMAGELESS_DRAW_RESULT"):
+            self.run_validation()
+
+    def test_wrong_draw_coverage(self):
+        self.messages[1] = self.messages[1].replace("drawn_pixels=2048", "drawn_pixels=0")
+        with self.assertRaisesRegex(ValueError, "IMAGELESS_DRAW_RESULT"):
             self.run_validation()
 
     def test_missing_retirement(self):
@@ -65,6 +78,7 @@ class ImagelessFramebufferWitnessTests(unittest.TestCase):
         self.assertIn(".size = BYTES, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT", witness)
         self.assertLess(witness.index("vkInvalidateMappedMemoryRanges(device"),
                         witness.index("PS5VK_CONSUMER_IMAGELESS_RESULT"))
+        self.assertIn("vkCmdDraw(command, 3, 1, 0, 0)", witness)
 
 
 if __name__ == "__main__":
