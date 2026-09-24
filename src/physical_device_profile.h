@@ -166,7 +166,6 @@ static inline void ps5vk_physical_profile_init(
     limits->maxClipDistances = PS5VK_REQUIRED_CLIP_DISTANCES;
     limits->maxCullDistances = PS5VK_REQUIRED_CULL_DISTANCES;
     limits->maxCombinedClipAndCullDistances = PS5VK_REQUIRED_COMBINED_CLIP_CULL_DISTANCES;
-
     limits->maxBoundDescriptorSets = PS5VK_MAX_SETS;
     limits->maxPerStageDescriptorStorageBuffers = PS5VK_MAX_DESCRIPTORS;
     limits->maxDescriptorSetStorageBuffers = PS5VK_MAX_DESCRIPTORS;

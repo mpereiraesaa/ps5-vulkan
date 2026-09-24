@@ -49,12 +49,36 @@ int main(void)
         r.size==2048 && r.alignment==256);
     i.usage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_ERROR_FORMAT_NOT_SUPPORTED);
+    /* The pinned cube-array image-view case's exact sampled/attachment
+     * combination is backed as a tiled layered target. Neighbouring shapes
+     * remain outside the executor profile. */
+    i=(VkImageCreateInfo){.imageType=VK_IMAGE_TYPE_2D,
+        .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={64,64,1},.mipLevels=1,
+        .arrayLayers=12,.samples=VK_SAMPLE_COUNT_1_BIT,
+        .tiling=VK_IMAGE_TILING_OPTIMAL,
+        .usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT};
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_SUCCESS &&
+        r.size && r.alignment==131072);
+    i.flags=0;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==
+        VK_ERROR_FORMAT_NOT_SUPPORTED && !r.size);
+    i.flags=VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    i.usage|=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==
+        VK_ERROR_FORMAT_NOT_SUPPORTED && !r.size);
 
-    /* Only formats with an implemented padded-linear encoding have layout
-     * arithmetic: the colour attachment, the depth target, the vertex-only
-     * rows and unknown formats are rejected rather than defaulted. */
+    i.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    i.extent=(VkExtent3D){4,4,1};
+    i.arrayLayers=13;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_SUCCESS && r.size==13312);
+    i.arrayLayers=5;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)!=VK_SUCCESS && !r.size);
+
+    /* Only formats with a sampled encoding have this generic arithmetic.
+     * D32 has one for descriptors, though image creation uses tiled storage. */
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_B8G8R8A8_UNORM,4,4,&l));
-    assert(ps5vk_texture_layout_for_format(VK_FORMAT_D32_SFLOAT,4,4,&l));
+    assert(!ps5vk_texture_layout_for_format(VK_FORMAT_D32_SFLOAT,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_R32G32B32_SFLOAT,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_A2B10G10R10_UNORM_PACK32,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_UNDEFINED,4,4,&l));
@@ -74,6 +98,21 @@ int main(void)
     assert(!ps5vk_texture_mip_layout_for_slices(VK_FORMAT_A8B8G8R8_SRGB_PACK32,
         65,3,1,3,&srgb_packed));
     assert(srgb_packed.bytes==rgba8.layer_stride);
+
+    /* BC data is stored in 4x4 blocks. Odd extents round up in block space,
+     * then each block row receives the same 256-byte hardware alignment. */
+    struct ps5vk_texture_mip_layout bc={0};
+    assert(!ps5vk_texture_mip_layout_for_slices(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+        5,5,2,1,&bc));
+    assert(bc.level_count==1 && bc.storage_layers==2 && bc.layer_stride==512 &&
+        bc.bytes==1024 && bc.levels[0].row_pitch==256 &&
+        bc.levels[0].storage_width==5 && bc.levels[0].storage_height==5);
+    assert(!ps5vk_texture_mip_layout_for_slices(VK_FORMAT_BC7_UNORM_BLOCK,
+        5,5,1,3,&bc));
+    /* Descending mips 2x2, 3x3, 5x5 use one, one and two 16-byte block rows. */
+    assert(bc.layer_stride==1024 && bc.bytes==1024 && bc.levels[0].offset==512 &&
+        bc.levels[1].offset==256 && bc.levels[2].offset==0 &&
+        bc.levels[0].row_pitch==256 && bc.levels[0].storage_width==5);
 
     /* Overflow and bound rejections must not mutate the caller's structure.
      * 16384x16384 at 16 bytes per texel is 2^32 bytes per level, so two levels

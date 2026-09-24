@@ -5,6 +5,7 @@ struct VkSampler_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
+    VkBool32 compare_enable;
     unsigned pending;
     uint32_t words[4];
 };

@@ -91,4 +91,13 @@ int main(void)
      * 16-byte start/end pair per render backend. */
     assert(ps5vk_graphics_occlusion_event(out,4,slot+8)==4);
     assert(out[2]==(uint32_t)(slot+8) && out[3]==(uint32_t)((slot+8)>>32));
+    uint32_t control[3]={0x5a5a5a5a,0x5a5a5a5a,0x5a5a5a5a};
+    assert(!ps5vk_graphics_occlusion_control(control,2,1));
+    assert(control[0]==0x5a5a5a5a && control[1]==0x5a5a5a5a && control[2]==0x5a5a5a5a);
+    assert(!ps5vk_graphics_occlusion_control(control,3,2));
+    assert(ps5vk_graphics_occlusion_control(control,3,1)==3);
+    assert(control[0]==UINT32_C(0xC0016900) && control[1]==1 &&
+        control[2]==((1u<<1)|(1u<<2)|(1u<<8)|(1u<<24)|(1u<<28)));
+    assert(ps5vk_graphics_occlusion_control(control,3,0)==3);
+    assert(control[0]==UINT32_C(0xC0016900) && control[1]==1 && control[2]==1);
 }

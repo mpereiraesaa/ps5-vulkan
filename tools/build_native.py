@@ -59,6 +59,36 @@ def main():
     scissor_probe = os.environ.get("PS5VK_GRAPHICS_SCISSOR_PROBE", "0")
     if scissor_probe not in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15") or (scissor_probe != "0" and not graphics_api):
         raise SystemExit("PS5VK_GRAPHICS_SCISSOR_PROBE requires graphics profile API: 0-10 existing diagnostics, 11 layered images, 12 mipmaps, 13 vertex bindings, 14 explicit depth clear witness, 15 occlusion-counter probe")
+    occlusion_precise_probe = os.environ.get("PS5VK_OCCLUSION_PRECISE_PROBE", "0")
+    if occlusion_precise_probe not in ("0", "1") or (occlusion_precise_probe == "1" and scissor_probe != "15"):
+        raise SystemExit("PS5VK_OCCLUSION_PRECISE_PROBE is a default-off variant of graphics probe 15")
+    occlusion_depth_probe = os.environ.get("PS5VK_OCCLUSION_DEPTH_PROBE", "0")
+    if occlusion_depth_probe not in ("0", "1") or (occlusion_depth_probe == "1" and scissor_probe != "15"):
+        raise SystemExit("PS5VK_OCCLUSION_DEPTH_PROBE is a default-off variant of graphics probe 15")
+    occlusion_query_api_probe = os.environ.get("PS5VK_OCCLUSION_QUERY_API_PROBE", "0")
+    if occlusion_query_api_probe not in ("0", "1") or (occlusion_query_api_probe == "1" and
+            (scissor_probe != "15" or occlusion_depth_probe != "1" or
+             os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1")):
+        raise SystemExit("PS5VK_OCCLUSION_QUERY_API_PROBE requires runtime graphics, depth-enabled probe 15")
+    gather_form = os.environ.get("PS5VK_GATHER_FORM", "0")
+    if gather_form not in ("0", "1", "2", "3", "4", "5", "6", "7", "8"):
+        raise SystemExit("PS5VK_GATHER_FORM must be 0 through 8")
+    if gather_form != "0" and os.environ.get("PS5VK_USE_SDK") != "1":
+        raise SystemExit("Image gather hardware witness requires PS5VK_USE_SDK=1")
+    if gather_form != "0" and (scissor_probe != "15" or
+            os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1" or
+            occlusion_precise_probe != "0" or occlusion_depth_probe != "0" or
+            occlusion_query_api_probe != "0"):
+        raise SystemExit("PS5VK_GATHER_FORM requires a single runtime-graphics draw on probe 15 (1 implicit core, 2 const offset, 3 dynamic offset, 4 four offsets, 5-8 explicit components 0-3)")
+    d16_depth_witness = os.environ.get("PS5VK_D16_DEPTH_WITNESS", "0")
+    if d16_depth_witness not in ("0", "1"):
+        raise SystemExit("PS5VK_D16_DEPTH_WITNESS must be 0 or 1")
+    if d16_depth_witness == "1" and (not graphics_api or scissor_probe != "14" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_D16_DEPTH_WITNESS requires graphics API, draw and PS5VK_GRAPHICS_SCISSOR_PROBE=14")
+    if d16_depth_witness == "1" and os.environ.get("PS5VK_USE_SDK") != "1":
+        raise SystemExit("D16 depth witness must be SDK-linked with PS5VK_USE_SDK=1")
     mip_view_base=os.environ.get("PS5VK_MIP_VIEW_BASE","0")
     if mip_view_base not in ("0","1") or (mip_view_base!="0" and scissor_probe!="12"):
         raise SystemExit("PS5VK_MIP_VIEW_BASE must be 0, or 1 only for mipmap diagnostic")
@@ -332,7 +362,8 @@ def main():
     cc = ["sh", foundation / "tooling/prospero-clang18"]
     common = ["-O2", "-Wall", "-Wextra", "-Werror", "-ffunction-sections",
               "-fdata-sections", "-I" + str(gears / "include"),
-              "-I" + str(logger), "-I" + str(ROOT / "src"), "-I" + str(out),
+              "-I" + str(logger), "-I" + str(ROOT / "src"),
+              "-I" + str(ROOT / "third_party/psbc-reference"), "-I" + str(out),
               "-DPS5VK_SUBMIT=" + ("1" if os.environ.get("PS5VK_SUBMIT") == "1" else "0"),
               "-DPS5VK_DMA_ONLY=" + ("1" if os.environ.get("PS5VK_DMA_ONLY") == "1" else "0"),
               "-DPS5VK_INSPECT=" + ("1" if os.environ.get("PS5VK_INSPECT") == "1" else "0")]
@@ -351,10 +382,15 @@ def main():
     use_runtime_compiler = compute and os.environ.get("PS5VK_RUNTIME_COMPILER") != "0"
     use_runtime_graphics = os.environ.get("PS5VK_RUNTIME_GRAPHICS") == "1"
     use_runtime_sdk = os.environ.get("PS5VK_USE_SDK") == "1"
-    if use_runtime_sdk and not use_runtime_graphics:
+    if use_runtime_sdk and not use_runtime_graphics and d16_depth_witness != "1":
         raise SystemExit("SDK-linked diagnostic requires runtime graphics")
     if use_runtime_graphics and not graphics_api:
         raise SystemExit("Runtime graphics requires a graphics API build")
+    if d16_depth_witness == "1" and (use_runtime_graphics or continuous == "1" or
+            observe_scene != "0" or witnesses != "0" or scene_split != "0" or
+            exit_control or keep_agc_module or shell_close or
+            os.environ.get("PS5VK_GRAPHICS_PRESENT") == "1"):
+        raise SystemExit("D16 depth witness requires the bounded non-runtime, non-presented probe-14 draw")
     if compute:
         common += ["-I" + str(ROOT / "third_party/vulkan-headers/include"),
                    "-I" + str(ROOT / "build/program-library")]
@@ -377,7 +413,8 @@ def main():
                     ("net", logger / "ps5log_ps5_net.c", [])]
     if graphics:
         common += ["-I" + str(graphics), "-I" + str(ROOT / "native"),
-                   "-I" + str(gears / "src"), "-I" + str(ROOT / "third_party/vulkan-headers/include")]
+                   "-I" + str(gears / "src"), "-I" + str(ROOT / "third_party/vulkan-headers/include"),
+                   "-I" + str(ROOT / "third_party/psbc-reference")]
         sources = [(p.stem, p, []) for p in (ROOT / "native/graphics_link_main.c",
             ROOT / "native/graphics_pair.c", ROOT / "native/memory_ps5.c",
             ROOT / "src/shader_relocate.c", gears / "src/ps5_shader_header.c")]
@@ -386,6 +423,8 @@ def main():
         if graphics_api:
             sources = [s for s in sources if s[0] != "graphics_link_main"]
             graphics_source = graphics_manifest.get("source")
+            if d16_depth_witness == "1" and graphics_source != "experiments/graphics/scene3d.pipe":
+                raise SystemExit("D16 depth witness requires experiments/graphics/scene3d.pipe")
             scene = (not use_runtime_graphics or scissor_probe == "12") and graphics_source in (
                 "experiments/graphics/scene3d.pipe",
                 "experiments/graphics/scene3d-uint.pipe",
@@ -434,11 +473,17 @@ def main():
             if observe_scene == "1" and (not scene or scissor_probe != "0" or os.environ.get("PS5VK_GRAPHICS_PRESENT") != "1"):
                 raise SystemExit("Scene observation requires the normal presented scene, without scissor diagnostics")
             common += ["-DPS5VK_GRAPHICS_OBSERVE=" + observe_scene]
-            if scissor_probe != "0" and not scene and not (scissor_probe in ("8", "13") and use_runtime_graphics):
+            if scissor_probe != "0" and not scene and not (
+                    scissor_probe in ("8", "13", "15") and use_runtime_graphics):
                 raise SystemExit("Scissor diagnostic requires scene3d.pipe")
             if scissor_probe in ("8", "13") and not use_runtime_graphics:
                 raise SystemExit("Vertex-format diagnostic requires runtime graphics")
             common += ["-DPS5VK_GRAPHICS_SCISSOR_PROBE=" + scissor_probe]
+            common += ["-DPS5VK_OCCLUSION_PRECISE_PROBE=" + occlusion_precise_probe]
+            common += ["-DPS5VK_OCCLUSION_DEPTH_PROBE=" + occlusion_depth_probe]
+            common += ["-DPS5VK_OCCLUSION_QUERY_API_PROBE=" + occlusion_query_api_probe]
+            common += ["-DPS5VK_GATHER_FORM=" + gather_form]
+            common += ["-DPS5VK_D16_DEPTH_WITNESS=" + d16_depth_witness]
             common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
             common += ["-DPS5VK_MIP_FORCE_LOD=" + mip_force_lod]
             common += ["-DPS5VK_MIP_LOD_BIAS=" + mip_lod_bias]
@@ -755,7 +800,7 @@ def main():
                 ROOT / "src/dual_source_oracle.c",
                 ROOT / "src/color_attachment_contract.c",
                 ROOT / "native/queue_ps5.c", ROOT / "native/graphics_pipeline_ps5.c",
-                ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
+                ROOT / "native/image_ps5.c", ROOT / "src/depth_layout.c", ROOT / "src/depth_detile.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
                 ROOT / "native/draw_prepare_ps5.c", ROOT / "native/draw_emit_ps5.c", ROOT / "native/index_emit_ps5.c",
                 ROOT / "native/input_attachment_gate.c",
                 ROOT / "native/input_attachment_oracle.c",
@@ -821,7 +866,8 @@ def main():
     extra_libs = []
     if use_runtime_sdk:
         extra_libs.append(str(ROOT / "dist-sdk/lib/libps5vk.a"))
-    if use_runtime_compiler or use_runtime_graphics:
+    if use_runtime_compiler or use_runtime_graphics or (
+            use_runtime_sdk and d16_depth_witness == "1"):
         psbc_lib = ROOT / ("dist-sdk/lib/libpsbc.a" if use_runtime_sdk else "build/libpsbc.ps5.a")
         if not psbc_lib.is_file():
             run(sys.executable, str(ROOT / "tools/build_psbc.py"), "--target=ps5")
@@ -902,10 +948,39 @@ def main():
                             observation_frame_pause_us=60000 if observe_scene == "1" else 0,
                             exact_interior_witnesses=int(witnesses),
                             runtime_mode="continuous" if continuous == "1" else "bounded-diagnostic",
+                            occlusion_precise_probe=int(occlusion_precise_probe),
+                            occlusion_depth_probe=int(occlusion_depth_probe),
+                            occlusion_query_api_probe=int(occlusion_query_api_probe),
+                            d16_depth_witness=int(d16_depth_witness),
+                            d16_depth_attachment_supported=1,
                             scissor_register_load="indirect-plus-direct-replay" if int(scissor_probe) else "indirect",
                             scene_draw_partition="two-36-index-draws" if scene_split == "1" else "single-draw",
                             exit_control=exit_control, keep_agc_module=keep_agc_module,
                             termination="os-close-during-render" if continuous == "1" else ("shell-close-after-cleanup" if shell_close else "return-main"))
+            if gather_form != "0":
+                gather_sources = {
+                    "1": "runtime_gather_core.frag",
+                    "2": "runtime_gather_const_offset.frag",
+                    "3": "runtime_gather_dynamic_offset.frag",
+                    "4": "runtime_gather_four_offsets.frag",
+                    "5": "runtime_gather_component_0.frag",
+                    "6": "runtime_gather_component_1.frag",
+                    "7": "runtime_gather_component_2.frag",
+                    "8": "runtime_gather_component_3.frag",
+                }
+                manifest.update(gather_probe={
+                    "form": int(gather_form),
+                    "source": "experiments/graphics/" + gather_sources[gather_form],
+                    "texture_extent": [64, 64],
+                    "sample_coordinate": [0.5, 0.5],
+                    "texel_pattern": "rgba8-x-y-3x-plus-5y",
+                    "diagnostic_feature": gather_form in ("2", "3", "4"),
+                    "profile_query_logged": True,
+                    "offset_limits": ({"min": -8, "max": 7}
+                                      if gather_form in ("2", "3", "4")
+                                      else {"min": 0, "max": 0}),
+                    "gpu_readback": True,
+                })
             if clip_cull_probe == "1":
                 # The dynamic-index case is part of the drawn set: it is the
                 # variant the upstream family registers separately, and the
@@ -952,7 +1027,11 @@ def main():
                                 two_mrt_measurement=True)
             if os.environ.get("PS5VK_GRAPHICS_DRAW") == "1":
                 manifest.update(stage="graphics-api-offscreen-draw", submit_enabled=True,
-                                compute_regression="compute-before-and-after-graphics")
+                                compute_regression="compute-before-and-after-graphics",
+                                occlusion_precise_probe=int(occlusion_precise_probe),
+                                occlusion_depth_probe=int(occlusion_depth_probe),
+                                occlusion_query_api_probe=int(occlusion_query_api_probe),
+                                occlusion_query_secondary=int(occlusion_query_api_probe))
                 if os.environ.get("PS5VK_GRAPHICS_PRESENT") == "1":
                     manifest.update(stage="graphics-api-native-presentation-reuse")
     if exit_control:
@@ -964,6 +1043,20 @@ def main():
                         graphics_shader_source="owned-runtime-vertex-formats" if vertex_probe else "owned-runtime-triangle",
                         graphics_offline_library_role="negative-lookup-control-only")
         runtime_inputs = (("vertex", "runtime_triangle.vert"), ("fragment", "runtime_triangle.frag"))
+        if gather_form != "0":
+            gather_sources = {
+                "1": "runtime_gather_core.frag",
+                "2": "runtime_gather_const_offset.frag",
+                "3": "runtime_gather_dynamic_offset.frag",
+                "4": "runtime_gather_four_offsets.frag",
+                "5": "runtime_gather_component_0.frag",
+                "6": "runtime_gather_component_1.frag",
+                "7": "runtime_gather_component_2.frag",
+                "8": "runtime_gather_component_3.frag",
+            }
+            manifest["graphics_shader_source"] = "owned-runtime-image-gather-" + gather_form
+            runtime_inputs = (("vertex", "runtime_triangle.vert"),
+                              ("fragment", gather_sources[gather_form]))
         if clip_cull_probe == "1":
             # The one scene whose pre-raster stage exports clip and cull
             # distances: recorded in the manifest so the artifact identity

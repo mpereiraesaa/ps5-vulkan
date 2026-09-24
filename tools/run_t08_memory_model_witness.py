@@ -87,6 +87,8 @@ def main() -> int:
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=120.0)
+    parser.add_argument("--require-ordinary", action="store_true",
+                        help="reject diagnostic SDK artifacts before launch")
     args = parser.parse_args()
     if running(args.host) != "none":
         raise RuntimeError("refusing to launch while a title is active")
@@ -95,6 +97,8 @@ def main() -> int:
     if (artifact.get("profile") != "t08-memory-model-public-sdk-witness" or
             hashlib.sha256(eboot.read_bytes()).hexdigest() != artifact.get("eboot_sha256")):
         raise RuntimeError("artifact identity mismatch")
+    if args.require_ordinary and artifact.get("sdk_profile") != "ordinary":
+        raise RuntimeError("ordinary SDK artifact required")
     known = {path.name for path in args.runs_dir.glob("*_PPSA99994_ps5vk_*.log")}
     result = {}
     lifecycle_ok = False

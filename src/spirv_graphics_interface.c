@@ -655,6 +655,34 @@ done:
     free(ids);return valid;
 }
 
+int ps5vk_spirv_module_uses_extended_gather(
+    const struct ps5vk_graphics_module_key *module)
+{
+    if(!module || !module->words || module->word_count<5 ||
+       module->words[0]!=0x07230203u)return -1;
+    for(size_t at=5;at<module->word_count;) {
+        const uint32_t instruction=module->words[at];
+        const size_t words=instruction>>16;
+        const uint32_t opcode=instruction&0xffffu;
+        if(!words || words>module->word_count-at)return -1;
+        if(opcode==17u) { /* OpCapability */
+            if(words!=2)return -1;
+            if(module->words[at+1]==25u)return 1; /* ImageGatherExtended */
+        } else if(opcode==96u || opcode==97u) { /* OpImageGather, OpImageDrefGather */
+            /* Both instructions place the optional Image Operands mask after
+             * their five required operands. shaderImageGatherExtended governs
+             * Offset, ConstOffset, and ConstOffsets even when the front end
+             * omits the ImageGatherExtended capability for a constant form. */
+            if(words>6u) {
+                const uint32_t image_operands=module->words[at+6u];
+                if(image_operands & (0x08u | 0x10u | 0x20u))return 1;
+            }
+        }
+        at+=words;
+    }
+    return 0;
+}
+
 int ps5vk_spirv_stage_distance_declarations(const struct ps5vk_graphics_module_key *module,
                                             unsigned *clip_distances,
                                             unsigned *cull_distances)
@@ -791,16 +819,20 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
      * and its program exports nothing (SPI_SHADER_COL_FORMAT zero). Requiring
      * an export that has nowhere to go, or accepting one that does, would both
      * be wrong, so the two cases are exclusive. */
-    /* The export's numeric type follows the attachment it writes into: a
-     * normalized colour target takes the float32 vec4 the profile has always
-     * required, and an integer one - served only by the build whose
-     * independentBlend oracle needs it - takes the same four-lane unsigned
-     * vector (the pinned compiler publishes 32_ABGR for it either way). */
+    /* Match the fragment output's numeric class to its attachment: UNORM
+     * uses float, UINT uses unsigned, and the diagnostic SINT target uses
+     * signed lanes. Both attachment locations obey the same rule. */
     const unsigned colour_numeric[PS5VK_MAX_COLOR_ATTACHMENTS] = {
-        (unsigned)(ps5vk_color_target_integer_served(key->color_format[0]) ?
-            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT),
-        (unsigned)(ps5vk_color_target_integer_served(key->color_format[1]) ?
-            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT)};
+        (unsigned)(key->color_format[0]==VK_FORMAT_R8G8B8A8_SINT &&
+            ps5vk_color_target_integer_served(key->color_format[0]) ?
+            PS5VK_VERTEX_NUMERIC_SINT :
+            (ps5vk_color_target_integer_served(key->color_format[0]) ?
+             PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT)),
+        (unsigned)(key->color_format[1]==VK_FORMAT_R8G8B8A8_SINT &&
+            ps5vk_color_target_integer_served(key->color_format[1]) ?
+            PS5VK_VERTEX_NUMERIC_SINT :
+            (ps5vk_color_target_integer_served(key->color_format[1]) ?
+             PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT))};
     /* A colour subpass wants the export that belongs to the attachment it
      * writes: the four-component value whose numeric class follows that
      * attachment's format. An attachment the pipeline does not write - its

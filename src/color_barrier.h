@@ -117,4 +117,28 @@ static inline int ps5vk_color_readback_reuse_barrier(const VkImageMemoryBarrier 
         b->srcAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
         b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 }
+
+/* The original precise-occlusion case renders into a 128x128 RGBA8 target in
+ * GENERAL, then reads it back. Keep its two transitions tied to that exact
+ * attachment role and to the stages the pinned test records. Both recorder
+ * and native prelude use this predicate so a recorded barrier is executable. */
+static inline int ps5vk_precise_query_colour_barrier(const VkImageMemoryBarrier *b,
+    VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage)
+{
+    if (!b || !ps5vk_basic_colour_readback_image(b->image) ||
+        b->image->info.extent.width != 128u ||
+        b->image->info.extent.height != 128u) return 0;
+    return (b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+            b->newLayout == VK_IMAGE_LAYOUT_GENERAL &&
+            !b->srcAccessMask &&
+            b->dstAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+            src_stage == VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT &&
+            dst_stage == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) ||
+           (b->oldLayout == VK_IMAGE_LAYOUT_GENERAL &&
+            b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+            b->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+            b->dstAccessMask == VK_ACCESS_TRANSFER_READ_BIT &&
+            src_stage == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+            dst_stage == VK_PIPELINE_STAGE_TRANSFER_BIT);
+}
 #endif

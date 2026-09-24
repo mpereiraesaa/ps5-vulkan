@@ -346,7 +346,9 @@ VkResult ps5vk_native_prepare_vertex_draw_masked(VkDevice d,const struct ps5vk_o
 {
     if(!out || out->backing || out->state)return VK_ERROR_UNKNOWN;
     struct ps5vk_vertex_fetch_table sparse,fetch;
-    VkResult rc=ps5vk_vertex_fetch_used_spans(d,key,op,usage_mask,&sparse);if(rc!=VK_SUCCESS)return rc;
-    rc=ps5vk_vertex_fetch_compact(&sparse,usage_mask,&fetch);if(rc!=VK_SUCCESS)return rc;
+    VkResult rc=ps5vk_vertex_fetch_used_spans(d,key,op,usage_mask,&sparse);
+    if(rc!=VK_SUCCESS){ps5vk_draw_prepare_site=__LINE__;return rc;}
+    rc=ps5vk_vertex_fetch_compact(&sparse,usage_mask,&fetch);
+    if(rc!=VK_SUCCESS){ps5vk_draw_prepare_site=__LINE__;return rc;}
     return prepare_draw(d,op,area,defaults,&fetch,shader_address,targets,out);
 }

@@ -155,11 +155,10 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_DEPTH_CLAMP |
                           PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                           PS5VK_FEATURE_MULTI_VIEWPORT |
-                          /* The four DXVK262-T06 bits govern fragment and
-                          * fixed-function graphics behaviour. A compute
-                          * pipeline created on the same logical device must
-                          * ignore them, while every unknown bit outside this
-                          * explicit list remains fail-closed. */
+                          /* Graphics-only device features are accepted on a
+                           * compute pipeline without changing the PSBC
+                           * compile options. The adapter still rejects any
+                           * unknown feature bit outside this allow-list. */
                           PS5VK_FEATURE_INDEPENDENT_BLEND |
                           PS5VK_FEATURE_DUAL_SRC_BLEND |
                           PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
@@ -167,6 +166,14 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS |
                           PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
                           PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE |
+                          PS5VK_FEATURE_IMAGE_CUBE_ARRAY |
+                          PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED |
+                          PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
+                          PS5VK_FEATURE_TEXTURE_COMPRESSION_BC |
+                          /* The UBO layout gate is checked when the shader
+                           * module is created. It changes no PSBC compute
+                           * option, but an enabled device still carries it
+                            * into every compute pipeline creation. */
                           PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
