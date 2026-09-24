@@ -547,6 +547,84 @@ static void multiview_equivalence(struct VkDevice_T *d)
     d->enabled_features = saved;
 }
 
+/* VkRenderPassInputAttachmentAspectCreateInfo (VK_KHR_maintenance2) on the
+ * version-1 path: accepted once, only on a device that enabled the extension,
+ * for input references that exist, under the same aspect rule the version-2
+ * reference obeys. */
+static void input_aspect_create_info(struct VkDevice_T *d)
+{
+    const VkAttachmentDescription attachments[2] = {
+        {.format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+        {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+    const VkAttachmentReference color = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    const VkAttachmentReference inputs[2] = {
+        {1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED}};
+    const VkSubpassDescription subpasses[2] = {
+        {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+         .colorAttachmentCount = 1, .pColorAttachments = &color},
+        {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+         .colorAttachmentCount = 1, .pColorAttachments = &color,
+         .inputAttachmentCount = 2, .pInputAttachments = inputs}};
+    VkInputAttachmentAspectReference aspects[2] = {
+        {.subpass = 1, .inputAttachmentIndex = 0, .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT},
+        /* The aspect of an UNUSED input reference is not checked. */
+        {.subpass = 1, .inputAttachmentIndex = 1, .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT}};
+    VkRenderPassInputAttachmentAspectCreateInfo aspect_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO,
+        .aspectReferenceCount = 2, .pAspectReferences = aspects};
+    VkRenderPassCreateInfo info = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext = &aspect_info, .attachmentCount = 2, .pAttachments = attachments,
+        .subpassCount = 2, .pSubpasses = subpasses};
+    const unsigned objects = d->graphics_objects;
+    VkRenderPass pass = (VkRenderPass)(uintptr_t)1, plain = VK_NULL_HANDLE;
+
+    d->maintenance2_extension_enabled = VK_FALSE;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT &&
+           !pass && d->graphics_objects == objects);
+    d->maintenance2_extension_enabled = VK_TRUE;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_SUCCESS);
+    /* The accepted mask is every aspect, so the object is the plain one. */
+    info.pNext = NULL;
+    assert(vkCreateRenderPass(d, &info, NULL, &plain) == VK_SUCCESS);
+    assert_same_pass(pass, plain);
+    vkDestroyRenderPass(d, plain, NULL);
+    vkDestroyRenderPass(d, pass, NULL);
+    info.pNext = &aspect_info;
+
+    struct { uint32_t subpass, index; VkImageAspectFlags aspect; VkResult expected; } bad[] = {
+        {2, 0, VK_IMAGE_ASPECT_COLOR_BIT, VK_ERROR_UNKNOWN},    /* 01926 */
+        {0, 0, VK_IMAGE_ASPECT_COLOR_BIT, VK_ERROR_UNKNOWN},    /* 01927 */
+        {1, 2, VK_IMAGE_ASPECT_COLOR_BIT, VK_ERROR_UNKNOWN},    /* 01927 */
+        {1, 0, VK_IMAGE_ASPECT_DEPTH_BIT, VK_ERROR_UNKNOWN},    /* 01963 */
+        {1, 0, 0, VK_ERROR_UNKNOWN},
+        {1, 0, VK_IMAGE_ASPECT_METADATA_BIT, VK_ERROR_UNKNOWN}};
+    for (unsigned i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        aspects[0] = (VkInputAttachmentAspectReference){bad[i].subpass, bad[i].index,
+                                                        bad[i].aspect};
+        pass = (VkRenderPass)(uintptr_t)1;
+        assert(vkCreateRenderPass(d, &info, NULL, &pass) == bad[i].expected &&
+               !pass && d->graphics_objects == objects);
+    }
+    aspects[0] = (VkInputAttachmentAspectReference){1, 0, VK_IMAGE_ASPECT_COLOR_BIT};
+    aspect_info.aspectReferenceCount = 0;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_UNKNOWN && !pass);
+    aspect_info.aspectReferenceCount = 2;
+    /* A second copy of the structure. */
+    VkRenderPassInputAttachmentAspectCreateInfo second = aspect_info;
+    second.pNext = &aspect_info;
+    info.pNext = &second;
+    assert(vkCreateRenderPass(d, &info, NULL, &pass) == VK_ERROR_FEATURE_NOT_PRESENT && !pass);
+    d->maintenance2_extension_enabled = VK_FALSE;
+    assert(d->graphics_objects == objects);
+}
+
 int main(void)
 {
     struct VkDevice_T d = {0};
@@ -556,6 +634,7 @@ int main(void)
     single_subpass_equivalence(&d);
     input_attachment_equivalence(&d);
     multiview_equivalence(&d);
+    input_aspect_create_info(&d);
     assert(d.graphics_objects == 0 && d.lifetime_errors == 0 && live_allocations == 0);
     puts("vk render pass 2 tests passed");
     return 0;

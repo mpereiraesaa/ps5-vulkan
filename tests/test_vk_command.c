@@ -1283,6 +1283,201 @@ static void core_dynamic_state_recording(void)
     vkCmdSetStencilReference(c,0,1);assert(c->state==PS5VK_INVALID);
     vkDestroyCommandPool(&d,p,NULL);
 }
+/* VK_KHR_create_renderpass2 recording: a pass created through
+ * vkCreateRenderPass2KHR and recorded through the version-2 commands produces
+ * exactly the operations the version-1 commands record for the same pass, and
+ * each malformed version-2 structure poisons the recording without recording
+ * anything. */
+static void render_pass2_recording(void)
+{
+    struct VkDevice_T d = {.graphics_enabled = VK_TRUE,
+        .create_renderpass2_extension_enabled = VK_TRUE,
+        .memory={NULL,allocate,release,cache,cache},.buffer_alignment=256,
+        .noncoherent_atom=64,.max_allocation=1<<20,
+        .image_requirements=image_requirements};
+    VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .extent = {8,8,1}, .mipLevels = 1, .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
+    VkImage image; VkDeviceMemory memory;
+    VkMemoryAllocateInfo mi = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = 4096};
+    assert(vkCreateImage(&d, &ii, NULL, &image) == VK_SUCCESS);
+    assert(vkAllocateMemory(&d, &mi, NULL, &memory) == VK_SUCCESS);
+    assert(vkBindImageMemory(&d, image, memory, 0) == VK_SUCCESS);
+    VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image, .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .levelCount = 1, .layerCount = 1}};
+    VkImageView view;
+    assert(vkCreateImageView(&d, &vi, NULL, &view) == VK_SUCCESS);
+
+    VkAttachmentDescription2 attachment = {
+        .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
+        .format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
+    VkAttachmentReference2 colour = {.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+        .attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT};
+    VkSubpassDescription2 described[2] = {
+        {.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2,
+         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+         .colorAttachmentCount = 1, .pColorAttachments = &colour},
+        {.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2,
+         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+         .colorAttachmentCount = 1, .pColorAttachments = &colour}};
+    VkRenderPassCreateInfo2 rpi = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2,
+        .attachmentCount = 1, .pAttachments = &attachment,
+        .subpassCount = 2, .pSubpasses = described};
+    VkRenderPass two;
+    assert(vkCreateRenderPass2KHR(&d, &rpi, NULL, &two) == VK_SUCCESS);
+    VkFramebufferCreateInfo fbi = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = two, .attachmentCount = 1, .pAttachments = &view,
+        .width = 8, .height = 8, .layers = 1};
+    VkFramebuffer fb;
+    assert(vkCreateFramebuffer(&d, &fbi, NULL, &fb) == VK_SUCCESS);
+
+    struct VkPipeline_T first = {.device = &d, .graphics = VK_TRUE, .subpass = 0,
+        .color_format = {VK_FORMAT_B8G8R8A8_UNORM}, .color_attachment_count = 1,
+        .viewport_count=1, .viewport={0,0,8,8,0,1}, .scissor = {{0,0},{8,8}}};
+    struct VkPipeline_T second = first; second.subpass = 1;
+    VkClearValue value = {.color = {.float32 = {0, 0, 0, 1}}};
+    VkRenderPassBeginInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = two, .framebuffer = fb, .renderArea = {.extent = {8, 8}},
+        .clearValueCount = 1, .pClearValues = &value};
+    VkSubpassBeginInfo inline_begin = {.sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO,
+        .contents = VK_SUBPASS_CONTENTS_INLINE};
+    VkSubpassEndInfo end = {.sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO};
+    VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer one = command(&d, p), c = command(&d, p);
+
+    /* The version-1 recording of the pass ... */
+    assert(vkBeginCommandBuffer(one, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(one, VK_PIPELINE_BIND_POINT_GRAPHICS, &first);
+    vkCmdBeginRenderPass(one, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdDraw(one, 3, 1, 0, 0);
+    vkCmdNextSubpass(one, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(one, VK_PIPELINE_BIND_POINT_GRAPHICS, &second);
+    vkCmdDraw(one, 3, 1, 0, 0);
+    vkCmdEndRenderPass(one);
+    assert(vkEndCommandBuffer(one) == VK_SUCCESS && one->operation_count == 5);
+    /* ... and the version-2 one record the same operations. */
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &first);
+    vkCmdBeginRenderPass2KHR(c, &ri, &inline_begin);
+    assert(c->render_pass == two && !c->subpass &&
+           c->render_pass_contents == VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdDraw(c, 3, 1, 0, 0);
+    vkCmdNextSubpass2KHR(c, &inline_begin, &end);
+    assert(c->state == PS5VK_RECORDING && c->subpass == 1);
+    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &second);
+    vkCmdDraw(c, 3, 1, 0, 0);
+    vkCmdEndRenderPass2KHR(c, &end);
+    assert(!c->render_pass);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->operation_count == 5);
+    assert(!memcmp(c->operations, one->operations, 5 * sizeof(c->operations[0])));
+    assert(c->operations[0].type == PS5VK_BEGIN_RENDER_PASS &&
+           c->operations[2].type == PS5VK_NEXT_SUBPASS && c->operations[2].subpass == 1 &&
+           c->operations[4].type == PS5VK_END_RENDER_PASS);
+
+    /* The subpass contents travel through VkSubpassBeginInfo. */
+    VkSubpassBeginInfo secondary_begin = inline_begin;
+    secondary_begin.contents = VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS;
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass2KHR(c, &ri, &secondary_begin);
+    assert(c->render_pass_contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS &&
+           c->operations[0].render_pass_contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    vkCmdNextSubpass2KHR(c, &inline_begin, &end);
+    assert(c->render_pass_contents == VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdEndRenderPass2KHR(c, &end);
+    assert(vkEndCommandBuffer(c) == VK_SUCCESS && c->operation_count == 3);
+
+    /* Malformed version-2 structures, each refused with nothing recorded by
+     * the refused command. */
+    VkSubpassBeginInfo bad_begin = inline_begin;
+    VkSubpassEndInfo bad_end = end;
+    const VkSubpassBeginInfo *const begins[] = {NULL, &bad_begin, &bad_begin, &bad_begin};
+    for (unsigned i = 0; i < 4; ++i) {
+        bad_begin = inline_begin;
+        if (i == 1) bad_begin.sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO;
+        if (i == 2) bad_begin.pNext = &end;
+        if (i == 3) bad_begin.contents = (VkSubpassContents)7;
+        assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        vkCmdBeginRenderPass2KHR(c, &ri, begins[i]);
+        assert(c->state == PS5VK_INVALID && !c->operation_count);
+        assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        vkCmdBeginRenderPass2KHR(c, &ri, &inline_begin);
+        vkCmdNextSubpass2KHR(c, begins[i], &end);
+        assert(c->state == PS5VK_INVALID && c->operation_count == 1);
+    }
+    const VkSubpassEndInfo *const ends[] = {NULL, &bad_end, &bad_end};
+    for (unsigned i = 0; i < 3; ++i) {
+        bad_end = end;
+        if (i == 1) bad_end.sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO;
+        if (i == 2) bad_end.pNext = &inline_begin;
+        assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        vkCmdBeginRenderPass2KHR(c, &ri, &inline_begin);
+        vkCmdNextSubpass2KHR(c, &inline_begin, ends[i]);
+        assert(c->state == PS5VK_INVALID && c->operation_count == 1);
+        assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+        assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+        vkCmdBeginRenderPass2KHR(c, &ri, &inline_begin);
+        vkCmdNextSubpass2KHR(c, &inline_begin, &end);
+        vkCmdEndRenderPass2KHR(c, ends[i]);
+        assert(c->state == PS5VK_INVALID && c->operation_count == 2);
+    }
+    /* The version-1 transition rules still apply: ending before the last
+     * subpass, and a begin info the version-1 begin refuses. */
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass2KHR(c, &ri, &inline_begin);
+    vkCmdEndRenderPass2KHR(c, &end);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 1);
+    ri.sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO;
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass2KHR(c, &ri, &inline_begin);
+    assert(c->state == PS5VK_INVALID && !c->operation_count);
+    ri.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    /* Without the extension enabled every version-2 command is refused. */
+    d.create_renderpass2_extension_enabled = VK_FALSE;
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass2KHR(c, &ri, &inline_begin);
+    assert(c->state == PS5VK_INVALID && !c->operation_count);
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdNextSubpass2KHR(c, &inline_begin, &end);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 1);
+    assert(vkResetCommandBuffer(c, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdNextSubpass(c, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdEndRenderPass2KHR(c, &end);
+    assert(c->state == PS5VK_INVALID && c->operation_count == 2);
+    /* A null command buffer is ignored. */
+    vkCmdBeginRenderPass2KHR(NULL, &ri, &inline_begin);
+    vkCmdNextSubpass2KHR(NULL, &inline_begin, &end);
+    vkCmdEndRenderPass2KHR(NULL, &end);
+
+    vkDestroyCommandPool(&d, p, NULL);
+    fb->pending = 0;
+    vkDestroyFramebuffer(&d, fb, NULL);
+    vkDestroyImageView(&d, view, NULL);
+    vkDestroyRenderPass(&d, two, NULL);
+    vkDestroyImage(&d, image, NULL);
+    vkFreeMemory(&d, memory, NULL);
+}
+
 static void dispatch_base_recording(void)
 {
     struct VkDevice_T d = {.device_group_extension_enabled = VK_TRUE};
@@ -1341,4 +1536,4 @@ static void dispatch_base_recording(void)
     vkDestroyCommandPool(&d, p, NULL);
 }
 int main(void)
-{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); dispatch_base_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); render_pass2_recording(); dispatch_base_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }

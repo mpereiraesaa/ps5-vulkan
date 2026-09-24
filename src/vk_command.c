@@ -890,6 +890,56 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
     op->subpass=c->subpass;
     c->render_pass = NULL; c->framebuffer = NULL; c->subpass = 0;
 }
+/* VK_KHR_create_renderpass2 recording commands.
+ *
+ * Each version-2 command carries the same transition as its version-1 twin
+ * plus a VkSubpassBeginInfo / VkSubpassEndInfo. This device extends neither
+ * structure (a fragment density map offset is the only pinned extension of the
+ * end info, and it is not exposed), so each is checked for its structure type,
+ * an empty chain and, for the begin info, a valid contents value, and the
+ * command then records EXACTLY what the version-1 command records. The render
+ * pass begin info is forwarded unchanged, pNext chain included, so whatever the
+ * version-1 begin accepts in that chain is accepted here and nothing else is.
+ *
+ * A malformed version-2 structure poisons the recording like any other refused
+ * command, and records no operation. */
+static int subpass_begin_info_valid(const VkSubpassBeginInfo *info)
+{
+    return info && info->sType == VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO && !info->pNext &&
+        (info->contents == VK_SUBPASS_CONTENTS_INLINE ||
+         info->contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+}
+static int subpass_end_info_valid(const VkSubpassEndInfo *info)
+{
+    return info && info->sType == VK_STRUCTURE_TYPE_SUBPASS_END_INFO && !info->pNext;
+}
+static int render_pass2_enabled(VkCommandBuffer c)
+{
+    return c && c->pool && c->pool->device &&
+        c->pool->device->create_renderpass2_extension_enabled;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass2KHR(VkCommandBuffer c,
+    const VkRenderPassBeginInfo *info, const VkSubpassBeginInfo *begin)
+{
+    if (!c) return;
+    if (!render_pass2_enabled(c) || !subpass_begin_info_valid(begin)) { invalid(c); return; }
+    vkCmdBeginRenderPass(c, info, begin->contents);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass2KHR(VkCommandBuffer c,
+    const VkSubpassBeginInfo *begin, const VkSubpassEndInfo *end)
+{
+    if (!c) return;
+    if (!render_pass2_enabled(c) || !subpass_begin_info_valid(begin) ||
+        !subpass_end_info_valid(end)) { invalid(c); return; }
+    vkCmdNextSubpass(c, begin->contents);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass2KHR(VkCommandBuffer c,
+    const VkSubpassEndInfo *end)
+{
+    if (!c) return;
+    if (!render_pass2_enabled(c) || !subpass_end_info_valid(end)) { invalid(c); return; }
+    vkCmdEndRenderPass(c);
+}
 /* Record an ordered, owned list of secondary references.
  *
  * Nothing is copied or flattened: the operation NAMES the children and the

@@ -62,7 +62,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
         uint32_t height = view->image->info.extent.height >> mip;
         if (!width) width = 1;
         if (!height) height = 1;
-        if (!(view->image->info.usage & usage) || info->width > width || info->height > height)
+        if (!(ps5vk_image_view_usage(view) & usage) || info->width > width || info->height > height)
             return VK_ERROR_UNKNOWN;
         /* A pass with view masks renders each subpass once per view, into the
          * attachment view's own layers, so that view has to START at layer zero

@@ -215,14 +215,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO)
         return VK_ERROR_UNKNOWN;
     if (!d->graphics_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
-    /* Exactly one optional VkRenderPassMultiviewCreateInfo is understood; any
-     * other structure, or a second copy of it, stays fail-closed. */
+    /* One optional VkRenderPassMultiviewCreateInfo and, on a device that
+     * enabled VK_KHR_maintenance2, one VkRenderPassInputAttachmentAspectCreateInfo
+     * are understood; any other structure, or a second copy of either, stays
+     * fail-closed. */
     const VkRenderPassMultiviewCreateInfo *multiview = NULL;
+    const VkRenderPassInputAttachmentAspectCreateInfo *input_aspects = NULL;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
-        if (next->sType != VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO || multiview)
+        if (next->sType == VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO && !multiview)
+            multiview = (const VkRenderPassMultiviewCreateInfo *)next;
+        else if (next->sType == VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO &&
+                 !input_aspects && d->maintenance2_extension_enabled)
+            input_aspects = (const VkRenderPassInputAttachmentAspectCreateInfo *)next;
+        else
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        multiview = (const VkRenderPassMultiviewCreateInfo *)next;
     }
     if (info->flags ||
         !info->subpassCount || info->subpassCount > PS5VK_MAX_SUBPASSES || !info->pSubpasses ||
@@ -250,6 +257,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
      * framebuffer compatibility is checked per reference rather than by role.
      * The native queue still refuses a graph it cannot execute - it carries the
      * shared-role shape only - so nothing here reaches hardware that way. */
+    /* Input aspects (VK_KHR_maintenance2). Each entry names an input reference
+     * that exists (VUID-VkRenderPassCreateInfo-pNext-01926 and -01927) and an
+     * aspect mask the version-2 reference would carry, checked by the same
+     * rule against the attachment it names (01963). Because the owned input
+     * reference reads every aspect, an accepted mask changes nothing stored. */
+    if (input_aspects) {
+        if (!input_aspects->aspectReferenceCount || !input_aspects->pAspectReferences)
+            return VK_ERROR_UNKNOWN;
+        for (uint32_t i = 0; i < input_aspects->aspectReferenceCount; ++i) {
+            const VkInputAttachmentAspectReference *r = &input_aspects->pAspectReferences[i];
+            if (r->subpass >= info->subpassCount ||
+                r->inputAttachmentIndex >= info->pSubpasses[r->subpass].inputAttachmentCount)
+                return VK_ERROR_UNKNOWN;
+            const uint32_t attachment = info->pSubpasses[r->subpass]
+                .pInputAttachments[r->inputAttachmentIndex].attachment;
+            if (attachment == VK_ATTACHMENT_UNUSED) continue;
+            VkResult rc = ps5vk_render_pass_input_aspect_valid(
+                info->pAttachments[attachment].format, r->aspectMask);
+            if (rc != VK_SUCCESS) return rc;
+        }
+    }
     /* Every attachment must be reachable through a subpass reference: an
      * attachment this profile never uses has no role to play. An input
      * reference is a use, which is the whole point of the shape: a later
