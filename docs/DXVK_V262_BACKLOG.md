@@ -146,8 +146,9 @@ the current public reporting closed while these prerequisites are incomplete.
 | `subgroupBroadcastDynamicId` | Only `VkPhysicalDeviceVulkan12Features` at this registry pin; the original nonconstant broadcast cases require Vulkan 1.2, SPIR-V 1.5, the feature bit, a supported stage and `BALLOT`. | Public bit off; API 1.0; no extension alias or accepted CTS route. |
 
 `VkPhysicalDeviceSubgroupProperties` supplies `subgroupSize`, `supportedStages`,
-`supportedOperations` and `quadOperationsInAllStages` through the 1.1
-properties query. Compute subgroup support is required by the original CTS;
+`supportedOperations` and `quadOperationsInAllStages` through properties2.
+The current Vulkan 1.0 KHR query explicitly returns zero for all four fields.
+Compute subgroup support is required by the original CTS;
 other stages depend on their reported masks. The quad field does not establish
 broadcast support. Neither subgroup bit nor `apiVersion` changes in this slice.
 
