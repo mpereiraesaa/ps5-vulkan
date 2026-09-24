@@ -32,6 +32,8 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
     subgroup_ops = []
     entry_models = []
     has_int8_type = False
+    loaded_ids = set()
+    broadcast_source_id = None
     index = 5
     while index < len(words):
         size, opcode = words[index] >> 16, words[index] & 0xffff
@@ -44,7 +46,11 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
             entry_models.append(operands[0])
         elif opcode == 21 and size == 4 and operands[1] == 8:  # OpTypeInt 8
             has_int8_type = True
-        elif 333 <= opcode <= 366:
+        elif opcode == 61 and size >= 4:  # OpLoad
+            loaded_ids.add(operands[1])
+        elif opcode == 337 and size == 6:  # OpGroupNonUniformBroadcast
+            broadcast_source_id = operands[4]
+        if 333 <= opcode <= 366:
             subgroup_ops.append(opcode)
         index += size
     expected_capabilities = {61, 64 if operation == "broadcast" else 63}
@@ -54,6 +60,9 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
             entry_models != [5] or
             (operation == "iadd_int8") != (39 in capabilities and has_int8_type)):
         raise ValueError(f"shader lacks compute GroupNonUniform{operation} contract")
+    if operation == "broadcast" and (words[1] < 0x00010500 or
+                                     broadcast_source_id not in loaded_ids):
+        raise ValueError("Broadcast witness requires SPIR-V 1.5 and a runtime-loaded source ID")
 
 
 def main() -> None:
