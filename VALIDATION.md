@@ -4720,7 +4720,18 @@ and log SHA-256 `66c5d6a48c932ca2b71b5b48f24f953287516feea8e2b63aaa55a6d1671072e
 bind that run to the default-off profile. The title closed and the previous
 payload was restored. This selection contains no applicable subgroup leaf;
 its result proves neutral acceptance, not subgroup conformance.
-The newer IAdd-gate head still needs the same hardware acceptance run.
+The ordinary build of the later IAdd-witness source at `33ca70f` did pass the
+same frozen selection in strict run `run-641358420703191`: **507 Pass, zero
+Fail, zero NotSupported, zero missing or unexpected**. Signed eboot SHA-256
+`33349dec94197bd4c883bfa1a76e86965f5e4d90dec4fe260ff5bb7d60ed045b`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+QPA SHA-256 `96e37fd5ae00ab7a6e3d63203bdebb6851611381c17519b6a4e2cd5665310449`,
+and log SHA-256 `6e496f7ecb9095ad38c699f9fe5f46bcc1e163fe82323889a0e2dbbfecd98025`
+bind the result. The build recorded 507 selected cases, no measurement
+manifest, both subgroup diagnostic switches off, and no experimental build
+switch. The title closed and the previous payload was restored. This is a
+neutrality check: no subgroup leaf belongs to that selection.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
