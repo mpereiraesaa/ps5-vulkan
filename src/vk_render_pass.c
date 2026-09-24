@@ -294,7 +294,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
          * colour formats this profile renders into, and D32 for depth. */
         if (a->flags ||
             ((as_colour || as_resolve) && !ps5vk_color_target_format_supported(a->format)) ||
-            (as_depth && a->format != VK_FORMAT_D32_SFLOAT))
+            (as_depth && a->format != VK_FORMAT_D32_SFLOAT &&
+                         a->format != VK_FORMAT_D16_UNORM))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
             a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||

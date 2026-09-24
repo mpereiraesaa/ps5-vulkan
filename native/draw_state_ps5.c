@@ -5,6 +5,12 @@
 #include "sample_rate_diagnostic.h"
 #include <string.h>
 
+unsigned ps5vk_draw_state_site;
+#define PS5VK_DRAW_UNSUPPORTED() do { \
+    ps5vk_draw_state_site = __LINE__; \
+    return VK_ERROR_FEATURE_NOT_PRESENT; \
+} while (0)
+
 #if PS5VK_SAMPLE_RATE_DIAGNOSTIC
 /* The one definition of the diagnostic override, in the translation unit that
  * READS it: the probe only ever sets it through this declaration, and a build
@@ -47,17 +53,24 @@ static uint32_t float_bits(float f) { uint32_t u; memcpy(&u, &f, sizeof(u)); ret
  * block is CLAMP, FRONT_SCALE, FRONT_OFFSET, BACK_SCALE, BACK_OFFSET at
  * 0x2df..0x2e3 with the slope scaled by 16, and PA_SU_POLY_OFFSET_DB_FMT_CNTL
  * (0x2de) describing the depth format: NEG_NUM_DB_BITS = -23 with
- * POLY_OFFSET_DB_IS_FLOAT_FMT for D32_SFLOAT, and zero when there is no depth
- * attachment (Vulkan leaves the constant term's unit undefined then). Both
+ * POLY_OFFSET_DB_IS_FLOAT_FMT for D32_SFLOAT, -16 fixed for D16_UNORM, and
+ * zero when there is no depth attachment (Vulkan leaves the constant term's
+ * unit undefined then). Both
  * front and back get the same scale/offset: Vulkan has one bias per polygon,
  * not per face. The factors are written even when the bias is disabled so the
  * words never carry another draw's values. */
-static void polygon_offset(const struct ps5vk_raster_state *raster, int depth_d32,
+static void polygon_offset(const struct ps5vk_raster_state *raster, VkFormat depth_format,
     ps5_agc_register out[6])
 {
     const uint32_t slope = float_bits(raster->depth_bias_slope * 16.0f);
     const uint32_t offset = float_bits(raster->depth_bias_constant);
-    out[0] = (ps5_agc_register){0x2de, depth_d32 ? ((uint32_t)(-23) & 0xffu) | (1u << 8) : 0u};
+    /* PAL's GFX9+ depth view uses -16 fixed-point bits for Z_16 and -23
+     * with the floating-format bit for Z_32_FLOAT. The D16 diagnostic only
+     * accepts zero bias factors until nonzero bias has a native witness. */
+    const uint32_t depth_bias_format = depth_format == VK_FORMAT_D32_SFLOAT ?
+        (((uint32_t)(-23) & 0xffu) | (1u << 8)) :
+        depth_format == VK_FORMAT_D16_UNORM ? ((uint32_t)(-16) & 0xffu) : 0u;
+    out[0] = (ps5_agc_register){0x2de, depth_bias_format};
     out[1] = (ps5_agc_register){0x2df, float_bits(raster->depth_bias_clamp)};
     out[2] = (ps5_agc_register){0x2e0, slope};
     out[3] = (ps5_agc_register){0x2e1, offset};
@@ -73,6 +86,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
 {
     if (!out) return VK_ERROR_UNKNOWN;
     memset(out, 0, sizeof(*out));
+    ps5vk_draw_state_site = 0;
     if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) return VK_ERROR_UNKNOWN;
     if (!p || !viewport_state || !scissor_state || !raster || !p->graphics || !p->graphics_state ||
         !width || !height || width > 16384 || height > 16384 ||
@@ -91,10 +105,16 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         (p->cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        PS5VK_DRAW_UNSUPPORTED();
+    int depth_format_supported = p->depth_format == VK_FORMAT_D32_SFLOAT;
+    depth_format_supported |= p->depth_format == VK_FORMAT_D16_UNORM &&
+        width == 128u && height == 128u;
     if (p->depth_format == VK_FORMAT_UNDEFINED ? depth != NULL :
-        (p->depth_format != VK_FORMAT_D32_SFLOAT || !depth || depth->count != PS5_DEPTH_REGISTER_COUNT))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        (!depth_format_supported || !depth || depth->count != PS5_DEPTH_REGISTER_COUNT ||
+         (p->depth_format == VK_FORMAT_D16_UNORM && raster->depth_bias_enable &&
+          (raster->depth_bias_constant != 0.0f || raster->depth_bias_clamp != 0.0f ||
+           raster->depth_bias_slope != 0.0f))))
+        PS5VK_DRAW_UNSUPPORTED();
     struct ps5vk_native_graphics_pipeline *native = p->graphics_state;
     if (native->device != p->device || !native->pair || !native->pair->ready) return VK_ERROR_UNKNOWN;
     struct ps5vk_graphics_pair *pair = native->pair;
@@ -131,7 +151,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             (pair->runtime_hull.header.num_sh_registers>4 ||
              pair->runtime_hull.header.num_cx_registers>PS5VK_RUNTIME_CX_MAX))))
         return VK_ERROR_UNKNOWN;
-    if (pair->vertex_quantization != 0x2d) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (pair->vertex_quantization != 0x2d) PS5VK_DRAW_UNSUPPORTED();
     ps5_agc_register viewport[PS5VK_VIEWPORT_REGISTERS];
     VkResult rc = ps5vk_native_viewport(viewport_state, scissor_state, area, viewport);
     if (rc != VK_SUCCESS) return rc;
@@ -398,7 +418,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     uint32_t hardware_polygon_type = 2u, polygon_mode = 0u;
     if (raster->polygon_mode == VK_POLYGON_MODE_LINE) hardware_polygon_type = 1u;
     else if (raster->polygon_mode == VK_POLYGON_MODE_POINT) hardware_polygon_type = 0u;
-    else if (raster->polygon_mode != VK_POLYGON_MODE_FILL) return VK_ERROR_FEATURE_NOT_PRESENT;
+    else if (raster->polygon_mode != VK_POLYGON_MODE_FILL) PS5VK_DRAW_UNSUPPORTED();
     if (hardware_polygon_type != 2u) polygon_mode = (1u << 3) | (1u << 24);
     const uint32_t polygon_offset_enable = raster->depth_bias_enable ?
         (1u << 11) | (1u << 12) | (1u << 13) : 0u;
@@ -441,7 +461,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * on an inherited AGC initialization value for rasterization precision. */
     result.cx[result.cx_count++] = (ps5_agc_register){0x2f9, pair->vertex_quantization};
     /* Depth bias: the polygon offset block, written on every draw. */
-    polygon_offset(raster, depth != NULL, result.cx + result.cx_count);
+    polygon_offset(raster, depth ? p->depth_format : VK_FORMAT_UNDEFINED,
+        result.cx + result.cx_count);
     result.cx_count += 6;
     /* Point and line rasterization state for the non-solid polygon modes,
      * written on every draw so a FILL draw cannot inherit another value.
@@ -481,7 +502,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     {
         const int indexed = index_width != 0;
         if (index_width != 0 && index_width != 2 && index_width != 4)
-            return VK_ERROR_FEATURE_NOT_PRESENT;
+            PS5VK_DRAW_UNSUPPORTED();
         const int restart = p->primitive_restart && indexed;
         result.cx[result.cx_count++] = (ps5_agc_register){0x103,
             restart ? (index_width == 2 ? 0xffffu : 0xffffffffu) : 0u};
@@ -652,7 +673,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     for(uint32_t attachment=0;attachment<color_count;++attachment)
         if(!ps5vk_blend_encode(&p->color_blend[slot[attachment]],p->blend_constants,
                                dual_source,&blend[attachment]))
-            return VK_ERROR_FEATURE_NOT_PRESENT;
+            PS5VK_DRAW_UNSUPPORTED();
     /* A DEPTH-ONLY draw programmes no colour target at all, so the blend word
      * pair written below is the one a colour pipeline with blending off emits:
      * explicit zeros and the same optimisation word. Writing it unconditionally
@@ -661,7 +682,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     if(!color_count) {
         const VkPipelineColorBlendAttachmentState none={0};
         if(!ps5vk_blend_encode(&none,p->blend_constants,dual_source,&blend[0]))
-            return VK_ERROR_FEATURE_NOT_PRESENT;
+            PS5VK_DRAW_UNSUPPORTED();
     }
     /* Attachment zero's colour block came from ps5_pipeline_build; every other
      * attachment is appended as its own CB_COLORn block with its own blend con
@@ -706,7 +727,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
                  * zero write mask simply programmes CB_TARGET_MASK. */
                 if(((spi_format>>(4u*attachment))&0xfu) ||
                    ((shader_mask>>(4u*attachment))&0xfu))
-                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                    PS5VK_DRAW_UNSUPPORTED();
                 per_target[attachment][0]=0;
                 per_target[attachment][1]=0;
                 per_target[attachment][2]=0;
@@ -715,7 +736,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
             if(!ps5vk_color_export_state(attachment,p->color_format[slot[attachment]],
                 spi_format,shader_mask,p->color_blend[slot[attachment]].blendEnable,
                 dual_source,per_target[attachment]))
-                return VK_ERROR_FEATURE_NOT_PRESENT;
+                PS5VK_DRAW_UNSUPPORTED();
         }
         ps5vk_color_export_compose(per_target,color_count,conversion);
         if(result.cx_count+3u>PS5VK_DRAW_CX_CAPACITY)return VK_ERROR_UNKNOWN;

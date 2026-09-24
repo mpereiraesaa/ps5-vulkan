@@ -14,6 +14,7 @@ enum ps5vk_operation_type {
     PS5VK_EVENT_RESET, PS5VK_EVENT_WAIT, PS5VK_COPY_BUFFER,
     PS5VK_UPDATE_BUFFER, PS5VK_FILL_BUFFER, PS5VK_DISPATCH_INDIRECT,
     PS5VK_DRAW_INDIRECT, PS5VK_DRAW_INDEXED_INDIRECT, PS5VK_QUERY_RESET,
+    PS5VK_QUERY_BEGIN, PS5VK_QUERY_END, PS5VK_QUERY_COPY,
     /* Frontend image domain: executed in submission order by start_submission
      * when the segment reaches the head, like the buffer transfers. */
     PS5VK_COPY_IMAGE, PS5VK_CLEAR_COLOR_IMAGE,
@@ -27,7 +28,9 @@ enum ps5vk_operation_type {
      * child keeps its object identity, its pending ownership and its reuse
      * rules instead of a parallel mechanism inventing them. */
     PS5VK_EXECUTE_COMMANDS,
-    PS5VK_CLEAR_ATTACHMENT
+    PS5VK_CLEAR_ATTACHMENT,
+    /* Bounded frontend BC1/BC3 nearest decode into an RGBA8 linear target. */
+    PS5VK_BLIT_BC_TO_RGBA8
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -62,11 +65,14 @@ struct ps5vk_operation {
     VkQueryPool query_pool;
     uint32_t query_first;
     uint32_t query_count;
+    VkQueryControlFlags query_flags;
+    VkDeviceSize query_stride;
     /* Image copy / colour clear domain. Region and range arrays live in
      * owned_payload; the clear value is stored as canonical RGBA8 bytes. */
     VkImage image_source, image_destination;
     VkImageLayout image_source_layout, image_destination_layout;
     uint32_t image_region_count;
+    VkFilter image_blit_filter;
     uint32_t clear_word;
     VkClearRect clear_rect;
     VkImage copy_image;
@@ -164,6 +170,8 @@ struct VkCommandBuffer_T {
     struct ps5vk_vertex_binding vertices[PS5VK_MAX_VERTEX_BINDINGS];
     VkRenderPass render_pass;
     VkFramebuffer framebuffer;
+    VkQueryPool active_occlusion_query_pool;
+    uint32_t active_occlusion_query;
     /* The active render pass was INHERITED by a continuation secondary rather
      * than begun here. Draws record against it exactly as they would in a
      * primary, but this buffer never began it: vkCmdEndRenderPass cannot close

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from tools.build_upstream_cts import tessellation_build_profile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,13 +91,13 @@ class UpstreamSelectionTests(unittest.TestCase):
         # of them - the triangle and quad shapes - are measured Pass and are
         # now the sample-rate-shading acceptance group, and the 20 line and
         # point_1px shapes moved to plain-point-line-pipeline-refused, whose
-        # pipeline shape this profile refuses at creation. The 66 diagnostics
-        # that remain document refusals, capability gaps and pending
-        # measurement windows. Seven T08 volatile atomic leaves and two
-        # original buffer-device-address leaves now belong to acceptance.
-        # `leaves` counts every attachment_write_mask leaf
-        # the pinned factory generates, wherever the manifest now keeps it.
-        self.assertEqual((507, 66, 48),
+        # pipeline shape this profile refuses at creation. Seven T08 volatile
+        # atomic leaves and two original buffer-device-address leaves belong
+        # to acceptance. T07 adds 322 original BC, gather, precise-query and
+        # cube-array cases; the 66 remaining diagnostics record refusals and
+        # gaps. `leaves` counts every
+        # attachment_write_mask leaf the pinned factory generates.
+        self.assertEqual((829, 66, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]
@@ -168,7 +169,109 @@ class UpstreamSelectionTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 altered = text.replace(marker, "REMOVED_FACTORY_MARKER")
                 self.assertNotIn(missing, self.gate._ubo_generated_paths(altered))
+    def test_original_gather_and_precise_query_leaf_derivation_is_pinned(self):
+        gather_path = UPSTREAM / self.gate.GATHER_TEST_SOURCE
+        query_path = UPSTREAM / self.gate.OCCLUSION_TEST_SOURCE
+        if not gather_path.is_file() or not query_path.is_file():
+            self.skipTest("pinned vk-gl-cts gather/query sources not present")
+        gather_text = gather_path.read_text(encoding="utf-8")
+        query_text = query_path.read_text(encoding="utf-8")
+        gather = self.gate._texture_gather_leaf_requirements(gather_text)
+        query = self.gate._precise_occlusion_leaf_requirements(query_text)
 
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot."
+            "clamp_to_edge_repeat"])
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset."
+            "2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge"])
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.basic.2d_array.rgba8.size_pot."
+            "repeat_mirrored_repeat"])
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset."
+            "2d_array.rgba8.size_pot.clamp_to_edge_repeat"])
+        for group in ("offset", "offset_dynamic", "offsets"):
+            path = ("dEQP-VK.shaderrender.texture_gather." + group +
+                    ".min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat")
+            self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        for group in ("offset", "offset_dynamic"):
+            path = ("dEQP-VK.shaderrender.texture_gather." + group +
+                    ".implementation_offset.2d.rgba8.size_pot.clamp_to_edge_repeat")
+            self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[
+            "dEQP-VK.shaderrender.texture_gather.offsets.implementation_offset."
+            "2d.rgba8.size_pot.clamp_to_edge_repeat"])
+        for pair in ("clamp_to_edge_repeat", "repeat_mirrored_repeat",
+                     "mirrored_repeat_clamp_to_edge"):
+            path = ("dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8."
+                    "size_pot." + pair)
+            self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        for texture_format in ("rgba8ui", "rgba8i"):
+            for group in ("basic", "offset", "offset_dynamic", "offsets"):
+                intermediate = "" if group == "basic" else ".min_required_offset"
+                for pair in ("clamp_to_edge_repeat", "repeat_mirrored_repeat",
+                             "mirrored_repeat_clamp_to_edge"):
+                    path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                            f".2d.{texture_format}.size_pot." + pair)
+                    self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        dref = ("dEQP-VK.shaderrender.texture_gather.offset.min_required_offset."
+                "2d.depth32f.size_pot.compare_less.clamp_to_edge_repeat")
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[dref])
+        self.assertEqual(24, sum(".rgba8ui." in path or ".rgba8i." in path
+                                 for path in gather))
+        self.assertEqual({"compare_less"},
+                         self.gate._texture_gather_generated_segments(gather_text))
+        self.assertEqual(["core:occlusionQueryPrecise"], query[
+            "dEQP-VK.query_pool.occlusion_query.basic_precise"])
+
+        self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
+            gather_text.replace('"min_required_offset"', '"invented_offset"', 1)))
+        self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
+            gather_text.replace('"rgba8ui"', '"invented_integer_format"', 1)))
+        self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
+            gather_text.replace('return "less";', 'return "invented_compare_mode";', 1)))
+        self.assertEqual(set(), self.gate._texture_gather_generated_segments(
+            gather_text.replace('return "less";', 'return "invented_compare_mode";', 1)))
+        self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
+            gather_text.replace(
+                "void TextureGather2DCase::checkSupport(Context &context) const\n{\n"
+                "    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);",
+                "void TextureGather2DCase::checkSupport(Context &context) const\n{\n",
+                1)))
+        self.assertEqual({}, self.gate._precise_occlusion_leaf_requirements(
+            query_text.replace(
+                "testVector.queryControlFlags = vk::VK_QUERY_CONTROL_PRECISE_BIT;",
+                "testVector.queryControlFlags = vk::VK_QUERY_CONTROL_RESERVED_BIT;", 1)))
+
+    def test_source_derived_feature_requirements_gate_diagnostics_and_acceptance(self):
+        manifest = copy.deepcopy(self.current_manifest)
+        paths = {
+            "shaderImageGatherExtended":
+                "dEQP-VK.shaderrender.texture_gather.offsets."
+                "min_required_offset.2d.rgba8.size_npot.clamp_to_edge_repeat",
+            "occlusionQueryPrecise": "dEQP-VK.query_pool.occlusion_query.basic_precise",
+        }
+        selected = {case["path"]: case for case in manifest["cases"]}
+        self.assertTrue(all(path in selected for path in paths.values()))
+        self.assertEqual(0, self._gate_exit_code_for_manifest(manifest))
+
+        missing_metadata = copy.deepcopy(manifest)
+        next(case for case in missing_metadata["cases"]
+             if case["path"] == paths["shaderImageGatherExtended"])["features_required"] = []
+        self.assertEqual(1, self._gate_exit_code_for_manifest(missing_metadata))
+
+        original = self.gate._advertised_capabilities
+        for feature in paths:
+            def without_feature(feature=feature):
+                capabilities, failures = original()
+                capabilities["core_features"] = capabilities["core_features"] - {feature}
+                return capabilities, failures
+            self.gate._advertised_capabilities = without_feature
+            try:
+                self.assertEqual(1, self._gate_exit_code_for_manifest(manifest))
+            finally:
+                self.gate._advertised_capabilities = original
     def setUp(self):
         self.source = UPSTREAM / MODULE
         if not self.source.is_file():
@@ -195,6 +298,50 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual(set(), set(derive(source, integration.replace(
             "createFocusedVolatileAtomicComputeGroup(m_testCtx)",
             "createWorkgroupMemoryComputeGroup(m_testCtx)"), wrapper)))
+
+    def test_t07_bc_generated_names_follow_pinned_factories(self):
+        copy_source = (UPSTREAM / "external/vulkancts/modules/vulkan/api/"
+                       "vktApiCopiesAndBlittingTests.cpp").read_text()
+        texture_source = (UPSTREAM / "external/vulkancts/modules/vulkan/texture/"
+                          "vktTextureCompressedFormatTests.cpp").read_text()
+        sampling = self.gate._bc_compressed_sampling_paths(texture_source)
+        image = self.gate._bc_image_copy_paths(copy_source)
+        mips = self.gate._bc_mip_copy_paths(copy_source)
+        blits = self.gate._bc_blit_paths(copy_source)
+        prefix = "dEQP-VK.api.copy_and_blit.core."
+
+        self.assertEqual(48, len(sampling))
+        self.assertIn("dEQP-VK.texture.compressed.bc7_srgb_block_2d_npot_mip1", sampling)
+        self.assertNotIn("dEQP-VK.texture.compressed.bc7_srgb_block_3d_npot_mip1", sampling)
+        self.assertIn(prefix + "image_to_image.all_formats.color.2d_to_2d."
+                      "bc1_rgba_unorm_block.bc4_snorm_block.optimal_general", image)
+        self.assertNotIn(prefix + "image_to_image.all_formats.color.2d_to_2d."
+                         "bc1_rgba_unorm_block.bc7_srgb_block.optimal_general", image)
+        self.assertEqual(66, len(mips))
+        self.assertIn(prefix + "image_to_buffer.2d_images."
+                      "mip_copies_bc6h_sfloat_block_64x192_5_layers_universal", mips)
+        self.assertNotIn(prefix + "image_to_buffer.2d_images."
+                         "mip_copies_bc6h_sfloat_block_64x192_5_layers_transfer", mips)
+        self.assertIn(prefix + "blit_image.all_formats.color.2d."
+                      "bc7_srgb_block.r8g8b8a8_srgb.general_optimal_linear", blits)
+        self.assertNotIn(prefix + "blit_image.all_formats.color.2d."
+                         "bc7_srgb_block.r8g8b8a8_unorm.general_optimal_linear", blits)
+
+        self.assertEqual(set(), self.gate._bc_compressed_sampling_paths(
+            texture_source.replace('nameBase + "_2d_"', 'nameBase + "_3d_"', 1)))
+        self.assertEqual(set(), self.gate._bc_image_copy_paths(
+            copy_source.replace('const VkImageLayout copyDstLayouts[] = '
+                                '{VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};',
+                                'const VkImageLayout copyDstLayouts[] = '
+                                '{VK_IMAGE_LAYOUT_GENERAL};', 1)))
+        self.assertEqual(set(), self.gate._bc_mip_copy_paths(
+            copy_source.replace('getCaseName(*format, params.src.image.extent, '
+                                'numLayers, "universal")',
+                                'getCaseName(*format, params.src.image.extent, '
+                                'numLayers, "transfer")', 1)))
+        self.assertEqual(set(), self.gate._bc_blit_paths(
+            copy_source.replace('{compressedFormatsSrgb, compatibleFormatsSrgb, false}',
+                                '{compressedFormatsSrgb, compatibleFormatsSrgb, true}', 1)))
 
     def test_t08_bda_paths_come_from_focused_original_factory(self):
         source = (UPSTREAM / "external/vulkancts/modules/vulkan/binding_model/"
@@ -373,6 +520,38 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertTrue((UPSTREAM / "external/vulkancts/data/vulkan/amber/rasterization/"
                          "line_continuity/polygon-mode-lines.amber").is_file())
 
+    def test_cube_array_image_view_uses_original_object_management_factory(self):
+        """The unchanged 12-layer CUBE_ARRAY image-view leaf stays reachable."""
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        upstream = (UPSTREAM / "external/vulkancts/modules/vulkan/api/"
+                    "vktApiObjectManagementTests.cpp").read_text()
+        self.assertIn("createObjectManagementTests(m_testCtx)", package)
+        self.assertIn("vktApiObjectManagementTests.cpp", builder)
+        self.assertIn('"image_view_cube_arr", imgViewCubeArr', upstream)
+        self.assertIn("checkImageCubeArraySupport", upstream)
+        self.assertIn("VK_IMAGE_VIEW_TYPE_CUBE_ARRAY", upstream)
+
+    def test_promoted_t07_switches_are_retired_from_cts_build_manifest(self):
+        normal = tessellation_build_profile({})
+        self.assertNotIn("PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC", normal["switches"])
+        self.assertNotIn("PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC", normal["switches"])
+        cube = tessellation_build_profile({"PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC": "1"})
+        self.assertEqual(normal, cube)
+
+    def test_bc_sampling_leaf_uses_original_compressed_texture_factory(self):
+        """BC sampling coverage uses the pinned upstream support gate/oracle."""
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        upstream = (UPSTREAM / "external/vulkancts/modules/vulkan/texture/"
+                    "vktTextureCompressedFormatTests.cpp").read_text()
+        self.assertIn("createTextureCompressedFormatTests(m_testCtx)", package)
+        self.assertIn("vktTextureCompressedFormatTests.cpp", builder)
+        self.assertIn("textureCompressionBC", upstream)
+        self.assertIn("Image verification failed", upstream)
+        self.assertIn("bc1_rgba_unorm_block", upstream.lower())
+        self.assertIn("bc3_unorm_block", upstream.lower())
+
     def test_t06_fragment_store_leaves_are_exact_promoted_upstream_oracles(self):
         expected_paths = {
             "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",
@@ -407,6 +586,8 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertNotIn("VK_KHR_CREATE_RENDERPASS_2", self.capabilities["extensions"])
         self.assertFalse(self.capabilities["features"]["multiviewGeometryShader"])
         self.assertFalse(self.capabilities["features"]["multiviewTessellationShader"])
+        self.assertIn("occlusionQueryPrecise", self.capabilities["core_features"])
+        self.assertIn("shaderImageGatherExtended", self.capabilities["core_features"])
         self.assertEqual(6, self.capabilities["max_multiview_view_count"])
 
     def test_t06_sample_rate_leaves_are_the_feature_gated_oracle(self):

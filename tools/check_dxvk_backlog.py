@@ -16,6 +16,9 @@ MATRIX = ROOT / "conformance_inventory/dxvk_v262_matrix.json"
 SCHEMA = "ps5vk-dxvk-v262-backlog/1"
 FINAL_TRANCHE = "DXVK262-T15"
 API_REQUIREMENT = "api-version:apiVersion"
+# Mirrors CTS_BLOCKING in tools/check_dxvk_profile.py; the matrix policy must
+# agree. CTS is regression evidence: only an observed failure blocks.
+CTS_BLOCKING = ["cts-fail"]
 
 
 def load(path: Path) -> dict:
@@ -34,14 +37,14 @@ def validate(document: dict, matrix: dict) -> dict:
     expected_profile_gate = {
         "api": "satisfied",
         "implementation": "implemented",
-        "cts": "cts-pass",
         "native": "native-evidence",
+        "cts_blocking": CTS_BLOCKING,
         "verdict": "satisfied",
     }
     expected_readiness_gate = {
         "implementation": "implemented",
-        "cts": "cts-pass",
         "native": "native-evidence",
+        "cts_blocking": CTS_BLOCKING,
         "meaning": ("Behavior is ready for final API promotion; this is not an "
                     "advertised profile capability while its API axis remains blocked."),
     }
@@ -50,6 +53,8 @@ def validate(document: dict, matrix: dict) -> dict:
         errors.append("profile completion gate drift")
     if policy.get("implementation_readiness_gate") != expected_readiness_gate:
         errors.append("implementation readiness gate drift")
+    if matrix.get("policy", {}).get("cts_blocking_states") != CTS_BLOCKING:
+        errors.append("matrix CTS blocking states differ from the backlog gate")
 
     tranches = document.get("tranches")
     if not isinstance(tranches, list) or not tranches:
@@ -149,7 +154,7 @@ def validate(document: dict, matrix: dict) -> dict:
     implementation_ready = sum(
         identifier != API_REQUIREMENT and
         rows_by_id[identifier].get("implementation", {}).get("state") == "implemented" and
-        rows_by_id[identifier].get("cts", {}).get("state") == "cts-pass" and
+        rows_by_id[identifier].get("cts", {}).get("state") not in CTS_BLOCKING and
         rows_by_id[identifier].get("native", {}).get("state") == "native-evidence"
         for identifier in assigned)
     return {

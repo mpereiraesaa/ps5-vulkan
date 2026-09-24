@@ -56,6 +56,10 @@ static inline void ps5vk_device_profile_init(VkPhysicalDeviceProperties *propert
         .host_coherent = VK_FALSE,
     };
     ps5vk_physical_profile_init(properties, memory, &info);
+    if (supported_features & PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED) {
+        properties->limits.minTexelGatherOffset = -8;
+        properties->limits.maxTexelGatherOffset = 7;
+    }
     if (graphics_submit) {
         ps5vk_graphics_limits(&properties->limits);
         /* The framebuffer sample counts follow the platform mask, exactly as

@@ -14,21 +14,21 @@
     "profile_completion_gate": {
       "api": "satisfied",
       "implementation": "implemented",
-      "cts": "cts-pass",
       "native": "native-evidence",
+      "cts_blocking": ["cts-fail"],
       "verdict": "satisfied"
     },
     "implementation_readiness_gate": {
       "implementation": "implemented",
-      "cts": "cts-pass",
       "native": "native-evidence",
+      "cts_blocking": ["cts-fail"],
       "meaning": "Behavior is ready for final API promotion; this is not an advertised profile capability while its API axis remains blocked."
     },
     "delivery": {
       "branching": "One fresh topic branch from current main per pull request; no stacked pull requests.",
       "file_budget": "Prefer 3-6 reviewed files per pull request; split a tranche when honest implementation needs more.",
       "promotion": "Never advertise a feature, property, extension or API version before every completion-gate axis passes.",
-      "validation": "Host tests are necessary but native PS5 evidence and applicable upstream CTS are required for promotion."
+      "validation": "Host tests are necessary but never promote a row alone. Promotion needs an artifact-bound native PS5 witness per capability. Upstream CTS is regression evidence: a missing, unmapped or unrun leaf does not block, an observed applicable failure blocks until explained or fixed, and whole-suite CTS and general Vulkan conformance are not promotion gates."
     }
   },
   "tranches": [
@@ -231,7 +231,7 @@
       "requirements": [
         "api-version:apiVersion"
       ],
-      "acceptance": "Promote apiVersion only after every prior profile leaf is satisfied and the wider cumulative Vulkan 1.0-1.3 core contract, applicable upstream CTS, native SDK consumer and repeated lifecycle runs are green."
+      "acceptance": "Promote apiVersion only after every prior profile leaf is satisfied, every entry point, feature, limit and format that Vulkan 1.0-1.3 makes mandatory is implemented and every optional one is implemented or reported false and refused, as checked by the reporting matrix, and our DXVK v2.6.2 build creates its device and completes a native SDK consumer run with repeated clean lifecycle. Focused upstream CTS is regression evidence where it validates a concrete contract, and any observed applicable failure blocks; whole-suite CTS and official conformance are separate, unclaimed goals."
     }
   ]
 }

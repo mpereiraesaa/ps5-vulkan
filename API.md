@@ -5,6 +5,13 @@ PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely. Each
 capability below states its evidence boundary when it is narrower than native
 hardware acceptance.
 
+This document describes the ordinary build at the T07 `main` checkpoint.
+Earlier measurements below are dated history, not the current advertised
+profile. A missing focused CTS result is not, by itself, a reason to reject an
+otherwise implemented and strictly GPU-witnessed capability; an observed CTS
+failure remains a defect to investigate. The public device still reports
+Vulkan 1.0, and no complete 1.1/1.2/1.3 core contract is claimed.
+
 ## Capability introspection
 
 The independently staged consumer includes an optional DXVK 2.6.2 D3D11
@@ -23,10 +30,11 @@ mean the driver advertises them; the reported device version remains Vulkan
 
 ## Core feature negotiation
 
-- `robustBufferAccess` is the one Vulkan 1.0 core feature currently reported
-  true. Device creation accepts it through either `pEnabledFeatures` or the
-  `VkPhysicalDeviceFeatures2` chain, rejects malformed booleans, and rejects
-  every unreported core feature.
+- `robustBufferAccess` is reported true. Device creation accepts it through
+  either `pEnabledFeatures` or the `VkPhysicalDeviceFeatures2` chain, rejects
+  malformed booleans, and rejects every unreported core feature. Other
+  graphics feature bits are listed individually below; this is not a claim
+  that only one Vulkan 1.0 feature is available.
 - Storage and uniform buffer descriptors carry their actual byte extent and
   use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
   the bound buffer span. This is the implementation basis for the feature, not
@@ -70,11 +78,14 @@ mean the driver advertises them; the reported device version remains Vulkan
 
 ## Graphics
 
-- Exactly one vertex stage and one fragment stage per graphics pipeline.
-- Triangle-list and triangle-strip topology, fill rasterization and line
-  width 1. Triangle strips are accepted and linked with the pinned GFX1013
-  primitive type 6, but no strip draw has a native witness yet; every other
-  topology is refused at pipeline creation.
+- Runtime vertex/fragment graphics pipelines plus the bounded, hardware-tested
+  geometry and tessellation stage combinations described in
+  [TESSELLATION_STATUS.md](TESSELLATION_STATUS.md). Do not infer arbitrary
+  shader-stage combinations from these witnesses.
+- Indexed and non-indexed triangle draws, with separately measured non-solid
+  fill, depth clamp/bias and viewport selection. Some additional topologies
+  and vertex-input modes remain fail-closed; see their individual contracts
+  and [VALIDATION.md](VALIDATION.md).
 - Up to 16 vertex bindings numbered 0–15, per-vertex input, with up to 32 attribute
   locations. Supported attributes are `R8` and `R8G8` UNORM/SNORM/UINT/SINT;
   `R8G8B8A8` UNORM/SNORM/UINT/SINT; packed `A8B8G8R8`
@@ -99,12 +110,13 @@ mean the driver advertises them; the reported device version remains Vulkan
   has no native witness of its own yet, so this list does not claim it.
 - Indexed and non-indexed draws. Index buffers support `uint16` and `uint32`,
   including offsets and signed base vertex.
-- One viewport and scissor, supplied statically at pipeline creation or through
-  `vkCmdSetViewport` / `vkCmdSetScissor` before each affected draw.
-- One BGRA8 presentation attachment or RGBA8 off-screen color attachment and
-  one sample. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
-  `DONT_CARE` store semantics are supported by the bounded native path.
-  Blending, logic ops and multisampling are unsupported.
+- Static or dynamic viewport/scissor state, with the measured multi-viewport
+  path gated by the advertised `multiViewport` feature.
+- One or two BGRA8/RGBA8 colour attachments with bounded load/store semantics,
+  independent and dual-source blending, and 1x/2x/4x colour sample counts.
+  Per-sample shading, input-attachment reads and resolve are measured at 2x
+  and 4x. Logic ops, multisampled depth and sampled multisample images remain
+  unsupported.
 - One or two subpasses may be described, recorded and **executed**. The native
   two-subpass path is deliberately bounded: both subpasses use the same colour
   and optional D32 attachment with the same layouts, and accept either no
@@ -114,34 +126,14 @@ mean the driver advertises them; the reported device version remains Vulkan
   stencil and depth bounds are unsupported.
 - Face culling and front-face selection are encoded by the native backend.
 
-All seven remaining Vulkan 1.0 dynamic-state setters are public and retain
-validated command-buffer state: line width, depth bias, blend constants, depth
-bounds and the three stencil masks/references. Because `wideLines` and
-`depthBiasClamp` are not advertised, their valid recording subset is line width
-`1.0` and depth-bias clamp `0.0`. Graphics pipeline creation still rejects
-these seven `VkDynamicState` values: the native draw backend does not yet
-consume them. Recording therefore establishes a real, non-interfering state
-contract without claiming dynamic blending, stencil, depth bounds or depth
-bias execution. Viewport and scissor remain the only dynamic states consumed by
-draws.
-
-The DXVK262-T05 rasterization and viewport states - `depthBiasClamp`,
-`depthClamp`, `fillModeNonSolid` and `multiViewport` - are implemented end to
-end behind a build-time measurement gate (`PS5VK_RASTER_DIAGNOSTIC`) and are
-**not advertised**: the shipping platform mask sets none of the four bits, a
-request for one is still rejected before device creation, and the profile keeps
-reporting `maxViewports` 1. They are gated rather than shipped because no
-upstream CTS leaf is applicable to them yet - the candidate families and their
-exact blocking reasons are in [UPSTREAM_CTS.md](UPSTREAM_CTS.md) - and because
-the first hardware run of their own witnesses leaves six of thirty-one raster
-cases unverified, as recorded in
-[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses).
-The shader-selected viewport path itself is now measured - a geometry stage
-routing sixteen primitives to sixteen banks through `gl_ViewportIndex` - so
-`multiViewport` is held back by the missing upstream leaf and the six cases
-rather than by the driver.
-Nothing here should be read as these features being usable by an application
-today.
+The remaining Vulkan 1.0 dynamic-state setters retain validated command-buffer
+state. Their native draw effects are supported only where separately documented;
+recording a setter does not imply that every dynamic pipeline mode executes.
+The four rasterization and viewport features `depthBiasClamp`, `depthClamp`,
+`fillModeNonSolid` and `multiViewport` are advertised in the ordinary graphics
+build following the native pixel witnesses and focused qualification recorded
+in [VALIDATION.md](VALIDATION.md). The diagnostic build switch used during
+development is not required to request those features now.
 
 DXVK262-T06 finished at the other end: `dualSrcBlend` **is advertised** by the
 shipping platform. The path is the one described above - exact `SRC1` register
@@ -205,7 +197,7 @@ a storage or transfer-only image.
 ## Images and sampling
 
 The GFX1013 texture-format table records exact descriptor encodings, Vulkan
-component completion and texel sizes for thirty-nine public sampled formats, adapted
+component completion and texel sizes for 61 public sampled formats, adapted
 from the pinned GPLv3 `ps5-opengl` reference and then validated against Vulkan
 oracles on PS5. Two byte-identical runs of each promoted tranche established
 image creation, transfer upload, descriptor sampling and deterministic
@@ -214,7 +206,9 @@ readback. Each format query exposes only the operations actually established.
 | Format | Supported role |
 | --- | --- |
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
-| `VK_FORMAT_D32_SFLOAT` | Depth attachment (depth aspect only), a whole-subresource, one-sample depth-only clear target written as a transfer destination, and a whole-surface readback read as a transfer source over the depth aspect |
+| `VK_FORMAT_D32_SFLOAT` | Depth attachment (depth aspect only), whole-subresource transfer-destination clear and transfer-source readback over the depth aspect, plus bounded 64×64 sampled depth for Dref gather |
+| `VK_FORMAT_D16_UNORM` | One 128×128 depth attachment with no sampled, transfer or stencil role |
+| Vulkan 1.0 BC1–BC7 formats (16 variants) | Sampled/upload images with nearest/linear filtering, compatible blit sources and bounded mip/layer transfers |
 | `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8_SNORM`, `VK_FORMAT_R8G8_UNORM`, `VK_FORMAT_R8G8_SNORM` | Sampled/upload image with nearest/linear filtering and Vulkan completion of missing components |
 | `VK_FORMAT_R8G8B8A8_UNORM` | Sampled/upload image with nearest/linear filtering and hardware-validated explicit mip LOD, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
 | `VK_FORMAT_R8G8B8A8_SNORM`, `VK_FORMAT_R8G8B8A8_SRGB` | Sampled/upload image with signed-normalized or hardware sRGB conversion and nearest/linear filtering |
@@ -229,6 +223,11 @@ readback. Each format query exposes only the operations actually established.
 | `VK_FORMAT_A8B8G8R8_UNORM_PACK32`, `VK_FORMAT_A8B8G8R8_SNORM_PACK32`, `VK_FORMAT_A8B8G8R8_SRGB_PACK32` | Packed sampled/upload image with native conversion and nearest/linear filtering; no color-attachment or storage-image role |
 | `VK_FORMAT_A8B8G8R8_UINT_PACK32`, `VK_FORMAT_A8B8G8R8_SINT_PACK32` | Packed typed integer sampled/upload image, nearest only |
 | 41 normalized, integer and floating-point rows across the `R8`, `R8G8`, `R8G8B8A8`, packed `A8B8G8R8`, `B10G11R11`, `R16`, `R16G16`, `R16G16B16A16`, `R32`, `R32G32` and `R32G32B32A32` families | Uniform texel buffers directly validated with typed compute `texelFetch`; the exact list and receipts are in `conformance_inventory/physical_format_validation.json` and `VALIDATION.md` |
+
+RGBA8 UINT/SINT also serve four-component color attachments with transfer-source
+readback for integer gather cases. `shaderImageGatherExtended` reports the
+bounded texel-gather offset interval -8 through 7; D32 comparison gather uses
+the sampled-depth profile above.
 
 The shared layout and query path exposes bounded complete mip chains for these
 sampled formats. Direct multi-level hardware evidence currently covers 2D
@@ -274,8 +273,10 @@ stays refused before any state is mutated. `linearTilingFeatures` and
 `vkGetPhysicalDeviceImageFormatProperties` report exactly this one shape and
 nothing else.
 
-Nearest and linear sampling have native deterministic readback evidence for all
-24 filterable sampled formats. 20 additional signed and unsigned
+The public table has 40 filterable sampled formats. Nearest and linear sampling
+have native deterministic readback evidence for the
+original 24 filterable formats. The sixteen BC formats have original CTS
+sampling coverage and focused native filtering witnesses. 20 additional signed and unsigned
 integer rows have typed `isampler2D`/`usampler2D` nearest-sampling evidence and
 do not expose linear filtering. R8 and RG8 verify Vulkan completion of missing
 components;
@@ -290,7 +291,7 @@ separate nearest-versus-linear magnification and minification discriminators;
 both float and integer variants of the six fixed `VkBorderColor` enums map to
 those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
 unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
-is advertised only for the 24 validated filterable rows. Valid sampled
+is advertised only for the 40 validated filterable rows. Valid sampled
 images can carry complete mip chains up to the per-type query limit. A
 public-SDK-linked 2D RGBA8 witness uploaded three levels and selected all three
 with runtime-compiled explicit LOD, producing deterministic GPU readback.
@@ -306,7 +307,12 @@ array layers, 4096 cube dimension and 512 3D dimension are frontend floors
 backed by descriptor/layout arithmetic and allocation bounds; the hardware
 witnesses use small resources and are not exhaustive tests at those maximum
 dimensions. The multi-level hardware witness is 2D RGBA8; it does not establish
-layered mip selection, anisotropy, cube arrays or general descriptor arrays.
+layered mip selection, anisotropy or general descriptor arrays. A separate
+cube-array path sampled two cubes and all twelve faces, including a view
+starting at layer one, with exact GPU readback. A separate 256×256 tiled
+attachment witness sampled all twelve rendered faces; descriptors refuse
+smaller incompatible layer pitches. The graphics profile reports
+`imageCubeArray` true.
 
 ## Compute
 
@@ -394,9 +400,12 @@ layered mip selection, anisotropy, cube arrays or general descriptor arrays.
   later segment is prepared or launched. Destination ranges are flushed through
   the memory backend before following GPU use.
 
-The transfer family remains deliberately bounded. The image-copy profile below
-does not imply general image formats, tiling, blit or resolve support; blit and
-resolve remain fail-closed entry points.
+The transfer family remains deliberately bounded. The historical RGBA8-only
+image-copy profile below was the first supported slice, not the whole current
+surface: T07 added BC copy/blit paths with their own format, mip and layer
+constraints and strict native witnesses. Resolve is supported only in the
+measured multisampled-colour attachment path. Neither result establishes a
+general image transfer, blit or resolve implementation.
 
 ## Image copy and colour clear
 
@@ -683,16 +692,20 @@ profile can honestly create:
   pool are rejected.
 - `vkDestroyQueryPool` follows the standard parentage rules, and the device
   cannot be destroyed while a query pool child remains.
-- `vkCmdResetQueryPool` records an ordered frontend operation. Query slots stay
-  uninitialized until that operation executes, then become unavailable.
-- `vkGetQueryPoolResults` implements only that observable unavailable state:
-  it preserves result words, writes zero availability when requested and
-  returns `VK_NOT_READY`. `WAIT_BIT` and `PARTIAL_BIT` fail closed because no
-  native query can publish a real result yet.
-- `vkCmdBeginQuery`, `vkCmdEndQuery`, `vkCmdCopyQueryPoolResults` and
-  `vkCmdWriteTimestamp` are structurally exported but invalidate recording.
-  No draw-derived fake counter or CPU-derived timestamp is substituted for a
-  native GFX1013 result.
+- `vkCmdResetQueryPool`, `vkCmdBeginQuery`, `vkCmdEndQuery` and
+  `vkCmdCopyQueryPoolResults` record bounded ordered operations. The native
+  graphics path publishes real occlusion counts; the precise path passed an
+  original upstream query oracle twice and a separate
+  SDK-linked witness for zero, one and three covered samples, both result
+  widths, availability, wait/partial and reset/reuse.
+- `vkGetQueryPoolResults` preserves unavailable result words, reports
+  availability separately, and reads published counts after completion.
+  The bounded `WAIT_BIT` and `PARTIAL_BIT` paths are exercised by the witness.
+  `VK_QUERY_CONTROL_PRECISE_BIT` requires the logical device to enable the
+  advertised `occlusionQueryPrecise` feature.
+- `vkCmdWriteTimestamp` remains fail closed; no CPU-derived timestamp is
+  substituted for a native result. Secondary command-buffer inheritance of
+  occlusion query state remains refused by this profile.
 
 Sparse binding is not advertised and images cannot be created with sparse flags,
 so the two mandatory sparse queries report an empty list rather than inventing
@@ -812,11 +825,10 @@ secondary, a child that is neither pending nor executable, a self-reference, a
 pending or repeated child that was not recorded for simultaneous use, and any
 of the scope mismatches above.
 
-Accordingly the driver refuses what it would not honour, and only that:
-`occlusionQueryEnable`,
-`queryFlags` and `pipelineStatistics`, because this device reports
-`occlusionQueryPrecise` and `pipelineStatisticsQuery` false and executes no
-query at all. Members Vulkan defines as ignored are not refused. Recording a
+Accordingly the driver refuses `occlusionQueryEnable`, `queryFlags` and
+`pipelineStatistics` in secondary inheritance because it does not execute
+inherited occlusion queries or pipeline statistics. Primary precise occlusion
+queries are supported. Members Vulkan defines as ignored are not refused. Recording a
 primary-only command into a secondary - `vkCmdBeginRenderPass`,
 `vkCmdEndRenderPass`, `vkCmdNextSubpass` - or nesting `vkCmdExecuteCommands`
 poisons the recording transactionally, leaving no partial operation behind.

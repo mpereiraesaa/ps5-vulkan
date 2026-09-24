@@ -95,6 +95,19 @@ static const struct core_feature_bit {
      * route is dormant until the platform carries a measured capability. */
     {offsetof(VkPhysicalDeviceFeatures, shaderInt16),
      PS5VK_FEATURE_SHADER_INT16},
+    /* T07 sampled-image capabilities. These mappings only expose the public
+     * query/enable path when the platform supplies its bit. */
+    {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),
+     PS5VK_FEATURE_IMAGE_CUBE_ARRAY},
+    {offsetof(VkPhysicalDeviceFeatures, textureCompressionBC),
+     PS5VK_FEATURE_TEXTURE_COMPRESSION_BC},
+    /* Precise occlusion queries are a Vulkan 1.0 core feature. The query
+     * implementation stays dormant unless the platform supplies its bit;
+     * mapping it here keeps reporting and logical-device enablement aligned. */
+    {offsetof(VkPhysicalDeviceFeatures, occlusionQueryPrecise),
+     PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE},
+    {offsetof(VkPhysicalDeviceFeatures, shaderImageGatherExtended),
+     PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,
@@ -297,7 +310,17 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
     vkGetPhysicalDeviceProperties(p, &out->properties);
     for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext; next;
          next = next->pNext) {
-        if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES) {
+        if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES) {
+            /* The Vulkan 1.0 profile has no reported subgroup stages or
+             * operations. Answer all fields rather than retaining the
+             * caller's previous values as apparent capabilities. */
+            VkPhysicalDeviceSubgroupProperties *properties =
+                (VkPhysicalDeviceSubgroupProperties *)next;
+            properties->subgroupSize = 0u;
+            properties->supportedStages = 0u;
+            properties->supportedOperations = 0u;
+            properties->quadOperationsInAllStages = VK_FALSE;
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES) {
             /* ONLY the floors this profile measured, and zero when the platform
              * does not carry the capability: no invented maxima. */
             VkPhysicalDeviceMultiviewProperties *properties =

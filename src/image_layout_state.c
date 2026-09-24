@@ -36,7 +36,18 @@ VkResult ps5vk_layout_commit(struct ps5vk_layout_state *s)
     for(unsigned i=0;i<s->count;++i)
         if(!s->entries[i].image || s->entries[i].image->layout!=s->entries[i].initial)
             return VK_ERROR_UNKNOWN;
-    for(unsigned i=0;i<s->count;++i)s->entries[i].image->layout=s->entries[i].current;
+    for(unsigned i=0;i<s->count;++i) {
+        VkImage image=s->entries[i].image;
+        /* Native transactions describe whole images. Keep the committed
+         * subresource table coherent even when this role normally routes its
+         * barriers through the frontend executor. */
+        if(image->subresource_layouts) {
+            size_t count=(size_t)image->info.mipLevels*image->info.arrayLayers;
+            for(size_t j=0;j<count;++j)
+                image->subresource_layouts[j]=s->entries[i].current;
+        }
+        image->layout=s->entries[i].current;
+    }
     s->count=0;
     return VK_SUCCESS;
 }

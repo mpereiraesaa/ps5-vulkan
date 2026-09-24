@@ -305,9 +305,9 @@ int main(void)
         NULL, UINT32_C(0x80000000), &bad_prog, &bad_code) == VK_ERROR_FEATURE_NOT_PRESENT);
     /* Every graphics-only device feature the console platform reports and the
      * pinned CTS enables on the device it creates must be transparent to the
-     * compute adapter: the mask of a real T03 device compiles a compute shader
-     * exactly like the bare mask does. A promotion candidate that forgot one
-     * of these bits failed every compute pipeline on hardware. */
+     * compute adapter: the full device mask compiles a compute shader exactly
+     * like the bare mask does. A promotion candidate that forgot one of these
+     * bits failed every compute pipeline on hardware. */
     {
         struct ps5vk_compiled_program graphics_device_program;
         uint32_t *graphics_device_code = NULL;
@@ -315,7 +315,8 @@ int main(void)
             PS5VK_FEATURE_STORAGE_BUFFER_8BIT | PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
             PS5VK_FEATURE_SHADER_DRAW_PARAMETERS | PS5VK_FEATURE_MULTIVIEW |
             PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE | PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
-            PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
+            PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 |
+            PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
         assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
             NULL, graphics_device_mask, &graphics_device_program,
             &graphics_device_code) == VK_SUCCESS);
@@ -362,6 +363,19 @@ int main(void)
         graphics_device_code = NULL;
         assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
             NULL, t06_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* T07 image/gather/query bits at 24-27 are legal on the same logical
+         * device and must not be confused with unknown bits. */
+        const uint32_t t07_device_mask = t06_device_mask |
+            PS5VK_FEATURE_IMAGE_CUBE_ARRAY |
+            PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED |
+            PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
+            PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t07_device_mask, &graphics_device_program,
             &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);

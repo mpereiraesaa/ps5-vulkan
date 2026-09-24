@@ -13,6 +13,8 @@
  */
 #include "vk_command.h"
 #include "vk_queue.h"
+#include "vk_internal.h"
+#include "vk_query_pool.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,6 +95,11 @@ int main(void)
     VkEvent first, second;
     assert(vkCreateEvent(&d, &ei, NULL, &first) == VK_SUCCESS);
     assert(vkCreateEvent(&d, &ei, NULL, &second) == VK_SUCCESS);
+    d.enabled_features |= PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+    VkQueryPoolCreateInfo qci = {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .queryType = VK_QUERY_TYPE_OCCLUSION, .queryCount = 1};
+    VkQueryPool query_pool;
+    assert(vkCreateQueryPool(&d, &qci, NULL, &query_pool) == VK_SUCCESS);
 
     /* --- the named children execute, in call order ------------------------ */
     VkCommandBuffer a = child_with_event(&d, pool, first, 0);
@@ -135,6 +142,7 @@ int main(void)
     assert(vkEndCommandBuffer(primary) == VK_SUCCESS);
     assert(vkQueueSubmit(&d.queue, 1, &si, VK_NULL_HANDLE) == VK_SUCCESS);
     assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+
     assert(vkGetEventStatus(&d, once_event) == VK_EVENT_SET);
     /* The expansion did not bypass pending accounting: the child is consumed
      * exactly as a primary would be, and can no longer be named. */
@@ -509,6 +517,37 @@ int main(void)
            !fb.pending && !view.pending && !image->pending && !graphics.pending &&
            host->state == PS5VK_EXECUTABLE && inside->state == PS5VK_EXECUTABLE);
 
+    /* With inheritedQueries disabled, the primary may not keep a query active
+     * across vkCmdExecuteCommands. A continuation secondary may own a complete
+     * precise query scope of its own; its reset is ordered in the primary
+     * before the render pass, and submission validates the expanded scope. */
+    VkCommandBuffer reset = begun_primary(&d, pool);
+    vkCmdResetQueryPool(reset, query_pool, 0, 1);
+    assert(vkEndCommandBuffer(reset) == VK_SUCCESS);
+    VkSubmitInfo reset_submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &reset};
+    assert(vkQueueSubmit(&d.queue, 1, &reset_submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+    assert(query_pool->states[0] == PS5VK_QUERY_UNAVAILABLE);
+    VkCommandBuffer query_child = allocate(&d, pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    assert(vkBeginCommandBuffer(query_child, &continue_begin) == VK_SUCCESS);
+    vkCmdBindPipeline(query_child, VK_PIPELINE_BIND_POINT_GRAPHICS, &graphics);
+    vkCmdBeginQuery(query_child, query_pool, 0, VK_QUERY_CONTROL_PRECISE_BIT);
+    vkCmdDraw(query_child, 3, 1, 0, 0);
+    vkCmdEndQuery(query_child, query_pool, 0);
+    assert(query_child->state == PS5VK_RECORDING && query_child->operation_count == 3);
+    assert(vkEndCommandBuffer(query_child) == VK_SUCCESS);
+    host = begun_primary(&d, pool);
+    vkCmdBeginRenderPass(host, &ri, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    vkCmdExecuteCommands(host, 1, &query_child);
+    vkCmdEndRenderPass(host);
+    assert(vkEndCommandBuffer(host) == VK_SUCCESS);
+    pass_submit.pCommandBuffers = &host;
+    assert(vkQueueSubmit(&d.queue, 1, &pass_submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    assert(d.submission && d.submission->count == 2 &&
+           d.submission->buffers[1] == query_child);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+
     /* The inherited framebuffer is OPTIONAL: the null handle is accepted and
      * the primary supplies the one that executes. */
     VkCommandBufferInheritanceInfo no_fb = continues;
@@ -845,6 +884,8 @@ int main(void)
 
     vkFreeCommandBuffers(&d, pool, 1, &floating);
     vkFreeCommandBuffers(&d, pool, 1, &inside);
+    vkFreeCommandBuffers(&d, pool, 1, &query_child);
+    vkFreeCommandBuffers(&d, pool, 1, &reset);
     vkDestroyImage(&d, image, NULL);
     vkFreeMemory(&d, memory, NULL);
     d.graphics_enabled = VK_FALSE; d.graphics_submit_enabled = VK_FALSE;
@@ -856,6 +897,7 @@ int main(void)
     vkDestroyEvent(&d, once_event, NULL);
     vkDestroyEvent(&d, second, NULL);
     vkDestroyEvent(&d, first, NULL);
+    vkDestroyQueryPool(&d, query_pool, NULL);
     vkDestroyCommandPool(&d, pool, NULL);
     puts("Secondary execution: pass (host queue only, no GPU work)");
     return 0;

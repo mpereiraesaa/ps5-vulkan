@@ -198,12 +198,6 @@ def main():
             "-DPS5VK_TARGET_PS5=1",
             "-DPS5VK_GRAPHICS_API=1", "-DPS5VK_GRAPHICS_DRAW=1",
             "-DPS5VK_RUNTIME_GRAPHICS=1", "-DPS5VK_NO_OFFLINE_LIBRARY=1",
-            # The diagnostic probes are environment-declared for the whole
-            # payload: the runtime library the SDK builds compiles the same
-            # sources the native build does, so the optional-stage negotiation
-            # gate must see the same diagnostic decision. The value is passed
-            # through from the caller (build_native.py sets it for its probe
-            # builds); the shipping default stays zero.
             *(["-DPS5VK_OPTIONAL_STAGE_DIAGNOSTIC=" +
                os.environ["PS5VK_OPTIONAL_STAGE_DIAGNOSTIC"]]
               if os.environ.get("PS5VK_OPTIONAL_STAGE_DIAGNOSTIC") else []),
@@ -251,11 +245,6 @@ def main():
             raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC must be 0 or 1")
         if sample_rate_diagnostic == "1":
             native_cflags.append("-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
-        memory_model_diagnostic = os.environ.get("PS5VK_MEMORY_MODEL_DIAGNOSTIC", "0")
-        if memory_model_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_MEMORY_MODEL_DIAGNOSTIC must be 0 or 1")
-        if memory_model_diagnostic == "1":
-            native_cflags.append("-DPS5VK_MEMORY_MODEL_DIAGNOSTIC=1")
         shader_int16_diagnostic = os.environ.get("PS5VK_SHADER_INT16_DIAGNOSTIC", "0")
         if shader_int16_diagnostic not in ("0", "1"):
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")
