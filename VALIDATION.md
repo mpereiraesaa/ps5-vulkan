@@ -4873,3 +4873,46 @@ receipt; it was closed and is not counted as an acceptance run. Firmware was
 not independently recorded in these T08 receipts. The bounded result does
 not claim capture replay, multiple-device addressing or additional image
 formats.
+
+## T07 BC mip and array-layer transfer measurement (2026-09-24)
+
+The integrated `6084d7e` branch passed `make check`. Its BC diagnostic build
+ran the eight original 2D BC image-copy leaves from the pinned CTS twice:
+**8 Pass, zero Fail, zero NotSupported, zero missing or unexpected** in each
+strict receipt. The two source/destination pairs were BC1 RGBA UNORM to BC4
+SNORM and BC3 UNORM to BC7 SRGB, each under all four GENERAL/OPTIMAL layout
+combinations. The selection SHA-256 was
+`912f2de20fd71bbf53813d991c196b376b5d91d860e425b495ae233e3b2241d2`;
+the diagnostic eboot SHA-256 was
+`a9d8592e16568a2564952b69705205be8ab501d19264f2972242422def213c52`.
+Run `run-621336816316363` produced QPA SHA-256
+`26d734132da166dbb261f76b76f2c9d8d57bf7e91e3acfb1d7342a5da0f635c4`;
+run `run-621372577415670` produced
+`1a826cacb66a751b5229bbb3fa85155c1654668cfb4fec0f56a93b84e08fc49b`.
+Both verified their exact build identity, QPA completion and clean title close.
+
+Four public SDK consumers, built from the integrated tree with isolated headers
+and symbols, each passed twice on hardware. Every run checked all 12 BC
+subresources byte for byte, preserved the other 11, sampled 4096 destination
+pixels with zero mismatches, completed its fence and closed cleanly:
+
+| Profile | Selected mip/layer and operation | Eboot SHA-256 |
+| --- | --- | --- |
+| `bc1-layer` | mip 0, layer 1, buffer to image | `50c0ce6b9396c109e241c824e07ec64e0211a6e1068df22d0abbd957333c0185` |
+| `bc1-mip` | mip 1, layer 2, buffer to image | `0e61ccfd6bda79c91aa0adb7e4fbc0a9d99c4b4cdbe4514d211d077656c51449` |
+| `bc1-imagecopy` | mip 1, layer 0 to layer 2, image to image | `49d13e039ee763d75e67e1338950a5a656a52863e27082baadc899282041e313` |
+| `bc3-tail` | mip 3, layer 2, buffer to image | `1bb1eb171279c2c8ebd0b73647af69cf4bcf5e67df4062261a176ec2c30cdd03` |
+
+The ordinary shipping build also passed the unchanged frozen selection in
+`run-621753906663208`: **507 Pass, zero Fail, zero NotSupported, zero missing
+or unexpected**, eboot SHA-256
+`d125d01918c88e763e7517dc6218ea71a211f21f116a8c6721653b19d9527eb1`,
+QPA SHA-256 `ea79a4561087966ad8d5c44332b48baa18673a5fa688863e961f95507256ac51`,
+with exact identity, completed report and clean close. The canonical eboot was
+restored after every run. Firmware was not recorded in these receipts.
+
+The CTS copy leaves exercise one mip and layer per image; the SDK witnesses
+exercise distinct mips and layers with whole-subresource regions. This evidence
+does not cover partial interior rectangles or a single copy region spanning
+multiple array layers. The shipping `textureCompressionBC` feature bit remains
+off pending the full T07 promotion audit.
