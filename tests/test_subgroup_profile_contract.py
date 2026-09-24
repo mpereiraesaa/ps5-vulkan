@@ -50,6 +50,28 @@ class SubgroupProfileContract(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "query route"):
             self.validate(device_source=source)
 
+    def test_explicit_zero_properties_query_is_compatible(self):
+        source = """VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(
+            VkPhysicalDevice p, VkPhysicalDeviceProperties2 *out)
+        {
+            for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext;
+                 next; next = next->pNext) {
+                if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES) {
+                    VkPhysicalDeviceSubgroupProperties *properties =
+                        (VkPhysicalDeviceSubgroupProperties *)next;
+                    properties->subgroupSize = 0u;
+                    properties->supportedStages = 0u;
+                    properties->supportedOperations = 0u;
+                    properties->quadOperationsInAllStages = VK_FALSE;
+                }
+            }
+        }
+        """
+        self.validate(device_source=source)
+        with self.assertRaisesRegex(AssertionError, "query route"):
+            self.validate(device_source=source.replace("subgroupSize = 0u",
+                                                       "subgroupSize = 32u"))
+
 
 if __name__ == "__main__":
     unittest.main()

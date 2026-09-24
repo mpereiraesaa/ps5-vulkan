@@ -2,6 +2,7 @@
 """Check the source-derived subgroup prerequisites and the current public gate."""
 import json
 from pathlib import Path
+import re
 import subprocess
 import xml.etree.ElementTree as ET
 
@@ -106,10 +107,26 @@ def check_reporting(contract, report, matrix, profile_source, device_source):
                 f"{profile} public API version changed")
     require("properties->apiVersion = VK_API_VERSION_1_0;" in profile_source,
             "source API version changed; re-audit subgroup profile")
-    require("VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES" not in device_source and
-            "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES" not in device_source and
+    require("VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES" not in device_source and
             "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES" not in device_source,
             "new subgroup query route requires contract review")
+    marker = "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES"
+    if marker in device_source:
+        start = device_source.find("vkGetPhysicalDeviceProperties2KHR(")
+        end = device_source.find("VKAPI_ATTR", start + 1)
+        query = device_source[start:end if end >= 0 else None]
+        require(start >= 0 and device_source.count(marker) == 1 and
+                f"if (next->sType == {marker})" in query and
+                "VkPhysicalDeviceSubgroupProperties *properties =" in query,
+                "new subgroup query route requires contract review")
+        assignments = re.findall(
+            r"properties->(subgroupSize|supportedStages|supportedOperations|"
+            r"quadOperationsInAllStages)\s*=\s*([^;]+);", device_source)
+        require(assignments == [("subgroupSize", "0u"),
+                                ("supportedStages", "0u"),
+                                ("supportedOperations", "0u"),
+                                ("quadOperationsInAllStages", "VK_FALSE")],
+                "new subgroup query route requires contract review")
     rows = {row["id"]: row for row in matrix["requirements"]}
     for name in ("shaderSubgroupExtendedTypes", "subgroupBroadcastDynamicId"):
         row = rows[f"feature:VkPhysicalDeviceVulkan12Features:{name}"]

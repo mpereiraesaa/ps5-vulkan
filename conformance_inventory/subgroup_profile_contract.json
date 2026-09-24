@@ -51,7 +51,7 @@
   },
   "current": {
     "api": "1.0",
-    "subgroup_properties": "not reported",
+    "subgroup_properties": "no supported stages or operations",
     "shaderSubgroupExtendedTypes": false,
     "subgroupBroadcastDynamicId": false,
     "cts": "no accepted original subgroup leaves",
