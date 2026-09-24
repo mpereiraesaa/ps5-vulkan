@@ -143,6 +143,12 @@ int main(void)
         layered_words[0]==(uint32_t)((uintptr_t)cube_array_base>>8) &&
         layered_words[3]==0xb0000fac && layered_words[4]==0x0006000b);
     vkDestroyImageView(&d,second_cube_view,NULL);
+    layered_vi.subresourceRange.baseArrayLayer=1;
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&second_cube_view)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,second_cube_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[0]==(uint32_t)((uintptr_t)cube_array_base>>8) &&
+        layered_words[4]==0x00010006);
+    vkDestroyImageView(&d,second_cube_view,NULL);
     d.enabled_features&=~(uint32_t)PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
     assert(ps5vk_texture_descriptor(&d,layered_view,sampler,layered_words)==
         VK_ERROR_FEATURE_NOT_PRESENT);

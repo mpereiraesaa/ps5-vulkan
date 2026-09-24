@@ -35,6 +35,10 @@ int main(void)
                cube_array_requirements.alignment==256u);
         cube_array.arrayLayers=7;
         assert(ps5vk_native_image_requirements(&device,&cube_array,
+            &cube_array_requirements)==VK_SUCCESS);
+        assert(cube_array_requirements.size==114688u);
+        cube_array.arrayLayers=5;
+        assert(ps5vk_native_image_requirements(&device,&cube_array,
             &cube_array_requirements)==VK_ERROR_FORMAT_NOT_SUPPORTED);
     }
     struct VkImage_T image = {.info={.imageType=VK_IMAGE_TYPE_2D, .format=VK_FORMAT_D32_SFLOAT,

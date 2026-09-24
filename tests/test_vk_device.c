@@ -482,7 +482,7 @@ static void lifecycle(void)
         VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,&ip)==VK_SUCCESS &&
         ip.maxExtent.width==PS5VK_MAX_IMAGE_CUBE && ip.maxExtent.height==PS5VK_MAX_IMAGE_CUBE &&
         ip.maxExtent.depth==1 &&
-        ip.maxArrayLayers==(PS5VK_MAX_IMAGE_ARRAY_LAYERS/6u)*6u);
+        ip.maxArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
     /* The pinned upstream cube-array image-view leaf creates this exact
      * sampled colour-attachment shape. It remains limited to cube-compatible
      * RGBA8 images; the same usage without the cube flag and neighbouring
@@ -495,7 +495,7 @@ static void lifecycle(void)
         ip.maxExtent.width==PS5VK_MAX_IMAGE_CUBE &&
         ip.maxExtent.height==PS5VK_MAX_IMAGE_CUBE && ip.maxExtent.depth==1 &&
         ip.maxMipLevels==1 &&
-        ip.maxArrayLayers==(PS5VK_MAX_IMAGE_ARRAY_LAYERS/6u)*6u);
+        ip.maxArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
     assert(vkGetPhysicalDeviceImageFormatProperties(p,VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,cube_sampled_attachment_usage,0,&ip)
         ==VK_ERROR_FORMAT_NOT_SUPPORTED && !memcmp(&ip,&zero_ip,sizeof(ip)));

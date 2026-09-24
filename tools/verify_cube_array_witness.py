@@ -30,6 +30,11 @@ def validate(log, receipt, artifact):
              contract.get("target_extent") == [192, 64] and
              contract.get("format") == "VK_FORMAT_R8G8B8A8_UNORM",
              "cube-array artifact contract")
+    base_layer = contract.get("base_array_layer")
+    storage_layers = contract.get("storage_layers")
+    _require(type(base_layer) is int and base_layer in (0, 1) and
+             type(storage_layers) is int and storage_layers == 12 + base_layer,
+             "cube-array storage and view range")
     shader_hashes = (contract.get("vertex_spirv_sha256", ""),
                      contract.get("fragment_spirv_sha256", ""))
     _require(all(len(value) == 64 and
@@ -77,7 +82,8 @@ def validate(log, receipt, artifact):
              "PS5VK_CONSUMER_CUBE_ARRAY_FEATURE imageCubeArray=1 enabled_by_features2=1",
              "feature negotiation")
     start = one("PS5VK_CONSUMER_CUBE_ARRAY_START ")
-    _require(f"cubes=2 faces=6 layers=12 image=4x4 target=192x64 " in start and
+    _require(f"cubes=2 faces=6 layers=12 image=4x4 target=192x64 "
+             f"storage_layers={storage_layers} base_array_layer={base_layer} " in start and
              f"vertex_sha256={shader_hashes[0]} fragment_sha256={shader_hashes[1]}" in start,
              "witness identity and shape")
     result = one("PS5VK_CONSUMER_CUBE_ARRAY_RESULT ")
@@ -100,6 +106,8 @@ def validate(log, receipt, artifact):
         "artifact_eboot_sha256": eboot_digest,
         "vertex_spirv_sha256": shader_hashes[0],
         "fragment_spirv_sha256": shader_hashes[1],
+        "storage_layers": storage_layers,
+        "base_array_layer": base_layer,
         "cubes": 2,
         "faces_per_cube": 6,
         "pixels_checked": TARGET_PIXELS,

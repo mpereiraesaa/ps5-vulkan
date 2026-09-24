@@ -508,7 +508,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
         (info->imageType==VK_IMAGE_TYPE_3D && info->arrayLayers!=1) ||
         (info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
          (info->imageType!=VK_IMAGE_TYPE_2D || info->arrayLayers<6 ||
-          info->arrayLayers%6 != 0 ||
           info->extent.width!=info->extent.height ||
           info->samples!=VK_SAMPLE_COUNT_1_BIT))) return INVALID;
     uint32_t dim = info->extent.width > info->extent.height ? info->extent.width : info->extent.height;

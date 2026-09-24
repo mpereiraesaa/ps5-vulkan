@@ -143,7 +143,11 @@ def main():
                         help="Build the compact UBO GPU witness entry point")
     parser.add_argument("--cube-array-witness", action="store_true",
                         help="Build the finite two-cube/six-face sampled-image witness")
+    parser.add_argument("--cube-array-base-layer", type=int, choices=(0, 1), default=0,
+                        help="Cube witness view base; 1 also tests 13-layer storage")
     args = parser.parse_args()
+    if args.cube_array_base_layer and not args.cube_array_witness:
+        parser.error("Cube-array base layer requires --cube-array-witness")
     if args.continuous and args.shared_stage_samplers:
         parser.error("Shared-stage qualification requires the finite consumer")
     if args.continuous and args.single_set_samplers:
@@ -282,6 +286,7 @@ def main():
         cflags.append("-DCONSUMER_DXVK262_PROBE=1")
     if args.cube_array_witness:
         cflags.append("-DCONSUMER_CUBE_ARRAY_WITNESS=1")
+        cflags.append(f"-DCONSUMER_CUBE_ARRAY_BASE_LAYER={args.cube_array_base_layer}")
     consumer_source = (CONSUMER_DIR / "ubo_layout_main.c" if args.ubo_standard_layout
                        else CONSUMER_DIR / "main.c")
 
@@ -561,6 +566,8 @@ def main():
                 "cubes": 2,
                 "faces_per_cube": 6,
                 "layers": 12,
+                "storage_layers": 12 + args.cube_array_base_layer,
+                "base_array_layer": args.cube_array_base_layer,
                 "face_extent": [4, 4],
                 "target_extent": [192, 64],
                 "format": "VK_FORMAT_R8G8B8A8_UNORM",

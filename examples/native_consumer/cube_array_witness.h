@@ -4,10 +4,15 @@
  */
 #include "cube_array_witness_shaders.h"
 
+#ifndef CONSUMER_CUBE_ARRAY_BASE_LAYER
+#define CONSUMER_CUBE_ARRAY_BASE_LAYER 0
+#endif
+
 enum {
     CUBE_ARRAY_FACE_COUNT = 6,
     CUBE_ARRAY_CUBE_COUNT = 2,
     CUBE_ARRAY_LAYER_COUNT = CUBE_ARRAY_FACE_COUNT * CUBE_ARRAY_CUBE_COUNT,
+    CUBE_ARRAY_STORAGE_LAYERS = CUBE_ARRAY_LAYER_COUNT + CONSUMER_CUBE_ARRAY_BASE_LAYER,
     CUBE_ARRAY_FACE_EXTENT = 4,
     CUBE_ARRAY_CELL_EXTENT = 16,
     CUBE_ARRAY_TARGET_WIDTH = CUBE_ARRAY_LAYER_COUNT * CUBE_ARRAY_CELL_EXTENT,
@@ -42,10 +47,12 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
 {
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_CONSUMER_CUBE_ARRAY_START cubes=%u faces=%u layers=%u image=%ux%u"
-        " target=%ux%u vertex_sha256=%s fragment_sha256=%s",
+        " target=%ux%u storage_layers=%u base_array_layer=%u"
+        " vertex_sha256=%s fragment_sha256=%s",
         CUBE_ARRAY_CUBE_COUNT, CUBE_ARRAY_FACE_COUNT, CUBE_ARRAY_LAYER_COUNT,
         CUBE_ARRAY_FACE_EXTENT, CUBE_ARRAY_FACE_EXTENT,
         CUBE_ARRAY_TARGET_WIDTH, CUBE_ARRAY_TARGET_HEIGHT,
+        CUBE_ARRAY_STORAGE_LAYERS, CONSUMER_CUBE_ARRAY_BASE_LAYER,
         CONSUMER_CUBE_ARRAY_VERT_SPIRV_SHA256,
         CONSUMER_CUBE_ARRAY_FRAG_SPIRV_SHA256);
 
@@ -71,7 +78,7 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
         .format = VK_FORMAT_R8G8B8A8_UNORM,
         .extent = {CUBE_ARRAY_FACE_EXTENT, CUBE_ARRAY_FACE_EXTENT, 1},
         .mipLevels = 1,
-        .arrayLayers = CUBE_ARRAY_LAYER_COUNT,
+        .arrayLayers = CUBE_ARRAY_STORAGE_LAYERS,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -90,8 +97,8 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
         .format = VK_FORMAT_R8G8B8A8_UNORM,
         .components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
                        VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
-        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0,
-                             CUBE_ARRAY_LAYER_COUNT},
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1,
+                             CONSUMER_CUBE_ARRAY_BASE_LAYER, CUBE_ARRAY_LAYER_COUNT},
     };
     CHECK(vkCreateImageView(device, &cube_view_info, NULL, &cube_view));
 
@@ -99,7 +106,7 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
     VkDeviceMemory upload_memory = VK_NULL_HANDLE;
     VkBufferCreateInfo upload_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = CUBE_ARRAY_LAYER_COUNT * CUBE_ARRAY_FACE_BYTES,
+        .size = CUBE_ARRAY_STORAGE_LAYERS * CUBE_ARRAY_FACE_BYTES,
         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
@@ -111,8 +118,10 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
     uint8_t *upload_bytes = NULL;
     CHECK(vkMapMemory(device, upload_memory, 0, VK_WHOLE_SIZE, 0,
                       (void **)&upload_bytes));
-    for (unsigned layer = 0; layer < CUBE_ARRAY_LAYER_COUNT; ++layer) {
+    for (unsigned layer = 0; layer < CUBE_ARRAY_STORAGE_LAYERS; ++layer) {
         uint8_t rgba[4];
+        /* The excluded prefix has a distinct color: a descriptor that ignores
+         * the view base cannot accidentally reproduce the expected faces. */
         cube_array_expected_color(layer, rgba);
         for (unsigned pixel = 0; pixel < CUBE_ARRAY_FACE_EXTENT * CUBE_ARRAY_FACE_EXTENT;
              ++pixel)
@@ -388,13 +397,13 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = cube_image,
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0,
-                             CUBE_ARRAY_LAYER_COUNT},
+                             CUBE_ARRAY_STORAGE_LAYERS},
     };
     vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                          VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL,
                          1, &cube_barrier);
-    VkBufferImageCopy face_copies[CUBE_ARRAY_LAYER_COUNT];
-    for (unsigned layer = 0; layer < CUBE_ARRAY_LAYER_COUNT; ++layer) {
+    VkBufferImageCopy face_copies[CUBE_ARRAY_STORAGE_LAYERS];
+    for (unsigned layer = 0; layer < CUBE_ARRAY_STORAGE_LAYERS; ++layer) {
         face_copies[layer] = (VkBufferImageCopy){
             .bufferOffset = layer * CUBE_ARRAY_FACE_BYTES,
             .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, layer, 1},
@@ -404,7 +413,7 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
     }
     vkCmdCopyBufferToImage(command_buffer, upload_buffer, cube_image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                           CUBE_ARRAY_LAYER_COUNT, face_copies);
+                           CUBE_ARRAY_STORAGE_LAYERS, face_copies);
     cube_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     cube_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     cube_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -488,7 +497,7 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
         for (unsigned x = 0; x < CUBE_ARRAY_TARGET_WIDTH; ++x) {
             const unsigned cell = x / CUBE_ARRAY_CELL_EXTENT;
             uint8_t expected[4];
-            cube_array_expected_color(cell, expected);
+            cube_array_expected_color(cell + CONSUMER_CUBE_ARRAY_BASE_LAYER, expected);
             const uint8_t *actual = pixels +
                 (y * CUBE_ARRAY_TARGET_WIDTH + x) * CUBE_ARRAY_PIXEL_BYTES;
             mismatches += actual[0] != expected[0] || actual[1] != expected[1] ||

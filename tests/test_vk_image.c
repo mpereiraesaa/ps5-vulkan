@@ -289,21 +289,20 @@ int main(void)
     info.mipLevels=32;
     assert(vkCreateImage(&d, &info, NULL, &image) == VK_ERROR_UNKNOWN && calls == 2);
 
-    /* A cube-compatible image may hold multiple cubes when the layer count is
-     * a six-layer multiple. Cube-array views require the feature at device
-     * creation and cover a whole number of complete cubes. */
+    /* Cube-compatible storage needs at least six layers. Only the view count
+     * must cover complete cubes; its first layer need not be a multiple of six. */
     {
         VkImageCreateInfo cube_array = info;
         cube_array.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
         cube_array.extent = (VkExtent3D){17, 17, 1};
         cube_array.mipLevels = 1;
-        cube_array.arrayLayers = 12;
+        cube_array.arrayLayers = 13;
         cube_array.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         VkImage cube_image = VK_NULL_HANDLE;
         assert(vkCreateImage(&d, &cube_array, NULL, &cube_image) == VK_SUCCESS &&
                cube_image && calls == 3);
         VkImageCreateInfo invalid_cube_array = cube_array;
-        invalid_cube_array.arrayLayers = 7;
+        invalid_cube_array.arrayLayers = 5;
         VkImage invalid_image = VK_NULL_HANDLE;
         assert(vkCreateImage(&d, &invalid_cube_array, NULL, &invalid_image) ==
                VK_ERROR_UNKNOWN && !invalid_image && calls == 3);
@@ -334,8 +333,17 @@ int main(void)
                cube_view->range.baseArrayLayer == 6 && cube_view->range.layerCount == 6);
         vkDestroyImageView(&d, cube_view, NULL);
         cube_view_info.subresourceRange.baseArrayLayer = 1;
-        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) ==
-               VK_ERROR_FEATURE_NOT_PRESENT && !cube_view);
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) == VK_SUCCESS);
+        vkDestroyImageView(&d, cube_view, NULL);
+        cube_view_info.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) == VK_SUCCESS &&
+               cube_view->range.layerCount == 12);
+        vkDestroyImageView(&d, cube_view, NULL);
+        cube_view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        cube_view_info.subresourceRange.layerCount = 6;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) == VK_SUCCESS);
+        vkDestroyImageView(&d, cube_view, NULL);
+        cube_view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
         cube_view_info.subresourceRange.baseArrayLayer = 0;
         cube_view_info.subresourceRange.layerCount = 7;
         assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) ==

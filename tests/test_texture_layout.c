@@ -68,6 +68,13 @@ int main(void)
     assert(ps5vk_native_image_requirements(NULL,&i,&r)==
         VK_ERROR_FORMAT_NOT_SUPPORTED && !r.size);
 
+    i.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    i.extent=(VkExtent3D){4,4,1};
+    i.arrayLayers=13;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_SUCCESS && r.size==13312);
+    i.arrayLayers=5;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)!=VK_SUCCESS && !r.size);
+
     /* Only formats with an implemented padded-linear encoding have layout
      * arithmetic: the colour attachment, the depth target, the vertex-only
      * rows and unknown formats are rejected rather than defaulted. */

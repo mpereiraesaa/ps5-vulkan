@@ -77,7 +77,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
     case VK_IMAGE_VIEW_TYPE_CUBE:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D ||
            !(image->info.flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
-           range.baseArrayLayer%6 || range.layerCount!=6 ||
+           range.layerCount!=6 ||
            image->info.extent.width!=image->info.extent.height)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         break;
@@ -85,7 +85,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
         if(!(d->enabled_features&PS5VK_FEATURE_IMAGE_CUBE_ARRAY) ||
            image->info.imageType!=VK_IMAGE_TYPE_2D ||
            !(image->info.flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
-           range.baseArrayLayer%6 || range.layerCount%6 ||
+           range.layerCount%6 ||
            image->info.extent.width!=image->info.extent.height)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         break;

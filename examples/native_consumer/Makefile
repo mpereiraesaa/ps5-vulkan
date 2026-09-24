@@ -64,7 +64,9 @@ ifneq ($(CONSUMER_CUBE_ARRAY_WITNESS),)
 ifneq ($(CONSUMER_CONTINUOUS),)
 $(error Cube-array witness requires the finite consumer)
 endif
-CFLAGS += -DCONSUMER_CUBE_ARRAY_WITNESS=1
+CONSUMER_CUBE_ARRAY_BASE_LAYER ?= 0
+CFLAGS += -DCONSUMER_CUBE_ARRAY_WITNESS=1 \
+          -DCONSUMER_CUBE_ARRAY_BASE_LAYER=$(CONSUMER_CUBE_ARRAY_BASE_LAYER)
 CUBE_ARRAY_WITNESS_SHADER = $(BUILD_DIR)/cube_array_witness_shaders.h
 
 $(CUBE_ARRAY_WITNESS_SHADER): ../../tools/prepare_consumer_cube_array_shaders.py \

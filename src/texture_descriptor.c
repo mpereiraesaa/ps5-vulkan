@@ -80,7 +80,7 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     case VK_IMAGE_VIEW_TYPE_CUBE:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D ||
            !(image->info.flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
-           view->range.baseArrayLayer%6 || view->range.layerCount!=6 ||
+           view->range.layerCount!=6 ||
            image->info.extent.width!=image->info.extent.height)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         type_word=11u<<28;
@@ -91,7 +91,7 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
         if(!(d->enabled_features&PS5VK_FEATURE_IMAGE_CUBE_ARRAY) ||
            image->info.imageType!=VK_IMAGE_TYPE_2D ||
            !(image->info.flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
-           view->range.baseArrayLayer%6 || view->range.layerCount%6 ||
+           view->range.layerCount%6 ||
            image->info.extent.width!=image->info.extent.height)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         type_word=11u<<28;
