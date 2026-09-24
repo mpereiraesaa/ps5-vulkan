@@ -146,6 +146,8 @@ check-sanitize:
 	./build/tests/test_texture_format_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy_sanitized
 	./build/tests/test_texture_copy_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -DPS5VK_D32_SAMPLED_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_d32_gather_copy_sanitized
+	./build/tests/test_d32_gather_copy_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc $(VK_IMAGE_TEST_SOURCES) tests/test_vk_image.c -o build/tests/test_vk_image_sanitized
 	./build/tests/test_vk_image_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass_sanitized
@@ -249,6 +251,8 @@ check:
 	./build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_texture_copy
 	./build/tests/test_texture_copy
+	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_D32_SAMPLED_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/texture_copy.c src/texture_format.c src/texture_layout.c tests/test_texture_copy.c -o build/tests/test_d32_gather_copy
+	./build/tests/test_d32_gather_copy
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_texture_format.c -o build/tests/test_texture_format
 	./build/tests/test_texture_format
 	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_bc_diagnostic_profile.c -o build/tests/test_bc_diagnostic_profile

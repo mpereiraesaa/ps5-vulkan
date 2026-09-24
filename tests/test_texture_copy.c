@@ -151,4 +151,28 @@ int main(void)
     assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_R32G32B32A32_SFLOAT,16384,16384,
         UINT64_MAX,UINT64_MAX,&widest,&guard)!=VK_SUCCESS &&
         !memcmp(&guard,&sentinel,sizeof(guard)));
+#if PS5VK_D32_SAMPLED_DIAGNOSTIC
+    struct VkImage_T d32={.info={.imageType=VK_IMAGE_TYPE_2D,
+        .format=VK_FORMAT_D32_SFLOAT,.extent={64,64,1},.mipLevels=7,.arrayLayers=1}};
+    VkBufferImageCopy depth_copy={.bufferOffset=0,
+        .imageSubresource={VK_IMAGE_ASPECT_DEPTH_BIT,0,0,1},
+        .imageExtent={64,64,1}};
+    assert(ps5vk_texture_copy_plan_for_image(&d32,16384,65536,&depth_copy,&p)==VK_SUCCESS);
+    assert(p.source_offset==0 && p.source_pitch==256 && p.row_bytes==256 &&
+        p.rows==64 && p.slices==1);
+    depth_copy.imageSubresource.mipLevel=6;
+    depth_copy.imageExtent=(VkExtent3D){1,1,1};
+    depth_copy.bufferOffset=4;
+    assert(ps5vk_texture_copy_plan_for_image(&d32,8,65536,&depth_copy,&p)==VK_SUCCESS);
+    assert(p.source_offset==4 && p.source_pitch==4 && p.row_bytes==4 && p.rows==1);
+    depth_copy.bufferOffset=3;
+    guard=sentinel;
+    assert(ps5vk_texture_copy_plan_for_image(&d32,8,65536,&depth_copy,&guard)!=VK_SUCCESS &&
+        !memcmp(&guard,&sentinel,sizeof(guard)));
+    depth_copy.bufferOffset=4;
+    depth_copy.imageSubresource.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+    guard=sentinel;
+    assert(ps5vk_texture_copy_plan_for_image(&d32,8,65536,&depth_copy,&guard)!=VK_SUCCESS &&
+        !memcmp(&guard,&sentinel,sizeof(guard)));
+#endif
 }

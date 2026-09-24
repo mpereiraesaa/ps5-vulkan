@@ -33,6 +33,32 @@ static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
     struct ps5vk_texture_copy *out)
 {
     if(!r || !out)return VK_ERROR_UNKNOWN;
+#if PS5VK_D32_SAMPLED_DIAGNOSTIC
+    /* The source-derived Dref gather upload is a whole-subresource copy for
+     * each level of one 64x64 D32 mip tail. The destination is tiled 64KB_Z_X,
+     * so this validates buffer packing only; the queue executor scatters each
+     * texel through the tested depth equation instead of using linear rows. */
+    if(format==VK_FORMAT_D32_SFLOAT) {
+        if(width!=64u || height!=64u || base_slices!=1u || mip_levels!=7u ||
+           is_3d || r->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT ||
+           r->imageSubresource.mipLevel>=7u || r->imageSubresource.baseArrayLayer ||
+           r->imageSubresource.layerCount!=1u || r->imageOffset.x || r->imageOffset.y ||
+           r->imageOffset.z || r->bufferOffset%4u) return VK_ERROR_UNKNOWN;
+        const uint32_t level=r->imageSubresource.mipLevel;
+        const uint32_t extent=width>>level?width>>level:1u;
+        if(r->imageExtent.width!=extent || r->imageExtent.height!=extent ||
+           r->imageExtent.depth!=1u ||
+           (r->bufferRowLength && r->bufferRowLength<extent) ||
+           (r->bufferImageHeight && r->bufferImageHeight<extent)) return VK_ERROR_UNKNOWN;
+        const uint64_t pitch=(uint64_t)4u*(r->bufferRowLength?r->bufferRowLength:extent);
+        const uint64_t span=(uint64_t)(extent-1u)*pitch+(uint64_t)extent*4u;
+        if(r->bufferOffset>source_bytes || span>source_bytes-r->bufferOffset ||
+           destination_bytes<65536u) return VK_ERROR_UNKNOWN;
+        *out=(struct ps5vk_texture_copy){r->bufferOffset,0,pitch,0,
+            extent*4u,extent,0,0,1};
+        return VK_SUCCESS;
+    }
+#endif
     /* Formats without an implemented sampled or compressed-block layout have
      * no transfer-copy plan (colour/depth/vertex-only rows stay rejected). */
     if(!ps5vk_texture_format_sampled_encoding(format) &&
