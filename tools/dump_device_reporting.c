@@ -139,6 +139,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                         PS5VK_FEATURE_TEXTURE_COMPRESSION_BC |
                                         PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
                                         PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
+    if (graphics_submit)
+        platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
@@ -586,6 +588,8 @@ int main(int argc, char **argv)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR};
     VkPhysicalDeviceBufferDeviceAddressFeaturesKHR device_address = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR};
+    VkPhysicalDeviceHostQueryResetFeaturesEXT host_query_reset = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT};
     VkPhysicalDeviceMultiviewProperties multiview_properties = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
     uint32_t extensions = 0;
@@ -603,6 +607,7 @@ int main(int argc, char **argv)
     multiview.pNext = &standard_ubo;
     standard_ubo.pNext = &memory_model;
     memory_model.pNext = &device_address;
+    device_address.pNext = &host_query_reset;
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = &storage8};
     vkGetPhysicalDeviceFeatures2KHR(dump_physical, &features2);
@@ -633,6 +638,9 @@ int main(int argc, char **argv)
         device_address.bufferDeviceAddress ? "true" : "false",
         device_address.bufferDeviceAddressCaptureReplay ? "true" : "false",
         device_address.bufferDeviceAddressMultiDevice ? "true" : "false");
+    fprintf(stdout, "  \"hostQueryResetQuery\": {\"route\": "
+                    "\"VK_EXT_host_query_reset\", \"hostQueryReset\": %s},\n",
+        host_query_reset.hostQueryReset ? "true" : "false");
     fprintf(stdout, "  \"extensionCount\": %u,\n", extensions);
     fputs("  \"extensions\": [", stdout);
     for (uint32_t i = 0; i < extensions; ++i)
@@ -651,7 +659,8 @@ int main(int argc, char **argv)
                     "    \"uniformBufferStandardLayout\": %s,\n"
                     "    \"vulkanMemoryModel\": %s,\n"
                     "    \"vulkanMemoryModelDeviceScope\": %s,\n"
-                    "    \"bufferDeviceAddress\": %s\n"
+                    "    \"bufferDeviceAddress\": %s,\n"
+                    "    \"hostQueryReset\": %s\n"
                     "  },\n",
         storage8.storageBuffer8BitAccess ? "true" : "false",
         storage8.uniformAndStorageBuffer8BitAccess ? "true" : "false",
@@ -665,7 +674,8 @@ int main(int argc, char **argv)
         standard_ubo.uniformBufferStandardLayout ? "true" : "false",
         memory_model.vulkanMemoryModel ? "true" : "false",
         memory_model.vulkanMemoryModelDeviceScope ? "true" : "false",
-        device_address.bufferDeviceAddress ? "true" : "false");
+        device_address.bufferDeviceAddress ? "true" : "false",
+        host_query_reset.hostQueryReset ? "true" : "false");
     free(extension_names);
     free(extension_properties);
 

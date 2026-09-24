@@ -42,8 +42,8 @@ class DxvkBacklogTests(unittest.TestCase):
         # T09 host reset and imageless have native witnesses behind default-off
         # gates; their public API rows remain blockers.
         self.assertEqual(26, summary["implementation_ready"])
-        self.assertEqual(24, summary["profile_satisfied"])
-        self.assertEqual(37, summary["remaining_profile_blockers"])
+        self.assertEqual(25, summary["profile_satisfied"])
+        self.assertEqual(36, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,
