@@ -4693,12 +4693,21 @@ the SDK-linked IAdd witness now builds as signed eboot SHA-256
 `2c9c39aa085ed628af1e1c809d394d6cf6ccc9b5139a93ad509673a7b7ad0f7a`.
 The exact witness SPIR-V also compiles through the host PSBC/ACO runtime path
 to nonempty GFX1013 wave32 code with one storage-buffer descriptor and a
-64-invocation workgroup. This is compiler evidence, not GPU output evidence.
+64-invocation workgroup.
 Its shader reads four host-provided seeds, reduces each 32-lane subgroup,
-and checks 128 output words plus untouched guards after a bounded fence.
-The strict ps5log/1 verifier is host-tested; the new witness has no GPU
-readback or original CTS Pass yet. It does
-not report the public `ARITHMETIC` operation bit or either T08 feature.
+and checks 128 output words plus untouched guards after a bounded fence. Two
+strict ps5log/1 runs of that exact signed eboot passed: 128/128 outputs,
+zero guard mismatches, digest `30acadc5`, completed fence and clean resource
+retirement each time. Runs
+`20260924T155206843Z_PPSA99994_ps5vk_0x246ef27b691a7` (log SHA-256
+`b9b0ebae49b541726a19877223b5fabadd9da2497a576914f12d4b01a6abe77e`)
+and `20260924T155235072Z_PPSA99994_ps5vk_0x246f5ba4a4168` (log SHA-256
+`9ef1e59972788bb9186124debe73db51df04df20f958f8535a1f07ed3374ae9a`)
+both verified artifact identity, closed the title and restored the previous
+payload. Firmware was not recorded in these receipts. This establishes one
+bounded 32-bit compute IAdd GPU path, not original CTS or broader subgroup
+operation/type/stage coverage. It does not report the public `ARITHMETIC`
+operation bit or either T08 feature.
 
 The earlier default-off Broadcast-only build passed its unchanged frozen
 upstream acceptance selection: **507 Pass, zero Fail, zero NotSupported, zero
