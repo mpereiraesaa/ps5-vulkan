@@ -165,6 +165,18 @@ Compute subgroup support is required by the original CTS;
 other stages depend on their reported masks. The quad field does not establish
 broadcast support. Neither subgroup bit nor `apiVersion` changes in this slice.
 
+### T09 diagnostic status (2026-09-24)
+
+The codex T09 slice has default-off implementations and artifact-bound native
+measurements for `hostQueryReset` and bounded `imagelessFramebuffer` use. The
+sampler mirror-clamp path passed eight U/V nearest and linear draw witnesses;
+two focused original W CTS leaves stopped in 3D image upload before sampling.
+The ordinary public device reports all three features false, and the DXVK
+matrix remains **25/62 ready with 37 blockers**. The full run identities,
+artifact hashes and remaining KHR dependency and W coverage limits are in
+[VALIDATION.md](../VALIDATION.md#t09-diagnostic-measurements-2026-09-24).
+This tranche does not claim that DXVK itself runs yet.
+
 ## Readiness versus profile completion
 
 For Vulkan 1.1–1.3 rows, implementation can be ready before the device is

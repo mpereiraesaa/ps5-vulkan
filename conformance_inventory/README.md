@@ -347,6 +347,12 @@ through their Vulkan 1.0 KHR routes, and the four rasterization and viewport fea
 `occlusionQueryPrecise`) and 37
 blockers.
 
+The T09 `hostQueryReset` and `imagelessFramebuffer` rows have bounded,
+default-off implementations and native witnesses, but remain API blockers.
+`samplerMirrorClampToEdge` has eight passing U/V draw witnesses; its native
+axis remains a blocker because W has not reached sampling in the focused 3D
+CTS attempt. These diagnostic runs do not increase the satisfied count.
+
 T04's implementation and focused native validation are
 complete and merged (PR #158), but its `geometryShader` and
 `tessellationShader` rows remain blocked **in this matrix** until the existing

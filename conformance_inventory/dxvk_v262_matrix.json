@@ -2424,22 +2424,25 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Bounded implementation exists in a diagnostic build; public API and native evidence remain independent, and observed CTS failures stay visible.",
+        "refs": [
+          "src/vk_device.c",
+          "src/vk_query_pool.c"
+        ],
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "hostQueryReset",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "d74390542e83e45e0010467beb9c5e3cd19b4cdfd776c000c9d14f6b9fae28ac",
+        "note": "Default-off SDK witness strictly verified host reset, unavailable results, preserved result words and resubmission of the same query command buffer; the public extension and feature remain closed.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t09-host-query-reset-diagnostic-measurement-2026-09-24"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260924T194817339Z_PPSA99994_ps5vk_0x771bcbf0e04"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
       "verdict": "blocker"
     },
@@ -2469,22 +2472,26 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Bounded implementation exists in a diagnostic build; public API and native evidence remain independent, and observed CTS failures stay visible.",
+        "refs": [
+          "src/vk_command.c",
+          "src/vk_device.c",
+          "src/vk_framebuffer.c"
+        ],
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "imagelessFramebuffer",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "01ff1cfbf7ed3f3cf34a0e49dc1256f2d20f65fbfe7db4725c615cfd26abfd21",
+        "note": "Default-off SDK witness bound two image views to one imageless framebuffer on two completed submissions and matched 8192 readback pixels; the public KHR dependency chain remains closed.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t09-imageless-framebuffer-diagnostic-measurement-2026-09-24"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260924T194946966Z_PPSA99994_ps5vk_0x7869ad308ae"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
       "verdict": "blocker"
     },
@@ -2517,20 +2524,40 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Bounded implementation exists in a diagnostic build; public API and native evidence remain independent, and observed CTS failures stay visible.",
+        "refs": [
+          "src/vk_device.c",
+          "src/vk_sampler.c"
+        ],
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "samplerMirrorClampToEdge",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "950bcfcd86e1e2796997518c327c5e3e0bfe58b603e3bd99d2aa0d838909c2e7",
+        "artifact_sha256_refs": {
+          "20260924T195942860Z_PPSA99994_ps5vk_0x8115866dec1": "99101732bd2d243a50531fb1f78be3c447e00b1f4eac1889d58e981ad80619b1",
+          "20260924T200150243Z_PPSA99994_ps5vk_0x82f00e17429": "950bcfcd86e1e2796997518c327c5e3e0bfe58b603e3bd99d2aa0d838909c2e7",
+          "20260924T200332043Z_PPSA99994_ps5vk_0x846b48a0f41": "1b2f0ea081852e32fa0c09ac8373eaffb54e9f227f414d0c0c0d7bfd462ff40c",
+          "20260924T200447187Z_PPSA99994_ps5vk_0x858336e3bd6": "7405f1af4e10a2b5c7f1f582469dabf259ba4ebd6399290e1b70796bfa884d8a",
+          "20260924T200659933Z_PPSA99994_ps5vk_0x8771b94f5a5": "606c13b15c8eb7b0dfa3e1fa602cb749cc252e0e16738ea5879c3f945766c7f0",
+          "20260924T200845944Z_PPSA99994_ps5vk_0x88fca4e620b": "ef3294f797ae6bbd370d303f0d3d65ff35d04c23616d163e42ef299666cb9b16",
+          "20260924T201032029Z_PPSA99994_ps5vk_0x8a87d58b6b4": "394bd73f7ec9937ac2d6c4226062d65139f111e7f632e734588e9ff9087b7179",
+          "20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12": "192d0289da708c5cc1f6cc81752b9be6cd812c4d3de9c6d289b613598d57b5f2"
+        },
+        "note": "Eight strict default-off SDK U/V nearest and linear witnesses each matched 373248 pixels; W remains unverified because two focused original 3D CTS leaves failed in image upload before sampling. Public KHR remains closed.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t09-sampler-mirror-clamp-diagnostic-measurement-2026-09-24"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260924T200150243Z_PPSA99994_ps5vk_0x82f00e17429",
+          "20260924T195942860Z_PPSA99994_ps5vk_0x8115866dec1",
+          "20260924T200659933Z_PPSA99994_ps5vk_0x8771b94f5a5",
+          "20260924T201032029Z_PPSA99994_ps5vk_0x8a87d58b6b4",
+          "20260924T200332043Z_PPSA99994_ps5vk_0x846b48a0f41",
+          "20260924T200447187Z_PPSA99994_ps5vk_0x858336e3bd6",
+          "20260924T200845944Z_PPSA99994_ps5vk_0x88fca4e620b",
+          "20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12"
         ],
         "state": "witnessed-blocker"
       },
@@ -2846,11 +2873,13 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
       "implementation": {
-        "detail": "Bounded implementation exists in a diagnostic build; the independent API, original CTS and native axes still control promotion.",
+        "detail": "The base model and DeviceScope are independently gated; compute and graphics compiler options follow each SPIR-V module's memory model.",
         "refs": [
-          "src/ps5vk_compiler.c",
           "src/vk_device.c",
-          "src/vk_pipeline.c"
+          "src/vk_pipeline.c",
+          "src/ps5vk_compiler.c",
+          "native/runtime_graphics_compiler.c",
+          "conformance_inventory/reporting_matrix.json"
         ],
         "state": "implemented"
       },
@@ -3931,12 +3960,12 @@
         "pass": 26
       },
       "implementation": {
-        "blocker": 35,
-        "satisfied": 27
+        "blocker": 32,
+        "satisfied": 30
       },
       "native": {
-        "blocker": 36,
-        "satisfied": 26
+        "blocker": 34,
+        "satisfied": 28
       }
     },
     "requirements": 62,
