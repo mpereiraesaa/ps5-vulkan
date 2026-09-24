@@ -4892,6 +4892,17 @@ receipt predates the full frozen-base metadata correction; its candidate
 selection was focused and omitted the 507 frozen cases. These runs are evidence
 for their original oracles, not a combined shipping acceptance run.
 
+An independent public SDK consumer exercised linear GPU sampling for all 16
+Vulkan 1.0 BC formats, one signed executable per format. Its final v3 reference
+uses normalized S3TC endpoint equations and bilinear filtering before the
+final RGBA8 conversion, with a fixed tolerance of two. All 16 strict native
+receipts passed: 65,536 pixels checked, zero mismatches, completed fences and
+clean closure. The ignored `build/bc-filter-v3/matrix.json` lists each format's
+executable SHA-256, receipt, source-log SHA-256 and independent reference
+hashes. All 16 archived executables and logs still match those records. These
+SDK results support the diagnostic sampled/filter roles; they do not replace
+the original CTS oracle or establish a shipping feature bit.
+
 The integrated diagnostic build also passed **74/74 original pinned BC copy
 leaves** in one strict, completed run: 66 image-to-buffer mip/array-layer cases
 covering 11 non-sRGB BC formats, two extents and one, two or five layers, plus
@@ -5149,3 +5160,23 @@ attachment layer stride for a 2D view; the same regression now passes. The CTS
 above checks view creation, not sampling from that tiled attachment. Public
 reporting must stay off until a native witness proves the new descriptor and
 the combined upstream selection remains passing.
+
+## T07 four-axis promotion audit (2026-09-24)
+
+The ordinary build reports all four T07 core feature bits false. A host
+contract confirms that each bit, when supplied by the platform, appears in
+both physical-device feature query routes, can be enabled through a logical
+device, and fails device creation when unsupported. That host result proves
+the negotiation wiring, not permission to advertise any bit. The evidence
+above leaves these promotion gates open:
+
+| Feature | Public query and device | Executable path and refusal | Original CTS oracle | Artifact-bound PS5 witness and remaining gate |
+| --- | --- | --- | --- | --- |
+| `imageCubeArray` | Host negotiation passes; shipping bit off. | Transfer-backed arrays sample two cubes, including a nonzero view base. Tiled colour-attachment sampling has a host-tested candidate. | Original image-view leaf passed twice; it checks view creation, not tiled attachment sampling. | Transfer-backed SDK witness passed twice per view base. The signed tiled render-to-sample witness has not run; then combined CTS and shipping acceptance are required. |
+| `textureCompressionBC` | Host negotiation passes; shipping bit and format roles off. | Diagnostic sampling, blit and mip/layer copy paths are bounded by format, layout and region checks. | Original focused selections passed 48/48 sampling, 128/128 blit and 74/74 copy. The 757-case combined selection has not run. | SDK filter and mip/layer witnesses passed on diagnostic builds. Run the 757-case selection on the combined branch, then promote the public format roles and bit and repeat shipping acceptance. |
+| `shaderImageGatherExtended` | Host negotiation passes; shipping bit off. | Diagnostic compiler accepts bounded gather forms; RGBA8 integer attachment and D32 comparison roles remain build-gated. | One original D32 comparison leaf passed twice. A 577-case selection covering all 70 eligible gather leaves has been built but not run. | The standalone native gather witness and full typed CTS selection have not run. Their oracle and resource results determine whether the bit can be promoted. |
+| `occlusionQueryPrecise` | Host negotiation passes; shipping bit off. | Diagnostic query state, ZPASS and bounded result read/copy paths passed host and native checks. | Original D16 precise case passed twice and in a 508/508 combined selection. | SDK-linked API witness passed twice with 0/1/3 samples and result variants. Promotion still needs an enabled shipping build, frozen CTS update and exact post-promotion acceptance. |
+
+No row is promoted by the passing subset of another row. All new combined
+selection candidates remain measurements until their strict hardware receipts
+and the ordinary shipping build agree.
