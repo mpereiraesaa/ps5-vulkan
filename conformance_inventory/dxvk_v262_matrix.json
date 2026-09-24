@@ -2261,7 +2261,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan11Features:multiview",
       "implementation": {
-        "detail": "Reviewed multiview execution; the separate CTS and native axes must also pass.",
+        "detail": "Reviewed multiview execution; a strict native witness is required, and an observed applicable CTS failure blocks.",
         "refs": [
           "src/vk_device.c",
           "src/vk_render_pass.c",
@@ -3496,7 +3496,7 @@
       "expected": 134217727,
       "id": "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
       "implementation": {
-        "detail": "Reviewed multiview execution; the separate CTS and native axes must also pass.",
+        "detail": "Reviewed multiview execution; a strict native witness is required, and an observed applicable CTS failure blocks.",
         "refs": [
           "src/vk_device.c",
           "src/vk_render_pass.c",
@@ -3593,7 +3593,7 @@
       "expected": 6,
       "id": "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
       "implementation": {
-        "detail": "Reviewed multiview execution; the separate CTS and native axes must also pass.",
+        "detail": "Reviewed multiview execution; a strict native witness is required, and an observed applicable CTS failure blocks.",
         "refs": [
           "src/vk_device.c",
           "src/vk_render_pass.c",
