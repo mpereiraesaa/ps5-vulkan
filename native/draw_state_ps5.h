@@ -21,7 +21,8 @@ enum { PS5VK_DRAW_RASTER_REGISTERS = 8 + 6 + 4 +
     (PS5VK_MAX_VIEWPORTS - 1) * PS5VK_VIEWPORT_REGISTERS };
 enum {
     PS5VK_DRAW_CX_CAPACITY = PS5_PIPELINE_CX_REGISTERS + 15 +
-        PS5_DEPTH_REGISTER_COUNT + PS5VK_DRAW_RASTER_REGISTERS + 24 + 9,
+        PS5_DEPTH_REGISTER_COUNT + PS5VK_DRAW_RASTER_REGISTERS + 24 + 9 +
+        3 /* stencil control and the two reference/mask words */,
     PS5VK_DRAW_SH_CAPACITY = 32,
     PS5VK_DRAW_UC_CAPACITY = 12
 };
@@ -62,4 +63,8 @@ VkResult ps5vk_native_draw_state(VkPipeline, const VkViewport *viewports,
     const VkRect2D *area,
     uint32_t width, uint32_t height, unsigned index_width,
     struct ps5vk_draw_state *);
+/* The three stencil words of a draw with the stencil test enabled:
+ * DB_STENCIL_CONTROL, DB_STENCILREFMASK and DB_STENCILREFMASK_BF. */
+int ps5vk_stencil_registers(const VkStencilOpState *front, const VkStencilOpState *back,
+    ps5_agc_register out[3]);
 #endif
