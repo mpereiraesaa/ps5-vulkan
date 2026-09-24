@@ -27,6 +27,20 @@ struct VkImage_T {
     VkBool32 display_busy;
     struct VkImage_T *next;
 };
+/* Cube-compatible RGBA8 whose sampled role reads a tiled colour attachment.
+ * Both descriptor encoding and its render-to-sample barrier use this exact
+ * role; a linear upload cube follows a different backing and dependency. */
+static inline VkBool32 ps5vk_tiled_cube_sampled_image(VkImage image)
+{
+    return image && image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.flags == VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.usage == (VK_IMAGE_USAGE_SAMPLED_BIT |
+                              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.mipLevels == 1 && image->info.arrayLayers >= 6;
+}
 struct VkImageView_T {
     VkDevice device;
     VkAllocationCallbacks allocator;

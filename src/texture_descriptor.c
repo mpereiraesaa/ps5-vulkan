@@ -13,20 +13,6 @@
 #include "texture_format.h"
 #include <string.h>
 
-/* The object-management cube-array CTS creates this sampled colour target.
- * Its attachment backing uses SW_64K_R_X and one aligned target footprint per
- * layer; the ordinary upload image uses padded linear rows instead. */
-static VkBool32 tiled_cube_sampled_image(const VkImage image)
-{
-    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
-        image->info.imageType == VK_IMAGE_TYPE_2D &&
-        image->info.flags == VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
-        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
-        image->info.usage == (VK_IMAGE_USAGE_SAMPLED_BIT |
-                              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
-        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
-        image->info.mipLevels == 1 && image->info.arrayLayers >= 6;
-}
 /* The GFX10 image fields both encoders share, and nothing else. The sampled
  * entry adds its own usage rules before calling this and its sampler words
  * after; the resource-only entry adds the input-attachment contract. Nothing
@@ -52,7 +38,7 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     if(ps5vk_texture_mip_layout_for_slices(view->format,image->info.extent.width,
         image->info.extent.height,slices,image->info.mipLevels,&layout))return VK_ERROR_UNKNOWN;
     VkDeviceSize layer_stride=layout.layer_stride;
-    const VkBool32 tiled_cube=tiled_cube_sampled_image(image);
+    const VkBool32 tiled_cube=ps5vk_tiled_cube_sampled_image(image);
     if(tiled_cube) {
         if(image->requirements.size%image->info.arrayLayers)
             return VK_ERROR_UNKNOWN;
@@ -150,7 +136,7 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     const VkImageUsageFlags usage=view->image->info.usage;
     if(!(usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
        ((usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) &&
-        !tiled_cube_sampled_image(view->image)))
+        !ps5vk_tiled_cube_sampled_image(view->image)))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if(ps5vk_d32_gather_image(view->image)!=sampler->compare_enable)
         return VK_ERROR_FEATURE_NOT_PRESENT;

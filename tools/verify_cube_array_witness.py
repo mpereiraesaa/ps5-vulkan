@@ -66,6 +66,8 @@ def validate(log, receipt, artifact):
              "cube-array artifact contract")
     base_layer = contract.get("base_array_layer")
     storage_layers = contract.get("storage_layers")
+    source = contract.get("source", "linear-upload")
+    _require(source in ("linear-upload", "tiled-attachment"), "cube-array source")
     _require(type(base_layer) is int and base_layer in (0, 1) and
              type(storage_layers) is int and storage_layers == 12 + base_layer,
              "cube-array storage and view range")
@@ -92,6 +94,14 @@ def validate(log, receipt, artifact):
              f"storage_layers={storage_layers} base_array_layer={base_layer} " in start and
              f"vertex_sha256={shader_hashes[0]} fragment_sha256={shader_hashes[1]}" in start,
              "witness identity and shape")
+    if source == "tiled-attachment":
+        _require(one("PS5VK_CONSUMER_CUBE_ARRAY_SOURCE ") ==
+                 f"PS5VK_CONSUMER_CUBE_ARRAY_SOURCE kind=tiled_attachment "
+                 f"rendered_layers={storage_layers}",
+                 "tiled attachment source")
+    else:
+        _require(not any(message.startswith("PS5VK_CONSUMER_CUBE_ARRAY_SOURCE ")
+                         for message in messages), "linear upload source")
     result = one("PS5VK_CONSUMER_CUBE_ARRAY_RESULT ")
     _require(result ==
              f"PS5VK_CONSUMER_CUBE_ARRAY_RESULT cells=12 pixels={TARGET_PIXELS} "

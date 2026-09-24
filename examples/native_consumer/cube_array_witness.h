@@ -7,6 +7,9 @@
 #ifndef CONSUMER_CUBE_ARRAY_BASE_LAYER
 #define CONSUMER_CUBE_ARRAY_BASE_LAYER 0
 #endif
+#ifndef CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
+#define CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT 0
+#endif
 
 enum {
     CUBE_ARRAY_FACE_COUNT = 6,
@@ -55,6 +58,11 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
         CUBE_ARRAY_STORAGE_LAYERS, CONSUMER_CUBE_ARRAY_BASE_LAYER,
         CONSUMER_CUBE_ARRAY_VERT_SPIRV_SHA256,
         CONSUMER_CUBE_ARRAY_FRAG_SPIRV_SHA256);
+#if CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_CUBE_ARRAY_SOURCE kind=tiled_attachment rendered_layers=%u",
+        CUBE_ARRAY_STORAGE_LAYERS);
+#endif
 
     VkFormatProperties format_properties = {0};
     vkGetPhysicalDeviceFormatProperties(physical, VK_FORMAT_R8G8B8A8_UNORM,
@@ -81,7 +89,12 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
         .arrayLayers = CUBE_ARRAY_STORAGE_LAYERS,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT |
+#if CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
+                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+#else
+                 VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+#endif
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
@@ -285,6 +298,23 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
     };
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     CHECK(vkCreateFramebuffer(device, &framebuffer_info, NULL, &framebuffer));
+#if CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
+    VkImageView face_views[CUBE_ARRAY_STORAGE_LAYERS] = {0};
+    VkFramebuffer face_framebuffers[CUBE_ARRAY_STORAGE_LAYERS] = {0};
+    for (unsigned layer = 0; layer < CUBE_ARRAY_STORAGE_LAYERS; ++layer) {
+        VkImageViewCreateInfo face_view_info = cube_view_info;
+        face_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        face_view_info.subresourceRange.baseArrayLayer = layer;
+        face_view_info.subresourceRange.layerCount = 1;
+        CHECK(vkCreateImageView(device, &face_view_info, NULL, &face_views[layer]));
+        VkFramebufferCreateInfo face_framebuffer_info = framebuffer_info;
+        face_framebuffer_info.pAttachments = &face_views[layer];
+        face_framebuffer_info.width = CUBE_ARRAY_FACE_EXTENT;
+        face_framebuffer_info.height = CUBE_ARRAY_FACE_EXTENT;
+        CHECK(vkCreateFramebuffer(device, &face_framebuffer_info, NULL,
+                                  &face_framebuffers[layer]));
+    }
+#endif
 
     VkShaderModule vertex_module = VK_NULL_HANDLE;
     VkShaderModule fragment_module = VK_NULL_HANDLE;
@@ -390,15 +420,46 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
 
     VkImageMemoryBarrier cube_barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+#if CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+#else
         .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
         .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+#endif
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = cube_image,
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0,
                              CUBE_ARRAY_STORAGE_LAYERS},
     };
+#if CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
+    for (unsigned layer = 0; layer < CUBE_ARRAY_STORAGE_LAYERS; ++layer) {
+        uint8_t rgba[4];
+        cube_array_expected_color(layer, rgba);
+        VkClearValue face_clear = {.color = {.float32 = {
+            rgba[0] / 255.0f, rgba[1] / 255.0f,
+            rgba[2] / 255.0f, rgba[3] / 255.0f,
+        }}};
+        VkRenderPassBeginInfo face_begin = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = render_pass,
+            .framebuffer = face_framebuffers[layer],
+            .renderArea = {{0, 0}, {CUBE_ARRAY_FACE_EXTENT, CUBE_ARRAY_FACE_EXTENT}},
+            .clearValueCount = 1,
+            .pClearValues = &face_clear,
+        };
+        vkCmdBeginRenderPass(command_buffer, &face_begin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdEndRenderPass(command_buffer);
+    }
+    vkCmdPipelineBarrier(command_buffer,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0,
+                         NULL, 1, &cube_barrier);
+#else
     vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                          VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL,
                          1, &cube_barrier);
@@ -421,6 +482,7 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
     vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0,
                          NULL, 1, &cube_barrier);
+#endif
 
     VkClearValue clear = {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}};
     VkRenderPassBeginInfo render_begin = {
@@ -520,6 +582,12 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
     vkDestroyShaderModule(device, fragment_module, NULL);
     vkDestroyShaderModule(device, vertex_module, NULL);
     vkDestroyFramebuffer(device, framebuffer, NULL);
+#if CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
+    for (unsigned layer = 0; layer < CUBE_ARRAY_STORAGE_LAYERS; ++layer) {
+        vkDestroyFramebuffer(device, face_framebuffers[layer], NULL);
+        vkDestroyImageView(device, face_views[layer], NULL);
+    }
+#endif
     vkDestroyRenderPass(device, render_pass, NULL);
     vkDestroyImageView(device, target_view, NULL);
     vkDestroyImage(device, target_image, NULL);

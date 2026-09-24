@@ -1287,6 +1287,13 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
 {
     VkImage image=b->image;
     const VkImageUsageFlags usage=image->info.usage;
+    if(ps5vk_tiled_cube_sampled_image(image))return
+        b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+        b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+        b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+        b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT &&
+        src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+        dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     if(ps5vk_d32_gather_image(image))return ps5vk_d32_gather_barrier(b);
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
     if(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image))

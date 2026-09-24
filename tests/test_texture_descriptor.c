@@ -193,6 +193,29 @@ int main(void)
         layered_words[0]==(uint32_t)(((uintptr_t)tiled_cube_base+6u*131072u)>>8) &&
         layered_words[3]==0x91b00facu && !layered_words[4]);
     vkDestroyImageView(&d,tiled_cube_view,NULL);
+    VkCommandPoolCreateInfo tiled_pool_info={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    VkCommandPool tiled_pool;
+    assert(vkCreateCommandPool(&d,&tiled_pool_info,NULL,&tiled_pool)==VK_SUCCESS);
+    VkCommandBufferAllocateInfo tiled_allocate_info={
+        .sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool=tiled_pool,.commandBufferCount=1};
+    VkCommandBuffer tiled_cb;
+    assert(vkAllocateCommandBuffers(&d,&tiled_allocate_info,&tiled_cb)==VK_SUCCESS);
+    VkCommandBufferBeginInfo tiled_begin={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    assert(vkBeginCommandBuffer(tiled_cb,&tiled_begin)==VK_SUCCESS);
+    VkImageMemoryBarrier tiled_handover={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask=VK_ACCESS_SHADER_READ_BIT,
+        .oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.image=tiled_cube_image,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,12}};
+    vkCmdPipelineBarrier(tiled_cb,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&tiled_handover);
+    assert(tiled_cb->state==PS5VK_RECORDING && tiled_cb->operation_count==1);
+    assert(vkEndCommandBuffer(tiled_cb)==VK_SUCCESS);
+    vkDestroyCommandPool(&d,tiled_pool,NULL);
     vkDestroyImage(&d,tiled_cube_image,NULL);
     vkFreeMemory(&d,tiled_cube_memory,NULL);
     d.memory.allocate=allocate;

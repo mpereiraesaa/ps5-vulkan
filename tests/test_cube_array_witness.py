@@ -81,6 +81,24 @@ class CubeArrayWitnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "witness identity and shape"):
             validate(self.log, self.receipt, self.artifact)
 
+    def test_tiled_attachment_source_requires_rendered_layer_marker(self):
+        self.artifact["cube_array"]["source"] = "tiled-attachment"
+        with self.assertRaisesRegex(ValueError, "PS5VK_CONSUMER_CUBE_ARRAY_SOURCE"):
+            validate(self.log, self.receipt, self.artifact)
+        self.messages.insert(2,
+            "PS5VK_CONSUMER_CUBE_ARRAY_SOURCE kind=tiled_attachment rendered_layers=12")
+        lines = ["HELLO ps5log/1 title=PPSA99994 app=ps5vk boot=123"]
+        lines.extend(f"{index}\t{index}\tMARK\t{message}"
+                     for index, message in enumerate(self.messages, 1))
+        lines.append(f"BYE seq={len(self.messages)} reason=consumer-cube-array-end")
+        self.log = ("\n".join(lines) + "\n").encode()
+        self.receipt["sha256"] = hashlib.sha256(self.log).hexdigest()
+        self.receipt["last_seq"] = len(self.messages)
+        self.assertEqual(validate(self.log, self.receipt, self.artifact)["mismatches"], 0)
+        self.artifact["cube_array"]["source"] = "linear-upload"
+        with self.assertRaisesRegex(ValueError, "linear upload source"):
+            validate(self.log, self.receipt, self.artifact)
+
     def test_out_of_bounds_view_is_refused(self):
         self.artifact["cube_array"]["base_array_layer"] = 1
         with self.assertRaisesRegex(ValueError, "storage and view range"):

@@ -250,7 +250,14 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  (ps5vk_colour_readback_image(b->image) ||
                   (b->image->info.samples!=VK_SAMPLE_COUNT_1_BIT &&
                    ps5vk_multisampled_color_usage(b->image->info.usage)))) ||
-                ps5vk_array_color_barrier(b)))
+                ps5vk_array_color_barrier(b) ||
+                (ps5vk_tiled_cube_sampled_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                 b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                 b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT &&
+                 op->src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+                 op->dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);
             if(rc!=VK_SUCCESS)return rc;

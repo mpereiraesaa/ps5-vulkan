@@ -145,6 +145,8 @@ def main():
                         help="Build the finite two-cube/six-face sampled-image witness")
     parser.add_argument("--cube-array-base-layer", type=int, choices=(0, 1), default=0,
                         help="Cube witness view base; 1 also tests 13-layer storage")
+    parser.add_argument("--cube-array-tiled-attachment", action="store_true",
+                        help="Fill cube faces as colour attachments before sampling")
     parser.add_argument("--bc-filter-format", choices=__import__("prepare_consumer_bc_filter").FORMATS)
     parser.add_argument("--bc-subresource-profile", choices=__import__("prepare_consumer_bc_subresource").PROFILES)
     args = parser.parse_args()
@@ -160,6 +162,8 @@ def main():
         parser.error("BC filter witness is an independent finite profile")
     if args.cube_array_base_layer and not args.cube_array_witness:
         parser.error("Cube-array base layer requires --cube-array-witness")
+    if args.cube_array_tiled_attachment and not args.cube_array_witness:
+        parser.error("Tiled cube attachment requires --cube-array-witness")
     if args.continuous and args.shared_stage_samplers:
         parser.error("Shared-stage qualification requires the finite consumer")
     if args.continuous and args.single_set_samplers:
@@ -301,6 +305,8 @@ def main():
     if args.cube_array_witness:
         cflags.append("-DCONSUMER_CUBE_ARRAY_WITNESS=1")
         cflags.append(f"-DCONSUMER_CUBE_ARRAY_BASE_LAYER={args.cube_array_base_layer}")
+        if args.cube_array_tiled_attachment:
+            cflags.append("-DCONSUMER_CUBE_ARRAY_TILED_ATTACHMENT=1")
     if args.bc_filter_format:
         subprocess.run([sys.executable, str(ROOT / "tools/prepare_consumer_bc_filter.py"),
                         "--format", args.bc_filter_format, "--out", str(BUILD_DIR)], check=True)
@@ -590,6 +596,8 @@ def main():
                 "layers": 12,
                 "storage_layers": 12 + args.cube_array_base_layer,
                 "base_array_layer": args.cube_array_base_layer,
+                "source": "tiled-attachment" if args.cube_array_tiled_attachment
+                          else "linear-upload",
                 "face_extent": [4, 4],
                 "target_extent": [192, 64],
                 "format": "VK_FORMAT_R8G8B8A8_UNORM",
