@@ -16,6 +16,7 @@
 #include "texture_dma.h"
 #include "upload_commands_ps5.h"
 #include "readback_commands_ps5.h"
+#include "depth_layout.h"
 #include "color_rect_clear.h"
 #include "color_clear.h"
 #include "color_detile.h"
@@ -606,7 +607,7 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     VkFormat colour_format[PS5VK_MAX_ATTACHMENTS]={0};
     VkImageLayout colour_layout[PS5VK_MAX_ATTACHMENTS]={0};
     int colour_role[PS5VK_MAX_ATTACHMENTS]={0};
-    uint32_t depth_attachment=VK_ATTACHMENT_UNUSED;
+    uint32_t depth_attachment=VK_ATTACHMENT_UNUSED,depth_subpass=0;
     VkImageLayout depth_layout=VK_IMAGE_LAYOUT_UNDEFINED;
     for(uint32_t s=0;s<pass->subpass_count;++s) {
         const struct ps5vk_subpass *sp=ps5vk_render_pass_subpass(pass,s);
@@ -649,8 +650,10 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         if(sp->depth.attachment!=VK_ATTACHMENT_UNUSED) {
             if(sp->depth.attachment>=pass->attachment_count){rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
             if(depth_attachment!=VK_ATTACHMENT_UNUSED &&
-               (depth_attachment!=sp->depth.attachment || depth_layout!=sp->depth.layout))
+               (depth_attachment!=sp->depth.attachment || depth_layout!=sp->depth.layout ||
+                pass->stencil.reference[s]!=pass->stencil.reference[depth_subpass]))
                 {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
+            if(depth_attachment==VK_ATTACHMENT_UNUSED)depth_subpass=s;
             depth_attachment=sp->depth.attachment;
             depth_layout=sp->depth.layout;
         }
@@ -684,6 +687,11 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             if(multiview->view_offsets[k]){rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
     }
     struct ps5vk_attachment_plan color_plan[PS5VK_MAX_ATTACHMENTS]={{0}},depth_plan={0};
+    /* The combined depth/stencil attachment: one plan and one layout
+     * sequence per aspect (VK_KHR_separate_depth_stencil_layouts). */
+    struct ps5vk_depth_stencil_plan ds_plan={0};
+    struct ps5vk_depth_stencil_layouts ds_initial={0},ds_reference={0},ds_final={0};
+    int combined_depth=0;
     /* One clear word per colour attachment: the ordered clear before the pass is
      * a whole-surface DMA fill per target, and two attachments may legitimately
      * ask for different values. The plan is per ATTACHMENT, because a subpass
@@ -726,8 +734,21 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     if(depth) {
         const uint32_t a=depth_attachment;
         VkImage image=begin->framebuffer->attachments[a]->image;
-        if(ps5vk_attachment_plan(&pass->attachments[a],image->info.format,depth_layout,
-            VK_TRUE,VK_FALSE,served_samples,&depth_plan)!=VK_SUCCESS ||
+        combined_depth=ps5vk_format_is_combined_depth_stencil(image->info.format);
+        if(combined_depth) {
+            if(!ps5vk_render_pass_depth_stencil_layouts(pass,depth_subpass,a,
+                   &ds_initial.depth,&ds_initial.stencil,&ds_reference.depth,
+                   &ds_reference.stencil,&ds_final.depth,&ds_final.stencil) ||
+               ps5vk_depth_stencil_attachment_plan(&pass->attachments[a],image->info.format,
+                   &ds_initial,&ds_reference,&ds_final,&ds_plan)!=VK_SUCCESS)
+                {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
+            /* The depth half keeps the single-aspect plan's meaning for the
+             * clear below; the stencil half has its own. */
+            depth_plan=(struct ps5vk_attachment_plan){ds_plan.depth_clear,
+                ds_plan.depth_load,ds_plan.depth_store};
+        }
+        if((!combined_depth && ps5vk_attachment_plan(&pass->attachments[a],image->info.format,depth_layout,
+            VK_TRUE,VK_FALSE,served_samples,&depth_plan)!=VK_SUCCESS) ||
             image->info.extent.width!=begin->framebuffer->width ||
             image->info.extent.height!=begin->framebuffer->height){rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
         if(depth_plan.clear) {
@@ -740,6 +761,14 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 begin->render_area.extent.height!=begin->framebuffer->height)
                 {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
         }
+        /* A stencil clear is a whole-plane fill as well, so it needs the
+         * whole render area just like the depth one. */
+        if(ds_plan.stencil_clear &&
+           (begin->clear_count<=a ||
+            begin->render_area.offset.x || begin->render_area.offset.y ||
+            begin->render_area.extent.width!=begin->framebuffer->width ||
+            begin->render_area.extent.height!=begin->framebuffer->height))
+            {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
     }
     /* Ordered body of the pass. vkCmdExecuteCommands carries no work of its
      * own: it NAMES children, and each name expands here into that child's own
@@ -913,7 +942,17 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
         }
     }
-    if(depth) {
+    if(depth && combined_depth) {
+        /* Each aspect is carried from its own initial layout to its own final
+         * one; UNDEFINED discards only that aspect. */
+        VkImage ds_image=begin->framebuffer->attachments[depth_attachment]->image;
+        rc=ps5vk_layout_transition_aspects(&j->layouts,ds_image,VK_IMAGE_ASPECT_DEPTH_BIT,
+            ds_initial.depth,ds_final.depth);
+        if(rc==VK_SUCCESS)
+            rc=ps5vk_layout_transition_aspects(&j->layouts,ds_image,VK_IMAGE_ASPECT_STENCIL_BIT,
+                ds_initial.stencil,ds_final.stencil);
+        if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
+    } else if(depth) {
         rc=ps5vk_layout_transition(&j->layouts,begin->framebuffer->attachments[depth_attachment]->image,
             pass->attachments[depth_attachment].initialLayout,
             pass->attachments[depth_attachment].finalLayout);
@@ -959,11 +998,46 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         if(!ps5vk_depth_attachment_clear_word(depth_image->info.format,
             begin->clears[depth_attachment].depthStencil.depth,&value))
             {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=__LINE__;goto fail;}
+        /* A combined surface's depth clear fills the depth plane only; the
+         * stencil plane follows it and has its own load operation. */
+        if(combined_depth) {
+            struct ps5vk_depth_stencil_layout planes;
+            if(ps5vk_depth_stencil_layout(depth_image->info.extent.width,
+                   depth_image->info.extent.height,&planes) || planes.bytes>bytes)
+                {rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}
+            bytes=planes.depth.bytes;
+        }
         cache(address,(size_t)bytes);
         size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,bytes,value);
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
         n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
+    }
+    if(depth && combined_depth && ds_plan.stencil_clear) {
+        /* The stencil plane holds one byte per texel, so a uniform clear is
+         * the clear value's low byte repeated through every dword - tiling
+         * invariant exactly like the depth fill. Vulkan takes the stencil
+         * clear value's low eight bits for an 8-bit stencil aspect. */
+        VkImage ds_image=begin->framebuffer->attachments[depth_attachment]->image;
+        void *address;VkDeviceSize bytes;
+        struct ps5vk_depth_stencil_layout planes;
+        rc=ps5vk_image_span(d,ds_image,&address,&bytes);
+        if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
+        if(ps5vk_depth_stencil_layout(ds_image->info.extent.width,
+               ds_image->info.extent.height,&planes) || planes.bytes>bytes)
+            {rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}
+        const uint32_t byte=begin->clears[depth_attachment].depthStencil.stencil&0xffu;
+        const uint32_t word=byte*UINT32_C(0x01010101);
+        uint8_t *stencil=(uint8_t *)address+planes.stencil_offset;
+        cache(stencil,(size_t)planes.stencil_bytes);
+        size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)stencil,
+            planes.stencil_bytes,word);
+        if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
+        n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+        if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
+        ps5log_printf(PS5LOG_MARK,"PS5VK_STENCIL_CLEAR_PREPARED serial=%llu attachment=%u value=%02x bytes=%llu",
+            (unsigned long long)j->serial,depth_attachment,byte,
+            (unsigned long long)planes.stencil_bytes);
     }
     /* A RESOLVE target is an attachment of the pass like any other, so Vulkan's
      * load operation applies to it: when the pass declares CLEAR for the
@@ -1991,8 +2065,11 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
             if(!image || ps5vk_image_span(d,image,&source,&source_bytes)!=VK_SUCCESS ||
                ps5vk_buffer_span(d,j->readback.target[r].buffer,0,VK_WHOLE_SIZE,
                     &destination,&destination_bytes)!=VK_SUCCESS ||
-               ps5vk_readback_detile(image,(size_t)j->readback.target[r].layer_stride,
-                    destination,(size_t)destination_bytes,source,source_bytes))
+               (j->readback.target[r].aspect ?
+                ps5vk_depth_stencil_readback_detile(image,j->readback.target[r].aspect,
+                    destination,(size_t)destination_bytes,source,source_bytes) :
+                ps5vk_readback_detile(image,(size_t)j->readback.target[r].layer_stride,
+                    destination,(size_t)destination_bytes,source,source_bytes)))
                 return VK_ERROR_DEVICE_LOST;
             /* This bounded implementation performs the transfer-copy result
              * publication on the CPU only after exact GPU completion. The

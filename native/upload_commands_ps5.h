@@ -88,6 +88,20 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 flush(address,(size_t)bytes);
             }
             n=ps5vk_graphics_acquire(*cursor,(size_t)(end-*cursor));
+        } else if(op->type==PS5VK_IMAGE_BARRIER &&
+                  ps5vk_depth_stencil_attachment_image(op->image_barrier.image)) {
+            /* The combined depth/stencil attachment moves only the aspects the
+             * barrier names. The recorder already refused the per-aspect forms
+             * a device without separateDepthStencilLayouts may not use, so the
+             * executor re-checks the shape and lets the per-aspect transaction
+             * decide whether each old layout matches. The acquire is the same
+             * conservative cache operation every other image barrier emits. */
+            const VkImageMemoryBarrier *b=&op->image_barrier;
+            if(!ps5vk_depth_stencil_barrier(b,VK_TRUE))return VK_ERROR_FEATURE_NOT_PRESENT;
+            VkResult rc=ps5vk_layout_transition_aspects(layouts,b->image,
+                b->subresourceRange.aspectMask,b->oldLayout,b->newLayout);
+            if(rc!=VK_SUCCESS)return rc;
+            n=ps5vk_graphics_acquire(*cursor,(size_t)(end-*cursor));
         } else if(op->type==PS5VK_IMAGE_BARRIER) {
             const VkImageMemoryBarrier *b=&op->image_barrier;
             if(!((b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
