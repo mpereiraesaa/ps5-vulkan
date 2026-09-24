@@ -21,12 +21,14 @@ class SubgroupProfileContract(unittest.TestCase):
         cls.matrix = json.loads((ROOT / "conformance_inventory/dxvk_v262_matrix.json").read_text())
         cls.profile_source = (ROOT / "src/physical_device_profile.h").read_text()
         cls.device_source = (ROOT / "src/vk_device.c").read_text()
+        cls.dispatch_source = (ROOT / "src/vk_dispatch.c").read_text()
 
     def validate(self, contract=None, report=None, matrix=None, profile_source=None,
-                 device_source=None):
+                 device_source=None, dispatch_source=None):
         checker.check_reporting(contract or self.contract, report or self.report,
                                 matrix or self.matrix, profile_source or self.profile_source,
-                                device_source or self.device_source)
+                                device_source or self.device_source,
+                                dispatch_source or self.dispatch_source)
 
     def test_pinned_sources_and_public_gate(self):
         checker.check(ROOT)
@@ -36,6 +38,14 @@ class SubgroupProfileContract(unittest.TestCase):
         report["profiles"]["compute"]["apiVersion"] = 4202496
         with self.assertRaisesRegex(AssertionError, "API version"):
             self.validate(report=report)
+
+    def test_core_11_command_alias_requires_reaudit(self):
+        dispatch = self.dispatch_source.replace(
+            "ENTRY(vkGetPhysicalDeviceFeatures2KHR, INSTANCE),",
+            "ENTRY(vkGetPhysicalDeviceFeatures2KHR, INSTANCE),\n"
+            "    ENTRY(vkGetPhysicalDeviceFeatures2, INSTANCE),")
+        with self.assertRaisesRegex(AssertionError, "core command dispatch"):
+            self.validate(dispatch_source=dispatch)
 
     def test_subgroup_promotion_requires_reaudit(self):
         matrix = copy.deepcopy(self.matrix)

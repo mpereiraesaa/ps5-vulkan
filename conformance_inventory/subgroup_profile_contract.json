@@ -26,6 +26,34 @@
       "cts_requirements": ["subgroup API 1.1", "supportedStages for the tested stage", "supportedOperations BALLOT", "subgroupBroadcastDynamicId", "SPIR-V 1.5 for nonconstant ID"]
     }
   },
+  "api11_command_gate": {
+    "registry_feature": "VK_BASE_VERSION_1_1",
+    "core_commands": [
+      "vkEnumerateInstanceVersion",
+      "vkBindBufferMemory2",
+      "vkBindImageMemory2",
+      "vkGetDeviceGroupPeerMemoryFeatures",
+      "vkCmdSetDeviceMask",
+      "vkEnumeratePhysicalDeviceGroups",
+      "vkGetImageMemoryRequirements2",
+      "vkGetBufferMemoryRequirements2",
+      "vkGetImageSparseMemoryRequirements2",
+      "vkGetPhysicalDeviceFeatures2",
+      "vkGetPhysicalDeviceProperties2",
+      "vkGetPhysicalDeviceFormatProperties2",
+      "vkGetPhysicalDeviceImageFormatProperties2",
+      "vkGetPhysicalDeviceQueueFamilyProperties2",
+      "vkGetPhysicalDeviceMemoryProperties2",
+      "vkGetPhysicalDeviceSparseImageFormatProperties2",
+      "vkTrimCommandPool",
+      "vkGetDeviceQueue2",
+      "vkGetPhysicalDeviceExternalBufferProperties",
+      "vkGetPhysicalDeviceExternalFenceProperties",
+      "vkGetPhysicalDeviceExternalSemaphoreProperties"
+    ],
+    "current_core_dispatch": [],
+    "note": "KHR-suffixed entry points do not provide the required core command names; implementing the names alone would not establish full Vulkan 1.1 conformance."
+  },
   "properties": {
     "query": "VkPhysicalDeviceSubgroupProperties via VkPhysicalDeviceProperties2",
     "core_1_1_alias": "VkPhysicalDeviceVulkan11Properties",
