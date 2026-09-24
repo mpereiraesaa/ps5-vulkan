@@ -63,7 +63,7 @@ official conformance process remain separate obligations.
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
 | 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
 
-### T07 combined diagnostic status (2026-09-24)
+### T07 combined diagnostic status before public reporting (2026-09-24)
 
 The BC diagnostic route passed three focused original selections: 48/48
 compressed-texture sampling, 128/128 compatible blits and 74/74 copies,
@@ -85,6 +85,26 @@ that witness has not run on hardware. A 577-case measurement selection now
 includes all 70 applicable original extended-gather leaves alongside the 507
 frozen cases, but it has not run. The complete public feature, frozen CTS and
 combined acceptance audit remain pending.
+
+### T07 public reporting candidate (2026-09-24)
+
+The ordinary build in the T07 candidate now reports `imageCubeArray`,
+`textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise` without diagnostic switches. Its public SDK capability
+probe passed with eboot SHA-256
+`c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae`
+in run `20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2`.
+That probe observed 26/62 requested values; it checks reporting, not execution.
+
+The frozen selection now includes 829 original upstream cases. The ordinary
+CTS package has eboot SHA-256
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`
+and case-list SHA-256
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+Its strict PS5 acceptance remains pending. The four T07 rows therefore remain
+blocked on the CTS axis, and the checked DXVK matrix stays at 20/62 ready with
+42 blockers. [VALIDATION.md](../VALIDATION.md#t07-public-reporting-candidate-2026-09-24)
+separates the candidate from the earlier diagnostic runs.
 
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership

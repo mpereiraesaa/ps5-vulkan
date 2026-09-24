@@ -112,14 +112,13 @@ indirect/indexed draw features `drawIndirectFirstInstance`,
 `shaderCullDistance` pair, `fragmentStoresAndAtomics`, `dualSrcBlend`,
 `independentBlend`, `sampleRateShading`, `uniformBufferStandardLayout`,
 base `vulkanMemoryModel` and bounded `bufferDeviceAddress` through their Vulkan
-1.0 KHR routes. The blend
-features draw into two colour attachments;
-sample-rate shading runs once per sample at 2x and 4x. The four
-rasterization and viewport features `depthClamp`, `depthBiasClamp`,
-`fillModeNonSolid` and `multiViewport`. Multiview is queried through its
+1.0 KHR routes, and the four rasterization and viewport features
+`depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`. The blend
+features draw into two colour attachments; sample-rate shading runs once per
+sample at 2x and 4x. Multiview is queried through its
 explicit KHR route. `geometryShader` and `tessellationShader` are positive on
 the API, implementation and CTS axes but their native axis is still
-`reported-not-executed`, so they stay among the other 43 requirements that
+`reported-not-executed`, so they stay among the other 42 requirements that
 remain blockers, together with the API-version requirement. This is an
 implementation roadmap, not a DXVK compatibility claim.
 
