@@ -5557,5 +5557,25 @@ strict receipt SHA-256
 `4d4ae7cb6f483ceae5847e69a6a3a6e2f996042f644fbcc753bd7d79149f8d10`;
 QPA SHA-256
 `f96d8cd5edebe3b6326c51932856f84533cd528b2b24e64362c7ecc74f34daf6`.
-The public sampler feature and KHR extension remain disabled. Rerun the W
-leaves after the 3D upload blocker is fixed.
+Six subsequent default-off SDK draws tested 3D W mirror clamp without that
+CTS upload path. Nearest and linear filtering each used W coordinates below
+zero, inside the image and above one. The strict CPU/readback oracle matched
+all 373,248 pixels in each draw (zero mismatches); each verifier reported a
+clean lifecycle. The table binds each result to its run, exact eboot and
+source-log SHA-256. Firmware was not re-probed for these runs.
+
+| Case | Filter and W coordinate | Run ID | Eboot SHA-256 | Source-log SHA-256 |
+| --- | --- | --- | --- | --- |
+| 20 | nearest, -0.25 | `20260924T215415552Z_PPSA99994_ps5vk_0xe517f2f1704` | `d0319cafd2af347c4e764ea87e4596b4886beeaa48d806e5affe435786060295` | `0f60ef1c40602ba1c60bc0ae19355ad0e798c260bbb20ebadcc73ee6594e4d64` |
+| 21 | nearest, 0.25 | `20260924T220203376Z_PPSA99994_ps5vk_0xebe6b628f46` | `f55991e7cc49a15ecd17dcdde5b923957ce7858fdf0134c5e7b675873edd6c2c` | `450a2d48ca7b4b15df347417f4a6fcfd661b83c548600a18956be3948ae9667e` |
+| 22 | nearest, 1.25 | `20260924T220213923Z_PPSA99994_ps5vk_0xec0dff2da2b` | `02b71c58dfff32fe6471b063e49cd30cc433209aea8fecf8b23383c3b8b8f848` | `e320118de014abb890ad0c143cd68649ffba35b27c4da84c0aa237b538a31d45` |
+| 23 | linear, -0.375 | `20260924T215647835Z_PPSA99994_ps5vk_0xe74f3dab544` | `b2e07979c046c4e7d5d3eb5f5ce23a8f8ffa5900e05e920ee73c9f681752b744` | `e4c5277266baf0c85767bb00079a629b6d27ea93ecf73a3965705085cc494ac6` |
+| 24 | linear, 0.375 | `20260924T220222966Z_PPSA99994_ps5vk_0xec2faf6f3b7` | `889455cad4f286701dc3b7dcbf134eaa87bf6c537c56f139b1b7fef2fcc38b27` | `d9f25c50e65fafcf5921a9ec5942441ff5c903a769423aef3d525c3cc789773f` |
+| 25 | linear, 1.25 | `20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69` | `377e0711d350702fdc2f34b76a44979625f0ce9c58544cd158c6ab7d0bc60bdc` | `3673ebfe533f8581f95a32315a27412d827fe149899e9db8de27c32b22f95362` |
+
+These draws establish the bounded W path's native evidence, so the DXVK row's
+native axis is now `native-evidence`. The two original CTS leaves still have
+the pre-sampling `Fail` described above and need a rerun after the 3D upload
+blocker is fixed; no CTS PASS is claimed. The ordinary public
+`samplerMirrorClampToEdge` feature and `VK_KHR_sampler_mirror_clamp_to_edge`
+extension remain disabled, so the DXVK requirement remains blocked.

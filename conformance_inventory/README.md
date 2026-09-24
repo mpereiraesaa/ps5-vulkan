@@ -351,9 +351,11 @@ The T09 `hostQueryReset` row is public through `VK_EXT_host_query_reset` with
 an ordinary SDK probe and shipping native reset/reuse witness. The
 `imagelessFramebuffer` row has a bounded, default-off implementation and native
 witness but remains an API blocker.
-`samplerMirrorClampToEdge` has eight passing U/V draw witnesses; its native
-axis remains a blocker because W has not reached sampling in the focused 3D
-CTS attempt. These diagnostic runs do not increase the satisfied count.
+`samplerMirrorClampToEdge` has eight passing U/V and six passing W draw
+witnesses, so its native axis is `native-evidence`. The two focused original
+3D CTS leaves failed in image upload before W sampling; neither leaf has a PASS.
+Its ordinary public feature and KHR extension remain disabled, so these
+diagnostic runs do not increase the satisfied count.
 
 T04's implementation and focused native validation are
 complete and merged (PR #158), but its `geometryShader` and
