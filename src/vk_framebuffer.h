@@ -50,6 +50,30 @@ static inline VkFramebuffer ps5vk_framebuffer_original(VkFramebuffer fb)
 {
     return fb && fb->original ? fb->original : fb;
 }
+/* Highest view used by any colour, resolve, depth or input reference to this slot. */
+static inline uint32_t ps5vk_framebuffer_attachment_view_count(
+    VkRenderPass pass, uint32_t attachment)
+{
+    const struct ps5vk_render_pass_multiview *multiview = &pass->multiview;
+    if (!multiview->present) return 0;
+    uint32_t views = 0;
+    for (uint32_t s = 0; s < multiview->subpass_count; ++s) {
+        const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, s);
+        VkBool32 used = subpass->depth.attachment == attachment;
+        for (uint32_t c = 0; c < subpass->color_count; ++c)
+            used |= subpass->color[c].attachment == attachment;
+        for (uint32_t c = 0; c < subpass->resolve_count; ++c)
+            used |= subpass->resolve[c].attachment == attachment;
+        for (uint32_t i = 0; i < subpass->input_count; ++i)
+            used |= pass->inputs[subpass->input_first + i].attachment == attachment;
+        if (!used) continue;
+        const uint32_t mask = multiview->view_masks[s];
+        for (uint32_t bit = 0; bit < 32u; ++bit)
+            if ((mask & (UINT32_C(1) << bit)) && views < bit + 1u)
+                views = bit + 1u;
+    }
+    return views;
+}
 /* Validates a begin-time view against the creation-time imageless contract.
  * Header-local so command/queue host slices do not need the object frontend. */
 static inline VkBool32 ps5vk_framebuffer_attachment_valid(VkFramebuffer fb,
@@ -72,21 +96,9 @@ static inline VkBool32 ps5vk_framebuffer_attachment_valid(VkFramebuffer fb,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     if (!(view->image->info.usage & usage) || fb->width > width || fb->height > height)
         return VK_FALSE;
-    if (pass->multiview.present) {
-        uint32_t views = 0;
-        for (uint32_t s = 0; s < pass->multiview.subpass_count; ++s) {
-            const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, s);
-            if (!(subpass->color_count && subpass->color[0].attachment == attachment) &&
-                subpass->depth.attachment != attachment &&
-                !(subpass->resolve_count && subpass->resolve[0].attachment == attachment))
-                continue;
-            const uint32_t mask = pass->multiview.view_masks[s];
-            for (uint32_t bit = 0; bit < 32u; ++bit)
-                if (mask & (UINT32_C(1) << bit)) views = bit + 1u;
-        }
-        if (views && (view->range.baseArrayLayer || view->range.layerCount < views))
-            return VK_FALSE;
-    }
+    const uint32_t views = ps5vk_framebuffer_attachment_view_count(pass, attachment);
+    if (views && (view->range.baseArrayLayer || view->range.layerCount < views))
+        return VK_FALSE;
     if (!fb->imageless) return VK_TRUE;
     if ((view->image->info.flags & fb->image_flags[attachment]) != fb->image_flags[attachment] ||
         (view->image->info.usage & fb->image_usage[attachment]) != fb->image_usage[attachment] ||
