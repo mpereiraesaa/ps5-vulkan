@@ -4685,6 +4685,27 @@ vertex and fragment Broadcast draws remain unproven on hardware. These
 diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
 
+The host `VkPhysicalDeviceProperties2KHR` contract now writes zero to all four
+`VkPhysicalDeviceSubgroupProperties` fields for this Vulkan 1.0 profile, even
+when the caller supplied nonzero prior values. This closes an ambiguous public
+query; it does not measure subgroup size, stages or operations on hardware.
+Those values, a legal Vulkan 1.1 or 1.2 route, the feature bits and targeted
+native execution evidence remain prerequisites to subgroup promotion. The
+original subgroup CTS cases remain ineligible under the public API 1.0.
+
+The unchanged frozen upstream acceptance selection on this query-only change
+passed 507/507 original cases with zero Fail, NotSupported, missing, unexpected
+or duplicate results. The strict receipt verified the signed eboot SHA-256
+`c88bb1a66b8f8690b833fd74e9a3ed99a8769dc576731265042014d48a516f01`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`a09dfd8ba9483c26cb388f99196bab6c69b552fee42c3ad40110e4bb3af14536`
+for run `run-623240048430401`. The title closed, and the previously accepted
+payload was restored. This proves neutrality for the selected Vulkan 1.0 CTS
+suite; it includes no applicable original subgroup leaf. The receipt does not
+record firmware, so this run makes no new firmware claim.
+
 The focused CTS package now links and registers the unchanged original
 `subgroups.ballot_broadcast` and `subgroups.arithmetic` factories, but the
 frozen 507-case acceptance selection still contains no subgroup leaf. A
