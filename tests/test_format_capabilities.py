@@ -176,7 +176,10 @@ class TestFormatCapabilities(unittest.TestCase):
             name = self.names[row["format"]]
             if row["capabilities"] & (CAP["SAMPLED_IMAGE"] | CAP["SAMPLED_IMAGE_LINEAR"]):
                 self.assertTrue(row["descriptorFormatWord"], name)
-                self.assertTrue(row["bytesPerTexel"], name)
+                self.assertTrue(
+                    row["bytesPerTexel"] or
+                    (row["blockWidth"] > 1 and row["blockHeight"] > 1 and
+                     row["bytesPerBlock"] > 0), name)
                 self.assertEqual(len(row["selectors"]), 4, name)
 
     def test_linear_filtering_never_applies_to_integer_formats(self):
@@ -284,18 +287,21 @@ class TestFormatCapabilities(unittest.TestCase):
         classification = {row["reason"]: row for row in self.plan["blocker_classification"]}
         total = sum(row["cells"] for row in classification.values())
         summary = self.plan["summary"]
-        self.assertEqual(total + summary["satisfied_by_this_task"],
+        self.assertEqual(total + summary["satisfied_by_this_task"] +
+                         summary["additional_satisfied_by_t07"],
                          summary["mandatory_cells_in_scope"])
         self.assertEqual(
             total - classification["implemented-pending-physical-diagnostic"]["cells"],
             summary["blocked_without_backend"])
         self.assertEqual(summary["mandatory_cells_in_scope"],
                          summary["satisfied_by_this_task"]
+                         + summary["additional_satisfied_by_t07"]
                          + summary["ready_pending_physical_validation"]
                          + summary["blocked_without_backend"])
         blockers = [row for row in self.format_rows if row["verdict"] == "blocker"]
         self.assertEqual(len(blockers), summary["mandatory_cells_in_scope"] -
-                         summary["satisfied_by_this_task"])
+                         summary["satisfied_by_this_task"] -
+                         summary["additional_satisfied_by_t07"])
         by_reason = {}
         for name, row in classification.items():
             features = BLOCKER_REASON_FEATURES[name] if name != "profile-has-no-image-model" else None

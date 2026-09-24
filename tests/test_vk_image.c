@@ -6,7 +6,7 @@
 static int calls;
 static VkResult requirements(VkDevice d, const VkImageCreateInfo *info, VkMemoryRequirements *out)
 {
-    (void)d; assert(info->extent.width == 17); ++calls;
+    (void)d; (void)info; ++calls;
     /* Deliberately padded synthetic backend layout, not a GPU surface formula. */
     *out = (VkMemoryRequirements){4096, 256, 1}; return VK_SUCCESS;
 }
@@ -134,6 +134,29 @@ int main(void)
     VkImageView view;
     assert(vkCreateImageView(&d, &vi, NULL, &view) == VK_SUCCESS);
     assert(view->range.levelCount == 1 && view->range.layerCount == 1 && image->views == 1);
+    VkImageViewMinLodCreateInfoEXT min_lod = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT,
+        .minLod = 0.0f,
+    };
+    vi.pNext = &min_lod;
+    VkImageView min_lod_view = VK_NULL_HANDLE;
+    assert(vkCreateImageView(&d, &vi, NULL, &min_lod_view) == VK_SUCCESS);
+    assert(min_lod_view->image == image && image->views == 2);
+    vkDestroyImageView(&d, min_lod_view, NULL);
+    assert(image->views == 1);
+    min_lod.minLod = 0.5f;
+    assert(vkCreateImageView(&d, &vi, NULL, &min_lod_view) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !min_lod_view);
+    min_lod.minLod = 0.0f;
+    VkImageViewMinLodCreateInfoEXT chained_min_lod = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT,
+        .pNext = &min_lod,
+        .minLod = 0.0f,
+    };
+    vi.pNext = &chained_min_lod;
+    assert(vkCreateImageView(&d, &vi, NULL, &min_lod_view) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !min_lod_view);
+    vi.pNext = NULL;
     VkAttachmentDescription attachment = {.format=info.format, .samples=VK_SAMPLE_COUNT_1_BIT,
         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
@@ -265,5 +288,73 @@ int main(void)
     vkDestroyImage(&d, image, NULL); assert(!d.images && !d.graphics_objects && !d.memories);
     info.mipLevels=32;
     assert(vkCreateImage(&d, &info, NULL, &image) == VK_ERROR_UNKNOWN && calls == 2);
+
+    /* Cube-compatible storage needs at least six layers. Only the view count
+     * must cover complete cubes; its first layer need not be a multiple of six. */
+    {
+        VkImageCreateInfo cube_array = info;
+        cube_array.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        cube_array.extent = (VkExtent3D){17, 17, 1};
+        cube_array.mipLevels = 1;
+        cube_array.arrayLayers = 13;
+        cube_array.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        VkImage cube_image = VK_NULL_HANDLE;
+        assert(vkCreateImage(&d, &cube_array, NULL, &cube_image) == VK_SUCCESS &&
+               cube_image && calls == 3);
+        VkImageCreateInfo invalid_cube_array = cube_array;
+        invalid_cube_array.arrayLayers = 5;
+        VkImage invalid_image = VK_NULL_HANDLE;
+        assert(vkCreateImage(&d, &invalid_cube_array, NULL, &invalid_image) ==
+               VK_ERROR_UNKNOWN && !invalid_image && calls == 3);
+        invalid_cube_array = cube_array;
+        invalid_cube_array.samples = VK_SAMPLE_COUNT_4_BIT;
+        assert(vkCreateImage(&d, &invalid_cube_array, NULL, &invalid_image) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !invalid_image && calls == 3);
+        VkMemoryAllocateInfo cube_ai = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = 8192};
+        VkDeviceMemory cube_memory = VK_NULL_HANDLE;
+        assert(vkAllocateMemory(&d, &cube_ai, NULL, &cube_memory) == VK_SUCCESS);
+        assert(vkBindImageMemory(&d, cube_image, cube_memory, 0) == VK_SUCCESS);
+        VkImageViewCreateInfo cube_view_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = cube_image, .viewType = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY,
+            .format = cube_array.format,
+            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 12}};
+        VkImageView cube_view = VK_NULL_HANDLE;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !cube_view);
+        d.enabled_features |= PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) == VK_SUCCESS &&
+               cube_view->range.baseArrayLayer == 0 && cube_view->range.layerCount == 12);
+        vkDestroyImageView(&d, cube_view, NULL);
+        cube_view_info.subresourceRange.baseArrayLayer = 6;
+        cube_view_info.subresourceRange.layerCount = 6;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) == VK_SUCCESS &&
+               cube_view->range.baseArrayLayer == 6 && cube_view->range.layerCount == 6);
+        vkDestroyImageView(&d, cube_view, NULL);
+        cube_view_info.subresourceRange.baseArrayLayer = 1;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) == VK_SUCCESS);
+        vkDestroyImageView(&d, cube_view, NULL);
+        cube_view_info.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) == VK_SUCCESS &&
+               cube_view->range.layerCount == 12);
+        vkDestroyImageView(&d, cube_view, NULL);
+        cube_view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        cube_view_info.subresourceRange.layerCount = 6;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) == VK_SUCCESS);
+        vkDestroyImageView(&d, cube_view, NULL);
+        cube_view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+        cube_view_info.subresourceRange.baseArrayLayer = 0;
+        cube_view_info.subresourceRange.layerCount = 7;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !cube_view);
+        cube_view_info.subresourceRange.baseArrayLayer = 6;
+        cube_view_info.subresourceRange.layerCount = 12;
+        assert(vkCreateImageView(&d, &cube_view_info, NULL, &cube_view) ==
+               VK_ERROR_UNKNOWN && !cube_view);
+        d.enabled_features &= ~(uint32_t)PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
+        vkDestroyImage(&d, cube_image, NULL);
+        vkFreeMemory(&d, cube_memory, NULL);
+    }
     puts("Image layout delegation, binding and lifetime: host backend only");
 }

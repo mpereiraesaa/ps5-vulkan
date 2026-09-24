@@ -1,9 +1,9 @@
 /*
  * Vulkan 1.0 image copy and colour image clear.
  *
- * Implemented role: RGBA8 with TRANSFER_SRC|TRANSFER_DST usage, backed by the
- * padded linear layout (ps5vk_texture_layout). Copy and clear are row copies or
- * row memsets on host-visible direct memory, executed in submission order at
+ * RGBA8 and BC transfers share padded linear mip/layer storage. Copy and
+ * clear execute as bounded row copies or row memsets over host-visible direct
+ * memory, in submission order at
  * the head of the queue chain. Every write flushes the exact bound destination
  * allocation range before a following GPU segment.
  */
@@ -11,6 +11,9 @@
 #include "vk_image.h"
 #include "color_clear.h"
 #include "color_detile.h"
+#include "depth_detile.h"
+#include "bc_blit_decode.h"
+#include "texture_copy.h"
 #include "texture_layout.h"
 #include <stdint.h>
 #include <string.h>
@@ -18,8 +21,8 @@
 #define INVALID VK_ERROR_UNKNOWN
 
 /* Return non-zero for overlap or an address-range representation failure.  The
- * implementation conservatively rejects distinct Vulkan resources backed by
- * overlapping allocation spans; its row copies may therefore use memcpy. */
+ * legacy paths compare allocation spans; BC copies compare the actual rows
+ * so disjoint regions in the same allocation remain valid. */
 static int spans_overlap(const void *a, VkDeviceSize a_bytes,
     const void *b, VkDeviceSize b_bytes)
 {
@@ -107,6 +110,44 @@ static int transfer_role_destination(VkImage image)
         (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 }
 
+/* A BC blit reads the same packed mip chain used by sampled image storage.
+ * Keep this separate from the one-level upload/readback executor predicate. */
+static int bc_blit_source(VkImage image)
+{
+    if (!image) return 0;
+    const VkImageCreateInfo *i = &image->info;
+    const VkImageUsageFlags allowed = VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return ps5vk_texture_format_block_compressed(i->format) &&
+        i->imageType == VK_IMAGE_TYPE_2D && i->tiling == VK_IMAGE_TILING_OPTIMAL &&
+        i->extent.depth == 1 && i->mipLevels && i->mipLevels <= PS5VK_MAX_TEXTURE_MIP_LEVELS &&
+        i->arrayLayers && i->samples == VK_SAMPLE_COUNT_1_BIT &&
+        (i->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) && !(i->usage & ~allowed);
+}
+
+static VkExtent3D bc_blit_mip_extent(VkImage image, uint32_t mip)
+{
+    const uint32_t width = image->info.extent.width >> mip;
+    const uint32_t height = image->info.extent.height >> mip;
+    return (VkExtent3D){width ? width : 1, height ? height : 1, 1};
+}
+
+static int bc_blit_destination(VkImage image)
+{
+    if (ps5vk_linear_staging_image(image)) return 1;
+    if (!image) return 0;
+    const VkImageCreateInfo *i = &image->info;
+    const VkImageUsageFlags allowed = VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    /* These roles share padded linear backing. An attachment instead has
+     * tiled color storage and must not be addressed by this executor. */
+    return (i->format == VK_FORMAT_R8G8B8A8_UNORM || i->format == VK_FORMAT_R8G8B8A8_SRGB) &&
+        i->imageType == VK_IMAGE_TYPE_2D && i->tiling == VK_IMAGE_TILING_OPTIMAL &&
+        i->extent.depth == 1 && i->mipLevels && i->mipLevels <= PS5VK_MAX_TEXTURE_MIP_LEVELS &&
+        i->arrayLayers && i->samples == VK_SAMPLE_COUNT_1_BIT &&
+        (i->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) && !(i->usage & ~allowed);
+}
+
 /* Which executor owns a recorded image operation. Exactly one domain owns an
  * operation, so the pure transfer role's row memcpy and the linear frontend's
  * colour readback can never both act on the same recording. */
@@ -115,6 +156,8 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
     if (!op) return PS5VK_IMAGE_DOMAIN_NONE;
     switch (op->type) {
     case PS5VK_COPY_IMAGE:
+        if (ps5vk_bc_linear_image(op->image_source) &&
+            ps5vk_bc_linear_image(op->image_destination)) return PS5VK_IMAGE_DOMAIN_LINEAR;
         /* A linear staging destination is the pinned host readback: its source
          * must be the colour attachment whose tiled surface is detiled below.
          * Any other combination is not an implemented copy at all. */
@@ -131,15 +174,25 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
         /* An upload into the colour-attachment shape that declares a transfer
          * destination is frontend work for the same reason the pure transfer
          * role is: padded linear memory the graphics backend never touches. */
-        return (ps5vk_pure_transfer_image(op->copy_image) ||
+        return (ps5vk_d32_gather_image(op->copy_image) ||
+                ps5vk_bc_linear_image(op->copy_image) ||
+                ps5vk_rgba_linear_image(op->copy_image) ||
                 ps5vk_colour_transfer_image(op->copy_image)) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_COPY_IMAGE_BUFFER:
-        return (ps5vk_pure_transfer_image(op->copy_image) ||
+        return (ps5vk_bc_linear_image(op->copy_image) ||
+                ps5vk_rgba_linear_image(op->copy_image) ||
                 ps5vk_storage_image(op->copy_image)) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
+    case PS5VK_BLIT_BC_TO_RGBA8:
+        return bc_blit_source(op->image_source) &&
+            bc_blit_destination(op->image_destination) ?
+            PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_IMAGE_BARRIER:
-        return (ps5vk_pure_transfer_image(op->image_barrier.image) ||
+        return (ps5vk_d32_gather_barrier(&op->image_barrier) ||
+                ps5vk_bc_linear_image(op->image_barrier.image) ||
+                ps5vk_rgba_linear_image(op->image_barrier.image) ||
+                ps5vk_pure_transfer_image(op->image_barrier.image) ||
                 ps5vk_linear_staging_image(op->image_barrier.image) ||
                 ps5vk_storage_image(op->image_barrier.image)) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
@@ -149,7 +202,7 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
 }
 
 /* Frontend work of the linear domain: image/buffer transfers over the padded
- * linear layout, layout bookkeeping for the roles that have no GPU stage, and
+ * linear layout, ordered layout bookkeeping for linear storage, and
  * the colour-attachment readback copy whose detile runs in recorded order after
  * the producing submission completed. The tiled colour-attachment role itself
  * keeps its GPU prelude/postlude path and the sampled role keeps its upload
@@ -166,6 +219,140 @@ static int layout_is_transfer_destination(VkImageLayout layout)
 { return layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL || layout == VK_IMAGE_LAYOUT_GENERAL; }
 
 
+/* BC image copies preserve block bytes; equal block sizes are compatible even
+ * when the sampled interpretation differs. Each side uses its own mip pitch. */
+static int bc_image_copy_plan(VkImage source, VkDeviceSize source_bytes,
+    VkImage destination, VkDeviceSize destination_bytes, const VkImageCopy *r,
+    struct ps5vk_texture_copy *src, struct ps5vk_texture_copy *dst)
+{
+    if (r->srcSubresource.layerCount != r->dstSubresource.layerCount) return 0;
+    const VkBufferImageCopy sr = {.imageSubresource=r->srcSubresource,
+        .imageOffset=r->srcOffset,.imageExtent=r->extent};
+    const VkBufferImageCopy dr = {.imageSubresource=r->dstSubresource,
+        .imageOffset=r->dstOffset,.imageExtent=r->extent};
+    return ps5vk_texture_copy_plan_for_image(source,UINT64_MAX,source_bytes,&sr,src)==VK_SUCCESS &&
+        ps5vk_texture_copy_plan_for_image(destination,UINT64_MAX,destination_bytes,&dr,dst)==VK_SUCCESS &&
+        src->row_bytes==dst->row_bytes && src->rows==dst->rows && src->slices==dst->slices;
+}
+
+static VkDeviceSize bc_image_copy_span(const struct ps5vk_texture_copy *p)
+{
+    /* The planner already checked the complete sum for overflow and bounds. */
+    return (VkDeviceSize)(p->slices-1)*p->destination_slice_pitch+
+        (VkDeviceSize)(p->rows-1)*p->destination_pitch+p->row_bytes;
+}
+
+/* Rows are ordered within each layer, and layers within the allocation. Merge
+ * the two interval streams in linear time. Padding never counts as copied
+ * data, allowing disjoint regions of one image even when their bounds overlap. */
+static int bc_image_copy_overlap(const void *a,const struct ps5vk_texture_copy *ap,
+    const void *b,const struct ps5vk_texture_copy *bp)
+{
+    const unsigned char *ab=(const unsigned char *)a+ap->destination_offset;
+    const unsigned char *bb=(const unsigned char *)b+bp->destination_offset;
+    if (!spans_overlap(ab,bc_image_copy_span(ap),bb,bc_image_copy_span(bp))) return 0;
+    uint32_t az=0,ay=0,bz=0,by=0;
+    while (az<ap->slices && bz<bp->slices) {
+        const unsigned char *ar=ab+(VkDeviceSize)az*ap->destination_slice_pitch+
+            (VkDeviceSize)ay*ap->destination_pitch;
+        const unsigned char *br=bb+(VkDeviceSize)bz*bp->destination_slice_pitch+
+            (VkDeviceSize)by*bp->destination_pitch;
+        if (spans_overlap(ar,ap->row_bytes,br,bp->row_bytes)) return 1;
+        if ((uintptr_t)ar<(uintptr_t)br) {
+            if (++ay==ap->rows) {ay=0;++az;}
+        } else {
+            if (++by==bp->rows) {by=0;++bz;}
+        }
+    }
+    return 0;
+}
+
+static VkResult bc_image_copy_validate(VkDevice d,VkImage source,VkImageLayout source_layout,
+    VkImage destination,VkImageLayout destination_layout,uint32_t count,const VkImageCopy *regions)
+{
+    void *source_address,*destination_address;
+    VkDeviceSize source_bytes,destination_bytes;
+    if (!count || !regions || !ps5vk_bc_linear_image(source) ||
+        !ps5vk_bc_linear_image(destination) ||
+        !(source->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+        !(destination->info.usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+        !layout_is_transfer_source(source_layout) ||
+        !layout_is_transfer_destination(destination_layout) ||
+        ps5vk_texture_format_lookup(source->info.format)->bytes_per_block !=
+            ps5vk_texture_format_lookup(destination->info.format)->bytes_per_block ||
+        ps5vk_image_span(d,source,&source_address,&source_bytes)!=VK_SUCCESS ||
+        ps5vk_image_span(d,destination,&destination_address,&destination_bytes)!=VK_SUCCESS)
+        return INVALID;
+    for (uint32_t i=0;i<count;++i) {
+        struct ps5vk_texture_copy src,dst;
+        if (!bc_image_copy_plan(source,source_bytes,destination,destination_bytes,
+                &regions[i],&src,&dst)) return INVALID;
+        for (uint32_t j=0;j<count;++j) {
+            struct ps5vk_texture_copy other_src,other_dst;
+            const VkImageSubresourceLayers *a=&regions[i].srcSubresource;
+            const VkImageSubresourceLayers *b=&regions[j].dstSubresource;
+            if (source==destination && a->mipLevel==b->mipLevel &&
+                (uint64_t)a->baseArrayLayer<(uint64_t)b->baseArrayLayer+b->layerCount &&
+                (uint64_t)b->baseArrayLayer<(uint64_t)a->baseArrayLayer+a->layerCount &&
+                (source_layout!=VK_IMAGE_LAYOUT_GENERAL ||
+                 destination_layout!=VK_IMAGE_LAYOUT_GENERAL)) return INVALID;
+            if (!bc_image_copy_plan(source,source_bytes,destination,destination_bytes,
+                    &regions[j],&other_src,&other_dst) ||
+                bc_image_copy_overlap(source_address,&src,destination_address,&other_dst) ||
+                (i<j && bc_image_copy_overlap(destination_address,&dst,
+                    destination_address,&other_dst))) return INVALID;
+        }
+    }
+    return VK_SUCCESS;
+}
+
+static VkResult bc_image_copy_execute(VkDevice d,const struct ps5vk_operation *op)
+{
+    const VkImageCopy *regions=op->owned_payload;
+    void *source_address,*destination_address;
+    VkDeviceSize source_bytes,destination_bytes;
+    if (ps5vk_image_span(d,op->image_source,&source_address,&source_bytes)!=VK_SUCCESS ||
+        ps5vk_image_span(d,op->image_destination,&destination_address,&destination_bytes)!=VK_SUCCESS)
+        return VK_ERROR_DEVICE_LOST;
+    /* A late region's stale layout must not leave an earlier region written. */
+    for (uint32_t i=0;i<op->image_region_count;++i) {
+        const VkImageSubresourceLayers *s=&regions[i].srcSubresource,*t=&regions[i].dstSubresource;
+        if (!ps5vk_image_layout_matches(op->image_source,s->mipLevel,s->baseArrayLayer,
+                s->layerCount,op->image_source_layout) ||
+            !ps5vk_image_layout_matches(op->image_destination,t->mipLevel,t->baseArrayLayer,
+                t->layerCount,op->image_destination_layout)) return VK_ERROR_DEVICE_LOST;
+    }
+    /* Invalidate every source before any write: two disjoint regions can share
+     * a cache line, and a later invalidate must not discard an earlier copy. */
+    for (uint32_t i=0;i<op->image_region_count;++i) {
+        struct ps5vk_texture_copy src,dst;
+        if (!bc_image_copy_plan(op->image_source,source_bytes,op->image_destination,
+                destination_bytes,&regions[i],&src,&dst) ||
+            ps5vk_image_invalidate_range(d,op->image_source,src.destination_offset,
+                bc_image_copy_span(&src))!=VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
+    }
+    for (uint32_t i=0;i<op->image_region_count;++i) {
+        struct ps5vk_texture_copy src,dst;
+        if (!bc_image_copy_plan(op->image_source,source_bytes,op->image_destination,
+                destination_bytes,&regions[i],&src,&dst)) return VK_ERROR_DEVICE_LOST;
+        for (uint32_t z=0;z<src.slices;++z)
+        for (uint32_t y=0;y<src.rows;++y)
+            memcpy((unsigned char *)destination_address+dst.destination_offset+
+                (VkDeviceSize)z*dst.destination_slice_pitch+(VkDeviceSize)y*dst.destination_pitch,
+                (const unsigned char *)source_address+src.destination_offset+
+                (VkDeviceSize)z*src.destination_slice_pitch+(VkDeviceSize)y*src.destination_pitch,
+                src.row_bytes);
+    }
+    for (uint32_t i=0;i<op->image_region_count;++i) {
+        struct ps5vk_texture_copy src,dst;
+        if (!bc_image_copy_plan(op->image_source,source_bytes,op->image_destination,
+                destination_bytes,&regions[i],&src,&dst) ||
+            ps5vk_image_flush_range(d,op->image_destination,dst.destination_offset,
+                bc_image_copy_span(&dst))!=VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
+    }
+    return VK_SUCCESS;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
     VkImageLayout source_layout, VkImage destination, VkImageLayout destination_layout,
     uint32_t region_count, const VkImageCopy *regions)
@@ -177,6 +364,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
     VkDevice d = c->pool->device;
     void *source_address = NULL, *destination_address = NULL;
     VkDeviceSize source_bytes = 0, destination_bytes = 0;
+    if (ps5vk_bc_linear_image(source) && ps5vk_bc_linear_image(destination)) {
+        if (bc_image_copy_validate(d,source,source_layout,destination,destination_layout,
+                region_count,regions)!=VK_SUCCESS) {ps5vk_command_invalidate(c);return;}
+        struct ps5vk_operation *op=ps5vk_command_reserve_operation_with_payload(c,
+            PS5VK_COPY_IMAGE,PS5VK_OPERATION_OUTSIDE_RENDER_PASS,regions,
+            (size_t)region_count*sizeof(*regions));
+        if (!op) return;
+        op->image_source=source;op->image_destination=destination;
+        op->image_source_layout=source_layout;op->image_destination_layout=destination_layout;
+        op->image_region_count=region_count;
+        return;
+    }
     /* The pinned draw module's host readback: the tiled colour attachment is
      * copied into the linear staging image, both in GENERAL, one whole-surface
      * region with no offsets (vktDrawImageObjectUtil.cpp:424-425). The staging
@@ -300,6 +499,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
         ps5vk_command_invalidate(c);
         return;
     }
+    if (image->info.format == VK_FORMAT_R8G8B8A8_SRGB) {
+        uint8_t rgba[4];
+        for (unsigned c = 0; c < 3; ++c)
+            rgba[c] = ps5vk_bc_blit_linear_to_srgb8(color->float32[c]);
+        rgba[3] = ps5vk_bc_blit_unorm8(color->float32[3]);
+        memcpy(&word, rgba, sizeof(word));
+    }
     for (uint32_t i = 0; i < range_count; ++i) {
         const VkImageSubresourceRange *r = &ranges[i];
         if (r->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT || r->baseMipLevel ||
@@ -320,14 +526,136 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
     op->image_region_count = range_count;
 }
 
+static int bc_blit_decode_format(VkFormat format, enum ps5vk_bc_blit_format *out)
+{
+    if (!out) return 0;
+    switch (format) {
+    case VK_FORMAT_BC1_RGB_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC1_RGB_UNORM; return 1;
+    case VK_FORMAT_BC1_RGB_SRGB_BLOCK: *out = PS5VK_BC_BLIT_BC1_RGB_SRGB; return 1;
+    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC1_RGBA_UNORM; return 1;
+    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK: *out = PS5VK_BC_BLIT_BC1_RGBA_SRGB; return 1;
+    case VK_FORMAT_BC2_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC2_UNORM; return 1;
+    case VK_FORMAT_BC2_SRGB_BLOCK: *out = PS5VK_BC_BLIT_BC2_SRGB; return 1;
+    case VK_FORMAT_BC3_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC3_UNORM; return 1;
+    case VK_FORMAT_BC3_SRGB_BLOCK: *out = PS5VK_BC_BLIT_BC3_SRGB; return 1;
+    case VK_FORMAT_BC4_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC4_UNORM; return 1;
+    case VK_FORMAT_BC4_SNORM_BLOCK: *out = PS5VK_BC_BLIT_BC4_SNORM; return 1;
+    case VK_FORMAT_BC5_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC5_UNORM; return 1;
+    case VK_FORMAT_BC5_SNORM_BLOCK: *out = PS5VK_BC_BLIT_BC5_SNORM; return 1;
+    case VK_FORMAT_BC6H_UFLOAT_BLOCK: *out = PS5VK_BC_BLIT_BC6H_UFLOAT; return 1;
+    case VK_FORMAT_BC6H_SFLOAT_BLOCK: *out = PS5VK_BC_BLIT_BC6H_SFLOAT; return 1;
+    case VK_FORMAT_BC7_UNORM_BLOCK: *out = PS5VK_BC_BLIT_BC7_UNORM; return 1;
+    case VK_FORMAT_BC7_SRGB_BLOCK: *out = PS5VK_BC_BLIT_BC7_SRGB; return 1;
+    default: return 0;
+    }
+}
+
+/* BC source regions are decoded before filtering and destination conversion.
+ * Destinations are single-level RGBA8 staging or optimal transfer-only images. */
+static int bc_blit_offsets_valid(const VkOffset3D offsets[2], VkExtent3D extent)
+{
+    return offsets[0].x >= 0 && offsets[1].x >= 0 &&
+        (uint32_t)offsets[0].x <= extent.width && (uint32_t)offsets[1].x <= extent.width &&
+        offsets[0].y >= 0 && offsets[1].y >= 0 &&
+        (uint32_t)offsets[0].y <= extent.height && (uint32_t)offsets[1].y <= extent.height &&
+        offsets[0].x != offsets[1].x && offsets[0].y != offsets[1].y &&
+        offsets[0].z == 0 && offsets[1].z == 1;
+}
+static VkResult bc_blit_operation_validate(VkDevice d, const struct ps5vk_operation *op)
+{
+    if (!d || !op || op->type != PS5VK_BLIT_BC_TO_RGBA8 ||
+        !op->image_source || !op->image_destination ||
+        op->image_source->device != d || op->image_destination->device != d ||
+        op->image_source == op->image_destination ||
+        !bc_blit_source(op->image_source) ||
+        (op->image_source->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) == 0 ||
+        !bc_blit_destination(op->image_destination) ||
+        (op->image_blit_filter != VK_FILTER_NEAREST &&
+         op->image_blit_filter != VK_FILTER_LINEAR) ||
+        !layout_is_transfer_source(op->image_source_layout) ||
+        !layout_is_transfer_destination(op->image_destination_layout) ||
+        !op->image_region_count || !op->owned_payload ||
+        op->owned_payload_size != (size_t)op->image_region_count * sizeof(VkImageBlit))
+        return INVALID;
+
+    enum ps5vk_bc_blit_format decode_format;
+    if (!bc_blit_decode_format(op->image_source->info.format, &decode_format)) return INVALID;
+    VkFormatProperties source_properties = {0}, destination_properties = {0};
+    ps5vk_texture_format_properties(op->image_source->info.format, &source_properties);
+    ps5vk_texture_format_properties(op->image_destination->info.format, &destination_properties);
+    const VkFormatFeatureFlags destination_features =
+        op->image_destination->info.tiling == VK_IMAGE_TILING_LINEAR ?
+            destination_properties.linearTilingFeatures : destination_properties.optimalTilingFeatures;
+    if (!(source_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) ||
+        !(source_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
+        !(destination_features & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) ||
+        !(destination_features & VK_FORMAT_FEATURE_BLIT_DST_BIT))
+        return INVALID;
+
+    const VkImageBlit *regions = (const VkImageBlit *)op->owned_payload;
+    for (uint32_t i = 0; i < op->image_region_count; ++i) {
+        const VkImageBlit *r = &regions[i];
+        if (r->srcSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+            r->dstSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+            r->srcSubresource.mipLevel >= op->image_source->info.mipLevels ||
+            r->dstSubresource.mipLevel >= op->image_destination->info.mipLevels ||
+            r->srcSubresource.baseArrayLayer >= op->image_source->info.arrayLayers ||
+            r->dstSubresource.baseArrayLayer >= op->image_destination->info.arrayLayers ||
+            !r->srcSubresource.layerCount ||
+            r->srcSubresource.layerCount != r->dstSubresource.layerCount ||
+            r->srcSubresource.layerCount > op->image_source->info.arrayLayers - r->srcSubresource.baseArrayLayer ||
+            r->dstSubresource.layerCount > op->image_destination->info.arrayLayers - r->dstSubresource.baseArrayLayer ||
+            !bc_blit_offsets_valid(r->srcOffsets,
+                bc_blit_mip_extent(op->image_source, r->srcSubresource.mipLevel)) ||
+            !bc_blit_offsets_valid(r->dstOffsets,
+                bc_blit_mip_extent(op->image_destination, r->dstSubresource.mipLevel)))
+            return INVALID;
+    }
+
+    void *source_address = NULL, *destination_address = NULL;
+    VkDeviceSize source_bytes = 0, destination_bytes = 0;
+    if (ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
+        ps5vk_image_span(d, op->image_destination, &destination_address,
+            &destination_bytes) != VK_SUCCESS ||
+        spans_overlap(source_address, source_bytes, destination_address, destination_bytes))
+        return INVALID;
+    return VK_SUCCESS;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage(VkCommandBuffer c, VkImage source,
     VkImageLayout source_layout, VkImage destination, VkImageLayout destination_layout,
     uint32_t region_count, const VkImageBlit *regions, VkFilter filter)
 {
-    (void)source; (void)source_layout; (void)destination; (void)destination_layout;
-    (void)region_count; (void)regions; (void)filter;
-    /* Scaling/filtering has no proven GFX1013 packet or bounded CPU contract. */
-    ps5vk_command_invalidate(c);
+    if (!c || c->state != PS5VK_RECORDING || c->render_pass || !region_count ||
+        !regions || (filter != VK_FILTER_NEAREST && filter != VK_FILTER_LINEAR)) {
+        ps5vk_command_invalidate(c);
+        return;
+    }
+    struct ps5vk_operation probe = {
+        .type = PS5VK_BLIT_BC_TO_RGBA8,
+        .owned_payload = (void *)regions,
+        .owned_payload_size = (size_t)region_count * sizeof(*regions),
+        .image_source = source,
+        .image_destination = destination,
+        .image_source_layout = source_layout,
+        .image_destination_layout = destination_layout,
+        .image_region_count = region_count,
+        .image_blit_filter = filter,
+    };
+    if (bc_blit_operation_validate(c->pool->device, &probe) != VK_SUCCESS) {
+        ps5vk_command_invalidate(c);
+        return;
+    }
+    struct ps5vk_operation *op = ps5vk_command_reserve_operation_with_payload(c,
+        PS5VK_BLIT_BC_TO_RGBA8, PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
+        regions, (size_t)region_count * sizeof(*regions));
+    if (!op) return;
+    op->image_source = source;
+    op->image_destination = destination;
+    op->image_source_layout = source_layout;
+    op->image_destination_layout = destination_layout;
+    op->image_region_count = region_count;
+    op->image_blit_filter = filter;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage(VkCommandBuffer c, VkImage source,
@@ -408,19 +736,29 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearAttachments(VkCommandBuffer c,
         c->level!=VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         c->render_pass_contents!=VK_SUBPASS_CONTENTS_INLINE ||
         c->operation_count>PS5VK_MAX_OPERATIONS || rect_count>PS5VK_MAX_OPERATIONS-c->operation_count ||
-        attachments[0].aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || attachments[0].colorAttachment!=0) {
+        (attachments[0].aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT &&
+         attachments[0].aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT)) {
         ps5vk_command_invalidate(c);
         return;
     }
     const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(c->render_pass,c->subpass);
-    if(!subpass || !c->framebuffer || subpass->color[0].attachment>=c->framebuffer->attachment_count) {
+    const VkBool32 depth=attachments[0].aspectMask==VK_IMAGE_ASPECT_DEPTH_BIT;
+    const uint32_t attachment=depth ? (subpass?subpass->depth.attachment:VK_ATTACHMENT_UNUSED) :
+        (subpass?subpass->color[0].attachment:VK_ATTACHMENT_UNUSED);
+    if(!subpass || !c->framebuffer || attachment>=c->framebuffer->attachment_count ||
+       (!depth && attachments[0].colorAttachment!=0)) {
         ps5vk_command_invalidate(c);return;
     }
-    VkImageView view=c->framebuffer->attachments[subpass->color[0].attachment];
-    uint32_t word;
-    if(!view || !view->image || !(view->image->info.format==VK_FORMAT_B8G8R8A8_UNORM?
+    VkImageView view=c->framebuffer->attachments[attachment];
+    uint32_t word=0;
+    const VkBool32 clear_valid=depth ? (view && view->image &&
+        ps5vk_d16_attachment_image(view->image) &&
+        ps5vk_depth_attachment_clear_word(VK_FORMAT_D16_UNORM,
+            attachments[0].clearValue.depthStencil.depth,&word)) :
+        (view && view->image && (view->image->info.format==VK_FORMAT_B8G8R8A8_UNORM?
         ps5vk_color_clear_bgra8(attachments[0].clearValue.color.float32,&word):
-        ps5vk_color_clear_rgba8(attachments[0].clearValue.color.float32,&word))) {
+        ps5vk_color_clear_rgba8(attachments[0].clearValue.color.float32,&word)));
+    if(!clear_valid) {
         ps5vk_command_invalidate(c);return;
     }
     VkRect2D render_area={0};
@@ -582,7 +920,11 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
     VkDeviceSize bytes = 0;
     if (op->type == PS5VK_IMAGE_BARRIER) {
         const VkImageMemoryBarrier *b = &op->image_barrier;
-        if (ps5vk_storage_image(b->image)) {
+        if (ps5vk_d32_gather_image(b->image)) {
+            if (!ps5vk_d32_gather_barrier(b)) return INVALID;
+        } else if (ps5vk_bc_linear_image(b->image) || ps5vk_rgba_linear_image(b->image)) {
+            if (!ps5vk_linear_image_barrier(b)) return INVALID;
+        } else if (ps5vk_storage_image(b->image)) {
             if (b->oldLayout != VK_IMAGE_LAYOUT_UNDEFINED ||
                 b->newLayout != VK_IMAGE_LAYOUT_GENERAL || b->srcAccessMask ||
                 b->dstAccessMask != VK_ACCESS_TRANSFER_WRITE_BIT) return INVALID;
@@ -611,8 +953,17 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
                 ~(VkAccessFlags)(VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT))
                 return INVALID;
         }
-        if (ps5vk_image_span(d, b->image, &address, &bytes) != VK_SUCCESS) return INVALID;
+        if (ps5vk_image_span(d, b->image, &address, &bytes) != VK_SUCCESS ||
+            (ps5vk_d32_gather_image(b->image) && bytes < 65536u)) return INVALID;
         return VK_SUCCESS;
+    }
+    if (op->type==PS5VK_COPY_IMAGE && ps5vk_bc_linear_image(op->image_source) &&
+        ps5vk_bc_linear_image(op->image_destination)) {
+        if (!op->owned_payload || op->owned_payload_size!=
+                (size_t)op->image_region_count*sizeof(VkImageCopy)) return INVALID;
+        return bc_image_copy_validate(d,op->image_source,op->image_source_layout,
+            op->image_destination,op->image_destination_layout,op->image_region_count,
+            op->owned_payload);
     }
     if (op->type == PS5VK_COPY_IMAGE) {
         /* The pinned host readback: the tiled colour attachment in GENERAL into
@@ -657,35 +1008,60 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
         }
         return VK_SUCCESS;
     }
+    if (op->type == PS5VK_BLIT_BC_TO_RGBA8)
+        return bc_blit_operation_validate(d, op);
+    if (op->type == PS5VK_COPY_BUFFER_IMAGE && ps5vk_d32_gather_image(op->copy_image)) {
+        void *buffer_address = NULL, *image_address = NULL;
+        VkDeviceSize buffer_bytes = 0, image_bytes = 0;
+        struct ps5vk_texture_copy plan;
+        if (op->copy_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
+            !ps5vk_buffer_usage(d, op->copy_source, VK_BUFFER_USAGE_TRANSFER_SRC_BIT) ||
+            ps5vk_buffer_span(d, op->copy_source, 0, VK_WHOLE_SIZE,
+                &buffer_address, &buffer_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->copy_image, &image_address, &image_bytes) != VK_SUCCESS ||
+            spans_overlap(buffer_address, buffer_bytes, image_address, image_bytes) ||
+            ps5vk_texture_copy_plan_for_image(op->copy_image, buffer_bytes,
+                image_bytes, &op->copy_region, &plan) != VK_SUCCESS) return INVALID;
+        return VK_SUCCESS;
+    }
     const VkBuffer buffer = op->type == PS5VK_COPY_BUFFER_IMAGE ?
         op->copy_source : op->copy_destination;
     /* The upload direction also accepts the colour-attachment shape that
      * declares a transfer destination; the readback direction does not. */
+    const int padded_role = ps5vk_bc_linear_image(op->copy_image) ||
+        ps5vk_rgba_linear_image(op->copy_image);
     const int image_role = op->type == PS5VK_COPY_BUFFER_IMAGE ?
-        (ps5vk_pure_transfer_image(op->copy_image) ||
+        (padded_role || ps5vk_pure_transfer_image(op->copy_image) ||
          ps5vk_colour_transfer_image(op->copy_image)) :
-        (ps5vk_pure_transfer_image(op->copy_image) ||
+        (padded_role || ps5vk_pure_transfer_image(op->copy_image) ||
          ps5vk_storage_image(op->copy_image));
     if (!image_role ||
         !ps5vk_buffer_usage(d, buffer, op->type == PS5VK_COPY_BUFFER_IMAGE ?
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT : VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
         (op->type == PS5VK_COPY_BUFFER_IMAGE ?
-            !transfer_role_destination(op->copy_image) : !transfer_role_source(op->copy_image)) ||
+            !(padded_role ? !!(op->copy_image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) :
+                transfer_role_destination(op->copy_image)) :
+            !(padded_role ? !!(op->copy_image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) :
+                transfer_role_source(op->copy_image))) ||
         (op->type == PS5VK_COPY_BUFFER_IMAGE ?
             !layout_is_transfer_destination(op->copy_layout) :
             !layout_is_transfer_source(op->copy_layout)) ||
         ps5vk_image_span(d, op->copy_image, &address, &bytes) != VK_SUCCESS ||
         ps5vk_buffer_span(d, buffer, 0, VK_WHOLE_SIZE, &address, &bytes) != VK_SUCCESS)
         return INVALID;
-    /* The region mapping is role-independent: both directions describe one
-     * RGBA8 base-level 2D area between a tightly described buffer row and the
-     * padded image row. */
+    /* The region mapping is role-independent: both directions use the same
+     * checked format-aware subresource plan for the padded backing. */
     VkDeviceSize source_bytes = 0, destination_bytes = 0;
     void *buffer_address = NULL, *image_address = NULL;
     if (ps5vk_buffer_span(d, buffer, 0, VK_WHOLE_SIZE, &buffer_address, &source_bytes) != VK_SUCCESS ||
         ps5vk_image_span(d, op->copy_image, &image_address, &destination_bytes) != VK_SUCCESS ||
         spans_overlap(buffer_address, source_bytes, image_address, destination_bytes))
         return INVALID;
+    if (padded_role) {
+        struct ps5vk_texture_copy plan;
+        return ps5vk_texture_copy_plan_for_image(op->copy_image, source_bytes,
+            destination_bytes, &op->copy_region, &plan);
+    }
     struct linear_copy plan;
     if (linear_region_plan(op->copy_image->info.extent.width,
             op->copy_image->info.extent.height, source_bytes, destination_bytes,
@@ -703,20 +1079,40 @@ VkResult ps5vk_image_linear_region_validate(VkImage image, const VkBufferImageCo
         buffer_bytes, image_bytes, region, &plan) ? INVALID : VK_SUCCESS;
 }
 
+static void bc_blit_texel(enum ps5vk_bc_blit_format format,
+    const uint8_t *source, uint32_t pitch, unsigned block_bytes,
+    int x, int y, uint32_t width, uint32_t height, float rgba[4])
+{
+    x = x < 0 ? 0 : (x >= (int)width ? (int)width - 1 : x);
+    y = y < 0 ? 0 : (y >= (int)height ? (int)height - 1 : y);
+    float block[16][4];
+    ps5vk_bc_blit_decode_float(format,
+        source + (size_t)(y / 4) * pitch + (size_t)(x / 4) * block_bytes, block);
+    memcpy(rgba, block[(y % 4) * 4 + x % 4], sizeof(block[0]));
+}
+
+static int bc_blit_floor(float value)
+{
+    int integer = (int)value;
+    return integer - (value < (float)integer);
+}
+
 VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op)
 {
     if (!d || !op) return VK_ERROR_DEVICE_LOST;
     if (ps5vk_image_linear_validate(d, op) != VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
     if (op->type == PS5VK_IMAGE_BARRIER) {
         const VkImageMemoryBarrier *b = &op->image_barrier;
-        /* The role is host-visible memory that no GPU stage touches, so the
-         * transition is bookkeeping and commits in recorded order. UNDEFINED
-         * discards the previous contents exactly as the GPU path does. */
-        if (b->oldLayout != VK_IMAGE_LAYOUT_UNDEFINED && b->image->layout != b->oldLayout)
-            return VK_ERROR_DEVICE_LOST;
-        b->image->layout = b->newLayout;
+        /* Queue segments execute in order after the preceding segment has
+         * completed. Copies perform their cache visibility operations; this
+         * bookkeeping commits only the addressed subresources. UNDEFINED
+         * discards their previous contents exactly as the GPU path does. */
+        if (!ps5vk_image_layout_transition(b->image, &b->subresourceRange,
+            b->oldLayout, b->newLayout)) return VK_ERROR_DEVICE_LOST;
         return VK_SUCCESS;
     }
+    if (op->type==PS5VK_COPY_IMAGE && ps5vk_bc_linear_image(op->image_source) &&
+        ps5vk_bc_linear_image(op->image_destination)) return bc_image_copy_execute(d,op);
     if (op->type == PS5VK_COPY_IMAGE) {
         /* The tiled colour attachment was painted by an earlier submission.
          * Segments are executed in recorded order and a segment starts only
@@ -761,13 +1157,174 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
             return VK_ERROR_DEVICE_LOST;
         return VK_SUCCESS;
     }
+    if (op->type == PS5VK_BLIT_BC_TO_RGBA8) {
+        enum ps5vk_bc_blit_format format;
+        struct ps5vk_texture_mip_layout layout, destination_layout;
+        void *source_address = NULL, *destination_address = NULL;
+        VkDeviceSize source_bytes = 0, destination_bytes = 0;
+        const VkImageBlit *regions = op->owned_payload;
+        for (uint32_t i = 0; i < op->image_region_count; ++i) {
+            const VkImageBlit *r = &regions[i];
+            if (!ps5vk_image_layout_matches(op->image_source, r->srcSubresource.mipLevel,
+                    r->srcSubresource.baseArrayLayer, r->srcSubresource.layerCount,
+                    op->image_source_layout) ||
+                !ps5vk_image_layout_matches(op->image_destination, r->dstSubresource.mipLevel,
+                    r->dstSubresource.baseArrayLayer, r->dstSubresource.layerCount,
+                    op->image_destination_layout)) return VK_ERROR_DEVICE_LOST;
+        }
+        if (!bc_blit_decode_format(op->image_source->info.format, &format) ||
+            ps5vk_texture_mip_layout_for_slices(op->image_source->info.format,
+                op->image_source->info.extent.width, op->image_source->info.extent.height,
+                op->image_source->info.arrayLayers, op->image_source->info.mipLevels, &layout) ||
+            ps5vk_texture_mip_layout_for_slices(op->image_destination->info.format,
+                op->image_destination->info.extent.width, op->image_destination->info.extent.height,
+                op->image_destination->info.arrayLayers, op->image_destination->info.mipLevels, &destination_layout) ||
+            ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->image_destination, &destination_address,
+                &destination_bytes) != VK_SUCCESS ||
+            layout.bytes > source_bytes || destination_layout.bytes > destination_bytes)
+            return VK_ERROR_DEVICE_LOST;
+        const unsigned block_bytes = ps5vk_bc_blit_block_bytes(format);
+        if (!block_bytes || !layout.levels[0].row_pitch || !destination_layout.levels[0].row_pitch ||
+            ps5vk_image_invalidate_range(d, op->image_source, 0, layout.bytes) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+
+        for (uint32_t i = 0; i < op->image_region_count; ++i) {
+            const VkImageBlit *r = &regions[i];
+            const uint32_t mip = r->srcSubresource.mipLevel;
+            const VkExtent3D extent = bc_blit_mip_extent(op->image_source, mip);
+            const uint32_t width = extent.width, height = extent.height;
+            const uint32_t destination_mip = r->dstSubresource.mipLevel;
+            const uint32_t destination_pitch = destination_layout.levels[destination_mip].row_pitch;
+            int x0 = r->dstOffsets[0].x, x1 = r->dstOffsets[1].x;
+            int y0 = r->dstOffsets[0].y, y1 = r->dstOffsets[1].y;
+            const float scale_x = (float)(r->srcOffsets[1].x - r->srcOffsets[0].x) / (x1 - x0);
+            const float scale_y = (float)(r->srcOffsets[1].y - r->srcOffsets[0].y) / (y1 - y0);
+            const int left = x0 < x1 ? x0 : x1, right = x0 > x1 ? x0 : x1;
+            const int top = y0 < y1 ? y0 : y1, bottom = y0 > y1 ? y0 : y1;
+            for (uint32_t layer = 0; layer < r->srcSubresource.layerCount; ++layer) {
+                const uint8_t *subresource = (const uint8_t *)source_address +
+                    (r->srcSubresource.baseArrayLayer + layer) * layout.layer_stride + layout.levels[mip].offset;
+                uint8_t *destination_subresource = (uint8_t *)destination_address +
+                    (r->dstSubresource.baseArrayLayer + layer) * destination_layout.layer_stride +
+                    destination_layout.levels[destination_mip].offset;
+                for (int y = top; y < bottom; ++y) {
+                    for (int x = left; x < right; ++x) {
+                        float sx = r->srcOffsets[0].x + (x + 0.5f - x0) * scale_x;
+                        float sy = r->srcOffsets[0].y + (y + 0.5f - y0) * scale_y;
+                        float rgba[4];
+                        if (op->image_blit_filter == VK_FILTER_NEAREST) {
+                            bc_blit_texel(format, subresource, layout.levels[mip].row_pitch,
+                                block_bytes, bc_blit_floor(sx), bc_blit_floor(sy), width, height, rgba);
+                        } else {
+                            sx -= 0.5f; sy -= 0.5f;
+                            const int ix = bc_blit_floor(sx), iy = bc_blit_floor(sy);
+                            const float fx = sx - ix, fy = sy - iy;
+                            float samples[4][4];
+                            for (unsigned t = 0; t < 4; ++t)
+                                bc_blit_texel(format, subresource, layout.levels[mip].row_pitch,
+                                    block_bytes, ix + (int)(t % 2), iy + (int)(t / 2),
+                                    width, height, samples[t]);
+                            for (unsigned c = 0; c < 4; ++c)
+                                rgba[c] = (samples[0][c] * (1-fx) + samples[1][c] * fx) * (1-fy) +
+                                          (samples[2][c] * (1-fx) + samples[3][c] * fx) * fy;
+                        }
+                        uint8_t *pixel = destination_subresource +
+                            (size_t)y * destination_pitch + (size_t)x * 4;
+                        for (unsigned c = 0; c < 4; ++c)
+                            pixel[c] = c < 3 && op->image_destination->info.format == VK_FORMAT_R8G8B8A8_SRGB ?
+                                ps5vk_bc_blit_linear_to_srgb8(rgba[c]) : ps5vk_bc_blit_unorm8(rgba[c]);
+                    }
+                }
+            }
+        }
+        return ps5vk_image_flush_range(d, op->image_destination, 0,
+            destination_layout.bytes) == VK_SUCCESS ? VK_SUCCESS : VK_ERROR_DEVICE_LOST;
+    }
+    if (op->type == PS5VK_COPY_BUFFER_IMAGE && ps5vk_d32_gather_image(op->copy_image)) {
+        void *image_address = NULL, *buffer_address = NULL;
+        VkDeviceSize image_bytes = 0, buffer_bytes = 0;
+        struct ps5vk_texture_copy plan;
+        if (!ps5vk_image_layout_matches(op->copy_image,
+                op->copy_region.imageSubresource.mipLevel, 0, 1,
+                op->copy_layout) ||
+            ps5vk_image_span(d, op->copy_image, &image_address, &image_bytes) != VK_SUCCESS ||
+            ps5vk_buffer_span(d, op->copy_source, 0, VK_WHOLE_SIZE,
+                &buffer_address, &buffer_bytes) != VK_SUCCESS ||
+            ps5vk_texture_copy_plan_for_image(op->copy_image, buffer_bytes,
+                image_bytes, &op->copy_region, &plan) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+        const VkDeviceSize buffer_span = (VkDeviceSize)(plan.rows - 1u) *
+            plan.source_pitch + plan.row_bytes;
+        if (plan.source_offset > buffer_bytes ||
+            buffer_span > buffer_bytes - plan.source_offset || image_bytes < 65536u ||
+            ps5vk_buffer_cache(d, op->copy_source, plan.source_offset,
+                buffer_span, VK_TRUE) != VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
+        const unsigned char *source = (const unsigned char *)buffer_address + plan.source_offset;
+        for (uint32_t y = 0; y < plan.rows; ++y) {
+            for (uint32_t x = 0; x < plan.row_bytes / 4u; ++x) {
+                const size_t offset = ps5vk_depth_64k_zx_gather_mip_offset(
+                    op->copy_region.imageSubresource.mipLevel, x, y);
+                if (offset == SIZE_MAX || offset > image_bytes || 4u > image_bytes - offset)
+                    return VK_ERROR_DEVICE_LOST;
+                memcpy((unsigned char *)image_address + offset,
+                    source + (VkDeviceSize)y * plan.source_pitch + (VkDeviceSize)x * 4u, 4u);
+            }
+        }
+        return ps5vk_image_flush_range(d, op->copy_image, 0, 65536u) == VK_SUCCESS ?
+            VK_SUCCESS : VK_ERROR_DEVICE_LOST;
+    }
     void *image_address = NULL, *buffer_address = NULL;
     VkDeviceSize image_bytes = 0, buffer_bytes = 0;
-    if (op->copy_image->layout != op->copy_layout ||
+    if (!ps5vk_image_layout_matches(op->copy_image, op->copy_region.imageSubresource.mipLevel,
+            op->copy_region.imageSubresource.baseArrayLayer,
+            op->copy_region.imageSubresource.layerCount, op->copy_layout) ||
         ps5vk_image_span(d, op->copy_image, &image_address, &image_bytes) != VK_SUCCESS ||
         ps5vk_buffer_span(d, op->type == PS5VK_COPY_BUFFER_IMAGE ? op->copy_source : op->copy_destination,
             0, VK_WHOLE_SIZE, &buffer_address, &buffer_bytes) != VK_SUCCESS)
         return VK_ERROR_DEVICE_LOST;
+    if (ps5vk_bc_linear_image(op->copy_image) || ps5vk_rgba_linear_image(op->copy_image)) {
+        struct ps5vk_texture_copy plan;
+        if (ps5vk_texture_copy_plan_for_image(op->copy_image, buffer_bytes,
+                image_bytes, &op->copy_region, &plan) != VK_SUCCESS ||
+            !plan.slices || !plan.rows || !plan.row_bytes)
+            return VK_ERROR_DEVICE_LOST;
+        const VkDeviceSize buffer_span =
+            (VkDeviceSize)(plan.slices - 1u) * plan.source_slice_pitch +
+            (VkDeviceSize)(plan.rows - 1u) * plan.source_pitch + plan.row_bytes;
+        const VkDeviceSize image_span =
+            (VkDeviceSize)(plan.slices - 1u) * plan.destination_slice_pitch +
+            (VkDeviceSize)(plan.rows - 1u) * plan.destination_pitch + plan.row_bytes;
+        if (plan.source_offset > buffer_bytes || buffer_span > buffer_bytes - plan.source_offset ||
+            plan.destination_offset > image_bytes || image_span > image_bytes - plan.destination_offset)
+            return VK_ERROR_DEVICE_LOST;
+        const int upload = op->type == PS5VK_COPY_BUFFER_IMAGE;
+        VkBuffer buffer = upload ? op->copy_source : op->copy_destination;
+        if (!upload && ps5vk_image_invalidate_range(d, op->copy_image,
+                plan.destination_offset, image_span) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+        VkResult result = ps5vk_buffer_cache(d, buffer,
+            plan.source_offset, buffer_span, VK_TRUE);
+        if (result != VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
+        unsigned char *buffer_base = (unsigned char *)buffer_address + plan.source_offset;
+        unsigned char *image_base = (unsigned char *)image_address + plan.destination_offset;
+        for (uint32_t z = 0; z < plan.slices; ++z)
+        for (uint32_t y = 0; y < plan.rows; ++y) {
+            unsigned char *buffer_row = buffer_base + (VkDeviceSize)z * plan.source_slice_pitch +
+                (VkDeviceSize)y * plan.source_pitch;
+            unsigned char *image_row = image_base + (VkDeviceSize)z * plan.destination_slice_pitch +
+                (VkDeviceSize)y * plan.destination_pitch;
+            if (upload) memcpy(image_row, buffer_row, plan.row_bytes);
+            else memcpy(buffer_row, image_row, plan.row_bytes);
+        }
+        if (upload)
+            result = ps5vk_image_flush_range(d, op->copy_image,
+                plan.destination_offset, image_span);
+        else
+            result = ps5vk_buffer_cache(d, buffer, plan.source_offset,
+                buffer_span, VK_FALSE);
+        return result == VK_SUCCESS ? VK_SUCCESS : VK_ERROR_DEVICE_LOST;
+    }
     struct linear_copy plan;
     /* The planner's "buffer" side and "image" side are named, not ordered:
      * only the memcpy argument order depends on the direction. */

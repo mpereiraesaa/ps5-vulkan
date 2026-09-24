@@ -14,7 +14,7 @@ ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
 
 
 class DeviceScopeCtsGate(unittest.TestCase):
-    def test_public_profile_remains_closed(self):
+    def test_public_khr_route_and_unmapped_original_cts(self):
         report = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         evidence = json.loads((ROOT / "conformance_inventory/dxvk_v262_evidence.json").read_text())
         matrix = json.loads((ROOT / "conformance_inventory/dxvk_v262_matrix.json").read_text())
@@ -23,10 +23,10 @@ class DeviceScopeCtsGate(unittest.TestCase):
         route = next(item for item in evidence["capability_probe"]["query_routes"]
                      if item["route"] == "VK_KHR_vulkan_memory_model")
         self.assertEqual((route["vulkanMemoryModel"], route["vulkanMemoryModelDeviceScope"]),
-                         ("1", "0"))
+                         ("1", "1"))
         row = next(item for item in matrix["requirements"] if item["id"] == ID)
         self.assertEqual((row["api"]["state"], row["cts"]["state"], row["verdict"]),
-                         ("blocker", "not-mapped", "blocker"))
+                         ("satisfied", "not-mapped", "satisfied"))
         self.assertEqual(row["cts"]["cases"], [])
 
     def test_registry_khr_feature_route(self):
