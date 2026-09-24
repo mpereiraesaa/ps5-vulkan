@@ -39,10 +39,18 @@ MEMORY_MODEL_IDS = {
 BDA_ID = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
 DEVICE_SCOPE_ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
 DIAGNOSTIC_IMPLEMENTATIONS = {
-    DEVICE_SCOPE_ID: (
-        ("src/vk_device.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
-        ("src/vk_pipeline.c", "case 5346u: /* VulkanMemoryModelDeviceScope */"),
-        ("src/ps5vk_compiler.c", "opts.enable_vulkan_memory_model_device_scope"),
+    "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset": (
+        ("src/vk_device.c", "PS5VK_T09_FEATURE_HOST_QUERY_RESET"),
+        ("src/vk_query_pool.c", "vkResetQueryPool"),
+    ),
+    "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": (
+        ("src/vk_device.c", "PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER"),
+        ("src/vk_framebuffer.c", "VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT"),
+        ("src/vk_command.c", "VkRenderPassAttachmentBeginInfo"),
+    ),
+    "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge": (
+        ("src/vk_device.c", "PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE"),
+        ("src/vk_sampler.c", "VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE"),
     ),
 }
 
@@ -57,7 +65,7 @@ def diagnostic_implementation(identifier: str) -> dict | None:
             "refs": sorted({path for path, _ in citations}),
             "detail": ("Missing reviewed diagnostic implementation: " + ", ".join(missing)
                        if missing else "Bounded implementation exists in a diagnostic build; "
-                       "the independent API, original CTS and native axes still control promotion.")}
+                       "public API and native evidence remain independent, and observed CTS failures stay visible.")}
 
 
 def memory_model_axes(row: dict, query: dict, extensions: set[str],

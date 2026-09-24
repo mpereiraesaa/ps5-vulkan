@@ -5397,3 +5397,77 @@ eboot SHA-256 was
 `aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
 The wrapper released the console and the subsequent status reported
 `running=none`.
+
+## T09 diagnostic measurements (2026-09-24)
+
+These are default-off, SDK-linked measurements of three DXVK 2.6.2
+requirements. Their implementation and native evidence are recorded separately
+from the ordinary public capability query in
+`conformance_inventory/dxvk_v262_evidence.json`. The public device still
+reports all three false; the checked profile remains **25/62 satisfied, 37
+blockers** after T08 DeviceScope. Firmware was not queried in these T09 runs.
+Each console window restored the ordinary eboot with SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+and released the console with `running=none`.
+
+### T09 host query reset diagnostic measurement (2026-09-24)
+
+The default-off `VK_EXT_host_query_reset` route accepted a host reset after
+completed precise occlusion queries. The strict SDK verifier checked the
+1/0/3-sample results, their availability, an unavailable result after reset,
+preservation of prior result words, and resubmission of the same command
+buffer. The `ps5log/1` run
+`20260924T194817339Z_PPSA99994_ps5vk_0x771bcbf0e04` completed with a clean
+title lifecycle. Eboot SHA-256:
+`d74390542e83e45e0010467beb9c5e3cd19b4cdfd776c000c9d14f6b9fae28ac`;
+source-log SHA-256:
+`66b1afc0116e1263e77ec15abe2ba8c28076dead266c57c0c3ecb91b587187ed`.
+The original CTS leaf
+`dEQP-VK.query_pool.occlusion_query.get_reset_results_precise_size_64_wait_queue_with_availability_draw_points`
+is identified in the pinned source but has not run against this artifact.
+Public extension and feature reporting remain disabled.
+
+### T09 imageless framebuffer diagnostic measurement (2026-09-24)
+
+One imageless framebuffer accepted two attachment views at separate render
+pass begins. Two completed submissions and 8,192 readback pixels matched the
+strict SDK oracle with zero mismatches in run
+`20260924T194946966Z_PPSA99994_ps5vk_0x7869ad308ae`. Eboot SHA-256:
+`01ff1cfbf7ed3f3cf34a0e49dc1256f2d20f65fbfe7db4725c615cfd26abfd21`;
+source-log SHA-256:
+`df42d9306c02b962a5b7f116f1eee4a1b62083474df42236d023f105ba54deb9`.
+The original `dEQP-VK.imageless_framebuffer.color` leaf is registered but has
+not run. The Vulkan 1.0 KHR extension dependency chain is incomplete, so the
+ordinary public extension and feature remain disabled.
+
+### T09 sampler mirror clamp diagnostic measurement (2026-09-24)
+
+Eight independently built, default-off SDK witnesses covered nearest and
+linear U/V sampling at negative, inside and positive-edge coordinates. Each
+strict draw readback matched 373,248 pixels; the run IDs and exact eboot
+SHA-256 for all eight cases are bound one to one in
+`conformance_inventory/dxvk_v262_evidence.json`. The first U run was
+`20260924T200150243Z_PPSA99994_ps5vk_0x82f00e17429` on eboot SHA-256
+`950bcfcd86e1e2796997518c327c5e3e0bfe58b603e3bd99d2aa0d838909c2e7`;
+the final V run was
+`20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12` on eboot SHA-256
+`192d0289da708c5cc1f6cc81752b9be6cd812c4d3de9c6d289b613598d57b5f2`.
+
+Two focused original 3D filtering CTS leaves then exercised W mirror clamp:
+`dEQP-VK.texture.filtering.3d.combinations.nearest.nearest.clamp_to_edge.clamp_to_edge.mirror_clamp_to_edge`
+and
+`dEQP-VK.texture.filtering.3d.combinations.linear.linear.clamp_to_edge.clamp_to_edge.mirror_clamp_to_edge`.
+Both reported `Fail` in run
+`20260924T205134796Z_PPSA99994_upstream-cts_0xae5e3b2989b`, but the first
+refusal was `PS5VK_UPLOAD_PREPARE_FAILED site=0 rc=-13` while loading the 3D
+RGBA8 mip image. Neither leaf reached W sampling, so this run cannot establish
+W behavior. The CTS eboot SHA-256 was
+`882beae5a17991b36348407b7aee24521f843410183572a6a2fc74d2a8aa1798`;
+case-list SHA-256
+`ec857802f748d97f664811d1ccb967435aea7f6e59d200411a77db58a1226608`;
+strict receipt SHA-256
+`4d4ae7cb6f483ceae5847e69a6a3a6e2f996042f644fbcc753bd7d79149f8d10`;
+QPA SHA-256
+`f96d8cd5edebe3b6326c51932856f84533cd528b2b24e64362c7ecc74f34daf6`.
+The public sampler feature and KHR extension remain disabled. Rerun the W
+leaves after the 3D upload blocker is fixed.
