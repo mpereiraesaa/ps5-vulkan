@@ -39,6 +39,14 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count)
     }
     return 0;
 }
+static int declares_int16_capability(const uint32_t *words, size_t count)
+{
+    for (size_t at = 5; at < count; at += words[at] >> 16)
+        if ((words[at] & 0xffffu) == 17u &&
+            (words[at] >> 16) == 2u && words[at + 1] == 22u)
+            return 1;
+    return 0;
+}
 VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
                             const char *name, uint32_t *out)
 {
@@ -113,6 +121,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
     if (!module_valid(info->pCode, info->codeSize / 4)) return INVALID;
     if (subgroup_module_unsupported(info->pCode, info->codeSize / 4))
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Shader modules may be shared across graphics and compute entries, so
+     * the Int16 capability must require the logical-device opt-in before
+     * either pipeline frontend can accept it. */
+    if (!(d->enabled_features & PS5VK_FEATURE_SHADER_INT16) &&
+        declares_int16_capability(info->pCode, info->codeSize / 4))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!ps5vk_spirv_validate_ubo_layout(info->pCode, info->codeSize / 4,
             !!(d->enabled_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT)))
         return INVALID;
@@ -132,8 +146,9 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyShaderModule(VkDevice d, VkShaderModule m, c
     --d->pipeline_objects; ps5vk_object_free(m, &saved, custom);
 }
 
-/* OpCapability declarations that name negotiated device features. Narrow
- * arithmetic and the broader storage classes remain unsupported. */
+/* OpCapability declarations that name negotiated device features. Int16 is
+ * gated by the core shaderInt16 opt-in; Int8 and the broader storage classes
+ * remain unsupported. */
 static int spirv_narrow_requirements(const uint32_t *words, size_t count,
                                      uint32_t *required)
 {
@@ -156,6 +171,7 @@ static int spirv_narrow_requirements(const uint32_t *words, size_t count,
             case 5347u: /* PhysicalStorageBufferAddresses */
                 *required |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS; break;
             case 22u:   /* Int16 */
+                *required |= PS5VK_FEATURE_SHADER_INT16; break;
             case 39u:   /* Int8 */
             case 4434u: /* UniformAndStorageBuffer16BitAccess */
             case 4449u: /* UniformAndStorageBuffer8BitAccess */

@@ -86,6 +86,20 @@ def wait_for_finalized_run(runs_dir: Path, title: str, known: set,
         logs = sorted(p for p in runs_dir.glob(f"*_{title}_*.log") if p.name not in known)
         if logs:
             candidate = logs[-1]
+            capture_path = candidate.with_suffix(".json")
+            if capture_path.is_file():
+                try:
+                    capture = json.loads(capture_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    # The logger may still be writing the manifest.
+                    pass
+                else:
+                    if (capture.get("protocol") == "ps5log/1" and
+                            capture.get("title") == title and
+                            capture.get("clean") is False):
+                        raise RunIncomplete(
+                            f"ps5log run finalized incomplete "
+                            f"(reason={capture.get('close_reason', 'unknown')}): {candidate}")
             text = candidate.read_text(encoding="utf-8", errors="replace")
             if "UPSTREAM_CTS_COMPLETE" in text or "BYE seq=" in text:
                 # Give ps5logd a moment to write the JSON manifest and flush.

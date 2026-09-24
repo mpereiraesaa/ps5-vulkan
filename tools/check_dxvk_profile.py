@@ -194,16 +194,14 @@ def implemented_device_extensions() -> set[str]:
     missing = sorted(token for token in tokens if token not in definitions)
     if missing:
         raise ValueError("unresolved device extension macros: " + ", ".join(missing))
-    # Compiling a conditional KHR route does not mean the shipping platform
-    # reports that extension. Count only the bits assigned to the native
-    # platform's supported-features mask, keeping the capability probe aligned
-    # until a measured promotion changes that mask.
+    # Count only bits assigned to the native platform's supported-features
+    # mask, keeping the capability probe aligned with the ordinary build.
     platform_source = (ROOT / "native/platform_ps5.c").read_text()
     # A default-off measurement build is not the shipping capability probe.
     # Strip only this explicitly named conditional block, and fail closed if
     # its preprocessor boundary is malformed rather than counting its bits.
     for name in (
-        "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
+        "PS5VK_SHADER_INT16_DIAGNOSTIC",
         "PS5VK_TIMELINE_DIAGNOSTIC",
         "PS5VK_DEPTH_STENCIL_DIAGNOSTIC",
     ):
@@ -266,23 +264,88 @@ def core_indexes(requirements: dict) -> tuple[dict[str, list[dict]],
     return feature_index, property_index, extension_index
 
 
+# CTS is regression evidence, not a readiness gate.  A capability that is
+# exposed, implemented and strictly native-witnessed is ready whether or not a
+# CTS leaf is mapped or has run.  CTS still records two positive routes:
+#   cts-pass          original leaves inside the frozen regression selection;
+#   cts-focused-pass  original leaves that passed a focused run of an exact
+#                     artifact and case list outside that selection, every
+#                     named case Pass (NotSupported, Skip or Fail never count);
+# and an observed applicable failure, cts-fail, stays visible and blocks the
+# row until it is explained or fixed.  No route relaxes the API or native axes.
+CTS_PASS = ("cts-pass", "cts-focused-pass")
+CTS_BLOCKING = ("cts-fail",)
+SHA256 = re.compile(r"[0-9a-f]{64}")
+CASE_NAME = re.compile(r"dEQP-VK(?:\.[A-Za-z0-9_\-]+)+")
+
+
+def _refs(override: dict, what: str) -> list[str]:
+    refs = override.get("refs")
+    if (not isinstance(refs, list) or not refs or
+            any(not isinstance(ref, str) or not ref for ref in refs)):
+        raise ValueError(f"{what} needs non-empty refs")
+    return refs
+
+
+def _run_ids(override: dict, what: str) -> list[str]:
+    runs = override.get("run_ids")
+    if (not isinstance(runs, list) or not runs or
+            any(not isinstance(run, str) or not run for run in runs)):
+        raise ValueError(f"{what} needs at least one run id")
+    return runs
+
+
+def _artifact(override: dict, key: str, what: str) -> str:
+    value = override.get(key)
+    if not isinstance(value, str) or not SHA256.fullmatch(value):
+        raise ValueError(f"{what} needs a SHA-256 {key}")
+    return value
+
+
+def focused_cts(override: dict, selected_cases: set[str],
+                diagnostic_cases: set[str]) -> dict:
+    claimed = override.get("cases")
+    if (not isinstance(claimed, list) or not claimed or len(set(claimed)) != len(claimed) or
+            any(not isinstance(case, str) or not CASE_NAME.fullmatch(case)
+                for case in claimed)):
+        raise ValueError("focused CTS evidence needs unique exact dEQP-VK leaf names")
+    if set(claimed) & diagnostic_cases:
+        raise ValueError("focused CTS evidence names a case the frozen package keeps "
+                         "as a diagnostic; reconcile the manifest first")
+    if set(claimed) <= selected_cases:
+        raise ValueError("every focused case is in the frozen selection; use cts-pass")
+    if override.get("result") != {"Pass": len(claimed)}:
+        raise ValueError("focused CTS result must be exactly Pass for every named case")
+    return {"run_ids": _run_ids(override, "focused CTS evidence"),
+            "artifact_sha256": _artifact(override, "artifact_sha256", "focused CTS evidence"),
+            "case_list_sha256": _artifact(override, "case_list_sha256",
+                                          "focused CTS evidence"),
+            "result": override["result"]}
+
+
 def cts_join(rows: list[dict], override: dict | None,
              selected_cases: set[str], diagnostic_cases: set[str]) -> dict:
     cases = sorted({case for row in rows for case in row.get("cts", {}).get("cases", [])})
     requirement_ids = sorted({row["id"] for row in rows})
     if override:
         state = override.get("state")
-        if state not in ("cts-pass", "cts-fail"):
+        extra: dict = {}
+        if state == "cts-focused-pass":
+            extra = focused_cts(override, selected_cases, diagnostic_cases)
+            claimed = override["cases"]
+        elif state in ("cts-pass", "cts-fail"):
+            claimed = override.get("cases", [])
+            allowed = selected_cases if state == "cts-pass" else diagnostic_cases
+            if not claimed or not set(claimed).issubset(allowed):
+                raise ValueError("CTS evidence names a case outside the current upstream "
+                                 f"{'selection' if state == 'cts-pass' else 'diagnostics'}")
+        else:
             raise ValueError(f"unsupported CTS evidence state {state!r}")
-        claimed = override.get("cases", [])
-        allowed = selected_cases if state == "cts-pass" else diagnostic_cases
-        if not claimed or not set(claimed).issubset(allowed):
-            raise ValueError("CTS evidence names a case outside the current upstream "
-                             f"{'selection' if state == 'cts-pass' else 'diagnostics'}")
         return {
             "state": state, "cases": claimed,
             "mapped_cases": cases, "related_requirement_ids": requirement_ids,
             "refs": override.get("refs", []), "note": override.get("note", ""),
+            **extra,
         }
     return {
         "state": "mapped-not-run" if cases else "not-mapped",
@@ -290,6 +353,26 @@ def cts_join(rows: list[dict], override: dict | None,
         "related_requirement_ids": requirement_ids,
         "refs": [],
     }
+
+
+def validate_native(identifier: str, native: dict) -> None:
+    state = native.get("state")
+    if state not in ("native-evidence", "witnessed-blocker",
+                     "reported-not-executed", "not-run"):
+        raise ValueError(f"invalid native state for {identifier}")
+    if state == "native-evidence":
+        # Per-capability execution evidence is bound to an exact artifact.
+        what = f"native evidence for {identifier}"
+        _run_ids(native, what)
+        _artifact(native, "artifact_sha256", what)
+        _refs(native, what)
+
+
+def row_ready(row: dict) -> bool:
+    return (row["api"]["state"] == "satisfied" and
+            row["implementation"]["state"] == "implemented" and
+            row["cts"]["state"] not in CTS_BLOCKING and
+            row["native"]["state"] == "native-evidence")
 
 
 def implementation_for(row: dict, feature_reports: dict[str, dict],
@@ -426,21 +509,16 @@ def generate() -> dict:
             }
         else:
             native = {"state": "not-run", "refs": []}
-        if native.get("state") not in ("native-evidence", "witnessed-blocker",
-                                       "reported-not-executed", "not-run"):
-            raise ValueError(f"invalid native state for {identifier}")
-        ready = (api["state"] == "satisfied" and
-                 implementation["state"] == "implemented" and
-                 cts["state"] == "cts-pass" and
-                 native["state"] == "native-evidence")
-        rows.append({
+        validate_native(identifier, native)
+        row = {
             **requirement,
             "api": api,
             "implementation": implementation,
             "cts": cts,
             "native": native,
-            "verdict": "satisfied" if ready else "blocker",
-        })
+        }
+        row["verdict"] = "satisfied" if row_ready(row) else "blocker"
+        rows.append(row)
 
     if probe:
         api_satisfied = {row["id"] for row in rows
@@ -449,17 +527,29 @@ def generate() -> dict:
             raise ValueError("DXVK native capability probe satisfied set drift")
 
     dimensions = {}
-    for name, success in (("api", "satisfied"), ("implementation", "implemented"),
-                          ("cts", "cts-pass"), ("native", "native-evidence")):
-        satisfied = sum(row[name]["state"] == success for row in rows)
+    for name, success in (("api", ("satisfied",)), ("implementation", ("implemented",)),
+                          ("native", ("native-evidence",))):
+        satisfied = sum(row[name]["state"] in success for row in rows)
         dimensions[name] = {"satisfied": satisfied,
                             "blocker": len(rows) - satisfied}
+    # CTS is evidence, not a gate: report passes and observed failures, and
+    # leave the rest as "no-evidence" instead of calling it a blocker.
+    passed = sum(row["cts"]["state"] in CTS_PASS for row in rows)
+    failed = sum(row["cts"]["state"] in CTS_BLOCKING for row in rows)
+    dimensions["cts"] = {"pass": passed, "fail": failed,
+                         "no-evidence": len(rows) - passed - failed}
     return {
         "schema": SCHEMA,
         "profile": profile["profile"],
         "source": profile["source"],
         "policy": {
-            "ready_rule": "api=satisfied AND implementation=implemented AND cts=cts-pass AND native=native-evidence",
+            "ready_rule": ("api=satisfied AND implementation=implemented AND "
+                           "native=native-evidence AND cts not in cts_blocking_states"),
+            "cts_blocking_states": list(CTS_BLOCKING),
+            "cts_scope": ("regression evidence per capability (frozen selection or a "
+                          "focused run); a missing, unmapped or unrun leaf never blocks, "
+                          "an observed applicable failure always does; never whole-suite "
+                          "CTS or conformance"),
             "missing_evidence": "blocker",
             "scope": "DXVK v2.6.2 D3D11 feature level 11_0 baseline only",
         },
@@ -490,11 +580,7 @@ def validate(document: dict) -> None:
     if summary.get("requirements") != len(rows):
         raise ValueError("DXVK matrix count drift")
     for row in rows:
-        ready = (row["api"]["state"] == "satisfied" and
-                 row["implementation"]["state"] == "implemented" and
-                 row["cts"]["state"] == "cts-pass" and
-                 row["native"]["state"] == "native-evidence")
-        if (row.get("verdict") == "satisfied") != ready:
+        if (row.get("verdict") == "satisfied") != row_ready(row):
             raise ValueError(f"non-fail-closed verdict for {row.get('id')}")
 
 

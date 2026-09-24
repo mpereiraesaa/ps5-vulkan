@@ -170,11 +170,10 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED |
                           PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
                           PS5VK_FEATURE_TEXTURE_COMPRESSION_BC |
-                          /* The UBO layout gate is checked when the shader
-                           * module is created. It changes no PSBC compute
-                           * option, but an enabled device still carries it
-                            * into every compute pipeline creation. */
-                          PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT))
+                          /* The UBO layout gate is checked at module creation;
+                           * Int16 is forwarded to the PSBC compute adapter. */
+                          PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT |
+                          PS5VK_FEATURE_SHADER_INT16))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
         !(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL))
@@ -183,6 +182,7 @@ VkResult ps5vk_runtime_compile_compute_features(
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
     opts.enable_storage_buffer_16bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_16BIT);
+    opts.enable_int16 = !!(feature_mask & PS5VK_FEATURE_SHADER_INT16);
     opts.enable_physical_storage_buffer_addresses =
         !!(feature_mask & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
     opts.enable_vulkan_memory_model =

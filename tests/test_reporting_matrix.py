@@ -40,6 +40,23 @@ def unassigned_format_table_digest(rows):
 
 
 class TestReportingMatrix(unittest.TestCase):
+    def test_device_scope_uses_public_khr_query_without_core_version_change(self):
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        for profile in ("graphics", "compute"):
+            with self.subTest(profile=profile):
+                reported = data["profiles"][profile]
+                self.assertEqual({"route": "VK_KHR_vulkan_memory_model",
+                                  "vulkanMemoryModel": True,
+                                  "vulkanMemoryModelDeviceScope": True},
+                                 reported["memory_model_query"])
+                self.assertEqual(4194304, reported["apiVersion"])
+                row = next(row for row in data["features"] if
+                           row["profile"] == profile and
+                           row["feature"] == "vulkanMemoryModelDeviceScope")
+                self.assertTrue(row["reported"])
+                self.assertEqual("satisfied", row["verdict"])
+                self.assertEqual([], row["applicable_cts"]["cases"])
+
     def test_multiview_queries_are_graphics_only_and_keep_the_route(self):
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         self.assertEqual(

@@ -324,13 +324,16 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
 #endif
     /* The Vulkan 1.0 KHR route is backed by the seven unchanged volatile
-     * queue-family atomic CTS leaves and the bounded GPU ordering witness.
-     * DeviceScope has separate requirements and remains diagnostic-only. */
+     * queue-family atomic CTS leaves and the bounded GPU ordering witness. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
-#if defined(PS5VK_MEMORY_MODEL_DIAGNOSTIC) && PS5VK_MEMORY_MODEL_DIAGNOSTIC
-    /* DeviceScope remains measurement-only: the original message-passing
-     * factory rejects Vulkan 1.0 before querying this extension feature. */
+    /* DeviceScope is exposed through the KHR feature chain under Vulkan 1.0.
+     * The original message-passing CTS factory requires core Vulkan 1.1, so
+     * the KHR route has a separate bounded native witness. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+#if defined(PS5VK_SHADER_INT16_DIAGNOSTIC) && PS5VK_SHADER_INT16_DIAGNOSTIC
+    /* Measure the core Int16 route with original CTS before considering the
+     * shader feature for the ordinary profile. Subgroup bits stay separate. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_INT16;
 #endif
     /* Vulkan 1.0 exposes the KHR route through device-group creation and
      * properties2. The bounded address witness and two unchanged original

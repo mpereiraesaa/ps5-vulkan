@@ -1,169 +1,60 @@
 # ps5-vulkan
 
-An experimental Vulkan-style graphics and compute API for native PlayStation 5
-homebrew, targeting the console's `gfx1013` GPU.
+An experimental, hardware-accelerated Vulkan-style graphics and compute API for
+native PlayStation 5 homebrew on the console's `gfx1013` GPU. It is built and
+tested on an owned PS5; the public device currently reports Vulkan 1.0. The
+project documents supported operations individually rather than claiming a
+complete Vulkan core version.
 
-The current implementation renders animated, indexed and textured 3D geometry
-through hardware graphics pipelines. It supports depth testing, GPU-backed
-images and buffers, explicit upload and layout transitions, and native 1080p
-presentation with two-buffer ownership. Compute dispatch uses the same Vulkan
-object model and native GPU submission path.
+## Working capabilities
 
-Hardware validation has been performed on an owned PS5 running firmware 12.02.
-The demonstrated scene sustains approximately 59.94 presented frames per second,
-survives repeated resource reuse, and can be closed and relaunched cleanly.
-Deterministic GPU readback checks cover selected texture and depth-overlap
-results; visual output is not the sole correctness signal.
+- Native graphics and compute submission, GPU-backed buffers and images,
+  command buffers, fences, binary semaphores, and two-buffer 1080p VideoOut
+  presentation with clean Close Game/relaunch.
+- Runtime SPIR-V compute and vertex/fragment compilation through pinned
+  PSBC/ACO, with bounded in-memory shader and pipeline caches. Compute has up
+  to four descriptor sets, storage/uniform buffers, uniform texel buffers,
+  push constants, specialization constants, and extension-negotiated 8/16-bit
+  storage-buffer access.
+- Indexed and indirect draws, typed vertex formats, depth testing, face
+  culling, multiview, geometry and tessellation stages, and clip/cull distance
+  export. The graphics backend also serves bounded non-solid fill, depth
+  clamp/bias and multiple viewports.
+- One or two BGRA8/RGBA8 colour attachments, independent and dual-source
+  blending, fragment storage writes/atomics, and 2x/4x colour multisampling
+  with per-sample shading, input-attachment reads and resolve.
+- Sampled 1D, 2D, array, cube, cube-array and 3D images, including bounded BC
+  compressed formats, mip uploads, depth sampling and extended image gather.
+  The format ledger records 61 sampled texture formats: 40 filterable rows and
+  20 integer rows restricted to nearest filtering.
+  Selected image copy, blit, clear and readback paths have exact GPU oracles;
+  unsupported resource shapes remain fail-closed.
+- Occlusion queries, including precise counts, and selected Vulkan memory-model,
+  standard-UBO-layout and buffer-device-address behavior through explicit KHR
+  extension routes. The public API and native evidence are narrower than the
+  corresponding complete core-version contracts.
 
-## API coverage
+These capabilities were validated through public-SDK consumers, structured
+`ps5log/1` telemetry and deterministic GPU readback; visual output alone is
+not the oracle. The T07 resource/query expansion is merged and its ordinary
+upstream selection passed 829/829 cases on hardware. See [API.md](API.md) for
+the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
+[BUILDING.md](BUILDING.md) to build the SDK.
 
-- Vulkan 1.0-style instance, physical-device, device and queue objects
-- Core `robustBufferAccess` reporting, device negotiation and executable
-  UBO/SSBO out-of-bounds semantics backed by bounded GFX1013 descriptors; 12
-  original upstream access oracles pass in the exact 109-case native suite
-- Host-visible buffers and images backed by native direct memory
-- Command pools and command buffers with explicit recording state
-- Ordered byte-granular buffer copies plus bounded buffer update and fill commands
-- Single-dispatch and single-draw indirect commands with execution-time argument resolution
-- Runtime-compiled compute pipelines with up to four resource sets
-- Storage buffers, uniform buffers and 41 directly hardware-tested uniform
-  texel-buffer formats spanning 1-, 2-, 4-, 8- and 16-byte elements
-- Extension-negotiated 8-bit and 16-bit storage-buffer access
-- Push constants and scalar specialization constants in compute and runtime graphics
-- Vulkan pipeline-cache objects with a normative header export (no portable compiled-code records yet)
-- Occlusion query pools with bounded native counters and precise-query support;
-  empty sparse image queries
-- Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
-- Vertex and index buffers, indexed and non-indexed triangle-list and
-  triangle-strip draws (the strip has host coverage but no native witness yet);
-  core 8-, 16- and 32-bit float/normalized/integer vertex families plus the
-  packed `A8B8G8R8_*` and `A2B10G10R10_UNORM` forms currently listed in
-  [API.md](API.md). Forty-one conversion cases have exact GPU readback on
-  non-indexed runtime draws, including byte strides and unaligned binding
-  offsets
-- One or two BGRA8/RGBA8 colour attachments in a pass - the second through the
-  independent-blend contract, each with its own clear value, blend state and
-  write mask - plus an optional D32 depth attachment
-- Fragment side effects: storage-buffer stores and atomics from a runtime
-  fragment stage, fail-closed behind `fragmentStoresAndAtomics` and witnessed
-  by an exact counter readback with its guard words intact
-- Blending across the GFX1013 `CB_BLEND0_CONTROL` space, dual-source secondary
-  exports (`dualSrcBlend`), independent per-attachment blend state and partial
-  colour write masks for `VK_FORMAT_R8G8B8A8_UNORM`
-- 2x and 4x multisampled colour attachments with per-sample fragment
-  invocation and `gl_FragCoord` at the sample (`sampleRateShading` advertised):
-  Vulkan's standard sample positions, a resolve target the driver writes, and
-  per-sample reads of the multisampled attachment as an input attachment.
-  Multisampled depth attachments, multisampled sampled images and 8x and above
-  are not served
-- 61 sampled texture formats spanning 8/16/32-bit UNORM,
-  SNORM, signed/unsigned integer and floating-point families, RGBA8 sRGB,
-  A8B8G8R8 packed color/integer, RGB9E5 and B10G11R11 packed floating point,
-  sixteen BC formats and bounded D32 depth sampling, with GPU
-  upload transitions and deterministic hardware readback; core repeat,
-  mirrored-repeat, edge/border clamp and the six fixed border-color enums are
-  implemented. Nearest/linear filtering is validated for the 40
-  filterable rows; the 20 integer rows use typed samplers and correctly
-  remain nearest-only. A three-level RGBA8 chain has deterministic explicit-LOD
-  GPU readback through the staged public SDK; signed sampler LOD bias is
-  implemented and hardware-qualified at both Vulkan 1.0 boundary values, -2
-  and +2
-- 1D, 1D-array, 2D-array, cubemap and 3D sampled-image views with layered
-  buffer uploads; their current per-region, layer, face or slice RGBA8
-  witnesses use one level, while the explicit mip witness is 2D
-- One static or dynamic viewport/scissor pair, depth testing and face culling
-- Recording support for all Vulkan 1.0 dynamic-state setters; only dynamic
-  viewport/scissor currently participate in native draws
-- Bounded RGBA8 attachment readback through `vkCmdCopyImageToBuffer`
-- Native two-buffer 1920x1080 presentation
-- Explicit completion, retirement and bounded resource accounting
+## In progress
 
-The exact supported profile is documented in [API.md](API.md). Build and test
-requirements are in [BUILDING.md](BUILDING.md).
-Runtime graphics test results and their limits are summarized in [VALIDATION.md](VALIDATION.md).
-Vertex-fetch preparation and shader-cache identity are described in [VERTEX_INPUT.md](VERTEX_INPUT.md).
-Native tessellation support, its tested limits and the focused hardware
-validation are recorded in
-[TESSELLATION_STATUS.md](TESSELLATION_STATUS.md).
-The provenance and current deficits of physical-device limits, memory, queues
-and formats are tracked in
-[PHYSICAL_DEVICE_REPORTING.md](PHYSICAL_DEVICE_REPORTING.md).
+Current work adds host query reset, imageless framebuffers, mirror-clamp
+sampling, timeline semaphores and separate depth/stencil layouts. These are
+**not** claims of public support until implementation and an artifact-bound
+native witness pass. Additional synchronization and descriptor capabilities
+will follow as needed by real consumers.
 
-Two independent suites are integrated against this backend: a focused selection
-of **genuine upstream Khronos VK-GL-CTS** code compiled into a native payload
-([UPSTREAM_CTS.md](UPSTREAM_CTS.md)), and a synthetic `contract.*` suite modelled
-after the CTS *mustpass* selection. They are separate artifacts with separate
-verifiers; neither is a claim of Vulkan conformance.
-
-## DXVK target
-
-DXVK support is tracked against the immutable DXVK **v2.6.2** profile
-`VP_DXVK_d3d11_level_11_0_baseline`, whose declared API version is Vulkan
-1.3.204. The exact upstream profile is hash-pinned; its 62 leaf requirements
-(one API version, two extensions, 49 features and ten properties) are derived
-into a checked-in machine-readable profile and joined independently to the
-current public API, reviewed implementation, CTS and native evidence.
-
-The fail-closed matrix currently proves **24/62** requirements completely:
-`robustBufferAccess`, multiview and its two required limits, the three
-indirect/indexed draw features `drawIndirectFirstInstance`,
-`multiDrawIndirect` (with `maxDrawIndirectCount = 65535`) and
-`fullDrawIndexUint32`, the user-defined `shaderClipDistance` and
-`shaderCullDistance` pair, `fragmentStoresAndAtomics`, `dualSrcBlend`,
-`independentBlend`, `sampleRateShading`, `uniformBufferStandardLayout`,
-base `vulkanMemoryModel` and bounded `bufferDeviceAddress` through their Vulkan
-1.0 KHR routes, and the four rasterization and viewport features
-`depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`. The blend
-features draw into two colour attachments; sample-rate shading runs once per
-sample at 2x and 4x. The four T07 features `imageCubeArray`,
-`textureCompressionBC`, `shaderImageGatherExtended` and
-`occlusionQueryPrecise` passed twice in the 829-case ordinary upstream CTS
-selection. Multiview is queried through its
-explicit KHR route. `geometryShader` and `tessellationShader` are positive on
-the API, implementation and CTS axes but their native axis is still
-`reported-not-executed`, so they stay among the other 38 requirements that
-remain blockers, together with the API-version requirement. This is an
-implementation roadmap, not a DXVK compatibility claim.
-hardware-validated and merged. The default graphics build passed a focused
-403/403 upstream run, including 99 tessellation-related cases. The separate
-fail-closed DXVK matrix has not yet admitted the geometry/tessellation native
-receipts or those 99 cases into its frozen selection, so it still scores the
-two rows as blockers. See the [backlog](docs/DXVK_V262_BACKLOG.md) for this
-accounting distinction and the machine-readable matrix for the current score.
-This is an implementation roadmap, not a DXVK compatibility claim.
-The public-SDK-only capability probe can be built with
-`python3 tools/build_consumer.py --dxvk-v262-probe`; see
-[the inventory](conformance_inventory/README.md#dxvk-262-profile) and
-[validation notes](VALIDATION.md#dxvk-262-public-abi-capability-probe).
-
-## Important boundaries
-
-This is not a Vulkan-conformant driver or ICD, and it does not yet provide WSI,
-swapchains, broad format coverage, general image transfer/blit, multiple queues,
-timeline semaphores, anisotropy or arbitrary shader programs. Blending is served
-through the GFX1013 blend-control space this profile programs for its two colour
-formats, and multisampling only where it was measured: 1x/2x/4x **colour**
-attachments with per-sample shading, the resolve target the driver writes and
-per-sample input-attachment reads - a multisampled depth attachment, a
-multisampled sampled image and 8x and above are not provided, and the
-interpolation-offset limits are reported as zero. The single-queue Vulkan 1.0
-profile includes binary semaphores and
-host/device events; it does not imply multi-queue or synchronization2 support.
-Compute SPIR-V is compiled at runtime through the pinned PSBC/ACO GFX1013
-backend and cached under a bounded in-memory policy. Runtime vertex/fragment
-compilation now supports procedural or multi-binding typed triangles with
-matching smooth interfaces, BGRA8/RGBA8 targets, push/specialization constants
-and vertex/fragment combined-image samplers. A four-set/96-element shared-stage
-sampler stress fixture has exact GPU readback, but exceeds the still-conservative published
-sampler limits; it is not a portable consumer or a limit promotion.
-Compiled pairs reuse the bounded cache. Two identical-artifact shared-stage runs
-passed, as did the default fragment-only regression and clean app closure.
-This bounded result does not establish arbitrary shader compatibility; see
-[the qualification details](VALIDATION.md#shared-stage-sampler-hardware-qualification).
-Other graphics resource types
-and arbitrary textured runtime-shader profiles remain unsupported.
-The 8/16-bit slice covers storage-buffer access only; narrow integer/float
-arithmetic and other narrow storage classes remain unadvertised.
+There is no Vulkan loader/ICD or Vulkan WSI/swapchain implementation. The
+native VideoOut path is separate from WSI. Format, shader, queue and resource
+coverage is intentionally bounded; [API.md](API.md) records those limits.
+Focused upstream CTS results are available for debugging and regression in
+[UPSTREAM_CTS.md](UPSTREAM_CTS.md), but no full CTS or Vulkan conformance claim
+is made.
 
 ## Development
 
