@@ -456,10 +456,14 @@ static void bc_source_subresources(VkFormat format, VkFilter filter)
 {
     void *src_map=NULL, *dst_map=NULL;
     VkImage source=make_image_subresources(format,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         17,9,5,3,VK_IMAGE_TILING_OPTIMAL,&src_map);
     VkImage destination=make_image_tiled_extent(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT,8,8,VK_IMAGE_TILING_LINEAR,&dst_map);
+    VkImageFormatProperties query;
+    assert(ps5vk_graphics_image_properties(format,VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,0,UINT64_C(268435456),&query)==VK_SUCCESS);
+    assert(query.maxMipLevels>=5 && query.maxArrayLayers>=3);
     struct ps5vk_texture_mip_layout layout;
     assert(!ps5vk_texture_mip_layout_for_slices(format,17,9,3,5,&layout));
     memset(src_map,0xa5,(size_t)layout.bytes);
@@ -530,10 +534,10 @@ static void bc_destination_subresources(VkFormat destination_format, VkFilter fi
 {
     void *src_map=NULL,*dst_map=NULL;
     VkImage source=make_image_subresources(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         8,8,2,3,VK_IMAGE_TILING_OPTIMAL,&src_map);
     VkImage destination=make_image_subresources(destination_format,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         17,9,3,4,VK_IMAGE_TILING_OPTIMAL,&dst_map);
     struct ps5vk_texture_mip_layout src,dst;
     assert(!ps5vk_texture_mip_layout_for_slices(source->info.format,8,8,3,2,&src));

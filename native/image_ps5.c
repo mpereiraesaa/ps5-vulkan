@@ -170,7 +170,8 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         struct ps5vk_texture_mip_layout texture;
         const uint32_t slices=info->imageType==VK_IMAGE_TYPE_3D?
             info->extent.depth:info->arrayLayers;
-        if(!sampled || (info->mipLevels!=1 && !(info->usage&VK_IMAGE_USAGE_SAMPLED_BIT)) ||
+        if(!sampled || (info->mipLevels!=1 && !(info->usage&VK_IMAGE_USAGE_SAMPLED_BIT) &&
+                       !ps5vk_bc_transfer_subresources(info->format)) ||
            ps5vk_texture_mip_layout_for_slices(info->format,
             info->extent.width,info->extent.height,slices,info->mipLevels,&texture))
             return VK_ERROR_FORMAT_NOT_SUPPORTED;

@@ -133,6 +133,19 @@ static inline int ps5vk_graphics_image_usage_with_flags(
         ps5vk_texture_format_has(format, PS5VK_FORMAT_CAP_COLOR_ATTACHMENT);
 }
 
+/* Multi-subresource transfer storage for the BC diagnostic and its RGBA8
+ * destinations. Publication remains gated by the measured profile. */
+static inline VkBool32 ps5vk_bc_transfer_subresources(VkFormat format)
+{
+#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
+    return ps5vk_texture_format_block_compressed(format) ||
+        format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB;
+#else
+    (void)format;
+    return VK_FALSE;
+#endif
+}
+
 /* Implementation ceilings from the encoders/layout arithmetic, not a hardware
  * certification at maximum dimensions. The resource-size budget also applies. */
 static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
@@ -217,6 +230,7 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         if(input_attachment_shape) layers=PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR;
     } else if(transfer_only && type==VK_IMAGE_TYPE_2D && !flags) {
         width=height=PS5VK_MAX_IMAGE_2D;
+        if(ps5vk_bc_transfer_subresources(format)) layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
     } else if(sampled && type==VK_IMAGE_TYPE_1D && !flags) {
         width=PS5VK_MAX_IMAGE_1D;height=1;layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
     } else if(sampled && type==VK_IMAGE_TYPE_2D && !flags) {
@@ -232,7 +246,8 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         width=height=depth=PS5VK_MAX_IMAGE_3D;
     } else return VK_ERROR_FORMAT_NOT_SUPPORTED;
     uint32_t mip_levels=1;
-    if(sampled && (usage&VK_IMAGE_USAGE_SAMPLED_BIT)) {
+    if((sampled && (usage&VK_IMAGE_USAGE_SAMPLED_BIT)) ||
+       (transfer_only && ps5vk_bc_transfer_subresources(format))) {
         uint32_t dimension=width>height?width:height;
         if(depth>dimension)dimension=depth;
         mip_levels=0;
