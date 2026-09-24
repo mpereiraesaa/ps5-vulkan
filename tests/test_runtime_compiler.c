@@ -280,6 +280,24 @@ int main(void)
            legacy_program.local_size[1] == 4 && legacy_program.local_size[2] == 1);
     free(legacy_code);
     free(legacy);
+    /* Compile the actual SDK witness module through PSBC/ACO. The synthetic
+     * pipeline gate test proves admission only; this catches a compiler
+     * failure before a diagnostic GPU run. Public subgroup reporting stays off. */
+    size_t iadd_bytes = 0;
+    uint32_t *iadd_spirv = read_file(
+        "build/test-shaders/t08_subgroup_iadd_runtime.spv", &iadd_bytes);
+    assert(iadd_spirv);
+    struct ps5vk_compiled_program iadd_program = {0};
+    uint32_t *iadd_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(iadd_spirv, iadd_bytes / 4,
+        "main", &single_storage_layout, NULL, 0, &iadd_program,
+        &iadd_code) == VK_SUCCESS);
+    assert(iadd_code && iadd_program.code_words && iadd_program.gfx == 1013 &&
+           iadd_program.wave_size == 32 && iadd_program.local_size[0] == 64 &&
+           iadd_program.descriptor_count == 1 &&
+           iadd_program.descriptors[0].binding == 0);
+    free(iadd_code);
+    free(iadd_spirv);
     /* 4. Test error handling */
     struct ps5vk_compiled_program bad_prog;
     uint32_t *bad_code = NULL;

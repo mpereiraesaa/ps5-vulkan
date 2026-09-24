@@ -4691,6 +4691,9 @@ outside compute, or when replaced by an unmeasured operation. The pinned
 compiler's separate typed arithmetic tests establish code generation, but
 the SDK-linked IAdd witness now builds as signed eboot SHA-256
 `2c9c39aa085ed628af1e1c809d394d6cf6ccc9b5139a93ad509673a7b7ad0f7a`.
+The exact witness SPIR-V also compiles through the host PSBC/ACO runtime path
+to nonempty GFX1013 wave32 code with one storage-buffer descriptor and a
+64-invocation workgroup. This is compiler evidence, not GPU output evidence.
 Its shader reads four host-provided seeds, reduces each 32-lane subgroup,
 and checks 128 output words plus untouched guards after a bounded fence.
 The strict ps5log/1 verifier is host-tested; the new witness has no GPU
