@@ -44,6 +44,9 @@
 #include "sampled_sets.h"
 #include "indirect_draws.h"
 #include "raster_state.h"
+#ifdef CONSUMER_CUBE_ARRAY_WITNESS
+#include "cube_array_witness.h"
+#endif
 
 static int parse_is_continuous(void)
 {
@@ -3204,6 +3207,12 @@ int main(void)
         .pNext = &storage8,
     };
     vkGetPhysicalDeviceFeatures2KHR(physical_device, &features2);
+#ifdef CONSUMER_CUBE_ARRAY_WITNESS
+    REQUIRE(features2.features.imageCubeArray == VK_TRUE,
+            "diagnostic imageCubeArray feature report");
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_CONSUMER_CUBE_ARRAY_FEATURE imageCubeArray=1 enabled_by_features2=1");
+#endif
     REQUIRE(features2.features.robustBufferAccess == VK_TRUE,
             "mandatory Vulkan 1.0 robustBufferAccess feature report");
     REQUIRE(storage8.storageBuffer8BitAccess == VK_TRUE &&
@@ -3262,6 +3271,16 @@ int main(void)
 
     VkQueue queue = VK_NULL_HANDLE;
     vkGetDeviceQueue(device, 0, 0, &queue);
+
+#ifdef CONSUMER_CUBE_ARRAY_WITNESS
+    run_cube_array_witness(physical_device, device, queue);
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_TEST_SUCCESS");
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1");
+    ps5log_line(PS5LOG_MARK, "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
+    ps5log_close("consumer-cube-array-end");
+    for (;;) sleep(1);
+#endif
 
     /* 4. Exercise the public pipeline-cache contract, then run runtime compute
      * with that cache passed to pipeline creation. */

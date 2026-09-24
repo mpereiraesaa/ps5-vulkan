@@ -307,6 +307,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * the front end, the pipeline key and the native per-target programming
      * already carry the bound. */
     platform->supported_features |= PS5VK_FEATURE_INDEPENDENT_BLEND;
+#if defined(PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC) && PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC
+    /* Private measurement build only: let the public SDK cube-array witness
+     * negotiate its view and shader. The default shipping mask stays false
+     * until image creation, all-face sampling, applicable CTS and acceptance
+     * evidence are complete. tools/build_sdk.py leaves this switch off unless
+     * the dedicated witness explicitly requests it. */
+    platform->supported_features |= PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
+#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

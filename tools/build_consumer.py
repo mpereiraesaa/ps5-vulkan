@@ -141,6 +141,8 @@ def main():
                         help="Build the public-ABI-only DXVK v2.6.2 capability probe")
     parser.add_argument("--ubo-standard-layout", action="store_true",
                         help="Build the compact UBO GPU witness entry point")
+    parser.add_argument("--cube-array-witness", action="store_true",
+                        help="Build the finite two-cube/six-face sampled-image witness")
     args = parser.parse_args()
     if args.continuous and args.shared_stage_samplers:
         parser.error("Shared-stage qualification requires the finite consumer")
@@ -152,6 +154,11 @@ def main():
         parser.error("Texel-format qualification requires the finite consumer")
     if args.texel_rgba8 and args.texel_formats:
         parser.error("Choose one uniform-texel witness")
+    if args.cube_array_witness and any((args.continuous, args.shared_stage_samplers,
+                                        args.single_set_samplers, args.mixed_resources,
+                                        args.texel_rgba8, args.texel_formats,
+                                        args.dxvk_v262_probe, args.ubo_standard_layout)):
+        parser.error("Cube-array witness is an independent finite profile")
     if args.dxvk_v262_probe and any((args.continuous, args.shared_stage_samplers,
                                     args.single_set_samplers, args.mixed_resources,
                                     args.texel_rgba8, args.texel_formats,
@@ -173,7 +180,11 @@ def main():
     # failures (or, worse, validation against yesterday's implementation).
     if not args.use_staged_sdk or not (DIST_SDK / "lib/libps5vk.a").is_file():
         print("Staging current SDK with tools/build_sdk.py...")
-        subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")], check=True)
+        build_env = dict(os.environ)
+        if args.cube_array_witness:
+            build_env["PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC"] = "1"
+        subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")],
+                       env=build_env, check=True)
 
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
@@ -193,6 +204,7 @@ def main():
     storage_shader_header = BUILD_DIR / "storage_width_shaders.h"
     sync_shader_header = BUILD_DIR / "sync_shaders.h"
     sampled_shader_header = BUILD_DIR / "sampled_set_shaders.h"
+    cube_array_shader_header = BUILD_DIR / "cube_array_witness_shaders.h"
     pie_elf = BUILD_DIR / "consumer_pie.elf"
     eboot_elf = BUILD_DIR / "eboot.elf"
     eboot_bin = DIST_DIR / "eboot.bin"
@@ -240,6 +252,11 @@ def main():
             sys.executable, str(ROOT / "tools/prepare_consumer_ubo_shader.py"),
             "--out", str(ubo_shader_header),
         ], check=True)
+    if args.cube_array_witness:
+        subprocess.run([
+            sys.executable, str(ROOT / "tools/prepare_consumer_cube_array_shaders.py"),
+            "--out", str(cube_array_shader_header),
+        ], check=True)
     cflags = [
         "-std=c11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
         "-ffunction-sections", "-fdata-sections",
@@ -263,6 +280,8 @@ def main():
         cflags.append("-DCONSUMER_TEXEL_FORMATS=1")
     if args.dxvk_v262_probe:
         cflags.append("-DCONSUMER_DXVK262_PROBE=1")
+    if args.cube_array_witness:
+        cflags.append("-DCONSUMER_CUBE_ARRAY_WITNESS=1")
     consumer_source = (CONSUMER_DIR / "ubo_layout_main.c" if args.ubo_standard_layout
                        else CONSUMER_DIR / "main.c")
 
@@ -529,6 +548,28 @@ def main():
                 "values": 64,
                 "ubo_bytes": 136,
                 "guarded_output": True,
+            },
+        }
+    if args.cube_array_witness:
+        artifact = {
+            "title": "PPSA99994",
+            "profile": "image-cube-array-witness",
+            "submit_enabled": True,
+            "files": files,
+            "cube_array": {
+                "feature": "VkPhysicalDeviceFeatures.imageCubeArray",
+                "cubes": 2,
+                "faces_per_cube": 6,
+                "layers": 12,
+                "face_extent": [4, 4],
+                "target_extent": [192, 64],
+                "format": "VK_FORMAT_R8G8B8A8_UNORM",
+                "vertex_spirv_sha256": hashlib.sha256(
+                    cube_array_shader_header.with_suffix(".vert.spv").read_bytes()
+                ).hexdigest(),
+                "fragment_spirv_sha256": hashlib.sha256(
+                    cube_array_shader_header.with_suffix(".frag.spv").read_bytes()
+                ).hexdigest(),
             },
         }
     if args.single_set_samplers:

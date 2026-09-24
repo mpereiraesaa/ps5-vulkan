@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTROL = ROOT / "tools/control.py"
 sys.path.insert(0, str(ROOT / "tools"))
 from verify_consumer_resource_abi import validate  # noqa: E402
+from verify_cube_array_witness import validate as validate_cube_array  # noqa: E402
 
 
 def control(action: str, host: str) -> str:
@@ -73,7 +74,11 @@ def main() -> int:
                         help="Require the RGBA8 uniform-texel-buffer witness markers")
     parser.add_argument("--texel-formats", action="store_true",
                         help="Require the complete typed uniform-texel format witness")
+    parser.add_argument("--cube-array-witness", action="store_true",
+                        help="Require the two-cube/six-face sampled-image witness")
     args = parser.parse_args()
+    if args.cube_array_witness and (args.texel_rgba8 or args.texel_formats):
+        parser.error("Cube-array witness is an independent finite profile")
 
     if running(args.host) != "none":
         raise RuntimeError("refusing to launch while another title is active")
@@ -86,9 +91,12 @@ def main() -> int:
         log = wait_for_log(args.runs_dir, known, args.timeout)
         receipt = json.loads(log.with_suffix(".json").read_text())
         artifact = json.loads(args.artifact.read_text())
-        result = validate(log.read_bytes(), receipt, artifact,
-                          texel_rgba8=args.texel_rgba8,
-                          texel_formats=args.texel_formats)
+        if args.cube_array_witness:
+            result = validate_cube_array(log.read_bytes(), receipt, artifact)
+        else:
+            result = validate(log.read_bytes(), receipt, artifact,
+                              texel_rgba8=args.texel_rgba8,
+                              texel_formats=args.texel_formats)
         result["source_log"] = str(log)
         result["strict_verified"] = True
     finally:
