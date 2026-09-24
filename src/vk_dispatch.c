@@ -151,6 +151,8 @@ static const struct entry entries[] = {
     ENTRY(vkCreateQueryPool, DEVICE),
     ENTRY(vkDestroyQueryPool, DEVICE),
     ENTRY(vkGetQueryPoolResults, DEVICE),
+    ENTRY(vkResetQueryPool, DEVICE),
+    ENTRY(vkResetQueryPoolEXT, DEVICE),
     ENTRY(vkCmdResetQueryPool, DEVICE),
     ENTRY(vkCmdBeginQuery, DEVICE),
     ENTRY(vkCmdEndQuery, DEVICE),
@@ -212,6 +214,10 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char *name)
 {
     if (!device || !name) return NULL;
+    if ((!strcmp(name, "vkResetQueryPool") ||
+         !strcmp(name, "vkResetQueryPoolEXT")) &&
+        !(device->enabled_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET))
+        return NULL;
     if (buffer_device_address_command(name) &&
         !(device->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
         return NULL;

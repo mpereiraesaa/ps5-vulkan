@@ -75,6 +75,8 @@ class ProbeFixture:
                 any("depth=1" in fields for kind, fields in records
                     if kind == "PS5VK_OCCLUSION_PROBE_BEGIN")),
             "occlusion_query_api_probe": int(query_api),
+            "host_query_reset_probe": int(any(kind == "PS5VK_HOST_QUERY_RESET"
+                for kind, _ in records)),
             "occlusion_query_secondary": int(query_api),
             "runtime_sdk": bool(query_api),
             "files": {"eboot.bin": digest},
@@ -277,6 +279,25 @@ class TestOcclusionProbeVerifier(unittest.TestCase):
                 manifest_path=fixture.manifest, artifact_path=fixture.artifact)
             self.assertTrue(comparison["identical"])
             self.assertEqual(comparison["query_api"], result["query_api"])
+            host_records = [records[0], records[1],
+                ("PS5VK_HOST_QUERY_RESET",
+                 "phase=after_reset old=1,0,3 availability=0,0,0 status=not_ready"),
+                records[2],
+                ("PS5VK_HOST_QUERY_RESET",
+                 "phase=after_reuse values=1,0,3 availability=1,1,1 completed=1"),
+                records[3], records[4]]
+            host_fixture = ProbeFixture(host_records, query_api=True)
+            try:
+                self.assertTrue(host_fixture.validate()["query_api"]["host_query_reset"])
+            finally:
+                host_fixture.tmp.cleanup()
+            host_records[2] = ("PS5VK_HOST_QUERY_RESET",
+                "phase=after_reset old=1,0,3 availability=1,0,0 status=not_ready")
+            bad_host_fixture = ProbeFixture(host_records, query_api=True)
+            try:
+                self.assertRaises(ValueError, bad_host_fixture.validate)
+            finally:
+                bad_host_fixture.tmp.cleanup()
         finally:
             fixture.tmp.cleanup()
             repeat.tmp.cleanup()
