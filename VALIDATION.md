@@ -4916,6 +4916,22 @@ pixels with zero mismatches, completed its fence and closed cleanly:
 | `bc1-imagecopy` | mip 1, layer 0 to layer 2, image to image | `49d13e039ee763d75e67e1338950a5a656a52863e27082baadc899282041e313` |
 | `bc3-tail` | mip 3, layer 2, buffer to image | `1bb1eb171279c2c8ebd0b73647af69cf4bcf5e67df4062261a176ec2c30cdd03` |
 
+The integrated `651a913` SDK consumer adds `bc1-partial-layers`: a BC1 image
+of 37×29 texels with four mips and three layers. One buffer-to-image region
+copies an 8×4 interior rectangle at offset (4,4) in mip 1 across layers 1–2;
+a second image-to-buffer region reads that rectangle with different row and
+layer strides. The independent oracle checks all 12 subresources, the two
+changed layers, untouched exterior blocks, readback padding and guards, then
+samples 4096 pixels from layer 1. Both strict hardware runs reported zero byte
+or pixel mismatches, maximum colour error 1 within tolerance 1, completed
+fences and clean closure. They used signed eboot SHA-256
+`0748c9c98708eb37ec6cd08853e4f1c8d53040d7aedcfa7892d3dc11df6c15c8`:
+
+- `20260924T124622442Z_PPSA99994_ps5vk_0x23ccc6ee08330`, log SHA-256
+  `0d8d81a68621cfa10a5c11c8105668774bb91820c1c990bce7cc178566391323`.
+- `20260924T124642084Z_PPSA99994_ps5vk_0x23cd10195fc3d`, log SHA-256
+  `2ac42d3fe9ea442fcec591d24c3d96945dbdd762e89655698f625659be720255`.
+
 The ordinary shipping build also passed the unchanged frozen selection in
 `run-621753906663208`: **507 Pass, zero Fail, zero NotSupported, zero missing
 or unexpected**, eboot SHA-256
@@ -4924,11 +4940,13 @@ QPA SHA-256 `ea79a4561087966ad8d5c44332b48baa18673a5fa688863e961f95507256ac51`,
 with exact identity, completed report and clean close. The canonical eboot was
 restored after every run. Firmware was not recorded in these receipts.
 
-The CTS copy leaves exercise one mip and layer per image; the SDK witnesses
-exercise distinct mips and layers with whole-subresource regions. This evidence
-does not cover partial interior rectangles or a single copy region spanning
-multiple array layers. The shipping `textureCompressionBC` feature bit remains
-off pending the full T07 promotion audit.
+The original image-to-image CTS leaves exercise one mip and layer per image;
+the SDK image-copy witness exercises distinct layers at mip 1. The original
+buffer readback leaves exercise every mip and layer, while the SDK consumers
+also exercise whole-subresource and interior multi-layer regions. These runs do
+not establish every image-to-image rectangle and layer combination. The
+shipping `textureCompressionBC` feature bit remains off pending the full T07
+promotion audit.
 
 ## T07 D32 comparison-gather diagnostic measurement (2026-09-24)
 
