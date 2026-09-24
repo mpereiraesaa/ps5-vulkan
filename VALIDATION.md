@@ -4876,6 +4876,19 @@ formats.
 
 ## T07 BC mip and array-layer transfer measurement (2026-09-24)
 
+The integrated diagnostic build also passed **74/74 original pinned BC copy
+leaves** in one strict, completed run: 66 image-to-buffer mip/array-layer cases
+covering 11 non-sRGB BC formats, two extents and one, two or five layers, plus
+eight compatible image-to-image cases. The unchanged CTS comparison reported
+zero Fail, NotSupported, missing or unexpected cases. Selection SHA-256 was
+`803a997a7a1a442c26d13585f07fae986031772d6f82ad193236dee21209c1f6`;
+eboot SHA-256 was
+`52790dffd9f6d11a1ad133254dd59fc5591d2ac9f6cb07bb63aa035dc5f7eec4`.
+Run `run-614985225661286` completed with QPA SHA-256
+`b7c176a7b8be8a559ef75ff36ca1bc6e4d94ec232488cae5588bd4cd48d42e94`.
+These original image-to-image cases use one mip and layer per image; the SDK
+consumer below supplies the separate mip/layer image-copy evidence.
+
 The integrated `6084d7e` branch passed `make check`. Its BC diagnostic build
 ran the eight original 2D BC image-copy leaves from the pinned CTS twice:
 **8 Pass, zero Fail, zero NotSupported, zero missing or unexpected** in each
