@@ -27263,7 +27263,7 @@
       "verdict": "satisfied"
     },
     {
-      "action": "reject",
+      "action": "requires-extension-feature",
       "advertised": false,
       "applicable_cts": {
         "cases": [],
@@ -27271,10 +27271,26 @@
         "status": "not-selected"
       },
       "capability": "Int16",
-      "detail": "frontend rejects (no feature required); advertised=False",
+      "detail": "accepted only when PS5VK_FEATURE_SHADER_INT16 is advertised (advertised=False), so the gate and the advertisement cannot disagree",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
       "number": 22,
+      "profile": "graphics",
+      "verdict": "satisfied"
+    },
+    {
+      "action": "reject",
+      "advertised": false,
+      "applicable_cts": {
+        "cases": [],
+        "note": "no original CTS case for this capability is selected here",
+        "status": "not-selected"
+      },
+      "capability": "Int8",
+      "detail": "frontend rejects (no feature required); advertised=False",
+      "file": "src/vk_pipeline.c",
+      "kind": "shader-capability",
+      "number": 39,
       "profile": "graphics",
       "verdict": "satisfied"
     },
@@ -27415,7 +27431,7 @@
       "verdict": "satisfied"
     },
     {
-      "action": "reject",
+      "action": "requires-extension-feature",
       "advertised": false,
       "applicable_cts": {
         "cases": [],
@@ -27423,10 +27439,26 @@
         "status": "not-selected"
       },
       "capability": "Int16",
-      "detail": "frontend rejects (no feature required); advertised=False",
+      "detail": "accepted only when PS5VK_FEATURE_SHADER_INT16 is advertised (advertised=False), so the gate and the advertisement cannot disagree",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
       "number": 22,
+      "profile": "compute",
+      "verdict": "satisfied"
+    },
+    {
+      "action": "reject",
+      "advertised": false,
+      "applicable_cts": {
+        "cases": [],
+        "note": "no original CTS case for this capability is selected here",
+        "status": "not-selected"
+      },
+      "capability": "Int8",
+      "detail": "frontend rejects (no feature required); advertised=False",
+      "file": "src/vk_pipeline.c",
+      "kind": "shader-capability",
+      "number": 39,
       "profile": "compute",
       "verdict": "satisfied"
     },
@@ -27506,7 +27538,7 @@
     },
     "shader_capabilities": {
       "not-audited": 2,
-      "satisfied": 18
+      "satisfied": 20
     }
   }
 }

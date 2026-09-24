@@ -167,7 +167,11 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS |
                           PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
                           PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE |
-                          PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT))
+                          PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT |
+                          /* Core shaderInt16 is negotiated by the module and
+                           * pipeline gates; PSBC consumes Int16 SPIR-V without
+                           * a separate compiler option. */
+                          PS5VK_FEATURE_SHADER_INT16))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
         !(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL))

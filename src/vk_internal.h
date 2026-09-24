@@ -131,6 +131,9 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE = 1u << 22,
     /* Keep this layout gate independent of the other feature bits. */
     PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
+    /* Core Vulkan 1.0 narrow shader arithmetic. The shipping platform leaves
+     * this unset until its standalone shaderInt16 CTS and GPU path are proven. */
+    PS5VK_FEATURE_SHADER_INT16 = 1u << 24,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

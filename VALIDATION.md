@@ -4654,6 +4654,13 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
+The host route for core `shaderInt16` now maps the legacy and Features2 query,
+device opt-in, shader-module gate, compute pipeline gate and compiler feature
+mask. The platform bit remains false. Promotion needs an original applicable
+Int16 CTS leaf plus a native GPU result for the narrow operation, followed by
+the combined subgroup profile checks; host contracts alone cannot establish
+shader arithmetic or subgroup correctness.
+
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
 `subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
 Add and Min cases and graphics-stage subgroup operations beyond the bounded
