@@ -4793,6 +4793,19 @@ or guard mismatches and bounded fence completion: runs
 on this Vulkan 1.0 profile. That CTS/API boundary prevents promotion despite
 the bounded GPU result.
 
+The pinned registry permits the `VK_KHR_vulkan_memory_model` feature query and
+device-create chain through `VkPhysicalDeviceVulkanMemoryModelFeatures` when
+`VK_KHR_get_physical_device_properties2` is present. This route does not
+require reporting Vulkan 1.1, but it does not remove the original CTS gate:
+the `ext` message-passing factory checks for Vulkan 1.1 before the
+`vulkanMemoryModelDeviceScope` feature, including its `device` scope cases.
+The API feature consistency cases instead target the Vulkan 1.2/1.3 aggregate
+rules. The next eligible validation requires an independently justified Vulkan
+1.1 public profile, registration and compilation of that unchanged original
+message-passing factory in the CTS runner, and passing selected `ext/device`
+leaves. The diagnostic witness above cannot substitute for those leaves; the
+public DeviceScope bit therefore remains off.
+
 ### Buffer device address
 
 At this measurement stage, the BDA bit stayed false. Its public-SDK diagnostic
