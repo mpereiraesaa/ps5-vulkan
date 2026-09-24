@@ -27,9 +27,9 @@ static void run_bc_subresource_witness(VkPhysicalDevice physical, VkDevice devic
                                    VkQueue queue)
 {
     ps5log_printf(PS5LOG_MARK,
-        "PS5VK_CONSUMER_BC_SUBRESOURCE_START profile=%s format=%u image=13x9 mips=4 layers=3 mip=%u layer=2"
+        "PS5VK_CONSUMER_BC_SUBRESOURCE_START profile=%s format=%u image=13x9 mips=4 layers=3 mip=%u layer=%u"
         " input_sha256=%s raw_reference_sha256=%s reference_sha256=%s",
-        BC_SUBRESOURCE_PROFILE, (unsigned)BC_SUBRESOURCE_FORMAT, BC_SUBRESOURCE_MIP,
+        BC_SUBRESOURCE_PROFILE, (unsigned)BC_SUBRESOURCE_FORMAT, BC_SUBRESOURCE_MIP, BC_SUBRESOURCE_LAYER,
         BC_SUBRESOURCE_INPUT_SHA256, BC_SUBRESOURCE_RAW_REFERENCE_SHA256,
         BC_SUBRESOURCE_REFERENCE_SHA256);
 
@@ -388,7 +388,7 @@ static void run_bc_subresource_witness(VkPhysicalDevice physical, VkDevice devic
                          VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL,
                          1, &sampled_barrier);
 
-    /* Only this nonzero mip/layer becomes writable. Other subresources
+    /* Only the selected mip/layer becomes writable. Other subresources
      * remain readable; their exact bytes and all readback padding are checked. */
     sampled_barrier.subresourceRange = (VkImageSubresourceRange){
         VK_IMAGE_ASPECT_COLOR_BIT, BC_SUBRESOURCE_MIP, 1, BC_SUBRESOURCE_LAYER, 1};

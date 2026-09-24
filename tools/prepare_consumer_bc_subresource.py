@@ -13,6 +13,7 @@ from prepare_consumer_sync_shaders import emit_array
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = {'bc1-mip': ('BC1_RGB_UNORM', 131, 1, 8),
+            'bc1-layer': ('BC1_RGB_UNORM', 131, 0, 8),
             'bc3-tail': ('BC3_UNORM', 137, 3, 16),
             'bc1-imagecopy': ('BC1_RGB_UNORM', 131, 1, 8)}
 MIPS, LAYERS, TARGET, GUARD = 4, 3, 64, 32
@@ -32,6 +33,7 @@ def block(seed, block_bytes):
 
 def generate(profile):
     fmt, value, selected_mip, block_bytes = PROFILES[profile]
+    selected_layer = 1 if profile == 'bc1-layer' else 2
     upload = bytearray([0xcd] * GUARD)
     expected = bytearray([0xa5] * GUARD)
     regions = []
@@ -55,7 +57,7 @@ def generate(profile):
                     data = block(layer*53 + mip*17 + y*columns+x, block_bytes)
                     upload[at:at+block_bytes] = data
                     expected[at:at+block_bytes] = data
-    selected = regions[2*MIPS + selected_mip]
+    selected = regions[selected_layer*MIPS + selected_mip]
     image_copy = profile == 'bc1-imagecopy'
     patch_offset = regions[selected_mip]['offset'] if image_copy else len(upload)
     if not image_copy:
@@ -82,7 +84,7 @@ def generate(profile):
             rgba.append(data[0] if block_bytes == 16 else 255)
     contract = dict(profile=profile, format='VK_FORMAT_'+fmt+'_BLOCK', format_value=value,
                     extent=[13,9], mip_levels=MIPS, array_layers=LAYERS,
-                    selected_mip=selected_mip, selected_layer=2,
+                    selected_mip=selected_mip, selected_layer=selected_layer,
                     selected_extent=[selected['width'],selected['height']],
                     subresources=12, preserved_subresources=11, target_extent=[64,64],
                     filter='nearest', tolerance=1, readback_bytes=len(expected),
@@ -109,7 +111,7 @@ def main():
     for r in regions:
         header += f'    {{{r["offset"]}, {r["row_length"]}, {r["image_height"]}, {{VK_IMAGE_ASPECT_COLOR_BIT, {r["mip"]}, {r["layer"]}, 1}}, {{0,0,0}}, {{{r["width"]},{r["height"]},1}}}},\n'
     header += '};\n'
-    constants = dict(FORMAT=contract['format'], MIP=contract['selected_mip'], LAYER=2,
+    constants = dict(FORMAT=contract['format'], MIP=contract['selected_mip'], LAYER=contract['selected_layer'],
                      PATCH_OFFSET=patch, TOLERANCE=1,
                      IMAGE_COPY=int(args.profile == 'bc1-imagecopy'))
     for name, value in constants.items():

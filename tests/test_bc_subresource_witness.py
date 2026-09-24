@@ -19,13 +19,14 @@ class BCSubresourceReferenceTests(unittest.TestCase):
                 self.assertEqual(generate(profile), generate(profile))
                 self.assertEqual(len(regions), 12)
                 self.assertEqual(len(pixels), 64*64*4)
-                self.assertEqual(contract['selected_extent'], [6,4] if mip==1 else [1,1])
+                self.assertEqual(contract['selected_extent'], [max(1,13>>mip),max(1,9>>mip)])
+                layer = contract['selected_layer']
                 touched = set()
                 for r in regions:
                     width = ((r['width']+3)//4)*block_bytes
                     for y in range(r['rows']):
                         at = r['offset']+y*r['pitch']
-                        source = patch+y*r['pitch'] if r['layer']==2 and r['mip']==mip else at
+                        source = patch+y*r['pitch'] if r['layer']==layer and r['mip']==mip else at
                         self.assertEqual(raw[at:at+width], upload[source:source+width])
                         if source != at:
                             self.assertNotEqual(raw[at:at+width], upload[at:at+width])
@@ -33,7 +34,7 @@ class BCSubresourceReferenceTests(unittest.TestCase):
                 self.assertTrue(all(v==0xa5 for i,v in enumerate(raw) if i not in touched))
                 self.assertGreater(len(raw)-len(touched), 12*32)
                 # Wrong mip, layer, or stale pre-overwrite texels must be observable.
-                selected = regions[2*4+mip]
+                selected = regions[layer*4+mip]
                 self.assertNotEqual(upload[patch:patch+block_bytes], upload[selected['offset']:selected['offset']+block_bytes])
                 self.assertTrue(all(upload[r['offset']:r['offset']+block_bytes] != upload[patch:patch+block_bytes] for r in regions
                                     if profile != 'bc1-imagecopy' or r['layer'] != 0 or r['mip'] != mip))
@@ -62,6 +63,19 @@ class BCSubresourceReferenceTests(unittest.TestCase):
         first, second = bytes((247,16,115,255)), bytes((49,61,222,255))
         self.assertEqual(generate('bc1-imagecopy')[2], (first*43 + second*21)*64)
 
+    def test_odd_extent_layer_pixel_oracle(self):
+        # Independent nearest boundaries for 13x9: x=20,39,59; y=28,57.
+        # The one-texel right/bottom edges must survive both upload and sample.
+        colors = ((107,125,74,255), (165,170,181,255), (222,215,33,255), (25,4,140,255),
+                  (82,49,247,255), (140,93,99,255), (197,138,206,255), (255,182,58,255),
+                  (58,227,165,255), (115,16,16,255), (173,61,123,255), (230,105,230,255))
+        expected = bytearray()
+        for row, height in enumerate((28,29,7)):
+            scanline = b''.join(bytes(colors[row*4+column])*width
+                                for column,width in enumerate((20,19,20,5)))
+            expected.extend(scanline*height)
+        self.assertEqual(generate('bc1-layer')[2], expected)
+
     def test_wrong_mip_layer_and_stale_texels_are_rejected(self):
         def candidate(upload, region, block_bytes):
             out = bytearray()
@@ -79,17 +93,21 @@ class BCSubresourceReferenceTests(unittest.TestCase):
             return out
         for profile in PROFILES:
             upload, raw, expected, regions, patch, contract = generate(profile)
-            mip = contract['selected_mip']; block_bytes=PROFILES[profile][3]
-            for label, index in (('wrong-mip',8), ('wrong-layer',4+mip), ('stale-upload',8+mip)):
+            mip, layer = contract['selected_mip'], contract['selected_layer']
+            block_bytes=PROFILES[profile][3]
+            candidates = [('wrong-mip',layer*4+(mip+1)%4), ('stale-upload',layer*4+mip)]
+            candidates += [(f'wrong-layer-{other}',other*4+mip) for other in range(3)
+                           if other != layer and not (profile == 'bc1-imagecopy' and other == 0)]
+            for label, index in candidates:
                 with self.subTest(profile=profile, fault=label):
                     actual = candidate(upload,regions[index],block_bytes)
                     mismatches = sum(any(abs(a-b)>1 for a,b in zip(actual[i:i+4],expected[i:i+4]))
                                      for i in range(0,len(expected),4))
                     self.assertGreaterEqual(mismatches, 1024)
-            # Copying the replacement into layer zero instead of layer two
+            # Copying the replacement into layer zero instead of the selected layer
             # corrupts a preserved subresource and leaves the selected one stale.
             wrong = bytearray(raw)
-            selected, other = regions[8+mip], regions[mip]
+            selected, other = regions[layer*4+mip], regions[mip]
             row_bytes=((selected['width']+3)//4)*block_bytes
             for y in range(selected['rows']):
                 at=selected['offset']+y*selected['pitch']
@@ -181,10 +199,10 @@ class BCSubresourceVerifierTests(unittest.TestCase):
         self.contract = generate(profile)[-1]
         self.contract.update(vert_spirv_sha256='1'*64, frag_spirv_sha256='2'*64)
         self.artifact['bc_subresource'] = self.contract
-        for key in ('profile', 'format_value', 'selected_mip', 'input_sha256',
+        for key in ('profile', 'format_value', 'selected_mip', 'selected_layer', 'input_sha256',
                     'raw_reference_sha256', 'reference_sha256', 'readback_bytes'):
             # Replace named fields, avoiding unrelated occurrences of 1 or 131.
-            field = {'format_value':'format', 'selected_mip':'mip',
+            field = {'format_value':'format', 'selected_mip':'mip', 'selected_layer':'layer',
                      'readback_bytes':'bytes'}.get(key, key)
             self.messages = [m.replace(f"{field}={old[key]}", f"{field}={self.contract[key]}")
                              for m in self.messages]
@@ -192,6 +210,13 @@ class BCSubresourceVerifierTests(unittest.TestCase):
     def test_bc3_tail_run(self):
         self.switch_profile('bc3-tail')
         self.assertEqual(self.run_validation()['selected_mip'], 3)
+
+    def test_base_mip_layer_run(self):
+        self.switch_profile('bc1-layer')
+        result = self.run_validation()
+        self.assertEqual((result['selected_mip'], result['selected_layer']), (0, 1))
+        self.assertEqual(result['preserved_subresources'], 11)
+        self.assertEqual(result['operation'], 'buffer-to-image')
 
     def test_image_copy_run_and_source_identity(self):
         self.switch_profile('bc1-imagecopy')

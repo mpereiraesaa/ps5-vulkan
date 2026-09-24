@@ -2,6 +2,66 @@
 #define main image_copy_clear_regression_main
 #include "test_image_copy_clear.c"
 #undef main
+/* Image barriers emitted by the original CopyImageToImage instance and
+ * readImage helper, for all four optimal/general layout combinations. This
+ * checks their public recording/execution contract, not the copy oracle. */
+static void original_bc_image_copy_barriers(void)
+{
+    const VkImageLayout source_layouts[]={VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL};
+    const VkImageLayout destination_layouts[]={VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL};
+    VkImage source=make_image_subresources(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        256,256,1,1,VK_IMAGE_TILING_OPTIMAL,NULL);
+    VkImage destination=make_image_subresources(VK_FORMAT_BC4_SNORM_BLOCK,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        256,256,1,1,VK_IMAGE_TILING_OPTIMAL,NULL);
+    for(unsigned si=0;si<2;++si)for(unsigned di=0;di<2;++di) {
+        VkImageMemoryBarrier barriers[2]={
+            transfer_barrier(source,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                0,VK_ACCESS_TRANSFER_WRITE_BIT),
+            transfer_barrier(destination,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                0,VK_ACCESS_TRANSFER_WRITE_BIT)};
+        VkCommandBuffer command=begin();
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,0,NULL,0,NULL,2,barriers);
+        for(unsigned i=0;i<2;++i) {
+            barriers[i].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barriers[i].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+        }
+        /* The original upload helper retains DST with a WRITE->WRITE scope. */
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,0,NULL,0,NULL,2,barriers);
+        barriers[0].newLayout=source_layouts[si];
+        barriers[0].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+        barriers[1].newLayout=destination_layouts[di];
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,0,NULL,0,NULL,2,barriers);
+        submit_and_wait(command);
+        assert(ps5vk_image_layout_matches(source,0,0,1,source_layouts[si]));
+        assert(ps5vk_image_layout_matches(destination,0,0,1,destination_layouts[di]));
+        vkFreeCommandBuffers(device,pool,1,&command);
+        command=begin();
+        barriers[1].oldLayout=destination_layouts[di];
+        barriers[1].newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barriers[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,0,NULL,0,NULL,1,&barriers[1]);
+        barriers[1].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barriers[1].newLayout=destination_layouts[di];
+        barriers[1].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+        barriers[1].dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_HOST_BIT,0,0,NULL,0,NULL,1,&barriers[1]);
+        submit_and_wait(command);
+        assert(ps5vk_image_layout_matches(destination,0,0,1,destination_layouts[di]));
+        vkFreeCommandBuffers(device,pool,1,&command);
+    }
+    VkDeviceMemory memory=source->memory;
+    vkDestroyImage(device,source,NULL);vkFreeMemory(device,memory,NULL);
+    memory=destination->memory;
+    vkDestroyImage(device,destination,NULL);vkFreeMemory(device,memory,NULL);
+}
+
 int main(void)
 {
     VkInstance instance;
@@ -102,6 +162,41 @@ int main(void)
     assert(ps5vk_image_range_layout_matches(image,&view_range,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
     view_range.layerCount=2;
     assert(!ps5vk_image_range_layout_matches(image,&view_range,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+    /* A sampled cell can return to transfer ownership without changing any
+     * neighbouring mip/layer. Access scopes are checked against stages. */
+    memcpy(snapshot,image->subresource_layouts,sizeof(snapshot));
+    b.oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    b.srcAccessMask=VK_ACCESS_SHADER_READ_BIT;b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+    bad=begin();
+    vkCmdPipelineBarrier(bad,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    assert(vkEndCommandBuffer(bad)!=VK_SUCCESS);vkFreeCommandBuffers(device,pool,1,&bad);
+    assert(!memcmp(snapshot,image->subresource_layouts,sizeof(snapshot)));
+    VkCommandBuffer recycle=begin();
+    vkCmdPipelineBarrier(recycle,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    submit_and_wait(recycle);vkFreeCommandBuffers(device,pool,1,&recycle);
+    snapshot[2*3+1]=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    assert(!memcmp(snapshot,image->subresource_layouts,sizeof(snapshot)));
+    assert(image->layout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    /* REMAINING spans multiple mips and layers, with independent read/write
+     * access bits in GENERAL. The untouched first layer/mip stays DST. */
+    b.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.newLayout=VK_IMAGE_LAYOUT_GENERAL;
+    b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+    b.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT;
+    b.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,1,
+        VK_REMAINING_MIP_LEVELS,1,VK_REMAINING_ARRAY_LAYERS};
+    recycle=begin();
+    vkCmdPipelineBarrier(recycle,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    submit_and_wait(recycle);vkFreeCommandBuffers(device,pool,1,&recycle);
+    for(unsigned m=0;m<4;++m)for(unsigned l=0;l<3;++l)
+        assert(ps5vk_image_layout_matches(image,m,l,1,m>=1&&l>=1?
+            VK_IMAGE_LAYOUT_GENERAL:VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
+    assert(image->layout==VK_IMAGE_LAYOUT_MAX_ENUM);
+    original_bc_image_copy_barriers();
     vkFreeCommandBuffers(device,pool,1,&first);vkFreeCommandBuffers(device,pool,1,&second);
     vkFreeCommandBuffers(device,pool,1,&sample);
     VkDeviceMemory memory=image->memory;vkDestroyImage(device,image,NULL);vkFreeMemory(device,memory,NULL);
