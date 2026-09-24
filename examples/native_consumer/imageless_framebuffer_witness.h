@@ -1,11 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * SDK-only diagnostic witness: one imageless framebuffer, two distinct views,
- * two completed colour clears and exact image-to-buffer readback.
+ * two completed clears and scissored draws with exact image-to-buffer readback.
  */
+#include "imageless_draw_shaders.h"
 static void run_imageless_framebuffer_witness(VkDevice device, VkQueue queue)
 {
     enum { WIDTH = 64, HEIGHT = 64, PIXELS = WIDTH * HEIGHT, BYTES = PIXELS * 4 };
     const uint8_t expected[2][4] = {{255, 0, 0, 255}, {0, 255, 0, 255}};
+    const uint8_t drawn[4] = {0, 0, 255, 255};
     VkImage images[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkDeviceMemory image_memory[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkImageView views[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
@@ -84,6 +86,55 @@ static void run_imageless_framebuffer_witness(VkDevice device, VkQueue queue)
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     CHECK(vkCreateFramebuffer(device, &framebuffer_info, NULL, &framebuffer));
 
+    VkShaderModule modules[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkShaderModuleCreateInfo shader_info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(imageless_draw_vert_spirv), .pCode = imageless_draw_vert_spirv};
+    CHECK(vkCreateShaderModule(device, &shader_info, NULL, &modules[0]));
+    shader_info.codeSize = sizeof(imageless_draw_frag_spirv);
+    shader_info.pCode = imageless_draw_frag_spirv;
+    CHECK(vkCreateShaderModule(device, &shader_info, NULL, &modules[1]));
+    VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    CHECK(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
+    VkPipelineShaderStageCreateInfo stages[2] = {
+        {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage=VK_SHADER_STAGE_VERTEX_BIT, .module=modules[0], .pName="main"},
+        {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage=VK_SHADER_STAGE_FRAGMENT_BIT, .module=modules[1], .pName="main"}};
+    VkPipelineVertexInputStateCreateInfo vertex_input = {
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo assembly = {
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+    VkViewport viewport = {0.0f, 0.0f, WIDTH, HEIGHT, 0.0f, 1.0f};
+    VkRect2D scissor = {{16, 16}, {32, 32}};
+    VkPipelineViewportStateCreateInfo viewport_info = {
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount=1, .pViewports=&viewport,
+        .scissorCount=1, .pScissors=&scissor};
+    VkPipelineRasterizationStateCreateInfo raster = {
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode=VK_POLYGON_MODE_FILL, .cullMode=VK_CULL_MODE_NONE,
+        .frontFace=VK_FRONT_FACE_COUNTER_CLOCKWISE, .lineWidth=1.0f};
+    VkPipelineMultisampleStateCreateInfo multisample = {
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+    VkPipelineColorBlendAttachmentState blend_attachment = {
+        .colorWriteMask=VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
+    VkPipelineColorBlendStateCreateInfo blend = {
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount=1, .pAttachments=&blend_attachment};
+    VkGraphicsPipelineCreateInfo pipeline_info = {
+        .sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount=2, .pStages=stages, .pVertexInputState=&vertex_input,
+        .pInputAssemblyState=&assembly, .pViewportState=&viewport_info,
+        .pRasterizationState=&raster, .pMultisampleState=&multisample,
+        .pColorBlendState=&blend, .layout=layout, .renderPass=pass};
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info,
+                                    NULL, &pipeline));
+
     VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = 0};
@@ -123,6 +174,8 @@ static void run_imageless_framebuffer_witness(VkDevice device, VkQueue queue)
         VkClearRect rect = {.rect = {{0, 0}, {WIDTH, HEIGHT}},
             .baseArrayLayer = 0, .layerCount = 1};
         vkCmdClearAttachments(command, 1, &color_clear, 1, &rect);
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        vkCmdDraw(command, 3, 1, 0, 0);
         vkCmdEndRenderPass(command);
         VkImageMemoryBarrier barrier = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -161,20 +214,32 @@ static void run_imageless_framebuffer_witness(VkDevice device, VkQueue queue)
         VkMappedMemoryRange invalidate = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
             .memory = buffer_memory, .offset = 0, .size = VK_WHOLE_SIZE};
         CHECK(vkInvalidateMappedMemoryRanges(device, 1, &invalidate));
-        for (unsigned pixel = 0; pixel < PIXELS; ++pixel)
+        for (unsigned pixel = 0; pixel < PIXELS; ++pixel) {
+            const unsigned x = pixel % WIDTH, y = pixel / WIDTH;
+            const uint8_t *oracle = x >= 16 && x < 48 && y >= 16 && y < 48 ?
+                drawn : expected[i];
             for (unsigned channel = 0; channel < 4; ++channel)
-                mismatches[i] += readback[pixel * 4 + channel] != expected[i][channel];
+                mismatches[i] += readback[pixel * 4 + channel] != oracle[channel];
+        }
     }
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_CONSUMER_IMAGELESS_RESULT views=2 same_framebuffer=1 pixels=%u"
         " first_mismatches=%u second_mismatches=%u valid=%u",
         PIXELS, mismatches[0], mismatches[1],
         !mismatches[0] && !mismatches[1]);
-    REQUIRE(!mismatches[0] && !mismatches[1], "imageless two-view readback");
+    ps5log_printf(PS5LOG_MARK,
+        "PS5VK_CONSUMER_IMAGELESS_DRAW_RESULT views=2 draws=2 drawn_pixels=2048"
+        " clear_pixels=6144 mismatches=%u valid=%u",
+        mismatches[0] + mismatches[1], !mismatches[0] && !mismatches[1]);
+    REQUIRE(!mismatches[0] && !mismatches[1], "imageless clear and draw readback");
 
     vkDestroyFence(device, fences[0], NULL);
     vkDestroyFence(device, fences[1], NULL);
     vkDestroyCommandPool(device, pool, NULL);
+    vkDestroyPipeline(device, pipeline, NULL);
+    vkDestroyPipelineLayout(device, layout, NULL);
+    vkDestroyShaderModule(device, modules[1], NULL);
+    vkDestroyShaderModule(device, modules[0], NULL);
     vkDestroyFramebuffer(device, framebuffer, NULL);
     vkDestroyRenderPass(device, pass, NULL);
     vkUnmapMemory(device, buffer_memory);

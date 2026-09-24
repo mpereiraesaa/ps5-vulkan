@@ -34,6 +34,8 @@ def validate(log, receipt, artifact):
 
     exactly("PS5VK_CONSUMER_IMAGELESS_RESULT views=2 same_framebuffer=1 pixels=4096 "
             "first_mismatches=0 second_mismatches=0 valid=1")
+    exactly("PS5VK_CONSUMER_IMAGELESS_DRAW_RESULT views=2 draws=2 "
+            "drawn_pixels=2048 clear_pixels=6144 mismatches=0 valid=1")
     exactly("PS5VK_CONSUMER_TEST_SUCCESS")
     exactly("PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1")
     exactly("PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1")
@@ -44,5 +46,8 @@ def validate(log, receipt, artifact):
         "framebuffers": 1,
         "submissions": 2,
         "pixels_checked": 8192,
+        "drawn_pixels_checked": 2048,
+        "clear_pixels_checked": 6144,
+        "draws": 2,
         "mismatches": 0,
     }
