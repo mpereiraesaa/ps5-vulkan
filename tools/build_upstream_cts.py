@@ -21,8 +21,8 @@ SELECTION_MANIFEST = ROOT / "cts/upstream/manifest.json"
 def tessellation_build_profile(environment):
     """Record build controls, never infer hardware validation from them.
 
-    Only these non-secret SDK switches are captured. Even a ring-only build
-    differs from the default runtime and must not masquerade as its evidence.
+    Only these non-secret SDK switches are captured. A diagnostic build differs
+    from the default runtime and must not masquerade as its evidence.
     Values remain strings, exactly as passed to the SDK compiler invocation.
     """
     switches = {
@@ -46,8 +46,10 @@ def tessellation_build_profile(environment):
             # concurrent `make check` restaged the SDK without the switch
             # reported every selected leaf NotSupported for sampleRateShading.
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
-            "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
             "PS5VK_SHADER_INT8_DIAGNOSTIC",
+            "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC",
+            "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
+            "PS5VK_SHADER_INT16_DIAGNOSTIC",
         )
     }
     return {
@@ -204,17 +206,22 @@ def write_focused_storage_source(source: Path, destination: Path,
     destination.write_text(text.replace(needle, replacement), encoding="utf-8")
 
 
-def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
+def write_focused_buffer_copy_source(source: Path, destination: Path,
+                                     include_bc_blits: bool = False,
+                                     include_bc_mip_copies: bool = False,
+                                     include_bc_image_copies: bool = False) -> None:
     """Keep the original buffer-copy bodies/oracles but prune registration.
 
     The complete copies/blits module builds a very large test tree before the
     case-list filter runs.  On PS5 that consumes the bounded application heap
     for image/blit/resolve families that are not selected.  Replace only the
-    two pinned registration functions; every selected test implementation and
+    pinned registration functions; every selected test implementation and
     result oracle remains byte-for-byte upstream.  The image-to-image group is
     registered through upstream's own simple-only factory so the audited RGBA8
     transfer leaves exist in the packaged tree without the all-formats, 3D,
-    cube, array or blit/resolve families.
+    cube, array or blit/resolve families. Optional BC registration retains
+    the original compressed blit, mip-copy or partial image-copy constructors
+    and comparisons.
     """
     text = source.read_text(encoding="utf-8")
     old_core = """void addCoreCopiesAndBlittingTests(tcu::TestCaseGroup *group)
@@ -260,9 +267,117 @@ def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
         raise SystemExit(
             f"focused image-to-image factory drift in {source}: "
             f"expected one addImageToImageTestsSimpleOnly definition")
+    if include_bc_mip_copies:
+        new_core = new_core[:-2] + (
+            '\n    addTestGroup(group, "image_to_buffer", addImageToBufferTests, '
+            'universalGroupParams);\n}')
+    text = text.replace(old_core, new_core).replace(old_factory, new_factory)
+
+    def registration(name, replacement):
+        nonlocal text
+        start = text.index("void " + name + "(")
+        opening = text.index("{", start)
+        depth = 1
+        end = opening + 1
+        while depth:
+            depth += (text[end] == "{") - (text[end] == "}")
+            end += 1
+        old = text[start:end]
+        text = text[:start] + replacement(old) + text[end:]
+
+    if include_bc_blits:
+        # Only registration changes: preserve original resources, regions,
+        # shader code, support checks and comparison oracles byte-for-byte.
+        text = text.replace(new_core, new_core[:-2] +
+            '\n    addTestGroup(group, "blit_image", addBlittingImageTests, '            'ALLOCATION_KIND_SUBALLOCATED, extensionFlags);\n}')
+        registration("addBlittingImageTests", lambda body: body.replace(
+            '    addTestGroup(group, "simple_tests", addBlittingImageSimpleTests, allocationKind, extensionFlags);\n', ""))
+        registration("addBlittingImageAllFormatsTests", lambda body: body.replace(
+            '    addTestGroup(group, "depth_stencil", addBlittingImageAllFormatsDepthStencilTests, allocationKind, extensionFlags);\n', "").replace(
+            '    addTestGroup(group, "generate_mipmaps", addBlittingImageAllFormatsMipmapTests, allocationKind, extensionFlags);\n', ""))
+        def color_2d(body):
+            body = body[:body.index("    // 1D tests.")] + "}"
+            needle = "                VkFormat srcFormat      = sourceFormats[srcFormatIndex];"
+            if body.count(needle) != 1:
+                raise SystemExit("BC blit source registration drift")
+            return body.replace(needle, needle + "\n" +
+                "                if (srcFormat < VK_FORMAT_BC1_RGB_UNORM_BLOCK || "
+                "srcFormat > VK_FORMAT_BC7_SRGB_BLOCK) continue;")
+        registration("addBlittingImageAllFormatsColorTests", color_2d)
+        def rgba_destinations(body):
+            needle = "            testParams.params.dst.image.format = testParams.compatibleFormats[dstFormatIndex];"
+            if body.count(needle) != 1:
+                raise SystemExit("BC blit destination registration drift")
+            return body.replace(needle, needle + "\n" +
+                "            if (testParams.params.dst.image.format != VK_FORMAT_R8G8B8A8_UNORM && "
+                "testParams.params.dst.image.format != VK_FORMAT_R8G8B8A8_SRGB) continue;")
+        registration("addBlittingImageAllFormatsColorSrcFormatTests", rgba_destinations)
+    if include_bc_image_copies:
+        def replace_once(body, needle, replacement):
+            if body.count(needle) != 1:
+                raise SystemExit("BC image copy registration drift")
+            return body.replace(needle, replacement)
+
+        registration("addImageToImageTestsSimpleOnly", lambda body: replace_once(
+            body,
+            '    addTestGroup(group, "simple_tests", addImageToImageSimpleTests, testGroupParams);',
+            '    addTestGroup(group, "simple_tests", addImageToImageSimpleTests, testGroupParams);\n'
+            '    addTestGroup(group, "all_formats", addImageToImageAllFormatsTests, testGroupParams);'))
+        registration("addImageToImageAllFormatsTests", lambda body: replace_once(
+            body,
+            '    if (testGroupParams->queueSelection == QueueSelectionOptions::Universal)\n'
+            '        addTestGroup(group, "depth_stencil", addImageToImageAllFormatsDepthStencilTests, testGroupParams);\n',
+            ""))
+
+        def copy_color_2d(body):
+            markers = ("    // 1D to 1D tests.", "    // 2D to 2D tests.",
+                       "    // 2D to 3D tests.")
+            if any(body.count(marker) != 1 for marker in markers):
+                raise SystemExit("BC image copy dimension registration drift")
+            body = (body[:body.index(markers[0])] +
+                    body[body.index(markers[1]):body.index(markers[2])] + "}")
+            needle = "                params.src.image.format = compatibleFormats[srcFormatIndex];"
+            return replace_once(body, needle, needle + "\n"
+                "                if (params.src.image.format != VK_FORMAT_BC1_RGBA_UNORM_BLOCK && "
+                "params.src.image.format != VK_FORMAT_BC3_UNORM_BLOCK) continue;")
+
+        registration("addImageToImageAllFormatsColorTests", copy_color_2d)
+        registration("addImageToImageAllFormatsColorSrcFormatTests", lambda body: replace_once(
+            body, "        const VkFormat dstFormat = testParams.params.dst.image.format;",
+            "        const VkFormat dstFormat = testParams.params.dst.image.format;\n"
+            "        if (!((srcFormat == VK_FORMAT_BC1_RGBA_UNORM_BLOCK && dstFormat == VK_FORMAT_BC4_SNORM_BLOCK) ||\n"
+            "              (srcFormat == VK_FORMAT_BC3_UNORM_BLOCK && dstFormat == VK_FORMAT_BC7_SRGB_BLOCK))) continue;"))
+    if include_bc_mip_copies:
+        registration("addImageToBufferTests", lambda body: body.replace(
+            '    addTestGroup(group, "1d_images", add1dImageToBufferTests, testGroupParams);\n', ""))
+
+        def compressed_mip_copies(body):
+            # Keep upstream's exact constructors, extents, layers and oracle.
+            # The earlier 2D registrations instantiate unrelated uncompressed cases.
+            marker = "    // those tests are performed for all queues, no need to repeat them"
+            if body.count(marker) != 1:
+                raise SystemExit("BC mip copy registration drift")
+            head = body[:body.index("\n    {", body.index("group->getTestContext()"))]
+            body = head + "\n" + body[body.index(marker):]
+            needle = "                    params.src.image.format = *format;"
+            if body.count(needle) != 1:
+                raise SystemExit("BC mip copy format registration drift")
+            body = body.replace(needle,
+                "                    if (*format < VK_FORMAT_BC1_RGB_UNORM_BLOCK || "
+                "*format > VK_FORMAT_BC7_SRGB_BLOCK) continue;\n" + needle)
+            for queue, name in (("ComputeOnly", "compute"), ("TransferOnly", "transfer")):
+                registration_text = (
+                    f"                        params.queueSelection = QueueSelectionOptions::{queue};\n"
+                    "                        group->addChild(new CopyCompressedImageToBufferTestCase(\n"
+                    f'                            testCtx, getCaseName(*format, params.src.image.extent, numLayers, "{name}"), params));\n')
+                if body.count(registration_text) != 1:
+                    raise SystemExit("BC mip copy queue registration drift")
+                body = body.replace(registration_text, "")
+            return body
+
+        registration("add2dImageToBufferTests", compressed_mip_copies)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(text.replace(old_core, new_core).replace(
-        old_factory, new_factory), encoding="utf-8")
+    destination.write_text(text, encoding="utf-8")
 
 
 def write_focused_robust_buffer_source(source: Path, destination: Path) -> None:
@@ -477,7 +592,15 @@ def main(argv=None):
         12)
     write_focused_buffer_copy_source(
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp",
-        focused_sources / "vktApiCopiesAndBlittingTests.cpp")
+        focused_sources / "vktApiCopiesAndBlittingTests.cpp",
+        include_bc_blits=any(".copy_and_blit.core.blit_image." in case["path"]
+                            for case in selection_manifest["cases"]),
+        include_bc_mip_copies=any(
+            ".copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc" in case["path"]
+            for case in selection_manifest["cases"]),
+        include_bc_image_copies=any(
+            ".copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc" in case["path"]
+            for case in selection_manifest["cases"]))
     write_focused_robust_buffer_source(
         cts_root / "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp",
         focused_sources / "vktRobustnessBufferAccessTests.cpp")
@@ -595,6 +718,10 @@ def main(argv=None):
         "-I" + str(cts_root / "external/vulkancts/modules/vulkan/synchronization"),
         "-I" + str(cts_root / "external/vulkancts/modules/vulkan/memory"),
         "-I" + str(cts_root / "external/vulkancts/modules/vulkan/compute"),
+        "-I" + str(cts_root / "external/vulkancts/modules/vulkan/draw"),
+        "-I" + str(cts_root / "external/vulkancts/modules/vulkan/query_pool"),
+        "-I" + str(cts_root / "external/vulkancts/modules/vulkan/shaderrender"),
+        "-I" + str(cts_root / "external/vulkancts/modules/vulkan/util"),
         "-I" + str(cts_root / "external/spirv-tools/src/include"),
         "-I" + str(cts_root / "external/spirv-headers/src/include"),
         "-I" + str(glslang_root),
@@ -730,6 +857,7 @@ def main(argv=None):
         cts_root / "framework/delibs/decpp/deRingBuffer.cpp",
         cts_root / "framework/delibs/decpp/deSemaphore.cpp",
         cts_root / "framework/delibs/decpp/deSharedPtr.cpp",
+        cts_root / "framework/delibs/decpp/deSpinBarrier.cpp",
         cts_root / "framework/delibs/decpp/deSocket.cpp",
         cts_root / "framework/delibs/decpp/deStringUtil.cpp",
         cts_root / "framework/delibs/decpp/deThread.cpp",
@@ -885,6 +1013,11 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiBufferAndImageAllocationUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiPipelineTests.cpp",
+        # Original object-management factory, including the cube-array image
+        # view test and its imageCubeArray support gate.
+        cts_root / "external/vulkancts/modules/vulkan/api/vktApiObjectManagementTests.cpp",
+        # Original compressed image sampling cases and upstream reference oracle.
+        cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureCompressedFormatTests.cpp",
         focused_sources / "vktApiCopiesAndBlittingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp",
         # Original UBO block-layout factory, shader bodies and result oracle.
@@ -900,6 +1033,9 @@ def main(argv=None):
         # vktImageTestsUtil provides the format-qualifier and packed-type helpers
         # the buffer-view access tests use to build their compute shader.
         cts_root / "external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp",
+        # Shared texture renderer/program helpers used by the original
+        # compressed-format sampling tests.
+        cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureTestUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp",
         focused_sources / "vktBindingBufferDeviceAddressTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp",
@@ -910,10 +1046,30 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeTestsUtil.cpp",
+        # Original subgroup Broadcast and arithmetic bodies, support gates and GPU oracles.
+        # Registration alone does not select a case or advertise a feature.
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsScanHelpers.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsTestsUtils.cpp",
         # Original dynamic-state compute/transfer non-interference module.  It
         # is compiled directly from the pinned checkout; no body or oracle is
         # copied into the integration.
         cts_root / "external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateComputeTests.cpp",
+        # Original query-pool factories. The focused case list selects only
+        # precise occlusion leaves; all query bodies and result checks remain
+        # those from the pinned upstream sources.
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolOcclusionTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolStatisticsTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolConcurrentTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolFragInvocationTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/query_pool/vktQueryPoolPerformanceTests.cpp",
+        # Original texture_gather factory and shared shader-render execution
+        # support. The packaged case list is the sole filter; shader generation,
+        # sampling setup and image oracle come from upstream unchanged.
+        cts_root / "external/vulkancts/modules/vulkan/shaderrender/vktShaderRender.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp",
         # Original multiview module. The package registers the module's own
         # factory, the view-mask support gate and the per-view layer oracle are
         # the upstream ones, and cases.txt selects only the 48 audited legacy
@@ -1059,6 +1215,7 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmGraphicsShaderTestUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmUtils.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIndexingTests.cpp",
         ROOT / "cts/upstream/volatile_atomic_focus.cpp",
     ]
     for src in test_cpp:

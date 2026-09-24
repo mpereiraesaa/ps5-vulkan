@@ -1,0 +1,13 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) buffer Data { uint words[]; } data;
+
+void main()
+{
+    uint subgroup = gl_WorkGroupID.x * 2u + gl_SubgroupID;
+    uint value = data.words[subgroup] + gl_SubgroupInvocationID;
+    data.words[16u + gl_GlobalInvocationID.x] = subgroupAdd(value);
+}

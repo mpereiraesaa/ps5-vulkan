@@ -17,11 +17,20 @@ static int module_valid(const uint32_t *words, size_t count)
     }
     return 1;
 }
-/* No subgroup operation/stage properties are reported by the Vulkan 1.0
- * device. Refuse subgroup SPIR-V at module creation for every shader stage,
- * including malformed modules that omit their required capability. */
-static int subgroup_module_unsupported(const uint32_t *words, size_t count)
+/* The shipping Vulkan 1.0 profile reports no subgroup stages or operations.
+ * Private compute-only builds admit only independently selected Broadcast and
+ * IAdd diagnostics. Each operation needs its own SPIR-V capability; no public
+ * subgroup operation or feature follows from either internal switch. */
+static int subgroup_module_unsupported(const uint32_t *words, size_t count,
+                                       uint32_t platform_features)
 {
+    const int broadcast_compute =
+        !!(platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE);
+    const int iadd_compute =
+        !!(platform_features & PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE);
+    int basic = 0, ballot = 0, arithmetic = 0, broadcast = 0, iadd = 0;
+    int compute_entry = 0;
+    int other_entry = 0, subgroup = 0;
     for (size_t at = 5; at < count; at += words[at] >> 16) {
         uint32_t opcode = words[at] & 0xffffu;
         uint32_t length = words[at] >> 16;
@@ -29,14 +38,39 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count)
             uint32_t capability = words[at + 1];
             if ((capability >= 61u && capability <= 68u) ||
                 capability == 4423u || capability == 4431u ||
-                capability == 5297u || capability == 6026u)
-                return 1;
+                capability == 5297u || capability == 6026u) {
+                subgroup = 1;
+                if ((capability != 61u && capability != 63u && capability != 64u) ||
+                    (capability == 63u && !iadd_compute) ||
+                    (capability == 64u && !broadcast_compute)) return 1;
+                if (capability == 61u) basic = 1;
+                if (capability == 63u) arithmetic = 1;
+                if (capability == 64u) ballot = 1;
+            }
+        }
+        if (opcode == 15u && length >= 4u) {
+            if (words[at + 1] == 5u) compute_entry = 1;
+            else other_entry = 1;
         }
         if ((opcode >= 333u && opcode <= 366u) ||
             opcode == 4431u || opcode == 5110u || opcode == 5111u ||
-            opcode == 5296u)
-            return 1;
+            opcode == 5296u) {
+            subgroup = 1;
+            if (opcode == 337u && broadcast_compute) broadcast = 1;
+            else if (opcode == 349u && iadd_compute) iadd = 1;
+            else return 1;
+        }
     }
+    return subgroup && (!basic || !compute_entry || other_entry ||
+                        (!broadcast && !iadd) || (broadcast != ballot) ||
+                        (iadd != arithmetic));
+}
+static int declares_int16_capability(const uint32_t *words, size_t count)
+{
+    for (size_t at = 5; at < count; at += words[at] >> 16)
+        if ((words[at] & 0xffffu) == 17u &&
+            (words[at] >> 16) == 2u && words[at + 1] == 22u)
+            return 1;
     return 0;
 }
 VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
@@ -111,7 +145,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
     if (info->codeSize > 16 * 1024 * 1024 || info->codeSize > SIZE_MAX - sizeof(struct VkShaderModule_T))
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (!module_valid(info->pCode, info->codeSize / 4)) return INVALID;
-    if (subgroup_module_unsupported(info->pCode, info->codeSize / 4))
+    if (subgroup_module_unsupported(info->pCode, info->codeSize / 4,
+                                    d->platform_features))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Shader modules may be shared across graphics and compute entries, so
+     * the Int16 capability must require the logical-device opt-in before
+     * either pipeline frontend can accept it. */
+    if (!(d->enabled_features & PS5VK_FEATURE_SHADER_INT16) &&
+        declares_int16_capability(info->pCode, info->codeSize / 4))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!ps5vk_spirv_validate_ubo_layout(info->pCode, info->codeSize / 4,
             !!(d->enabled_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT)))
@@ -132,9 +173,9 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyShaderModule(VkDevice d, VkShaderModule m, c
     --d->pipeline_objects; ps5vk_object_free(m, &saved, custom);
 }
 
-/* OpCapability declarations that name negotiated device features. The Int8
- * compute probe is private and default off; other narrow arithmetic and the
- * broader storage classes remain unsupported. */
+/* OpCapability declarations that name negotiated device features. Int16 is
+ * gated by shaderInt16; the Int8 compute probe is private and default off.
+ * Broader narrow storage classes remain unsupported. */
 static int spirv_narrow_requirements(const uint32_t *words, size_t count,
                                      uint32_t *required)
 {
@@ -156,8 +197,10 @@ static int spirv_narrow_requirements(const uint32_t *words, size_t count,
                              PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE; break;
             case 5347u: /* PhysicalStorageBufferAddresses */
                 *required |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS; break;
-            case 39u: *required |= PS5VK_FEATURE_SHADER_INT8_COMPUTE; break;
-            case 22u:   /* Int16 */
+            case 39u: /* Int8 */
+                *required |= PS5VK_FEATURE_SHADER_INT8_COMPUTE; break;
+            case 22u: /* Int16 */
+                *required |= PS5VK_FEATURE_SHADER_INT16; break;
             case 4434u: /* UniformAndStorageBuffer16BitAccess */
             case 4449u: /* UniformAndStorageBuffer8BitAccess */
                 return 0;

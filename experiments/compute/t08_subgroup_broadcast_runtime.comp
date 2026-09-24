@@ -1,0 +1,16 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_ballot : require
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) buffer Data { uint words[]; } data;
+
+void main()
+{
+    uint subgroup = gl_WorkGroupID.x * 2u + gl_SubgroupID;
+    uint source_lane = data.words[subgroup];
+    uint lane_value = gl_WorkGroupID.x * 1000u +
+                      gl_SubgroupID * 100u + gl_SubgroupInvocationID;
+    data.words[16u + gl_GlobalInvocationID.x] =
+        subgroupBroadcast(lane_value, source_lane);
+}

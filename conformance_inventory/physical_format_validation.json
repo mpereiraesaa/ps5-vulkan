@@ -11,8 +11,9 @@
     "satisfied_by_this_task": 25,
     "direct_texel_matrix_cells_in_scope": 10,
     "ready_pending_physical_validation": 0,
-    "blocked_without_backend": 262,
-    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated eight A8B8G8R8 sampled entries. The direct uniform-texel matrix of 2026-09-15 validates 41 formats across all owned format families and moves ten additional cells in this original two-table scope. The DXVK262-T06 independentBlend promotion of 2026-09-22 moves one more: the integer colour target R8G8B8A8_UINT now reports its colour-attachment feature and passes both upstream leaves that require the feature. The bounded R32_UINT storage-image route moves one more after two identical original BDA diagnostic runs. The remaining 262 baseline cells require backend work; the count is not CTS coverage or conformance."
+    "blocked_without_backend": 259,
+    "notes": "The original offline assignment classified 287 baseline deficit cells in these tables (not all their mandatory cells). Orchestrator qualification on 2026-09-14 validated eight A8B8G8R8 sampled entries. The direct uniform-texel matrix of 2026-09-15 validates 41 formats across all owned format families and moves ten additional cells in this original two-table scope. The DXVK262-T06 independentBlend promotion of 2026-09-22 moves one more: the integer colour target R8G8B8A8_UINT now reports its colour-attachment feature and passes both upstream leaves that require the feature. The bounded R32_UINT storage-image route moves one more after two identical original BDA diagnostic runs. The remaining 262 baseline cells require backend work; the count is not CTS coverage or conformance. The T07 promotion separately qualifies three more baseline cells: R8G8B8A8_SINT color attachment and R8G8B8A8_UNORM/SRGB blit destinations, leaving 259 in the original two-table scope.",
+    "additional_satisfied_by_t07": 3
   },
   "qualification": {
     "status": "validated",
@@ -425,7 +426,7 @@
       "profiles": [
         "graphics"
       ],
-      "cells": 40,
+      "cells": 38,
       "detail": "vkCmdBlitImage rejects every call: there is no scaling/filtering packet and no bounded CPU contract, and BLIT is not COPY, so no BLIT_SRC/BLIT_DST bit may be published."
     },
     {
@@ -441,7 +442,7 @@
       "profiles": [
         "graphics"
       ],
-      "cells": 21,
+      "cells": 20,
       "detail": "Only B8G8R8A8_UNORM, R8G8B8A8_UNORM and - since the DXVK262-T06 independentBlend promotion of 2026-09-22 - R8G8B8A8_UINT have a render-target encoding and a clear/draw/readback route; the native graphics compiler additionally requires a write-mask shape the target register can express (the masked, unblended one the two upstream leaves that require the feature build), so no blend bit is publishable either."
     },
     {

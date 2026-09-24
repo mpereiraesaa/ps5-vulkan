@@ -7,6 +7,10 @@
  * tile of 4-byte samples. */
 size_t ps5vk_depth_64k_zx_surface_size(uint32_t width,uint32_t height);
 size_t ps5vk_depth_64k_zx_offset(uint32_t x,uint32_t y,uint32_t width);
+/* Exact 64x64 D32, seven-level GFX10 mip tail used by the pinned T07 gather
+ * leaf. Coordinates and offsets follow Mesa AddrLib's ADDR_SW_64KB_Z_X
+ * mip-tail calculation, with the already cross-validated 16-pipe equation. */
+size_t ps5vk_depth_64k_zx_gather_mip_offset(uint32_t mip,uint32_t x,uint32_t y);
 int ps5vk_depth_64k_zx_detile(void *destination,size_t destination_bytes,
     const void *source,size_t source_bytes,uint32_t width,uint32_t height);
 #endif

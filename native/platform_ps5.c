@@ -307,19 +307,44 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * the front end, the pipeline key and the native per-target programming
      * already carry the bound. */
     platform->supported_features |= PS5VK_FEATURE_INDEPENDENT_BLEND;
+    /* Two-cube GPU readback and the applicable upstream case qualify this bit.
+     * Unsupported tiled layer pitches still fail at descriptor creation. */
+    platform->supported_features |= PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
+    /* BC sampling, filtering and transfer roles passed original CTS;
+     * format queries expose only implemented roles. */
+    platform->supported_features |= PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
+    /* Precise occlusion has native counter and original CTS evidence. */
+    platform->supported_features |= PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+    /* Constant, dynamic, four-offset and Dref forms have GPU readback and
+     * original CTS coverage at the required offset limits. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
     platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS;
 #endif
     /* The Vulkan 1.0 KHR route is backed by the seven unchanged volatile
-     * queue-family atomic CTS leaves and the bounded GPU ordering witness.
-     * DeviceScope has separate requirements and remains diagnostic-only. */
+     * queue-family atomic CTS leaves and the bounded GPU ordering witness. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL;
-#if defined(PS5VK_MEMORY_MODEL_DIAGNOSTIC) && PS5VK_MEMORY_MODEL_DIAGNOSTIC
-    /* DeviceScope remains measurement-only: the original message-passing
-     * factory rejects Vulkan 1.0 before querying this extension feature. */
+    /* DeviceScope is exposed through the KHR feature chain under Vulkan 1.0.
+     * The original message-passing CTS factory requires core Vulkan 1.1, so
+     * the KHR route has a separate bounded native witness. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+#if defined(PS5VK_SHADER_INT16_DIAGNOSTIC) && PS5VK_SHADER_INT16_DIAGNOSTIC
+    /* Measure the core Int16 route with original CTS before considering the
+     * shader feature for the ordinary profile. Subgroup bits stay separate. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_INT16;
+#endif
+#if defined(PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC) && PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC
+    /* Private Vulkan 1.0 measurement only: admit compute Ballot Broadcast
+     * through the runtime pipeline without reporting subgroup properties or
+     * either T08 subgroup feature. Public API eligibility remains blocked. */
+    platform->supported_features |= PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+#endif
+#if defined(PS5VK_SUBGROUP_IADD_DIAGNOSTIC) && PS5VK_SUBGROUP_IADD_DIAGNOSTIC
+    /* Private compute IAdd measurement only. This is narrower than the
+     * public ARITHMETIC operation bit and reports no subgroup properties. */
+    platform->supported_features |= PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
 #endif
 #if defined(PS5VK_SHADER_INT8_DIAGNOSTIC) && PS5VK_SHADER_INT8_DIAGNOSTIC
     /* Compiler-only probe; public shaderInt8 and subgroup features stay false. */

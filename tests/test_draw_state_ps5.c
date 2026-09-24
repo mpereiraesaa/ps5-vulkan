@@ -121,6 +121,25 @@ int main(void)
     /* With a D32 attachment the format word describes the float depth even
      * while the bias is disabled; only the factors and enables say "off". */
     check_polygon_offset(&out, 114, 1, 0.0f, 0.0f, 0.0f);
+    /* The precise-query CTS leaf uses this exact 128x128 D16 target extent. */
+    {
+        struct VkPipeline_T d16 = p;
+        struct ps5vk_draw_state d16_state;
+        d16.depth_format=VK_FORMAT_D16_UNORM;
+        d16.color_format[0]=VK_FORMAT_R8G8B8A8_UNORM;
+        raster.depth_bias_enable=VK_TRUE;
+        assert(ps5vk_native_draw_state(&d16,&d16.viewport,&d16.scissor,1,
+            &raster,&color,1,&depth,&area,128,128,0,&d16_state)==VK_SUCCESS);
+        assert(d16_state.cx_count==out.cx_count && d16_state.cx[112].offset==0x204);
+        assert(last_cx(&d16_state,0x2de)==0xf0u);
+        raster.depth_bias_constant=1.0f;
+        assert(ps5vk_native_draw_state(&d16,&d16.viewport,&d16.scissor,1,
+            &raster,&color,1,&depth,&area,128,128,0,&d16_state)==VK_ERROR_FEATURE_NOT_PRESENT);
+        raster.depth_bias_constant=0.0f;
+        assert(ps5vk_native_draw_state(&d16,&d16.viewport,&d16.scissor,1,
+            &raster,&color,1,&depth,&area,127,128,0,&d16_state)==VK_ERROR_FEATURE_NOT_PRESENT);
+        raster.depth_bias_enable=VK_FALSE;
+    }
     assert(out.cx[107].offset==0x205 && out.cx[107].value==0x246u);
     /* Real factors: slope is scaled by 16 for the hardware, the constant and
      * the clamp are carried as-is, and front/back share the polygon's bias.
