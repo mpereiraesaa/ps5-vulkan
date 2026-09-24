@@ -31,7 +31,8 @@ results; visual output is not the sole correctness signal.
 - Extension-negotiated 8-bit and 16-bit storage-buffer access
 - Push constants and scalar specialization constants in compute and runtime graphics
 - Vulkan pipeline-cache objects with a normative header export (no portable compiled-code records yet)
-- Occlusion query-pool lifetime (result retrieval deferred) and empty sparse image queries
+- Occlusion query pools with bounded native counters and precise-query support;
+  empty sparse image queries
 - Runtime vertex/fragment compilation for procedural triangles with a bounded pair cache
 - Vertex and index buffers, indexed and non-indexed triangle-list and
   triangle-strip draws (the strip has host coverage but no native witness yet);
@@ -55,12 +56,13 @@ results; visual output is not the sole correctness signal.
   per-sample reads of the multisampled attachment as an input attachment.
   Multisampled depth attachments, multisampled sampled images and 8x and above
   are not served
-- 44 sampled texture formats spanning 8/16/32-bit UNORM,
+- 61 sampled texture formats spanning 8/16/32-bit UNORM,
   SNORM, signed/unsigned integer and floating-point families, RGBA8 sRGB,
-  A8B8G8R8 packed color/integer, RGB9E5 and B10G11R11 packed floating point, with GPU
+  A8B8G8R8 packed color/integer, RGB9E5 and B10G11R11 packed floating point,
+  sixteen BC formats and bounded D32 depth sampling, with GPU
   upload transitions and deterministic hardware readback; core repeat,
   mirrored-repeat, edge/border clamp and the six fixed border-color enums are
-  implemented. Nearest/linear filtering is validated for the 24
+  implemented. Nearest/linear filtering is validated for the 40
   filterable rows; the 20 integer rows use typed samplers and correctly
   remain nearest-only. A three-level RGBA8 chain has deterministic explicit-LOD
   GPU readback through the staged public SDK; signed sampler LOD bias is
@@ -102,7 +104,7 @@ DXVK support is tracked against the immutable DXVK **v2.6.2** profile
 into a checked-in machine-readable profile and joined independently to the
 current public API, reviewed implementation, CTS and native evidence.
 
-The fail-closed matrix currently proves **20/62** requirements completely:
+The fail-closed matrix currently proves **24/62** requirements completely:
 `robustBufferAccess`, multiview and its two required limits, the three
 indirect/indexed draw features `drawIndirectFirstInstance`,
 `multiDrawIndirect` (with `maxDrawIndirectCount = 65535`) and
@@ -110,18 +112,18 @@ indirect/indexed draw features `drawIndirectFirstInstance`,
 `shaderCullDistance` pair, `fragmentStoresAndAtomics`, `dualSrcBlend`,
 `independentBlend`, `sampleRateShading`, `uniformBufferStandardLayout`,
 base `vulkanMemoryModel` and bounded `bufferDeviceAddress` through their Vulkan
-1.0 KHR routes. The blend
-features draw into two colour attachments;
-sample-rate shading runs once per sample at 2x and 4x. The four
-rasterization and viewport features `depthClamp`, `depthBiasClamp`,
-`fillModeNonSolid` and `multiViewport`. Multiview is queried through its
+1.0 KHR routes, and the four rasterization and viewport features
+`depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`. The blend
+features draw into two colour attachments; sample-rate shading runs once per
+sample at 2x and 4x. The four T07 features `imageCubeArray`,
+`textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise` passed twice in the 829-case ordinary upstream CTS
+selection. Multiview is queried through its
 explicit KHR route. `geometryShader` and `tessellationShader` are positive on
 the API, implementation and CTS axes but their native axis is still
-`reported-not-executed`, so they stay among the other 43 requirements that
+`reported-not-executed`, so they stay among the other 38 requirements that
 remain blockers, together with the API-version requirement. This is an
 implementation roadmap, not a DXVK compatibility claim.
-
-T04 (geometry, tessellation and clip/cull distances) is implemented,
 hardware-validated and merged. The default graphics build passed a focused
 403/403 upstream run, including 99 tessellation-related cases. The separate
 fail-closed DXVK matrix has not yet admitted the geometry/tessellation native

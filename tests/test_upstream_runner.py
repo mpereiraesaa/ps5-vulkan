@@ -872,6 +872,121 @@ void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
         self.assertIn("CopyBufferToBuffer::iterate", generated)
         self.assertIn("deMemCmp(referenceData, resultData, bufferSize)", generated)
 
+    def test_bc_blit_registration_preserves_original_implementations(self):
+        upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                    "modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp")
+        if not upstream.is_file():
+            self.skipTest("pinned CTS checkout unavailable")
+        original = upstream.read_text()
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "focused.cpp"
+            write_focused_buffer_copy_source(upstream, destination, include_bc_blits=True)
+            generated = destination.read_text()
+        marker = "void addBlittingImageAllFormatsColorSrcFormatTests("
+        self.assertEqual(original[:original.index(marker)], generated[:generated.index(marker)])
+        self.assertIn('addTestGroup(group, "blit_image", addBlittingImageTests,', generated)
+        self.assertIn("srcFormat < VK_FORMAT_BC1_RGB_UNORM_BLOCK", generated)
+        self.assertIn("srcFormat > VK_FORMAT_BC7_SRGB_BLOCK", generated)
+        color = generated.split("void addBlittingImageAllFormatsColorTests(", 1)[1]
+        color = color.split("void addBlittingImageAllFormatsDepthStencilFormatsTests(", 1)[0]
+        self.assertIn("create2DCopyRegions(64, 64, 64, 64)", color)
+        self.assertNotIn("// 1D tests.", color)
+        self.assertNotIn("// 3D tests.", color)
+
+    def test_bc_mip_copy_registration_preserves_original_implementations(self):
+        upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                    "modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp")
+        if not upstream.is_file():
+            self.skipTest("pinned CTS checkout unavailable")
+        original = upstream.read_text()
+        marker = "void add2dImageToBufferTests("
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "focused.cpp"
+            for blits in (False, True):
+                write_focused_buffer_copy_source(upstream, destination,
+                    include_bc_blits=blits, include_bc_mip_copies=True)
+                generated = destination.read_text()
+                self.assertEqual(original[:original.index(marker)],
+                                 generated[:generated.index(marker)])
+                self.assertIn('addTestGroup(group, "image_to_buffer", addImageToBufferTests,', generated)
+                registration = generated.split(marker, 1)[1].split(
+                    "void addBufferToDepthStencilTests(", 1)[0]
+                self.assertIn("{64, 64, 1}", registration)
+                self.assertIn("{64, 192, 1}", registration)
+                self.assertIn("arrayLayers[] = {1, 2, 5}", registration)
+                self.assertIn("*format < VK_FORMAT_BC1_RGB_UNORM_BLOCK", registration)
+                self.assertIn("*format > VK_FORMAT_BC7_SRGB_BLOCK", registration)
+                self.assertEqual(registration.count("new CopyCompressedImageToBufferTestCase("), 1)
+                self.assertIn('numLayers, "universal"), params)', registration)
+                self.assertNotIn("QueueSelectionOptions::ComputeOnly", registration)
+                self.assertNotIn("QueueSelectionOptions::TransferOnly", registration)
+                self.assertNotIn("new CopyImageToBufferTestCase(", registration)
+                core = generated.split("void addCoreCopiesAndBlittingTests(", 1)[1].split("\n}", 1)[0]
+                self.assertEqual(blits, 'addTestGroup(group, "blit_image", addBlittingImageTests,' in core)
+            drifted = Path(directory) / "drifted.cpp"
+            drifted.write_text(original.replace("    // those tests are performed for all queues, no need to repeat them", "    // moved registration"))
+            with self.assertRaisesRegex(SystemExit, "BC mip copy registration drift"):
+                write_focused_buffer_copy_source(drifted, destination, include_bc_mip_copies=True)
+
+    def test_bc_image_copy_registration_preserves_original_implementations(self):
+        upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                    "modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp")
+        if not upstream.is_file():
+            self.skipTest("pinned CTS checkout unavailable")
+        original = upstream.read_text()
+
+        def function(text, name):
+            start = text.index("void " + name + "(")
+            end = text.index("{", start) + 1
+            depth = 1
+            while depth:
+                depth += (text[end] == "{") - (text[end] == "}")
+                end += 1
+            return text[start:end]
+
+        first_change = "void addImageToImageAllFormatsColorSrcFormatTests("
+        color_name = "addImageToImageAllFormatsColorTests"
+        original_color = function(original, color_name)
+        region_start = "        TestParams params;"
+        region_end = "        const int numOfColorImageFormatsToTest"
+        original_2d = original_color.split("    // 2D to 2D tests.", 1)[1]
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "focused.cpp"
+            for blits in (False, True):
+                for mip_copies in (False, True):
+                    write_focused_buffer_copy_source(upstream, destination,
+                        include_bc_blits=blits, include_bc_mip_copies=mip_copies,
+                        include_bc_image_copies=True)
+                    generated = destination.read_text()
+                    self.assertEqual(original.split(first_change)[0],
+                                     generated.split(first_change)[0])
+                    # Preserve all four layout constructors and the complete
+                    # original extent/fill/partial-region setup byte-for-byte.
+                    leaf = "addImageToImageAllFormatsColorSrcFormatDstFormatTests"
+                    self.assertEqual(function(original, leaf), function(generated, leaf))
+                    color = function(generated, color_name)
+                    self.assertEqual(original_2d.split(region_start, 1)[1].split(region_end, 1)[0],
+                                     color.split(region_start, 1)[1].split(region_end, 1)[0])
+                    self.assertIn('"2d_to_2d"', color)
+                    for excluded in ('"1d_to_', '"2d_to_1d"', '"2d_to_3d"', '"3d_to_'):
+                        self.assertNotIn(excluded, color)
+                    self.assertIn("!= VK_FORMAT_BC1_RGBA_UNORM_BLOCK", color)
+                    self.assertIn("!= VK_FORMAT_BC3_UNORM_BLOCK", color)
+                    pairs = function(generated, "addImageToImageAllFormatsColorSrcFormatTests")
+                    self.assertIn("srcFormat == VK_FORMAT_BC1_RGBA_UNORM_BLOCK && dstFormat == VK_FORMAT_BC4_SNORM_BLOCK", pairs)
+                    self.assertIn("srcFormat == VK_FORMAT_BC3_UNORM_BLOCK && dstFormat == VK_FORMAT_BC7_SRGB_BLOCK", pairs)
+                    self.assertNotIn("depth_stencil", function(generated, "addImageToImageAllFormatsTests"))
+                    self.assertIn('"all_formats"', function(generated, "addImageToImageTestsSimpleOnly"))
+                    core = function(generated, "addCoreCopiesAndBlittingTests")
+                    self.assertEqual(blits, '"blit_image"' in core)
+                    self.assertEqual(mip_copies, '"image_to_buffer"' in core)
+            for needle in ("    // 2D to 2D tests.",
+                           "        const VkFormat dstFormat = testParams.params.dst.image.format;"):
+                drifted = Path(directory) / "drifted.cpp"
+                drifted.write_text(original.replace(needle, "    // moved registration"))
+                with self.assertRaisesRegex(SystemExit, "BC image copy .*registration drift"):
+                    write_focused_buffer_copy_source(drifted, destination, include_bc_image_copies=True)
+
     def test_robust_buffer_selection_and_upstream_factory_are_exact(self):
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
         selected = {case["path"] for case in manifest["cases"]

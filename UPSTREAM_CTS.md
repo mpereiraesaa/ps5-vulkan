@@ -50,11 +50,12 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 507 original upstream acceptance cases frozen in
-  `cts/upstream/manifest.json`. This includes four standard UBO layout vertex
-  oracles, seven VulkanKHR volatile storage-buffer atomic oracles, two
-  buffer-device-address compute oracles, and the earlier API, graphics,
-  compute, resource and synchronization cases. Before the BDA promotion, the
+* **Selected**: the 829 original upstream acceptance cases frozen in
+  `cts/upstream/manifest.json`. T07 adds 250 BC sampling, blit and copy cases,
+  70 gather cases, one precise-query case and one cube-array image-view case to
+  the prior 507-case selection. This also includes four standard UBO layout
+  vertex oracles, seven VulkanKHR volatile storage-buffer atomic oracles and
+  two buffer-device-address compute oracles. Before the BDA promotion, the
   first two strict shipping runs on 2026-09-23 each reported 505/505 Pass. A
   third integrated run on eboot SHA-256
   `0aadc18fb2d7537b85fa678b7dd0abbcbe7ec5babcb6cd762523d3e367ea4ba4`
@@ -68,6 +69,13 @@ were the same thing:
   and selection SHA-256
   `d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`;
   see [the evidence](VALIDATION.md#buffer-device-address-khr-promotion).
+  T07's ordinary 829-case selection passed twice on owner-reported firmware
+  12.02, with zero Fail, NotSupported, missing or unexpected cases. Both runs
+  used eboot SHA-256
+  `95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`
+  and selection SHA-256
+  `81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`;
+  see [the T07 promotion evidence](VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
   The manifest also carries 66 diagnostic paths, which remain outside strict
   acceptance. Earlier dated sections below record the smaller selections used
   at each promotion and preserve their historical counts.
@@ -330,6 +338,14 @@ closed; `vkQueueBindSparse`, `vkCmdNextSubpass` and `vkCmdExecuteCommands`
 likewise have no valid invocation in the reported profile. No CTS case or
 hardware result is claimed for this slice.
 
+Later T07 diagnostics added a bounded native occlusion counter and two passing
+original `basic_precise` runs; the combined 508-case measurement also passed.
+At that diagnostic checkpoint, the shipping `occlusionQueryPrecise` bit and
+frozen selection remained unchanged.
+See [VALIDATION.md](VALIDATION.md#t07-precise-occlusion-original-cts-measurement-2026-09-24)
+for the exact artifact and run identities. The paragraph above remains the
+record of the 2026-09-13 object-only slice.
+
 ### Pipeline cache (2026-09-13)
 
 One additional original upstream case joins the selection:
@@ -356,7 +372,7 @@ compiled-code records, so no restored cache hit is claimed or reported. The
 graphics-derived cache cases
 (`graphics_tests`, `pipeline_from_get_data`, `pipeline_from_incomplete_get_data`,
 `merge`, and the four `misc_tests`) remain unselected because the pinned bodies
-require a `D16_UNORM` depth attachment this profile does not support; their
+required a `D16_UNORM` depth attachment the 2026-09-13 profile did not support; their
 oracles are reproduced as host tests in `tests/test_pipeline_cache.c`.
 ### Binary semaphore and event expansion (2026-09-13)
 
@@ -1341,7 +1357,7 @@ Families examined and found not applicable, recorded so they are not
 re-derived: `draw.renderpass.inverted_depth_ranges.*` (D16_UNORM attachment and
 DEPTH-aspect readback), `draw.depth_bias.*` (D16_UNORM scripts),
 `rs_state.nonzero_depth_bias_clamp` (D16_UNORM), `rasterization.depth_bias.d32_sfloat*`
-(samples the depth image; `D32_SFLOAT` has no sampled role), `glsl.builtin_var.fragdepth.*`
+(samples the depth image; at T05 `D32_SFLOAT` had no sampled role), `glsl.builtin_var.fragdepth.*`
 (DEPTH-aspect readback), `amber.depth.*_clamp` (`VK_EXT_depth_clamp_zero_one`),
 `pipeline.*.depth_range_unrestricted.*` (`VK_EXT_depth_range_unrestricted`),
 `clipping.clip_volume.depth_clip.*` (`VK_EXT_depth_clip_enable`),

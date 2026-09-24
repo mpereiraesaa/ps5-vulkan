@@ -35,11 +35,11 @@ class DxvkBacklogTests(unittest.TestCase):
         self.assertEqual(15, summary["tranches"])
         self.assertEqual(61, summary["requirements"])
         # DXVK262-T06 independentBlend (2026-09-22) and then sampleRateShading
-        # (2026-09-23) were promoted: each is implementation-ready and
-        # profile-satisfied, so T06's four requirements are all in.
-        self.assertEqual(19, summary["implementation_ready"])
-        self.assertEqual(19, summary["profile_satisfied"])
-        self.assertEqual(42, summary["remaining_profile_blockers"])
+        # (2026-09-23) were promoted, followed by T07's four resource/query
+        # rows on 2026-09-24.
+        self.assertEqual(23, summary["implementation_ready"])
+        self.assertEqual(23, summary["profile_satisfied"])
+        self.assertEqual(38, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,

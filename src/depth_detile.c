@@ -63,6 +63,25 @@ size_t ps5vk_depth_64k_zx_offset(uint32_t x,uint32_t y,uint32_t width)
     return index*UINT32_C(0x10000)+local;
 }
 
+size_t ps5vk_depth_64k_zx_gather_mip_offset(uint32_t mip,uint32_t x,uint32_t y)
+{
+    /* Mesa AddrLib 6.2, Gfx10Lib::ComputeSurfaceInfoMacroTiled, for a
+     * 64x64x1, seven-mip, 32bpp 2D 64KB_Z_X chain. All seven levels fit in
+     * one 64 KiB mip-tail block. These coordinates are the published
+     * mipTailCoordX/Y values, not per-level tile origins. */
+    static const uint8_t tail_x[7]={64,0,32,0,16,8,0};
+    static const uint8_t tail_y[7]={0,64,0,32,0,16,24};
+    if(mip>=7)return SIZE_MAX;
+    uint32_t width=64u>>mip,height=64u>>mip;
+    if(!width)width=1;
+    if(!height)height=1;
+    if(x>=width||y>=height)return SIZE_MAX;
+    /* The top level of this chain is already in the mip tail. AddrLib
+     * addresses every tail mip inside the single 128x128 Z_X macroblock. */
+    return ps5vk_depth_64k_zx_offset((uint32_t)tail_x[mip]+x,
+        (uint32_t)tail_y[mip]+y,128u);
+}
+
 int ps5vk_depth_64k_zx_detile(void *destination,size_t destination_bytes,
     const void *source,size_t source_bytes,uint32_t width,uint32_t height)
 {

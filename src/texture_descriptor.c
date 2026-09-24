@@ -11,7 +11,9 @@
 #include "texture_descriptor.h"
 #include "texture_layout.h"
 #include "texture_format.h"
+#include "depth_layout.h"
 #include <string.h>
+
 /* The GFX10 image fields both encoders share, and nothing else. The sampled
  * entry adds its own usage rules before calling this and its sampler words
  * after; the resource-only entry adds the input-attachment contract. Nothing
@@ -20,8 +22,9 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
 {
     VkImage image=view->image;
     const struct ps5vk_texture_format *format=ps5vk_texture_format_lookup(view->format);
+    const VkBool32 d32_gather=ps5vk_d32_gather_image(image);
     if(!format || !ps5vk_texture_format_sampled_image(view->format) || image->info.format!=view->format ||
-        view->range.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || !view->range.levelCount ||
+        (view->range.aspectMask!=(d32_gather?VK_IMAGE_ASPECT_DEPTH_BIT:VK_IMAGE_ASPECT_COLOR_BIT)) || !view->range.levelCount ||
         view->range.baseMipLevel>=image->info.mipLevels ||
         view->range.levelCount>image->info.mipLevels-view->range.baseMipLevel ||
         !view->range.layerCount || image->info.mipLevels>PS5VK_MAX_TEXTURE_MIP_LEVELS)
@@ -35,6 +38,20 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     struct ps5vk_texture_mip_layout layout;
     if(ps5vk_texture_mip_layout_for_slices(view->format,image->info.extent.width,
         image->info.extent.height,slices,image->info.mipLevels,&layout))return VK_ERROR_UNKNOWN;
+    VkDeviceSize layer_stride=layout.layer_stride;
+    const VkBool32 tiled_cube=ps5vk_tiled_cube_sampled_image(image);
+    if(tiled_cube) {
+        if(image->requirements.size%image->info.arrayLayers)
+            return VK_ERROR_UNKNOWN;
+        layer_stride=image->requirements.size/image->info.arrayLayers;
+        /* The sampler derives its array pitch from the tiled footprint. A
+         * smaller attachment layer padded to the target's 128 KiB alignment
+         * would silently sample each face twice. Refuse that descriptor. */
+        struct ps5vk_depth_layout tiled;
+        if(ps5vk_depth_layout(image->info.extent.width,
+            image->info.extent.height,&tiled) || tiled.bytes!=layer_stride)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     void *base;VkDeviceSize bytes;
     VkResult rc=ps5vk_image_span(d,image,&base,&bytes);if(rc!=VK_SUCCESS)return rc;
     uint64_t address=(uintptr_t)base,limit=UINT64_C(1)<<48;
@@ -45,10 +62,10 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     case VK_IMAGE_VIEW_TYPE_1D:
         if(image->info.imageType!=VK_IMAGE_TYPE_1D || view->range.layerCount!=1)
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        if(layout.layer_stride>limit-address ||
-           view->range.baseArrayLayer>(limit-address)/layout.layer_stride)
+        if(layer_stride>limit-address ||
+           view->range.baseArrayLayer>(limit-address)/layer_stride)
             return VK_ERROR_UNKNOWN;
-        address+=layout.layer_stride*view->range.baseArrayLayer;
+        address+=layer_stride*view->range.baseArrayLayer;
         type_word=8u<<28;
         break;
     case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
@@ -61,14 +78,15 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     case VK_IMAGE_VIEW_TYPE_2D:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D || view->range.layerCount!=1)
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        if(layout.layer_stride>limit-address ||
-           view->range.baseArrayLayer>(limit-address)/layout.layer_stride)
+        if(layer_stride>limit-address ||
+           view->range.baseArrayLayer>(limit-address)/layer_stride)
             return VK_ERROR_UNKNOWN;
-        address+=layout.layer_stride*view->range.baseArrayLayer;
+        address+=layer_stride*view->range.baseArrayLayer;
         type_word=9u<<28;
-        if(image->info.mipLevels==1 &&
-           layout.levels[0].row_pitch/format->bytes_per_texel!=image->info.extent.width)
-            dimension_word=layout.levels[0].row_pitch/format->bytes_per_texel-1;
+        /* GFX10 sampled-resource word 4 carries DEPTH/BASE_ARRAY state; it
+         * has no MIP0_WIDTH pitch field. The render-target MIP0_WIDTH register
+         * is a different descriptor. A 2D view's depth is one, including when
+         * linear upload rows are padded or stored in compressed blocks. */
         break;
     case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D)return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -79,9 +97,23 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     case VK_IMAGE_VIEW_TYPE_CUBE:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D ||
            !(image->info.flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
-           view->range.baseArrayLayer || view->range.layerCount!=6)
+           view->range.layerCount!=6 ||
+           image->info.extent.width!=image->info.extent.height)
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        type_word=11u<<28; /* one cube: descriptor word 4 stores cube count - 1 */
+        type_word=11u<<28;
+        dimension_word=(view->range.baseArrayLayer<<16)|
+            (view->range.baseArrayLayer+view->range.layerCount-1);
+        break;
+    case VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:
+        if(!(d->enabled_features&PS5VK_FEATURE_IMAGE_CUBE_ARRAY) ||
+           image->info.imageType!=VK_IMAGE_TYPE_2D ||
+           !(image->info.flags&VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
+           view->range.layerCount%6 ||
+           image->info.extent.width!=image->info.extent.height)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        type_word=11u<<28;
+        dimension_word=(view->range.baseArrayLayer<<16)|
+            (view->range.baseArrayLayer+view->range.layerCount-1);
         break;
     case VK_IMAGE_VIEW_TYPE_3D:
         if(image->info.imageType!=VK_IMAGE_TYPE_3D ||
@@ -99,6 +131,8 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     words[3]=ps5vk_texture_format_dst_sel(format)|type_word|
         (view->range.baseMipLevel<<12)|
         ((view->range.baseMipLevel+view->range.levelCount-1)<<16);
+    if(tiled_cube)words[3]|=UINT32_C(0x01b00000);
+    if(d32_gather) words[3]|=24u<<20; /* GFX10 64KB_Z_X depth mip tail */
     words[4]=dimension_word;
     words[5]=(4u<<20)|((image->info.mipLevels-1)<<4);
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
@@ -109,7 +143,14 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     if(!d || !view || !sampler || !out || view->device!=d || sampler->device!=d || !view->image)return VK_ERROR_UNKNOWN;
     const VkImageUsageFlags usage=view->image->info.usage;
     if(!(usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
-       (usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
+       ((usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) &&
+        !ps5vk_tiled_cube_sampled_image(view->image)))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(ps5vk_d32_gather_image(view->image)!=sampler->compare_enable)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(ps5vk_d32_gather_image(view->image) &&
+       (!view->range.levelCount || view->range.baseMipLevel ||
+        view->range.levelCount!=7u || view->range.aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t words[12];
     VkResult rc=image_resource_words(d,view,words);

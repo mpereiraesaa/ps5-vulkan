@@ -13,8 +13,8 @@
       "VK_KHR_vulkan_memory_model"
     ],
     "native_probe": {
-      "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
-      "blockers": 40,
+      "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
+      "blockers": 36,
       "device_api": "1.0.0",
       "device_extensions": 9,
       "query_routes": [
@@ -41,11 +41,11 @@
       "requirements": 62,
       "runs": [
         {
-          "id": "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2",
-          "log_sha256": "b0263aacbdebc8f6170d70a21450e5f77121bd2e89e973dd06972203b0bff7a2"
+          "id": "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2",
+          "log_sha256": "a4b19620f2d9d3d9b03f5808a837bb9264ab994696c87f665417d13ddb972c60"
         }
       ],
-      "satisfied": 22,
+      "satisfied": 26,
       "satisfied_ids": [
         "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
         "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -55,14 +55,18 @@
         "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
         "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
         "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
         "feature:VkPhysicalDeviceFeatures:independentBlend",
         "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
         "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
         "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
         "feature:VkPhysicalDeviceFeatures:sampleRateShading",
         "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
         "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
         "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
         "feature:VkPhysicalDeviceVulkan11Features:multiview",
         "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
         "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
@@ -70,7 +74,7 @@
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
       ],
-      "source_matrix_sha256": "299653cd4d8bcc655d292fb3c68f0fa54b8c29142884cf8206788ad3b31b022b",
+      "source_matrix_sha256": "3b1508abecbe0da57265d1ac46cf9c34e9f189b5b6befbed772c3d04f06218fe",
       "transport": "ps5log/1",
       "verifier": "tools/verify_dxvk_probe.py"
     },
@@ -173,13 +177,13 @@
       "kind": "extension",
       "name": "VK_EXT_robustness2",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -215,13 +219,13 @@
       "kind": "extension",
       "name": "VK_EXT_transform_feedback",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -848,48 +852,54 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.api.object_management.single.image_view_cube_arr"
+        ],
         "mapped_cases": [
           "dEQP-VK.info.device_mandatory_features"
         ],
-        "refs": [],
+        "note": "All 1 original selected T07 leaves passed in both strict 829-case ordinary-build runs, run-3158572987094 and run-3231483363368, on exact eboot 95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1; no Fail, NotSupported, missing or unexpected cases, with complete QPA and clean title closure.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24"
+        ],
         "related_requirement_ids": [
           "VK14-CORE-005",
           "VK14-INSTANCE-008"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:imageCubeArray",
       "implementation": {
-        "detail": "only 2D images are created (src/vk_memory.c)",
+        "detail": "cube-array image/view negotiation and twelve-face GPU sampling are implemented, with unsupported tiled pitches refused at descriptor creation",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "imageCubeArray",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "941ba1a5aac7d7a69745efec339807adc2539ed150923646033177b03f9fc097",
+        "note": "Exact native tiled attachment-to-sample readback checked all twelve 256x256 cube-array faces and 12,288 pixels, including a nonzero view base; separate transfer-backed witnesses checked two cubes.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t07-cube-array-combined-branch-diagnostic-evidence-2026-09-24"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T160809323Z_PPSA99994_ps5vk_0x247cf3f1ba220"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -1106,45 +1116,52 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.query_pool.occlusion_query.basic_precise"
+        ],
         "mapped_cases": [],
-        "refs": [],
+        "note": "All 1 original selected T07 leaves passed in both strict 829-case ordinary-build runs, run-3158572987094 and run-3231483363368, on exact eboot 95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1; no Fail, NotSupported, missing or unexpected cases, with complete QPA and clean title closure.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24"
+        ],
         "related_requirement_ids": [
           "VK14-QUERIES-002"
         ],
-        "state": "not-mapped"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
       "implementation": {
-        "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
+        "detail": "precise occlusion counters complete on GPU and pass the original query oracle",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "occlusionQueryPrecise",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "1975dd0757438c9a4df8121c3a9576bb041cc8c18031f0c6488fa71045eefae5",
+        "note": "Two strict native API runs checked zero, one and three depth-tested samples with direct/copied 32-bit and 64-bit results, availability, wait/partial, reset/reuse and completion.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t07-precise-occlusion-native-api-witness-2026-09-24"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T135031940Z_PPSA99994_ps5vk_0x2404cb3638f3e",
+          "20260924T135057995Z_PPSA99994_ps5vk_0x24052c4740042"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -1516,48 +1533,130 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_npot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_npot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8i.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8i.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8ui.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8ui.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d_array.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d_array.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.basic.2d_array.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.implementation_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.implementation_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset.implementation_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.depth32f.size_pot.compare_less.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_npot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_npot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8i.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8i.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8ui.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8ui.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d_array.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d_array.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d_array.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.implementation_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.implementation_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.implementation_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_npot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_npot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8i.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8i.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8ui.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8ui.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d_array.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d_array.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d_array.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_npot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_npot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_npot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8i.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8i.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8ui.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8ui.size_pot.repeat_mirrored_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d_array.rgba8.size_pot.clamp_to_edge_repeat",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d_array.rgba8.size_pot.mirrored_repeat_clamp_to_edge",
+          "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d_array.rgba8.size_pot.repeat_mirrored_repeat"
+        ],
         "mapped_cases": [
           "dEQP-VK.info.device_mandatory_features"
         ],
-        "refs": [],
+        "note": "All 70 original selected T07 leaves passed in both strict 829-case ordinary-build runs, run-3158572987094 and run-3231483363368, on exact eboot 95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1; no Fail, NotSupported, missing or unexpected cases, with complete QPA and clean title closure.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24"
+        ],
         "related_requirement_ids": [
           "VK14-CORE-005",
           "VK14-INSTANCE-008"
         ],
-        "state": "mapped-not-run"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
       "implementation": {
-        "detail": "reported false and any request for this VkPhysicalDeviceFeatures member is rejected before device creation (src/vk_device.c; exhaustive tests/test_vk_device.c)",
+        "detail": "constant, dynamic, four-offset, component and Dref gather forms execute within the reported -8..7 interval",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "shaderImageGatherExtended",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "895b4f4283d9814c67d57988dac40ebd804c9569234984ae6a9b1657661a51a3",
+        "artifact_sha256_refs": {
+          "20260924T160859672Z_PPSA99994_ps5vk_0x247daf8292e93": "a580b648c57f3dff098fa862b4bba143e306bceda207f8593614b9b0c8d1e3fd",
+          "20260924T160915319Z_PPSA99994_ps5vk_0x247de9ca34ded": "ab5221508076ee29e399891a6a836be54c605407751aad15e9de936583bc170b",
+          "20260924T160929553Z_PPSA99994_ps5vk_0x247e1ed220fc3": "895b4f4283d9814c67d57988dac40ebd804c9569234984ae6a9b1657661a51a3"
+        },
+        "note": "Independent GPU readbacks checked constant, dynamic and four-offset image-gather forms; original D32 comparison-gather and typed integer oracles are covered by the selected CTS cases.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t07-d32-comparison-gather-diagnostic-measurement-2026-09-24"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T160859672Z_PPSA99994_ps5vk_0x247daf8292e93",
+          "20260924T160915319Z_PPSA99994_ps5vk_0x247de9ca34ded",
+          "20260924T160929553Z_PPSA99994_ps5vk_0x247e1ed220fc3"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -1591,13 +1690,13 @@
       "kind": "feature",
       "name": "tessellationShader",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "The native query reports the requested value, but the probe does not execute the capability.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "reported-not-executed"
       },
@@ -1606,43 +1705,299 @@
     {
       "api": {
         "expected": true,
-        "observed": false,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
       ],
       "container": "VkPhysicalDeviceFeatures",
       "cts": {
-        "cases": [],
+        "cases": [
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_srgb_block.r8g8b8a8_srgb.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_srgb_block.r8g8b8a8_srgb.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_srgb_block.r8g8b8a8_srgb.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_srgb_block.r8g8b8a8_srgb.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_srgb_block.r8g8b8a8_srgb.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_srgb_block.r8g8b8a8_srgb.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_srgb_block.r8g8b8a8_srgb.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_srgb_block.r8g8b8a8_srgb.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_unorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_unorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_unorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_unorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_unorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_unorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_unorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgb_unorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_srgb_block.r8g8b8a8_srgb.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_srgb_block.r8g8b8a8_srgb.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_srgb_block.r8g8b8a8_srgb.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_srgb_block.r8g8b8a8_srgb.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_srgb_block.r8g8b8a8_srgb.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_srgb_block.r8g8b8a8_srgb.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_srgb_block.r8g8b8a8_srgb.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_srgb_block.r8g8b8a8_srgb.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_unorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_unorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_unorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_unorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_unorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_unorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_unorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc1_rgba_unorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_srgb_block.r8g8b8a8_srgb.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_srgb_block.r8g8b8a8_srgb.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_srgb_block.r8g8b8a8_srgb.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_srgb_block.r8g8b8a8_srgb.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_srgb_block.r8g8b8a8_srgb.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_srgb_block.r8g8b8a8_srgb.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_srgb_block.r8g8b8a8_srgb.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_srgb_block.r8g8b8a8_srgb.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_unorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_unorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_unorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_unorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_unorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_unorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_unorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc2_unorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_srgb_block.r8g8b8a8_srgb.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_srgb_block.r8g8b8a8_srgb.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_srgb_block.r8g8b8a8_srgb.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_srgb_block.r8g8b8a8_srgb.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_srgb_block.r8g8b8a8_srgb.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_srgb_block.r8g8b8a8_srgb.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_srgb_block.r8g8b8a8_srgb.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_srgb_block.r8g8b8a8_srgb.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_unorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_unorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_unorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_unorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_unorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_unorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_unorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc3_unorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_snorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_snorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_snorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_snorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_snorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_snorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_snorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_snorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_unorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_unorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_unorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_unorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_unorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_unorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_unorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc4_unorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_snorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_snorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_snorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_snorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_snorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_snorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_snorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_snorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_unorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_unorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_unorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_unorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_unorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_unorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_unorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc5_unorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_sfloat_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_sfloat_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_sfloat_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_sfloat_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_sfloat_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_sfloat_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_sfloat_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_sfloat_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_ufloat_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_ufloat_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_ufloat_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_ufloat_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_ufloat_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_ufloat_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_ufloat_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc6h_ufloat_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_srgb_block.r8g8b8a8_srgb.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_srgb_block.r8g8b8a8_srgb.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_srgb_block.r8g8b8a8_srgb.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_srgb_block.r8g8b8a8_srgb.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_srgb_block.r8g8b8a8_srgb.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_srgb_block.r8g8b8a8_srgb.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_srgb_block.r8g8b8a8_srgb.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_srgb_block.r8g8b8a8_srgb.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_unorm_block.r8g8b8a8_unorm.general_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_unorm_block.r8g8b8a8_unorm.general_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_unorm_block.r8g8b8a8_unorm.general_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_unorm_block.r8g8b8a8_unorm.general_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_unorm_block.r8g8b8a8_unorm.optimal_general_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_unorm_block.r8g8b8a8_unorm.optimal_general_nearest",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_unorm_block.r8g8b8a8_unorm.optimal_optimal_linear",
+          "dEQP-VK.api.copy_and_blit.core.blit_image.all_formats.color.2d.bc7_unorm_block.r8g8b8a8_unorm.optimal_optimal_nearest",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgb_unorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgb_unorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgb_unorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgb_unorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgb_unorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgb_unorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgba_unorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgba_unorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgba_unorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgba_unorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgba_unorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc1_rgba_unorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc2_unorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc2_unorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc2_unorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc2_unorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc2_unorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc2_unorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc3_unorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc3_unorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc3_unorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc3_unorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc3_unorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc3_unorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_snorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_snorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_snorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_snorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_snorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_snorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_unorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_unorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_unorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_unorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_unorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc4_unorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_snorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_snorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_snorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_snorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_snorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_snorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_unorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_unorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_unorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_unorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_unorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc5_unorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_sfloat_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_sfloat_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_sfloat_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_sfloat_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_sfloat_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_sfloat_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_ufloat_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_ufloat_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_ufloat_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_ufloat_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_ufloat_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc6h_ufloat_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc7_unorm_block_64x192_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc7_unorm_block_64x192_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc7_unorm_block_64x192_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc7_unorm_block_64x64_2_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc7_unorm_block_64x64_5_layers_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc7_unorm_block_64x64_universal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc1_rgba_unorm_block.bc4_snorm_block.general_general",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc1_rgba_unorm_block.bc4_snorm_block.general_optimal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc1_rgba_unorm_block.bc4_snorm_block.optimal_general",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc1_rgba_unorm_block.bc4_snorm_block.optimal_optimal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc3_unorm_block.bc7_srgb_block.general_general",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc3_unorm_block.bc7_srgb_block.general_optimal",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc3_unorm_block.bc7_srgb_block.optimal_general",
+          "dEQP-VK.api.copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc3_unorm_block.bc7_srgb_block.optimal_optimal",
+          "dEQP-VK.texture.compressed.bc1_rgb_srgb_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc1_rgb_srgb_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc1_rgb_srgb_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc1_rgb_unorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc1_rgb_unorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc1_rgb_unorm_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc1_rgba_srgb_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc1_rgba_srgb_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc1_rgba_srgb_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc1_rgba_unorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc1_rgba_unorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc1_rgba_unorm_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc2_srgb_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc2_srgb_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc2_srgb_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc2_unorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc2_unorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc2_unorm_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc3_srgb_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc3_srgb_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc3_srgb_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc3_unorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc3_unorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc3_unorm_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc4_snorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc4_snorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc4_snorm_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc4_unorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc4_unorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc4_unorm_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc5_snorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc5_snorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc5_snorm_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc5_unorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc5_unorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc5_unorm_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc6h_sfloat_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc6h_sfloat_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc6h_sfloat_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc6h_ufloat_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc6h_ufloat_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc6h_ufloat_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc7_srgb_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc7_srgb_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc7_srgb_block_2d_pot",
+          "dEQP-VK.texture.compressed.bc7_unorm_block_2d_npot",
+          "dEQP-VK.texture.compressed.bc7_unorm_block_2d_npot_mip1",
+          "dEQP-VK.texture.compressed.bc7_unorm_block_2d_pot"
+        ],
         "mapped_cases": [],
-        "refs": [],
+        "note": "All 250 original selected T07 leaves passed in both strict 829-case ordinary-build runs, run-3158572987094 and run-3231483363368, on exact eboot 95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1; no Fail, NotSupported, missing or unexpected cases, with complete QPA and clean title closure.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24"
+        ],
         "related_requirement_ids": [],
-        "state": "not-mapped"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
       "implementation": {
-        "detail": "no VK_FORMAT_BC family in src/graphics_formats.h",
+        "detail": "sixteen BC formats provide sampled, filtered, copy and blit source roles with subresource transfer execution",
         "refs": [
           "conformance_inventory/reporting_matrix.json"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "textureCompressionBC",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "0748c9c98708eb37ec6cd08853e4f1c8d53040d7aedcfa7892d3dc11df6c15c8",
+        "note": "Two strict SDK runs checked interior BC1 buffer-to-image and image-to-buffer copies across mips and layers, untouched blocks, guards and sampled output; independent GPU filter witnesses covered all sixteen Vulkan 1.0 BC formats.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t07-bc-mip-and-array-layer-transfer-measurement-2026-09-24"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T124622442Z_PPSA99994_ps5vk_0x23ccc6ee08330",
+          "20260924T124642084Z_PPSA99994_ps5vk_0x23cd10195fc3d"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -1677,13 +2032,13 @@
       "kind": "feature",
       "name": "nullDescriptor",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -1722,13 +2077,13 @@
       "kind": "feature",
       "name": "robustBufferAccess2",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -1764,13 +2119,13 @@
       "kind": "feature",
       "name": "geometryStreams",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -1806,13 +2161,13 @@
       "kind": "feature",
       "name": "transformFeedback",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2071,13 +2426,13 @@
       "kind": "feature",
       "name": "hostQueryReset",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2116,13 +2471,13 @@
       "kind": "feature",
       "name": "imagelessFramebuffer",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2164,13 +2519,13 @@
       "kind": "feature",
       "name": "samplerMirrorClampToEdge",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2206,13 +2561,13 @@
       "kind": "feature",
       "name": "separateDepthStencilLayouts",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2248,13 +2603,13 @@
       "kind": "feature",
       "name": "shaderSubgroupExtendedTypes",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2290,13 +2645,13 @@
       "kind": "feature",
       "name": "subgroupBroadcastDynamicId",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2335,13 +2690,13 @@
       "kind": "feature",
       "name": "timelineSemaphore",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2540,13 +2895,13 @@
       "kind": "feature",
       "name": "computeFullSubgroups",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2586,13 +2941,13 @@
       "kind": "feature",
       "name": "dynamicRendering",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2628,13 +2983,13 @@
       "kind": "feature",
       "name": "inlineUniformBlock",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2670,13 +3025,13 @@
       "kind": "feature",
       "name": "maintenance4",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2712,13 +3067,13 @@
       "kind": "feature",
       "name": "pipelineCreationCacheControl",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2757,13 +3112,13 @@
       "kind": "feature",
       "name": "robustImageAccess",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2799,13 +3154,13 @@
       "kind": "feature",
       "name": "shaderDemoteToHelperInvocation",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2841,13 +3196,13 @@
       "kind": "feature",
       "name": "shaderIntegerDotProduct",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2883,13 +3238,13 @@
       "kind": "feature",
       "name": "shaderTerminateInvocation",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2925,13 +3280,13 @@
       "kind": "feature",
       "name": "shaderZeroInitializeWorkgroupMemory",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -2967,13 +3322,13 @@
       "kind": "feature",
       "name": "subgroupSizeControl",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3012,13 +3367,13 @@
       "kind": "feature",
       "name": "synchronization2",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3250,13 +3605,13 @@
       "kind": "property",
       "name": "maxTimelineSemaphoreValueDifference",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3294,13 +3649,13 @@
       "kind": "property",
       "name": "maxBufferSize",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3334,13 +3689,13 @@
       "kind": "property",
       "name": "maxDescriptorSetInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3374,13 +3729,13 @@
       "kind": "property",
       "name": "maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3414,13 +3769,13 @@
       "kind": "property",
       "name": "maxInlineUniformBlockSize",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3454,13 +3809,13 @@
       "kind": "property",
       "name": "maxInlineUniformTotalSize",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3494,13 +3849,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3534,13 +3889,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "cca94ae01eb55569fc8850e54ab04edd867a6560230b8b3433bcb084a38c7be3",
+        "artifact_sha256": "c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260923T194027559Z_PPSA99994_ps5vk_0x204d0c42239a2"
+          "20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2"
         ],
         "state": "witnessed-blocker"
       },
@@ -3559,26 +3914,26 @@
     "tag_object": "e2373f9421f2c70583aea75c54219fbdcd67959c"
   },
   "summary": {
-    "blocker": 42,
+    "blocker": 38,
     "dimensions": {
       "api": {
-        "blocker": 40,
-        "satisfied": 22
+        "blocker": 36,
+        "satisfied": 26
       },
       "cts": {
-        "blocker": 40,
-        "satisfied": 22
+        "blocker": 36,
+        "satisfied": 26
       },
       "implementation": {
-        "blocker": 39,
-        "satisfied": 23
+        "blocker": 35,
+        "satisfied": 27
       },
       "native": {
-        "blocker": 40,
-        "satisfied": 22
+        "blocker": 36,
+        "satisfied": 26
       }
     },
     "requirements": 62,
-    "satisfied": 20
+    "satisfied": 24
   }
 }

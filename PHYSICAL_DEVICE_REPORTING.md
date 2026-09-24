@@ -188,8 +188,9 @@ The current graphics format matrix remains deliberately bounded:
 | --- | --- |
 | `B8G8R8A8_UNORM` | optimal color attachment |
 | `R8_UNORM`, `R8_SNORM`, `R8G8_UNORM`, `R8G8_SNORM` | optimal sampled image, linear filtering and transfer destination |
-| `R8G8B8A8_UNORM` | optimal sampled image, linear filtering, color attachment and transfer source/destination |
-| `R8G8B8A8_SNORM`, `R8G8B8A8_SRGB` | optimal sampled image, linear filtering and transfer destination |
+| `R8G8B8A8_UNORM` | optimal sampled image, linear filtering, color attachment, transfer source/destination and compatible blit destination |
+| `R8G8B8A8_SNORM` | optimal sampled image, linear filtering and transfer destination |
+| `R8G8B8A8_SRGB` | optimal sampled image, linear filtering, transfer source/destination and compatible blit destination |
 | `E5B9G9R9_UFLOAT_PACK32`, `B10G11R11_UFLOAT_PACK32` | optimal sampled image, linear filtering and transfer destination |
 | `R16_UNORM`, `R16_SNORM`, `R16_SFLOAT`, `R16G16_UNORM`, `R16G16_SNORM`, `R16G16_SFLOAT` | optimal sampled image, linear filtering and transfer destination; vertex-buffer support also applies where independently listed by the vertex table |
 | `R16G16B16A16_UNORM`, `R16G16B16A16_SNORM`, `R16G16B16A16_SFLOAT` | optimal sampled image, linear filtering and transfer destination; vertex-buffer support also applies where independently listed by the vertex table |
@@ -197,7 +198,10 @@ The current graphics format matrix remains deliberately bounded:
 | scalar, two-component and four-component `R8`, `R16`, `R32` UINT/SINT families (18 formats) | typed sampled image and transfer destination, nearest only |
 | `A8B8G8R8_UNORM_PACK32`, `A8B8G8R8_SNORM_PACK32`, `A8B8G8R8_SRGB_PACK32` | optimal sampled image, linear filtering and transfer destination |
 | `A8B8G8R8_UINT_PACK32`, `A8B8G8R8_SINT_PACK32` | typed sampled image and transfer destination, nearest only |
-| `D32_SFLOAT` | optimal depth attachment (the `DEPTH_STENCIL_ATTACHMENT` feature bit, depth aspect only), plus transfer destination, which exists solely for the whole-subresource one-sample depth-only clear, plus transfer source for the whole-surface depth readback, whose SW_64K_Z_X pixel addressing is implemented in `src/depth_detile.c` |
+| `D32_SFLOAT` | optimal depth attachment, whole-subresource transfer-destination clear and transfer-source readback over the depth aspect, plus sampled depth in a bounded 64×64, seven-mip Dref-gather profile |
+| `D16_UNORM` | one 128×128 optimal depth attachment; no sampled, transfer or stencil role |
+| BC1–BC7 (16 Vulkan 1.0 formats) | optimal sampled image with linear filtering, transfer source/destination and compatible blit source, including bounded mip/layer copies |
+| `R8G8B8A8_UINT`, `R8G8B8A8_SINT` | optimal typed sampled image and transfer destination; also four-component color attachments with transfer-source readback for bounded gather sources |
 | `R32_SFLOAT` | vertex buffer and uniform texel buffer; the texel-buffer role has host-only evidence |
 | `R32_SINT`, `R32_UINT` | uniform texel buffer; UINT has native evidence, SINT is host-only |
 | `R8G8B8A8_UNORM`, `R8G8B8A8_SNORM`, `R8G8B8A8_UINT`, `R8G8B8A8_SINT` | uniform texel buffer with four-component identity completion; UNORM is directly covered by the two-run `texelFetch` witness in VALIDATION.md, while the other three compose that shared buffer path with their independently validated format conversion/interface evidence |

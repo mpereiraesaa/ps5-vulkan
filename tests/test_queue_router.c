@@ -38,12 +38,13 @@ int main(void)
     struct ps5vk_queue_backend graphics={pg,launch,poll,release};
     struct ps5vk_submission s={.serial=7,.count=1,.buffers={&command}};
     const enum ps5vk_operation_type routed_types[]={PS5VK_DISPATCH,
-        PS5VK_DRAW_INDEXED,PS5VK_DISPATCH_INDIRECT,PS5VK_DRAW_INDIRECT};
+        PS5VK_DRAW_INDEXED,PS5VK_DISPATCH_INDIRECT,PS5VK_DRAW_INDIRECT,
+        PS5VK_QUERY_BEGIN,PS5VK_QUERY_END};
     command.operation_count=1;
     /* Alternate native backend kinds on the same device, with pinned ownership. */
-    for (unsigned n=0;n<8;++n) {
+    for (unsigned n=0;n<12;++n) {
         ps5vk_queue_router_configure(&device,compute,graphics);
-        command.operations[0].type=routed_types[n%4];
+        command.operations[0].type=routed_types[n%6];
         void *job=NULL;
         assert(device.submit_backend.prepare(&device,&s,&job)==VK_SUCCESS && job);
         device.compute_backend=(struct ps5vk_queue_backend){0};
@@ -55,8 +56,8 @@ int main(void)
         assert(device.submit_backend.poll(&device,job,&completed)==VK_SUCCESS && completed==7);
         device.submit_backend.release(&device,job);
     }
-    assert(prepared[0]==4 && prepared[1]==4 && launched[0]==4 && launched[1]==4);
-    assert(polled[0]==8 && polled[1]==8 && released[0]==4 && released[1]==4);
+    assert(prepared[0]==4 && prepared[1]==8 && launched[0]==4 && launched[1]==8);
+    assert(polled[0]==8 && polled[1]==16 && released[0]==4 && released[1]==8);
     ps5vk_queue_router_configure(&device,compute,graphics);
     command.operations[0].type=PS5VK_DISPATCH;
     command.operation_count=2; command.operations[1].type=PS5VK_BEGIN_RENDER_PASS;
@@ -65,7 +66,7 @@ int main(void)
     command.operation_count=1; s.count=2; s.buffers[1]=&second;
     second.operation_count=1; second.operations[0].type=PS5VK_DRAW;
     assert(device.submit_backend.prepare(&device,&s,&job)==VK_ERROR_FEATURE_NOT_PRESENT);
-    assert(prepared[0]==4 && prepared[1]==4); /* No speculative child prepare. */
+    assert(prepared[0]==4 && prepared[1]==8); /* No speculative child prepare. */
     /* A subpass boundary is graphics scope, not an unknown opcode and not a
      * compute no-op. PR #75 made it recordable; this regression keeps the
      * router in lockstep with that command surface. */
@@ -75,6 +76,17 @@ int main(void)
     assert(device.submit_backend.prepare(&device,&s,&job)==VK_SUCCESS && job);
     assert(prepared[1]==boundary_graphics+1 && prepared[0]==boundary_compute);
     device.submit_backend.release(&device,job);
+    /* Precise query scope markers are graphics work and must reach the same
+     * backend as their surrounding render pass, not the compute backend. */
+    const enum ps5vk_operation_type query_types[]={PS5VK_QUERY_BEGIN,PS5VK_QUERY_END};
+    for (unsigned i=0;i<sizeof(query_types)/sizeof(query_types[0]);++i) {
+        command.operations[0].type=query_types[i];
+        const unsigned before=prepared[1];
+        job=NULL;
+        assert(device.submit_backend.prepare(&device,&s,&job)==VK_SUCCESS && job);
+        assert(prepared[1]==before+1);
+        device.submit_backend.release(&device,job);
+    }
     s.count=1; prepare_rc=VK_ERROR_OUT_OF_DEVICE_MEMORY;
     assert(device.submit_backend.prepare(&device,&s,&job)==prepare_rc && !job);
     prepare_rc=VK_SUCCESS;
