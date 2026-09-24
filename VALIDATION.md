@@ -4916,3 +4916,29 @@ exercise distinct mips and layers with whole-subresource regions. This evidence
 does not cover partial interior rectangles or a single copy region spanning
 multiple array layers. The shipping `textureCompressionBC` feature bit remains
 off pending the full T07 promotion audit.
+
+## T07 D32 comparison-gather diagnostic measurement (2026-09-24)
+
+The isolated D32 route in `5067a1b` accepts a bounded 64×64, seven-mip
+sampled-depth image, full-mip buffer uploads and the exact transfer-to-sampling
+barrier sequence. The host byte oracle verifies every depth texel and untouched
+allocation byte; `make check` passed after the diagnostic build identity was
+wired in `984703e`.
+
+The original pinned `depth32f` comparison-gather CTS leaf passed twice with its
+unchanged image oracle: **1 Pass, zero Fail, zero NotSupported, zero missing or
+unexpected** in each strict receipt. Selection SHA-256 was
+`3564731db031196812cb5ecc800d943a13679e48bac0155b7af1adeb8a8b28c0`;
+diagnostic eboot SHA-256 was
+`f2f1d42fcc1fb3ec3409ec378ec8cbebda896925e2e4588c2896ab230866344f`.
+Run `run-623668162749001` yielded QPA SHA-256
+`a064613e54bc6a519694de937f06d49c4b493884bad6ce43f6950434515f5695`;
+repeat `run-623701544102072` yielded
+`36f95dd349633253c9a29fc04fa0199b750a3408de6f27b10ba4d893c629377d`.
+Both verified exact build identity, report completion and clean title closure;
+the canonical eboot was restored after each run. Firmware was not recorded.
+
+This diagnostic selection contains one D32 comparison-gather leaf. It does
+not establish the other typed gather profiles or public
+`shaderImageGatherExtended` reporting, which remains off pending the full T07
+audit.
