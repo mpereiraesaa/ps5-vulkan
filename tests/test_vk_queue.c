@@ -78,8 +78,74 @@ static void recover_fixture(VkDevice d, struct fixture *f)
     f->launch_result = f->poll_result = VK_SUCCESS; f->wrong = 0; f->complete = 1;
     d->lost = VK_FALSE; assert(ps5vk_queue_poll(d) == VK_SUCCESS);
 }
+static void imageless_two_view_clear_recording(void)
+{
+    struct VkDevice_T d = {.graphics_enabled = VK_TRUE,
+        .enabled_features_t09 = PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER};
+    VkAttachmentDescription attachment = {.format = VK_FORMAT_R8G8B8A8_UNORM,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR};
+    VkAttachmentReference color = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    struct ps5vk_subpass subpass = {.color_count = 1, .color[0] = color,
+        .depth = {.attachment = VK_ATTACHMENT_UNUSED}};
+    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1,
+        .subpass_count = 1, .attachments = &attachment, .subpasses = &subpass};
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    struct VkFramebuffer_T fb = {.device = &d, .imageless = VK_TRUE,
+        .width = 64, .height = 64, .attachment_count = 1,
+        .color_count = 1, .depth_attachment = VK_ATTACHMENT_UNUSED,
+        .formats = {VK_FORMAT_R8G8B8A8_UNORM}, .samples = {VK_SAMPLE_COUNT_1_BIT},
+        .image_usage = {VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT},
+        .image_width = {64}, .image_height = {64}, .image_layers = {1},
+        .view_format_count = {1}, .view_formats = {&format}};
+    struct VkImage_T images[2] = {0};
+    struct VkImageView_T views[2] = {0};
+    for (unsigned i = 0; i < 2; ++i) {
+        images[i].device = &d;
+        images[i].memory = (VkDeviceMemory)(uintptr_t)1;
+        images[i].info = (VkImageCreateInfo){.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
+            .extent = {64, 64, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT};
+        views[i].device = &d; views[i].image = &images[i];
+        views[i].format = VK_FORMAT_R8G8B8A8_UNORM;
+        views[i].range = (VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    }
+    VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    VkCommandPool pool = VK_NULL_HANDLE;
+    assert(vkCreateCommandPool(&d, &pool_info, NULL, &pool) == VK_SUCCESS);
+    VkCommandBufferAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 2};
+    VkCommandBuffer commands[2] = {0};
+    assert(vkAllocateCommandBuffers(&d, &allocation, commands) == VK_SUCCESS);
+    VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    for (unsigned i = 0; i < 2; ++i) {
+        VkImageView supplied = &views[i];
+        VkRenderPassAttachmentBeginInfo attachments = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO,
+            .attachmentCount = 1, .pAttachments = &supplied};
+        VkClearValue clear = {.color = {.float32 = {1, 0, 0, 1}}};
+        VkRenderPassBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .pNext = &attachments, .renderPass = &pass, .framebuffer = &fb,
+            .renderArea = {{0, 0}, {64, 64}}, .clearValueCount = 1, .pClearValues = &clear};
+        VkClearAttachment color_clear = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .colorAttachment = 0, .clearValue = clear};
+        VkClearRect rect = {.rect = {{0, 0}, {64, 64}}, .layerCount = 1};
+        VkCommandBuffer command = commands[i];
+        assert(vkBeginCommandBuffer(command, &begin_info) == VK_SUCCESS);
+        vkCmdBeginRenderPass(command, &begin, VK_SUBPASS_CONTENTS_INLINE);
+        assert(command->state == PS5VK_RECORDING &&
+            command->framebuffer->attachments[0] == &views[i]);
+        vkCmdClearAttachments(command, 1, &color_clear, 1, &rect);
+        assert(command->state == PS5VK_RECORDING);
+        vkCmdEndRenderPass(command);
+        assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    }
+    vkDestroyCommandPool(&d, pool, NULL);
+}
 int main(void)
 {
+    imageless_two_view_clear_recording();
     struct fixture f = {0};
     struct VkDevice_T d = {.progress = {&f, ps5vk_queue_poll, clock_ns, pause_wait},
         .submit_backend = {prepare, launch, poll_backend, release}};
@@ -468,6 +534,31 @@ int main(void)
     for(unsigned s=0;s<4;++s)assert(!sampled_sets[s].pending);
     assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
     assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && !image->pending);
+
+    /* An imageless begin records a framebuffer snapshot, while the application
+     * framebuffer remains the lifetime owner. Queue pinning must follow the
+     * supplied view and release it only after the backend completion label. */
+    {
+        struct VkImageView_T supplied = {.device = &d, .image = image};
+        struct VkFramebuffer_T snapshot = fb;
+        snapshot.original = &fb;
+        snapshot.imageless = VK_TRUE;
+        snapshot.attachments[0] = &supplied;
+        for (uint32_t n = 0; n < c->operation_count; ++n)
+            if (c->operations[n].framebuffer == &fb)
+                c->operations[n].framebuffer = &snapshot;
+        assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+        assert(fb.pending == 1 && !snapshot.pending && supplied.pending == 1 &&
+            !view.pending && image->pending == 1);
+        assert(!d.invalidate(&d, VK_OBJECT_TYPE_IMAGE_VIEW, &supplied));
+        assert(!d.invalidate(&d, VK_OBJECT_TYPE_FRAMEBUFFER, &fb));
+        assert(fb.pending == 1 && supplied.pending == 1);
+        assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+        assert(!fb.pending && !supplied.pending && !image->pending);
+        for (uint32_t n = 0; n < c->operation_count; ++n)
+            if (c->operations[n].framebuffer == &snapshot)
+                c->operations[n].framebuffer = &fb;
+    }
 
     /* The layout remains compatible, but an executable using no descriptors
      * needs none bound. Unknown or actually-used sets are still mandatory. */
