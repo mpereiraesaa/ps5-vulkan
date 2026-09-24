@@ -29,6 +29,7 @@ BDA_BUILD_SOURCE = ROOT / "tools/build_upstream_cts.py"
 # sources, not from the selection itself.
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
 INTERNAL_HEADER = ROOT / "src/vk_internal.h"
+PLATFORM_SOURCE = ROOT / "native/platform_ps5.c"
 # The driver's own image-usage surfaces, and the pinned upstream helper that
 # builds the resources a selected family actually needs.
 IMAGE_USAGE_CREATE_SOURCE = ROOT / "src/vk_memory.c"
@@ -40,6 +41,10 @@ MULTIVIEW_TEST_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
                          "vktMultiViewRenderTests.cpp")
 # The shared draw utility that names the clipping module's clip_volume leaves.
 DRAW_UTIL_SOURCE = "external/vulkancts/modules/vulkan/util/vktDrawUtil.cpp"
+GATHER_TEST_SOURCE = ("external/vulkancts/modules/vulkan/shaderrender/"
+                     "vktShaderRenderTextureGatherTests.cpp")
+OCCLUSION_TEST_SOURCE = ("external/vulkancts/modules/vulkan/query_pool/"
+                         "vktQueryPoolOcclusionTests.cpp")
 # The exact execution requirements a contract must name. Every key is required
 # and must be a real boolean; anything else - a missing key, an unknown one, a
 # non-boolean value - fails closed rather than being ignored, because the
@@ -194,6 +199,80 @@ def _focused_bda_leaf_paths(text: str, integration: str, builder: str) -> frozen
     prefix = ("dEQP-VK.binding_model.buffer_device_address."
               "set0.depth1.basessbo.load.nostore.single.std140.")
     return frozenset((prefix + "comp", prefix + "comp_offset_nonzero"))
+
+def _texture_gather_leaf_requirements(text: str) -> dict[str, list[str]]:
+    """Return only original gather leaves derived from the pinned factory.
+
+    The factory composes gather operation groups and wrap-pair case names from
+    fixed tables. Bind the recognition to those constructions and to the
+    factory's fixed texture/format/size tables, so unrelated literals in this
+    large shader module cannot make a fabricated path traceable.
+    """
+    required_fragments = (
+        'return "basic";', 'return "offset";', 'return "offset_dynamic";',
+        'return "offsets";',
+        'string() + wrapModes[wrapSNdx].name + "_" + wrapModes[wrapTNdx].name',
+        'const int wrapSNdx = wrapCaseNdx;',
+        'const int wrapTNdx = (wrapCaseNdx + 1) % DE_LENGTH_OF_ARRAY(wrapModes);',
+        '{"2d", TEXTURETYPE_2D}', '{"rgba8",', '{"size_pot",',
+        'offsetSize == OFFSETSIZE_MINIMUM_REQUIRED ? "min_required_offset"',
+        '{"cube", TEXTURETYPE_CUBE}',
+        'void TextureGather2DCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'void TextureGather2DArrayCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'void TextureGatherCubeCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'offsetSize == OFFSETSIZE_IMPLEMENTATION_MAXIMUM', '"implementation_offset"',
+    )
+    if not all(fragment in text for fragment in required_fragments):
+        return {}
+    wraps = re.search(r"wrapModes\[\]\s*=\s*\{(.*?);", text, re.DOTALL)
+    if not wraps:
+        return {}
+    wrap_names = re.findall(r'\{\s*"([a-z_]+)"\s*,\s*tcu::Sampler::[A-Z_]+\s*\}',
+                            wraps.group(1))
+    if wrap_names != ["clamp_to_edge", "repeat", "mirrored_repeat"]:
+        return {}
+    group_types = ("basic", "offset", "offset_dynamic", "offsets")
+    # The loop's 2D RGBA8 power-of-two case uses the same ordinary wrap-pair
+    # cases for every operation group. Restrict these leaves to adjacent pairs
+    # produced by the pinned three-element table.
+    wrap_pairs = [f"{wrap_names[index]}_{wrap_names[(index + 1) % len(wrap_names)]}"
+                  for index in range(len(wrap_names))]
+    result: dict[str, list[str]] = {}
+    for group in group_types:
+        for pair in wrap_pairs:
+            intermediate = "" if group == "basic" else ".min_required_offset"
+            path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                    ".2d.rgba8.size_pot." + pair)
+            result[path] = ["core:shaderImageGatherExtended"]
+            if group not in ("basic",):
+                implementation_path = (
+                    "dEQP-VK.shaderrender.texture_gather." + group +
+                    ".implementation_offset.2d.rgba8.size_pot." + pair)
+                result[implementation_path] = ["core:shaderImageGatherExtended"]
+    # The pinned cube case is basic gather only and its checkSupport explicitly
+    # requires shaderImageGatherExtended. Keep this source-derived subset to
+    # the factory's RGBA8 power-of-two ordinary cube leaves.
+    for pair in wrap_pairs:
+        path = ("dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot." + pair)
+        result[path] = ["core:shaderImageGatherExtended"]
+    return result
+
+
+def _precise_occlusion_leaf_requirements(text: str) -> dict[str, list[str]]:
+    """Recognize the original basic precise occlusion query case."""
+    construction = (
+        'new QueryPoolOcclusionTest<BasicOcclusionQueryTestInstance>' in text and
+        '"basic_precise", testVector' in text and
+        'testVector.queryControlFlags = vk::VK_QUERY_CONTROL_PRECISE_BIT;' in text and
+        ': TestCaseGroup(testCtx, "occlusion_query")' in text
+    )
+    if not construction:
+        return {}
+    return {"dEQP-VK.query_pool.occlusion_query.basic_precise":
+            ["core:occlusionQueryPrecise"]}
 
 
 def _memoized(function):
@@ -1183,6 +1262,27 @@ def _advertised_capabilities() -> tuple[dict, list[str]]:
         if not core_features:
             failures.append("the core feature table in src/vk_device.c names no member")
 
+    # A row in the vk_device mapping says how a platform bit would be exposed;
+    # it does not say that this platform sets the bit. For the two T07 features,
+    # read their source of truth and exclude bits that occur only inside their
+    # default-off diagnostic guards. This keeps a diagnostic CTS run from
+    # accidentally making its feature look generally advertised to this gate.
+    platform = re.sub(r"/\*.*?\*/|//[^\n]*", "",
+                      PLATFORM_SOURCE.read_text(encoding="utf-8", errors="replace"),
+                      flags=re.DOTALL)
+    for feature, bit, diagnostic_macro in (
+        ("occlusionQueryPrecise", "PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE",
+         "PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC"),
+        ("shaderImageGatherExtended", "PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED",
+         "PS5VK_GATHER_EXTENDED_DIAGNOSTIC"),
+    ):
+        if feature not in core_features:
+            continue
+        unconditional = re.sub(
+            rf"#if\s+{diagnostic_macro}\b.*?#endif\s*", "", platform, flags=re.DOTALL)
+        if not re.search(rf"\b{bit}\b", unconditional):
+            core_features.discard(feature)
+
     floor = re.search(r"PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR\s*=\s*(\d+)", header)
     if not floor:
         failures.append("cannot read PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR from src/vk_internal.h")
@@ -1715,6 +1815,49 @@ def main() -> int:
                     f"integration or {module_root}")
 
         function_text = _source_function_at_line(text, source_line)
+
+        if source_path.as_posix().endswith(GATHER_TEST_SOURCE):
+            derived_gather = _texture_gather_leaf_requirements(text).get(path)
+            if derived_gather is None:
+                failures.append(
+                    f"{path}: not produced by the pinned texture-gather factory {source_ref}")
+                continue
+            required = derived_gather
+            declared = case.get("features_required", [])
+            missing_metadata = sorted(set(required) - set(declared))
+            if missing_metadata:
+                failures.append(
+                    f"{path}: features_required omits source-derived "
+                    f"{', '.join(missing_metadata)}")
+            if path in acceptance_paths:
+                missing = _unadvertised(required, capabilities)
+                if missing:
+                    failures.append(
+                        f"{path}: acceptance requires {', '.join(missing)}, which "
+                        "this device does not advertise")
+            continue
+
+        if source_path.as_posix().endswith(OCCLUSION_TEST_SOURCE):
+            derived_query = _precise_occlusion_leaf_requirements(text).get(path)
+            if derived_query is None:
+                failures.append(
+                    f"{path}: not produced by the pinned precise-occlusion factory "
+                    f"{source_ref}")
+                continue
+            required = derived_query
+            declared = case.get("features_required", [])
+            missing_metadata = sorted(set(required) - set(declared))
+            if missing_metadata:
+                failures.append(
+                    f"{path}: features_required omits source-derived "
+                    f"{', '.join(missing_metadata)}")
+            if path in acceptance_paths:
+                missing = _unadvertised(required, capabilities)
+                if missing:
+                    failures.append(
+                        f"{path}: acceptance requires {', '.join(missing)}, which "
+                        "this device does not advertise")
+            continue
 
         # The multiview render factory composes every leaf from the
         # shader-family table, the two query names, the rendering types and the
