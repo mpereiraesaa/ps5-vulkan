@@ -187,6 +187,15 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
             .maxResourceSize=budget};
         return VK_SUCCESS;
     }
+    /* The combined depth/stencil surface is one 2D mip and layer, one
+     * sample: the shape image creation accepts. */
+    if (format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+        if (type != VK_IMAGE_TYPE_2D || flags) return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        *out = (VkImageFormatProperties){.maxExtent={PS5VK_MAX_IMAGE_2D,PS5VK_MAX_IMAGE_2D,1},
+            .maxMipLevels=1,.maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
     /* The measurement-only D16 profile serves one physical 128x128 64KB_Z_X
      * depth attachment. Keep the queried extent identical to the creation
      * gate; reporting the generic 2D ceiling here would promise unsupported
