@@ -1755,6 +1755,28 @@ static void tessellation_feature_negotiation(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void unadvertised_subgroup_properties(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    assert(VK_API_VERSION_MAJOR(p->platform.properties.apiVersion) == 1);
+    assert(VK_API_VERSION_MINOR(p->platform.properties.apiVersion) == 0);
+    VkPhysicalDeviceSubgroupProperties subgroup = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
+        .subgroupSize = 99u,
+        .supportedStages = VK_SHADER_STAGE_ALL,
+        .supportedOperations = VK_SUBGROUP_FEATURE_BALLOT_BIT,
+        .quadOperationsInAllStages = VK_TRUE};
+    VkPhysicalDeviceProperties2 properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &subgroup};
+    vkGetPhysicalDeviceProperties2KHR(p, &properties);
+    assert(!subgroup.subgroupSize && !subgroup.supportedStages &&
+           !subgroup.supportedOperations && !subgroup.quadOperationsInAllStages);
+    assert(properties.properties.apiVersion == VK_API_VERSION_1_0);
+    vkDestroyInstance(i, NULL);
+}
+
 static void memory_model_feature_negotiation(void)
 {
     VkInstance i = features2_instance();
@@ -2121,6 +2143,7 @@ int main(void)
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     consumer_physical_queries();
     tessellation_feature_negotiation();
+    unadvertised_subgroup_properties();
     memory_model_feature_negotiation();
     single_device_group_creation();
     buffer_address_command_gate();

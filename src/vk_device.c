@@ -293,7 +293,17 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
     vkGetPhysicalDeviceProperties(p, &out->properties);
     for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext; next;
          next = next->pNext) {
-        if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES) {
+        if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES) {
+            /* The Vulkan 1.0 profile has no reported subgroup stages or
+             * operations. Answer all fields rather than retaining the
+             * caller's previous values as apparent capabilities. */
+            VkPhysicalDeviceSubgroupProperties *properties =
+                (VkPhysicalDeviceSubgroupProperties *)next;
+            properties->subgroupSize = 0u;
+            properties->supportedStages = 0u;
+            properties->supportedOperations = 0u;
+            properties->quadOperationsInAllStages = VK_FALSE;
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES) {
             /* ONLY the floors this profile measured, and zero when the platform
              * does not carry the capability: no invented maxima. */
             VkPhysicalDeviceMultiviewProperties *properties =

@@ -4661,6 +4661,13 @@ vertex and fragment Broadcast draws remain unproven on hardware. These
 diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
 
+The host `VkPhysicalDeviceProperties2KHR` contract now writes zero to all four
+`VkPhysicalDeviceSubgroupProperties` fields for this Vulkan 1.0 profile, even
+when the caller supplied nonzero prior values. This closes an ambiguous public
+query; it does not measure subgroup size, stages or operations on hardware.
+Those values, a legal Vulkan 1.1 or 1.2 route, the feature bits and original
+applicable CTS remain prerequisites to subgroup promotion.
+
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
 nested struct. Two workgroups produced 64 exact values with zero mismatches and
