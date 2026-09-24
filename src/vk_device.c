@@ -91,6 +91,10 @@ static const struct core_feature_bit {
      PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS},
     {offsetof(VkPhysicalDeviceFeatures, sampleRateShading),
      PS5VK_FEATURE_SAMPLE_RATE_SHADING},
+    /* A Vulkan 1.0 prerequisite for extended subgroup integer types. This
+     * route is dormant until the platform carries a measured capability. */
+    {offsetof(VkPhysicalDeviceFeatures, shaderInt16),
+     PS5VK_FEATURE_SHADER_INT16},
     /* T07 sampled-image capabilities. These mappings only expose the public
      * query/enable path when the platform supplies its bit. */
     {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),

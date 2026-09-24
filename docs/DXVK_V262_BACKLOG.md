@@ -131,8 +131,12 @@ prerequisite. Its `opaccesschain_u16` leaf reaches the original CTS support
 check, which reports `NotSupported` because the shipping core bit is false.
 The one-leaf diagnostic receipt and artifact identity are in `VALIDATION.md`.
 The current frozen acceptance selection remains 829 cases; the Int16 leaf is
-only in a separate diagnostic selection. Int16 execution, original CTS Pass
-and subgroup promotion still require separate evidence.
+only in a separate diagnostic selection. A build combining that factory with
+the default-off Int16 diagnostic route passed the original 128-value GPU
+oracle twice after forwarding `shaderInt16` to PSBC. Exact artifact and QPA
+identities are in `VALIDATION.md`. Public `shaderInt16`, subgroup features and
+`apiVersion` stay off; the broader Int16 operand matrix, subgroup properties,
+original subgroup CTS and combined profile still need evidence.
 
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership

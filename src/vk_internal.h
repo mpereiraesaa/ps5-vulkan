@@ -137,6 +137,8 @@ enum ps5vk_feature_bits {
     /* Keep this layout gate independent of the other feature bits. */
     PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT = 1u << 23,
     PS5VK_FEATURE_TEXTURE_COMPRESSION_BC = 1u << 24,
+    /* Core Vulkan 1.0 narrow shader arithmetic; diagnostic only. */
+    PS5VK_FEATURE_SHADER_INT16 = 1u << 28,
 };
 
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table

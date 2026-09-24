@@ -330,6 +330,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * The original message-passing CTS factory requires core Vulkan 1.1, so
      * the KHR route has a separate bounded native witness. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+#if defined(PS5VK_SHADER_INT16_DIAGNOSTIC) && PS5VK_SHADER_INT16_DIAGNOSTIC
+    /* Measure the core Int16 route with original CTS before considering the
+     * shader feature for the ordinary profile. Subgroup bits stay separate. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_INT16;
+#endif
     /* Vulkan 1.0 exposes the KHR route through device-group creation and
      * properties2. The bounded address witness and two unchanged original
      * buffer-address compute leaves execute through the R32_UINT output. */

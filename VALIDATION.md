@@ -4673,6 +4673,61 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
+The host route for core `shaderInt16` maps the legacy and Features2 query,
+device opt-in, shader-module gate, compute pipeline gate and compiler feature
+mask. The compute adapter forwards that bit to PSBC's `enable_int16` option.
+A host fixture declares only `Int16` and `Shader` capabilities, with 32-bit
+storage buffers: it is rejected without `shaderInt16` and compiles with it.
+The ordinary platform bit remains false. The original CTS measurement below
+establishes one bounded GPU prerequisite, followed by outstanding combined
+subgroup profile checks; it does not establish subgroup correctness.
+
+An isolated diagnostic build combined this route with the unchanged pinned
+indexing factory from the separate original-CTS registration change. With
+`PS5VK_SHADER_INT16_DIAGNOSTIC=1`, the original Vulkan 1.0
+`spirv_assembly.instruction.compute.indexing.input.struct.opaccesschain_u16`
+leaf passed its 128-value GPU oracle twice on the same signed eboot SHA-256
+`b602a2d71019d08c4a290007b746675173cbeb80ca0b5654228c1b0da0fcf345`.
+The one-leaf selection SHA-256 was
+`a49a36073c093f0e5e13f88d7b36be9255c5235cfa17c3c11583fe486d8286b9`:
+run `run-633858541401345` had QPA SHA-256
+`99d80d69b7f863cca7cb3ad2498891b153fa3d876359f854d11ca27bacfdc452`,
+and run `run-633899483926515` had QPA SHA-256
+`00bc3640af0723be07938ddcef7b52ac4758e872e76dff4b0b5c5c7864e866a2`.
+Both strict receipts recorded one Pass, zero Fail/NotSupported/missing or
+unexpected cases, and clean title closure. A preceding diagnostic eboot
+`25e0ed2ca670870214cfc8ec33c03cc972ced1614c7a320346d6ed7cd990588b`
+reached pipeline creation but failed with `VK_ERROR_UNKNOWN` because the
+compiler adapter had not forwarded the Int16 option. These measurements do
+not promote public `shaderInt16`, either subgroup bit, or `apiVersion`.
+Firmware was not independently recorded in these receipts.
+
+The unchanged frozen upstream acceptance selection on this default-off route
+passed 507/507 original cases, with zero Fail, NotSupported, missing,
+unexpected or duplicate results. The strict receipt verified signed eboot
+SHA-256 `a52ae2b604e722ad793bb54aa06a0b9cd5d24875c09d72a4d717ca26e6965380`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`9302316ca811d8359e5077f132d45ad93f7e8f0fe55551cfd24d5b9d64fb3b2d`
+for run `run-624227907988111`. The title closed, and the previously accepted
+payload was restored. This is Vulkan 1.0 selection neutrality, not an
+applicable original Int16 or subgroup CTS pass. The receipt does not record
+firmware, so this run makes no new firmware claim.
+
+After the diagnostic switch and PSBC Int16 option were added, the ordinary
+default-off build of this branch passed the same frozen 507-case selection:
+run `run-634753171512544`, signed eboot SHA-256
+`b6e2f729755d1a96fe621933c9418c20f606e50b9e0b9321118e8a510e810e48`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`85f1777cd6cf897a384225f21111dee714bc4c5e87038d7ebd2aeaf5d59c0771`.
+The strict receipt had 507 Pass, zero Fail, NotSupported, missing, unexpected
+or duplicate cases, and clean title closure. An earlier attempt with this
+identical eboot stopped while emitting QPA before a final receipt; it was
+closed and is not counted as an acceptance run. Firmware was not
+independently recorded in these receipts.
 The unchanged arithmetic factory first requires subgroup support and
 `VK_SUBGROUP_FEATURE_ARITHMETIC_BIT` in `supportedOperations`, then checks the
 operand format and any 8/16-bit uniform-buffer storage requirement. Package
