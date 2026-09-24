@@ -1446,5 +1446,67 @@ static void imageless_framebuffer_recording(void)
     vkDestroyFramebuffer(&d, fb, NULL);
     assert(!d.graphics_objects);
 }
+static void imageless_second_color_multiview_layers(void)
+{
+    struct VkDevice_T d = {.graphics_enabled = VK_TRUE,
+        .enabled_features_t09 = PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER};
+    VkAttachmentDescription descriptions[2] = {
+        {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT},
+        {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT}};
+    struct ps5vk_subpass subpass = {.color_count=2,
+        .color={{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},
+        .depth={.attachment=VK_ATTACHMENT_UNUSED}};
+    struct VkRenderPass_T pass = {.device=&d, .attachment_count=2,
+        .subpass_count=1, .attachments=descriptions, .subpasses=&subpass,
+        .multiview={.present=VK_TRUE, .subpass_count=1, .view_masks={0x3fu}}};
+    VkFormat formats[2] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM};
+    VkFramebufferAttachmentImageInfo image_info[2] = {
+        {.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO,
+         .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .width=8, .height=8,
+         .layerCount=6, .viewFormatCount=1, .pViewFormats=&formats[0]},
+        {.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO,
+         .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .width=8, .height=8,
+         .layerCount=6, .viewFormatCount=1, .pViewFormats=&formats[1]}};
+    VkFramebufferAttachmentsCreateInfo attachments = {
+        .sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO,
+        .attachmentImageInfoCount=2, .pAttachmentImageInfos=image_info};
+    VkFramebufferCreateInfo create = {.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .pNext=&attachments, .flags=VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT,
+        .renderPass=&pass, .attachmentCount=2, .width=8, .height=8, .layers=1};
+    VkFramebuffer fb = VK_NULL_HANDLE;
+    assert(vkCreateFramebuffer(&d, &create, NULL, &fb) == VK_SUCCESS);
+    struct VkImage_T images[2] = {0};
+    struct VkImageView_T views[2] = {0};
+    VkImageView provided[2] = {&views[0], &views[1]};
+    for (unsigned i = 0; i < 2; ++i) {
+        images[i].device=&d; images[i].memory=(VkDeviceMemory)(uintptr_t)1;
+        images[i].info.extent=(VkExtent3D){8,8,1};
+        images[i].info.samples=VK_SAMPLE_COUNT_1_BIT;
+        images[i].info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        views[i].device=&d; views[i].image=&images[i];
+        views[i].format=VK_FORMAT_B8G8R8A8_UNORM;
+        views[i].range.levelCount=1; views[i].range.layerCount=6;
+    }
+    VkRenderPassAttachmentBeginInfo supplied = {
+        .sType=VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO,
+        .attachmentCount=2, .pAttachments=provided};
+    VkRenderPassBeginInfo begin = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .pNext=&supplied, .renderPass=&pass, .framebuffer=fb,
+        .renderArea={.extent={8,8}}};
+    VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c = command(&d, p);
+    views[1].range.layerCount=5;
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass(c, &begin, VK_SUBPASS_CONTENTS_INLINE);
+    assert(c->state == PS5VK_INVALID);
+    views[1].range.layerCount=6;
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass(c, &begin, VK_SUBPASS_CONTENTS_INLINE);
+    assert(c->state == PS5VK_RECORDING && c->framebuffer->attachments[1] == &views[1]);
+    vkDestroyCommandPool(&d, p, NULL);
+    vkDestroyFramebuffer(&d, fb, NULL);
+    assert(!d.graphics_objects);
+}
 int main(void)
-{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); dispatch_base_recording(); imageless_framebuffer_recording(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); dispatch_base_recording(); imageless_framebuffer_recording(); imageless_second_color_multiview_layers(); puts("Command recording/ownership: pass (host only, no submit)"); }
