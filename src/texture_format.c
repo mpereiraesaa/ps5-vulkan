@@ -54,8 +54,12 @@
 /* Row with no sampled-image encoding: a render-target, depth or buffer role. */
 #define BUFFER(f, CAPS) \
     { (f), 0, 0, {0, 0, 0, 0}, (CAPS), (CAPS), PS5VK_FORMAT_PROVENANCE_NONE, 0, 0, 0 }
-#define BC(f, gfxfmt, bytes) \
-    { (f), 0, ((uint32_t)(gfxfmt) << 20), {4, 5, 6, 7}, \
+/* Complete components absent from the Vulkan format in the descriptor.
+ * In particular BC1 RGB must not expose BC1's optional transparent alpha. */
+#define BC(f, gfxfmt, bytes, components) \
+    { (f), 0, ((uint32_t)(gfxfmt) << 20), \
+      {4, (components) >= 2 ? 5 : 0, (components) >= 3 ? 6 : 0, \
+       (components) == 4 ? 7 : 1}, \
       CAP_SAMP | CAP_LINEAR | CAP_SRC | CAP_DST | CAP_BLIT_SRC, 0, \
       PS5VK_FORMAT_PROVENANCE_GFX10_FORMAT_ENUM, 4, 4, (bytes) }
 
@@ -192,22 +196,22 @@ static const struct ps5vk_texture_format formats[] = {
      * padded block layout are represented for all 16 Vulkan variants;
      * witnessed stays zero until upload and the CTS-mandated transfer and
      * blit roles are integrated through the queue executor. */
-    BC(VK_FORMAT_BC1_RGB_UNORM_BLOCK, 169, 8),
-    BC(VK_FORMAT_BC1_RGB_SRGB_BLOCK, 170, 8),
-    BC(VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 169, 8),
-    BC(VK_FORMAT_BC1_RGBA_SRGB_BLOCK, 170, 8),
-    BC(VK_FORMAT_BC2_UNORM_BLOCK, 171, 16),
-    BC(VK_FORMAT_BC2_SRGB_BLOCK, 172, 16),
-    BC(VK_FORMAT_BC3_UNORM_BLOCK, 173, 16),
-    BC(VK_FORMAT_BC3_SRGB_BLOCK, 174, 16),
-    BC(VK_FORMAT_BC4_UNORM_BLOCK, 175, 8),
-    BC(VK_FORMAT_BC4_SNORM_BLOCK, 176, 8),
-    BC(VK_FORMAT_BC5_UNORM_BLOCK, 177, 16),
-    BC(VK_FORMAT_BC5_SNORM_BLOCK, 178, 16),
-    BC(VK_FORMAT_BC6H_UFLOAT_BLOCK, 179, 16),
-    BC(VK_FORMAT_BC6H_SFLOAT_BLOCK, 180, 16),
-    BC(VK_FORMAT_BC7_UNORM_BLOCK, 181, 16),
-    BC(VK_FORMAT_BC7_SRGB_BLOCK, 182, 16),
+    BC(VK_FORMAT_BC1_RGB_UNORM_BLOCK, 169, 8, 3),
+    BC(VK_FORMAT_BC1_RGB_SRGB_BLOCK, 170, 8, 3),
+    BC(VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 169, 8, 4),
+    BC(VK_FORMAT_BC1_RGBA_SRGB_BLOCK, 170, 8, 4),
+    BC(VK_FORMAT_BC2_UNORM_BLOCK, 171, 16, 4),
+    BC(VK_FORMAT_BC2_SRGB_BLOCK, 172, 16, 4),
+    BC(VK_FORMAT_BC3_UNORM_BLOCK, 173, 16, 4),
+    BC(VK_FORMAT_BC3_SRGB_BLOCK, 174, 16, 4),
+    BC(VK_FORMAT_BC4_UNORM_BLOCK, 175, 8, 1),
+    BC(VK_FORMAT_BC4_SNORM_BLOCK, 176, 8, 1),
+    BC(VK_FORMAT_BC5_UNORM_BLOCK, 177, 16, 2),
+    BC(VK_FORMAT_BC5_SNORM_BLOCK, 178, 16, 2),
+    BC(VK_FORMAT_BC6H_UFLOAT_BLOCK, 179, 16, 3),
+    BC(VK_FORMAT_BC6H_SFLOAT_BLOCK, 180, 16, 3),
+    BC(VK_FORMAT_BC7_UNORM_BLOCK, 181, 16, 4),
+    BC(VK_FORMAT_BC7_SRGB_BLOCK, 182, 16, 4),
     /* VideoOut target and vertex input; deliberately not sampled. */
     BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_VERTEX),
     /* 64KB_Z_X depth target. TRANSFER_DST is the whole-subresource clear:

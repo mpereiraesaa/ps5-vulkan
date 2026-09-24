@@ -126,11 +126,23 @@ int main(void)
     };
     const uint8_t bc_gfx[] = {169,170,169,170,171,172,173,174,175,176,177,178,179,180,181,182};
     const uint8_t bc_bytes[] = {8,8,8,8,16,16,16,16,8,8,16,16,16,16,16,16};
+    /* Vulkan's absent components are zero, except alpha which is one.
+     * BC1 RGB is opaque even when its block uses the transparent index;
+     * BC4/5 carry R/RG and BC6H carries RGB. */
+    const uint8_t bc_components[] = {3,3,4,4,4,4,4,4,1,1,2,2,3,3,4,4};
     for (unsigned i = 0; i < sizeof(bc_formats)/sizeof(bc_formats[0]); ++i) {
         const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(bc_formats[i]);
         assert(entry && !entry->bytes_per_texel && entry->block_width==4 &&
             entry->block_height==4 && entry->bytes_per_block==bc_bytes[i]);
         assert(ps5vk_texture_format_gfx10_format(entry)==bc_gfx[i]);
+        uint32_t completion = 0;
+        for (unsigned channel = 0; channel < 4; ++channel) {
+            const uint8_t selector = channel < bc_components[i] ?
+                (uint8_t)(4 + channel) : (channel == 3 ? 1 : 0);
+            assert(entry->selectors[channel] == selector);
+            completion |= (uint32_t)selector << (3 * channel);
+        }
+        assert(ps5vk_texture_format_dst_sel(entry) == completion);
         assert(ps5vk_texture_format_block_compressed(bc_formats[i]));
         assert(ps5vk_texture_format_has(bc_formats[i],
             PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
