@@ -36,6 +36,12 @@
     "quad_rule": "quadOperationsInAllStages concerns QUAD only; it is not a broadcast prerequisite"
   },
   "cts_extended_type_extension_gate": ["VK_KHR_shader_subgroup_extended_types", "VK_KHR_shader_float16_int8"],
+  "cts_float16_int8_prerequisite": {
+    "extension": "VK_KHR_shader_float16_int8",
+    "registry_depends": "VK_KHR_get_physical_device_properties2,VK_VERSION_1_1",
+    "core_api": "1.2",
+    "current_public": false
+  },
   "cts_stages": {
     "compute": "VK_SHADER_STAGE_COMPUTE_BIT; missing compute subgroup support is a CTS Fail",
     "graphics": "VK_SHADER_STAGE_ALL_GRAPHICS; supportedStages must intersect the tested mask",

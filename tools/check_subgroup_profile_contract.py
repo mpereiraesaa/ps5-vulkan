@@ -28,6 +28,15 @@ def check_registry(root, contract):
             "extended types route disagrees with registry")
     require(extended.find(".//feature[@name='shaderSubgroupExtendedTypes']") is not None,
             "extended types extension feature missing")
+    float16_int8 = extensions["VK_KHR_shader_float16_int8"]
+    prerequisite = contract["cts_float16_int8_prerequisite"]
+    require(prerequisite["extension"] == "VK_KHR_shader_float16_int8" and
+            prerequisite["registry_depends"] == float16_int8.get("depends") ==
+            "VK_KHR_get_physical_device_properties2,VK_VERSION_1_1" and
+            float16_int8.get("promotedto") == "VK_VERSION_1_2" and
+            prerequisite["core_api"] == "1.2" and
+            prerequisite["current_public"] is False,
+            "CTS float16/int8 prerequisite API dependency changed")
     require(not any(node.find(".//feature[@name='subgroupBroadcastDynamicId']") is not None
                     for node in extensions.values()), "dynamic ID extension route appeared")
     require(contract["routes"]["subgroupBroadcastDynamicId"]["extension"] is None,
@@ -51,6 +60,9 @@ def check_cts(utils, broadcast, arithmetic, contract):
     require(contract["cts_extended_type_extension_gate"] ==
             ["VK_KHR_shader_subgroup_extended_types", "VK_KHR_shader_float16_int8"],
             "CTS extension gate changed")
+    require(contract["cts_float16_int8_prerequisite"]["extension"] in
+            contract["cts_extended_type_extension_gate"],
+            "CTS float16/int8 prerequisite missing from extension gate")
     for extension in contract["cts_extended_type_extension_gate"]:
         require(f'context.isDeviceFunctionalitySupported("{extension}")' in utils,
                 f"CTS extension gate missing: {extension}")
