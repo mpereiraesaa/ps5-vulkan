@@ -125,6 +125,15 @@ applicable original message-passing CTS leaf under API 1.0. The earlier
 candidate paragraph records its status before these runs. Full receipt and
 artifact hashes are in [VALIDATION.md](../VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
 
+For T08's extended subgroup Int16 operands, the pinned original Vulkan 1.0
+compute indexing factory is now packaged as an independent `shaderInt16`
+prerequisite. Its `opaccesschain_u16` leaf reaches the original CTS support
+check, which reports `NotSupported` because the shipping core bit is false.
+The one-leaf diagnostic receipt and artifact identity are in `VALIDATION.md`.
+The current frozen acceptance selection remains 829 cases; the Int16 leaf is
+only in a separate diagnostic selection. Int16 execution, original CTS Pass
+and subgroup promotion still require separate evidence.
+
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
 is stable while readiness and completion are derived from the live matrix, so implemented

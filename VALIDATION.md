@@ -4977,6 +4977,41 @@ not independently recorded in these T08 receipts. The bounded result does
 not claim capture replay, multiple-device addressing or additional image
 formats.
 
+### Original core Int16 indexing CTS route
+
+The focused package now links the unchanged pinned
+`vktSpvAsmIndexingTests.cpp` compute factory. Its Vulkan 1.0
+`spirv_assembly.instruction.compute.indexing.input.struct.opaccesschain_u16`
+leaf uses `OpCapability Int16`, requests core `shaderInt16`, and compares its
+buffer reads against the original 128-value oracle. It is not a subgroup leaf;
+it measures a prerequisite for extended subgroup Int16 operands. At this
+historical measurement stage, the 507-case acceptance manifest was unchanged;
+the later T07 promotion expanded the frozen selection to 829 cases.
+
+A one-leaf diagnostic selection on signed eboot SHA-256
+`01a1457e5b8fc64005f3d96f30b5f2a4f3eb8a75924cb1942ec30a7dcf053eab`
+and selection SHA-256
+`a49a36073c093f0e5e13f88d7b36be9255c5235cfa17c3c11583fe486d8286b9`
+registered and ran that exact original leaf. Run `run-632095073483134`
+reported one `NotSupported`, zero missing or unexpected cases, and QPA
+SHA-256 `e0fe2a27be5d65c6616231e6e62ebabc935a7ed6021c9fae13b1cdcaef25914a`.
+Its first support gate was `shaderInt16` at
+`vktSpvAsmComputeShaderCase.cpp:437`. The title closed cleanly and the
+accepted payload was restored. This confirms case reachability and the
+shipping feature blocker, not Int16 GPU correctness or any subgroup feature.
+The next measurement requires a separately reviewed diagnostic `shaderInt16`
+capability, then this unchanged case must pass with artifact-bound GPU output
+before a public bit can be considered. Firmware was not recorded in the receipt.
+
+The ordinary build of this exact code passed the unchanged frozen CTS
+selection in strict run `run-632263053027911`: 507 Pass, zero Fail,
+NotSupported, missing or unexpected, with clean title closure. It used the
+same signed eboot SHA-256, selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`
+and QPA SHA-256
+`db86c4f4a583a68babbac9c2b490c386d3d4a3187238ec4406ec358fe3fe713e`.
+This is neutral acceptance of the existing profile; the Int16 leaf was only
+in the separate diagnostic selection above.
 ## T07 BC mip and array-layer transfer measurement (2026-09-24)
 
 The pinned original BC oracle has also passed in two earlier focused diagnostic
