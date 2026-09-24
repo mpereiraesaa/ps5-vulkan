@@ -26,6 +26,10 @@ class SubgroupWitnessTests(unittest.TestCase):
         self.assertEqual(ordinary["switches"]["PS5VK_SUBGROUP_IADD_DIAGNOSTIC"], "0")
         self.assertEqual(iadd["switches"]["PS5VK_SUBGROUP_IADD_DIAGNOSTIC"], "1")
         self.assertTrue(iadd["experimental"])
+        int8 = tessellation_build_profile({"PS5VK_SHADER_INT8_DIAGNOSTIC": "1"})
+        self.assertEqual(ordinary["switches"]["PS5VK_SHADER_INT8_DIAGNOSTIC"], "0")
+        self.assertEqual(int8["switches"]["PS5VK_SHADER_INT8_DIAGNOSTIC"], "1")
+        self.assertTrue(int8["experimental"])
 
     def setUp(self):
         self.log = (
@@ -87,6 +91,26 @@ class SubgroupWitnessTests(unittest.TestCase):
             verify(log, receipt, dict(artifact,
                                      profile="t08-subgroup-broadcast-diagnostic-witness",
                                      operation="broadcast"))
+
+    def test_int8_iadd_wraparound_contract(self):
+        digest = expected_digest("iadd_int8")
+        self.assertNotEqual(digest, expected_digest("iadd"))
+        log = (
+            b"T08_SUBGROUP_IADD_INT8_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.0\n"
+            + ("T08_SUBGROUP_IADD_INT8_RESULT outputs=128 mismatches=0 guards=0 "
+               f"digest={digest:08x} fence=complete\n").encode()
+            + b"T08_SUBGROUP_IADD_INT8_RETIRED resources=clean\n"
+        )
+        receipt = dict(self.receipt, sha256=hashlib.sha256(log).hexdigest())
+        artifact = dict(self.artifact,
+                        profile="t08-subgroup-iadd_int8-diagnostic-witness",
+                        operation="iadd_int8")
+        self.assertEqual(verify(log, receipt, artifact)["digest"], f"{digest:08x}")
+        wrong = log.replace(f"digest={digest:08x}".encode(),
+                            f"digest={expected_digest('iadd'):08x}".encode())
+        with self.assertRaisesRegex(ValueError, "subgroup data"):
+            verify(wrong, dict(receipt, sha256=hashlib.sha256(wrong).hexdigest()),
+                   artifact)
 
 
 if __name__ == "__main__":

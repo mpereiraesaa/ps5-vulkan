@@ -31,6 +31,7 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
     capabilities = set()
     subgroup_ops = []
     entry_models = []
+    has_int8_type = False
     index = 5
     while index < len(words):
         size, opcode = words[index] >> 16, words[index] & 0xffff
@@ -41,6 +42,8 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
             capabilities.add(operands[0])
         elif opcode == 15:  # OpEntryPoint
             entry_models.append(operands[0])
+        elif opcode == 21 and size == 4 and operands[1] == 8:  # OpTypeInt 8
+            has_int8_type = True
         elif 333 <= opcode <= 366:
             subgroup_ops.append(opcode)
         index += size
@@ -48,13 +51,14 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
     expected_opcode = 337 if operation == "broadcast" else 349
     if (not expected_capabilities.issubset(capabilities) or
             subgroup_ops != [expected_opcode] or
-            entry_models != [5]):
+            entry_models != [5] or
+            (operation == "iadd_int8") != (39 in capabilities and has_int8_type)):
         raise ValueError(f"shader lacks compute GroupNonUniform{operation} contract")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--operation", choices=("broadcast", "iadd"),
+    parser.add_argument("--operation", choices=("broadcast", "iadd", "iadd_int8"),
                         default="broadcast")
     operation = parser.parse_args().operation
     lab = lab_root()
@@ -72,7 +76,8 @@ def main() -> None:
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
 
-    shader_source = ROOT / f"experiments/compute/t08_subgroup_{operation}_runtime.comp"
+    shader_name = "int8_iadd" if operation == "iadd_int8" else operation
+    shader_source = ROOT / f"experiments/compute/t08_subgroup_{shader_name}_runtime.comp"
     shader_file = build / f"{operation}.spv"
     run(glslang, "-V", "--target-env", "vulkan1.2", str(shader_source),
         "-o", str(shader_file))
@@ -86,7 +91,9 @@ def main() -> None:
                    PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC=(
                        "1" if operation == "broadcast" else "0"),
                    PS5VK_SUBGROUP_IADD_DIAGNOSTIC=(
-                       "1" if operation == "iadd" else "0"))
+                       "1" if operation in ("iadd", "iadd_int8") else "0"),
+                   PS5VK_SHADER_INT8_DIAGNOSTIC=(
+                       "1" if operation == "iadd_int8" else "0"))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t08_subgroup_broadcast_witness/main.c"
@@ -96,6 +103,8 @@ def main() -> None:
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         "-MD", "-MP", "-MF", str(dep),
         *(["-DT08_SUBGROUP_IADD_WITNESS=1"] if operation == "iadd" else []),
+        *(["-DT08_SUBGROUP_IADD_INT8_WITNESS=1"]
+          if operation == "iadd_int8" else []),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger), "-c", str(source), "-o", str(obj), env=sdk_env)
     dependencies = dep.read_text()
@@ -133,11 +142,13 @@ def main() -> None:
 
     param = json.loads((lab / "projects/ps5-agc-gears/sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
-                 contentId=("UP9000-PPSA99994_00-PS5VKSGRT0000001" if
-                            operation == "broadcast" else
-                            "UP9000-PPSA99994_00-PS5VKSGIA0000001"))
+                 contentId={"broadcast": "UP9000-PPSA99994_00-PS5VKSGRT0000001",
+                            "iadd": "UP9000-PPSA99994_00-PS5VKSGIA0000001",
+                            "iadd_int8": "UP9000-PPSA99994_00-PS5VKS8IA0000001"}[operation])
+    title_operation = {"broadcast": "Broadcast", "iadd": "IAdd",
+                       "iadd_int8": "Int8 IAdd"}[operation]
     param["localizedParameters"]["en-US"]["titleName"] = (
-        f"PS5 Vulkan Subgroup {operation.upper() if operation == 'iadd' else 'Broadcast'} Witness")
+        f"PS5 Vulkan Subgroup {title_operation} Witness")
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
