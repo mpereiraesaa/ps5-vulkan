@@ -1358,9 +1358,9 @@ static void negative(void)
         features.robustBufferAccess = VK_TRUE;
     }
     /* Every T07 core feature uses the same one-member/one-platform bit
-     * contract. The fixture turns each bit on only to prove the query and
-     * logical-device routes; platform defaults remain disabled pending native
-     * and applicable CTS evidence. */
+     * contract. This host fixture starts with the bits off and turns each on
+     * to prove the query and logical-device routes independently of the
+     * native platform's current reporting candidate. */
     {
         const struct { size_t offset; uint32_t bit; } t07[] = {
             {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),
