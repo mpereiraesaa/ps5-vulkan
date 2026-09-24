@@ -43,8 +43,22 @@ struct VkImageView_T {
     VkImageViewType view_type;
     VkImageSubresourceRange range;
     VkFormat format;
+    /* The usage VkImageViewUsageCreateInfo narrowed this view to, or zero when
+     * the view was created without it and inherits its image's usage. The
+     * structure cannot name an empty usage, so zero is unambiguous. */
+    VkImageUsageFlags usage;
     unsigned pending, framebuffers;
 };
+/* The eight VkImageUsageFlagBits of Vulkan 1.0, the only ones this device
+ * knows. */
+#define PS5VK_IMAGE_USAGE_CORE_BITS ((VkImageUsageFlags)0xFFu)
+/* What a view may be used for: its own narrowed usage when it has one, its
+ * image's otherwise. Every check of a VIEW's role goes through this, while
+ * image-level role and layout decisions keep reading the image's usage. */
+static inline VkImageUsageFlags ps5vk_image_view_usage(VkImageView view)
+{
+    return view->usage ? view->usage : view->image->info.usage;
+}
 VkResult ps5vk_image_span(VkDevice, VkImage, void **address, VkDeviceSize *bytes);
 /* Resolve counts by subtraction, so oversized ranges cannot wrap. */
 static inline int ps5vk_image_range_resolve(VkImage image,

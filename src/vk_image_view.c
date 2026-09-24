@@ -24,14 +24,39 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
     VkImage image = d->images;
     while (image && image != info->image) image = image->next;
     if (!image || image->device != d || !image->memory) return VK_ERROR_UNKNOWN;
-    /* The CTS texture helper chains this extension structure even when its
-     * default minLod is zero. That value is a no-op; nonzero min LOD still
-     * needs the unsupported image-view-min-lod feature. */
-    if (info->pNext) {
-        const VkImageViewMinLodCreateInfoEXT *min_lod = info->pNext;
-        if (min_lod->sType != VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT ||
-            min_lod->pNext || min_lod->minLod != 0.0f)
+    /* Two structures are understood, each at most once; anything else stays
+     * fail-closed.
+     *
+     * The CTS texture helper chains VkImageViewMinLodCreateInfoEXT even when
+     * its default minLod is zero. That value is a no-op; nonzero min LOD still
+     * needs the unsupported image-view-min-lod feature.
+     *
+     * VkImageViewUsageCreateInfo (VK_KHR_maintenance2) narrows what the view
+     * may be used for. DXVK chains it on every view it creates. It is accepted
+     * only on a device that enabled the extension, must name at least one
+     * valid usage (VUID-VkImageViewUsageCreateInfo-usage-requiredbitmask and
+     * -parameter) and, since this profile never creates an image with
+     * VK_IMAGE_CREATE_EXTENDED_USAGE_BIT, only usage the image itself was
+     * created with (VUID-VkImageViewCreateInfo-pNext-02662). The narrowed usage
+     * is what the framebuffer and descriptor checks then hold the view to. */
+    VkImageUsageFlags view_usage = 0;
+    VkBool32 saw_min_lod = VK_FALSE;
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
+         next; next = next->pNext) {
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT &&
+            !saw_min_lod) {
+            saw_min_lod = VK_TRUE;
+            if (((const VkImageViewMinLodCreateInfoEXT *)next)->minLod != 0.0f)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+        } else if (next->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO &&
+                   !view_usage && d->maintenance2_extension_enabled) {
+            view_usage = ((const VkImageViewUsageCreateInfo *)next)->usage;
+            if (!view_usage || (view_usage & ~PS5VK_IMAGE_USAGE_CORE_BITS) ||
+                (view_usage & ~image->info.usage))
+                return VK_ERROR_UNKNOWN;
+        } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;
+        }
     }
     if (info->flags || info->format != image->info.format)
         return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -105,6 +130,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
     view->device = d; view->allocator = saved; view->custom_allocator = custom;
     view->image = image; view->view_type=info->viewType;
     view->format = info->format; view->range = range;
+    view->usage = view_usage;
     ++image->views; ++d->graphics_objects; *out = view;
     return VK_SUCCESS;
 }
