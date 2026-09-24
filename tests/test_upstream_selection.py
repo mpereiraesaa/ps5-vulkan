@@ -395,6 +395,19 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertTrue(cube["experimental"])
         self.assertEqual("1", cube["switches"]["PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC"])
 
+    def test_bc_sampling_leaf_uses_original_compressed_texture_factory(self):
+        """BC sampling coverage uses the pinned upstream support gate/oracle."""
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        upstream = (UPSTREAM / "external/vulkancts/modules/vulkan/texture/"
+                    "vktTextureCompressedFormatTests.cpp").read_text()
+        self.assertIn("createTextureCompressedFormatTests(m_testCtx)", package)
+        self.assertIn("vktTextureCompressedFormatTests.cpp", builder)
+        self.assertIn("textureCompressionBC", upstream)
+        self.assertIn("Image verification failed", upstream)
+        self.assertIn("bc1_rgba_unorm_block", upstream.lower())
+        self.assertIn("bc3_unorm_block", upstream.lower())
+
     def test_t06_fragment_store_leaves_are_exact_promoted_upstream_oracles(self):
         expected_paths = {
             "dEQP-VK.rasterization.frag_side_effects.color_at_beginning.kill",

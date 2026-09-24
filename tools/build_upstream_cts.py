@@ -890,6 +890,8 @@ def main(argv=None):
         # Original object-management factory, including the cube-array image
         # view test and its imageCubeArray support gate.
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiObjectManagementTests.cpp",
+        # Original compressed image sampling cases and upstream reference oracle.
+        cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureCompressedFormatTests.cpp",
         focused_sources / "vktApiCopiesAndBlittingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp",
         # Original UBO block-layout factory, shader bodies and result oracle.
@@ -905,6 +907,9 @@ def main(argv=None):
         # vktImageTestsUtil provides the format-qualifier and packed-type helpers
         # the buffer-view access tests use to build their compute shader.
         cts_root / "external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp",
+        # Shared texture renderer/program helpers used by the original
+        # compressed-format sampling tests.
+        cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureTestUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp",
         focused_sources / "vktBindingBufferDeviceAddressTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp",

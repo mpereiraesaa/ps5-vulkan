@@ -257,6 +257,8 @@ check:
 	./build/tests/test_texture_layout
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler
 	./build/tests/test_vk_sampler
+	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/vk_sampler.c tests/test_vk_sampler.c -o build/tests/test_vk_sampler_bc_diagnostic
+	./build/tests/test_vk_sampler_bc_diagnostic
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/index_emit_ps5.c tests/test_index_emit_ps5.c -o build/tests/test_index_emit_ps5
 	./build/tests/test_index_emit_ps5
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) src/index_fetch.c tests/test_index_fetch.c -o build/tests/test_index_fetch

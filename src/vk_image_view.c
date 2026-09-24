@@ -24,7 +24,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
     VkImage image = d->images;
     while (image && image != info->image) image = image->next;
     if (!image || image->device != d || !image->memory) return VK_ERROR_UNKNOWN;
-    if (info->pNext || info->flags || info->format != image->info.format)
+    /* The CTS texture helper chains this extension structure even when its
+     * default minLod is zero. That value is a no-op; nonzero min LOD still
+     * needs the unsupported image-view-min-lod feature. */
+    if (info->pNext) {
+        const VkImageViewMinLodCreateInfoEXT *min_lod = info->pNext;
+        if (min_lod->sType != VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT ||
+            min_lod->pNext || min_lod->minLod != 0.0f)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    if (info->flags || info->format != image->info.format)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     const VkComponentMapping *c = &info->components;
     if ((c->r != VK_COMPONENT_SWIZZLE_IDENTITY && c->r != VK_COMPONENT_SWIZZLE_R) ||

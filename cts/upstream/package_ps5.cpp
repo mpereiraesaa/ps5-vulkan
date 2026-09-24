@@ -6,6 +6,7 @@
 #include "vktApiObjectManagementTests.hpp"
 #include "vktApiCopiesAndBlittingTests.hpp"
 #include "vktApiFillBufferTests.hpp"
+#include "vktTextureCompressedFormatTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
 #include "vktBindingBufferDeviceAddressTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
@@ -146,6 +147,14 @@ void FocusedVkTestPackage::init(void)
         apiGroup->addChild(vkt::api::createCopiesAndBlittingTests(m_testCtx));
         apiGroup->addChild(vkt::api::createFillAndUpdateBufferTests(m_testCtx));
         addChild(apiGroup.release());
+    }
+
+    // Original compressed-texture tests and their support gates/oracles. The
+    // focused cases manifest selects only the BC1/BC3 sampling leaves.
+    {
+        de::MovePtr<tcu::TestCaseGroup> textureGroup(new tcu::TestCaseGroup(m_testCtx, "texture"));
+        textureGroup->addChild(vkt::texture::createTextureCompressedFormatTests(m_testCtx));
+        addChild(textureGroup.release());
     }
 
     // binding_model.shader_access group

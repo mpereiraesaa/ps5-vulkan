@@ -134,6 +134,29 @@ int main(void)
     VkImageView view;
     assert(vkCreateImageView(&d, &vi, NULL, &view) == VK_SUCCESS);
     assert(view->range.levelCount == 1 && view->range.layerCount == 1 && image->views == 1);
+    VkImageViewMinLodCreateInfoEXT min_lod = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT,
+        .minLod = 0.0f,
+    };
+    vi.pNext = &min_lod;
+    VkImageView min_lod_view = VK_NULL_HANDLE;
+    assert(vkCreateImageView(&d, &vi, NULL, &min_lod_view) == VK_SUCCESS);
+    assert(min_lod_view->image == image && image->views == 2);
+    vkDestroyImageView(&d, min_lod_view, NULL);
+    assert(image->views == 1);
+    min_lod.minLod = 0.5f;
+    assert(vkCreateImageView(&d, &vi, NULL, &min_lod_view) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !min_lod_view);
+    min_lod.minLod = 0.0f;
+    VkImageViewMinLodCreateInfoEXT chained_min_lod = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT,
+        .pNext = &min_lod,
+        .minLod = 0.0f,
+    };
+    vi.pNext = &chained_min_lod;
+    assert(vkCreateImageView(&d, &vi, NULL, &min_lod_view) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !min_lod_view);
+    vi.pNext = NULL;
     VkAttachmentDescription attachment = {.format=info.format, .samples=VK_SAMPLE_COUNT_1_BIT,
         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
