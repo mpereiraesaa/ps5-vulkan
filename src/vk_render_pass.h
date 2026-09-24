@@ -60,6 +60,45 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
     const VkRenderPassMultiviewCreateInfo *multiview, VkBool32 multiview_enabled,
     uint32_t max_multiview_view_count, struct ps5vk_render_pass_multiview *out);
 
+/* VK_KHR_create_renderpass2: a VkRenderPassCreateInfo2 translated into the
+ * version-1 description vkCreateRenderPass consumes, with every array it
+ * points at owned by this structure. The version-2 obligations that have no
+ * version-1 equivalent - structure types, the extension chains and the input
+ * aspect masks - are checked by the translation; everything else is left to
+ * the version-1 path, so both entry points share one model and one set of
+ * profile rules. `info.pNext` names `multiview` only when the pass declares a
+ * view mask, a view offset, a view-local dependency or a correlated mask. */
+/* One translated subpass's references. A preserve list names distinct
+ * attachments of the pass, so the pass's attachment bound bounds it. */
+struct ps5vk_render_pass2_refs {
+    VkAttachmentReference color[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkAttachmentReference resolve[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkAttachmentReference input[PS5VK_MAX_INPUT_ATTACHMENTS];
+    VkAttachmentReference depth;
+    uint32_t preserve[PS5VK_MAX_ATTACHMENTS];
+};
+struct ps5vk_render_pass2_translation {
+    VkRenderPassCreateInfo info;
+    VkRenderPassMultiviewCreateInfo multiview;
+    VkAttachmentDescription attachments[PS5VK_MAX_ATTACHMENTS];
+    VkSubpassDescription subpasses[PS5VK_MAX_SUBPASSES];
+    struct ps5vk_render_pass2_refs refs[PS5VK_MAX_SUBPASSES];
+    VkSubpassDependency dependencies[PS5VK_MAX_DEPENDENCIES];
+    uint32_t view_masks[PS5VK_MAX_SUBPASSES];
+    int32_t view_offsets[PS5VK_MAX_DEPENDENCIES];
+    uint32_t correlation_masks[PS5VK_MAX_CORRELATION_MASKS];
+};
+VkResult ps5vk_render_pass2_translate(const VkRenderPassCreateInfo2 *info,
+    struct ps5vk_render_pass2_translation *out);
+
+/* The aspect mask an input reference declares, against the format of the
+ * attachment it names: never empty, never METADATA or a memory plane, only
+ * aspects the format has (VK_ERROR_UNKNOWN otherwise), and every aspect the
+ * format has, because the owned input reference reads them all
+ * (VK_ERROR_FEATURE_NOT_PRESENT for a strict subset). Shared by the version-2
+ * reference and VkRenderPassInputAttachmentAspectCreateInfo. */
+VkResult ps5vk_render_pass_input_aspect_valid(VkFormat format, VkImageAspectFlags aspect);
+
 /* One subpass: the roles this profile executes.
  *
  * There is no preserve list here, and that is a statement about the profile
