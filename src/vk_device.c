@@ -329,6 +329,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
                 ->maxTimelineSemaphoreValueDifference =
                 (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE) ?
                 PS5VK_TIMELINE_MAX_VALUE_DIFFERENCE : 0u;
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES) {
+            /* VK_KHR_maintenance2. ALL_CLIP_PLANES is the Vulkan 1.0 rule this
+             * device already obeys - a point outside the clip volume is
+             * discarded - so reporting it claims no new behaviour; the
+             * USER_CLIP_PLANES_ONLY relaxation is never claimed. */
+            ((VkPhysicalDevicePointClippingProperties *)next)->pointClippingBehavior =
+                VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
         }
     }
 }
