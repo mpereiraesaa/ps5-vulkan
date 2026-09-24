@@ -21,6 +21,7 @@ def load_tool(name):
 
 derive = load_tool("derive_dxvk_profile")
 probe = load_tool("verify_dxvk_probe")
+matrix = load_tool("check_dxvk_profile")
 
 
 class ProbeFixture:
@@ -267,6 +268,45 @@ class DxvkProbeTests(unittest.TestCase):
         fixture.write(records)
         with self.assertRaisesRegex(ValueError, "explicit host query reset route"):
             fixture.validate()
+
+    def test_sampler_mirror_clamp_requires_exact_khr_route(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        identifier = "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge"
+        records = list(fixture.records)
+        index = next(i for i, record in enumerate(records) if f"id={identifier} " in record)
+        records[index] = records[index].replace("observed=0 status=blocker",
+                                                 "observed=1 status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                         "satisfied=2 blockers=60")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit sampler mirror clamp route"):
+            fixture.validate()
+        route = ("DXVK262_SAMPLER_MIRROR_CLAMP_QUERY "
+                 "route=VK_KHR_sampler_mirror_clamp_to_edge samplerMirrorClampToEdge=1")
+        records.insert(1, route)
+        fixture.write(records)
+        result = fixture.validate()
+        self.assertEqual(2, result["satisfied"])
+        self.assertIn("samplerMirrorClampToEdge", result["query_routes"][-1])
+        records[1] = route.replace("samplerMirrorClampToEdge=1", "samplerMirrorClampToEdge=0")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit sampler mirror clamp route"):
+            fixture.validate()
+        records[1] = route
+        records.insert(1, route)
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit sampler mirror clamp route"):
+            fixture.validate()
+
+    def test_sampler_mirror_clamp_matrix_route_is_shipping_gated(self):
+        row = {"id": matrix.SAMPLER_MIRROR_CLAMP_ID, "expected": True}
+        self.assertIsNone(matrix.sampler_mirror_clamp_axes(row, set()))
+        api, implementation = matrix.sampler_mirror_clamp_axes(
+            row, {"VK_KHR_sampler_mirror_clamp_to_edge"})
+        self.assertEqual("satisfied", api["state"])
+        self.assertEqual("VK_KHR_sampler_mirror_clamp_to_edge", api["via"])
+        self.assertEqual("implemented", implementation["state"])
 
     def test_historical_matrix_snapshot_remains_hash_bound(self):
         fixture = ProbeFixture()
