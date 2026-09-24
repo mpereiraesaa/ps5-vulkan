@@ -432,7 +432,7 @@ class DxvkMatrixTests(unittest.TestCase):
         row["cts"]["state"] = "cts-fail"
         with self.assertRaisesRegex(ValueError, "non-fail-closed"):
             matrix.validate(broken)
-        self.assertEqual({"pass": 26, "fail": 0, "no-evidence": 36},
+        self.assertEqual({"pass": 27, "fail": 0, "no-evidence": 35},
                          document["summary"]["dimensions"]["cts"])
 
     def test_unmapped_cts_allows_artifact_bound_khr_device_scope(self):
