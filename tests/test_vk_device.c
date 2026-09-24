@@ -1341,23 +1341,31 @@ static void negative(void)
         memset(&features, 0, sizeof(features));
         features.robustBufferAccess = VK_TRUE;
     }
-    /* T07 cube arrays and BC compression use the same one-member/one-platform
-     * bit contract. The fixture turns the bits on only to prove the query and
+    /* Every T07 core feature uses the same one-member/one-platform bit
+     * contract. The fixture turns each bit on only to prove the query and
      * logical-device routes; platform defaults remain disabled pending native
      * and applicable CTS evidence. */
     {
-        const struct { size_t offset; uint32_t bit; } t07[2] = {
+        const struct { size_t offset; uint32_t bit; } t07[] = {
             {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),
              PS5VK_FEATURE_IMAGE_CUBE_ARRAY},
             {offsetof(VkPhysicalDeviceFeatures, textureCompressionBC),
              PS5VK_FEATURE_TEXTURE_COMPRESSION_BC},
+            {offsetof(VkPhysicalDeviceFeatures, shaderImageGatherExtended),
+             PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED},
+            {offsetof(VkPhysicalDeviceFeatures, occlusionQueryPrecise),
+             PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE},
         };
+        const unsigned t07_count = sizeof(t07) / sizeof(t07[0]);
         const uint32_t saved = p->platform.supported_features;
         const VkBool32 yes = VK_TRUE;
         VkPhysicalDeviceFeatures reported;
         vkGetPhysicalDeviceFeatures(p, &reported);
-        assert(!reported.imageCubeArray && !reported.textureCompressionBC);
-        for (unsigned n = 0; n < 2; ++n) {
+        assert(!reported.imageCubeArray && !reported.textureCompressionBC &&
+               !reported.shaderImageGatherExtended && !reported.occlusionQueryPrecise);
+        uint32_t all_bits = 0;
+        for (unsigned n = 0; n < t07_count; ++n) {
+            all_bits |= t07[n].bit;
             memset(&features, 0, sizeof(features));
             memcpy((unsigned char *)&features + t07[n].offset, &yes, sizeof(yes));
             d=(VkDevice)(uintptr_t)1;
@@ -1365,7 +1373,7 @@ static void negative(void)
 
             p->platform.supported_features = saved | t07[n].bit;
             vkGetPhysicalDeviceFeatures(p, &reported);
-            for (unsigned other = 0; other < 2; ++other) {
+            for (unsigned other = 0; other < t07_count; ++other) {
                 VkBool32 value;
                 memcpy(&value, (unsigned char *)&reported + t07[other].offset,
                        sizeof(value));
@@ -1380,13 +1388,14 @@ static void negative(void)
             p->platform.supported_features = saved;
         }
 
-        const uint32_t all_bits = t07[0].bit | t07[1].bit;
         p->platform.supported_features = saved | all_bits;
         VkPhysicalDeviceFeatures2 all = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2
         };
         vkGetPhysicalDeviceFeatures2KHR(p, &all);
-        assert(all.features.imageCubeArray && all.features.textureCompressionBC);
+        assert(all.features.imageCubeArray && all.features.textureCompressionBC &&
+               all.features.shaderImageGatherExtended &&
+               all.features.occlusionQueryPrecise);
         VkDeviceCreateInfo chained = info;
         chained.pEnabledFeatures = NULL;
         chained.pNext = &all;

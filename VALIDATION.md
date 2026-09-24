@@ -4999,6 +4999,22 @@ not establish the other typed gather profiles or public
 `shaderImageGatherExtended` reporting, which remains off pending the full T07
 audit.
 
+The current frozen manifest identifies 70 applicable original extended-gather
+leaves: 45 RGBA8 forms and 25 typed forms using RGBA8 signed/unsigned integer
+or D32 comparison. An ignored measurement manifest at
+`build/upstream-cts/t07-full-gather-measurement.json` combines all 70 with the
+507 frozen cases. Its 577-case selection SHA-256 is
+`464a436cd07eeb3c0471bf475d7001463f52f5f1e6424b06bf8725f40f83b8bd`.
+The package linked 416 translation units and signed eboot SHA-256
+`f6cece12464758ef08a9d8d18bb8f997cc067b9b62dc116f4eea1b3f23b888b7`;
+its build manifest records the gather, RGBA8 integer attachment and D32
+sampled diagnostic switches as `1`, with BC off. A separate 532-case selection
+of only the 25 typed leaves uses the same executable but a different selection
+SHA-256, `5702b90f15a93d623277846891b1bd47d4765f3f02a4b6f646b38a573d333b2a`.
+Neither new selection has run on hardware. The 45 previously catalogued RGBA8
+leaves and the 25 typed leaves still require exact combined-branch acceptance
+before the public feature can be reconsidered.
+
 ## T07 D16 depth attachment diagnostic witness (2026-09-24)
 
 The isolated 128×128 D16 attachment route now records the exact

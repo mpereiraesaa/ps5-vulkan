@@ -81,8 +81,10 @@ recorded in [VALIDATION.md](../VALIDATION.md).
 These are bounded diagnostic results. All four T07 feature bits remain off in
 the shipping profile. The cube-compatible sampled colour-attachment role has
 a host-tested tiled descriptor and a packaged render-to-sample witness, but
-that witness has not run on hardware. Typed gather coverage and the complete
-public feature, frozen CTS and combined acceptance audit are also pending.
+that witness has not run on hardware. A 577-case measurement selection now
+includes all 70 applicable original extended-gather leaves alongside the 507
+frozen cases, but it has not run. The complete public feature, frozen CTS and
+combined acceptance audit remain pending.
 
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
