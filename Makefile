@@ -481,6 +481,15 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_dual_source.frag -o build/runtime-graphics/dual_source.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_two_mrt.frag -o build/runtime-graphics/two_mrt.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_core.frag -o build/runtime-graphics/gather_core.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_const_offset.frag -o build/runtime-graphics/gather_const_offset.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_dynamic_offset.frag -o build/runtime-graphics/gather_dynamic_offset.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_four_offsets.frag -o build/runtime-graphics/gather_four_offsets.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_component_0.frag -o build/runtime-graphics/gather_component_0.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_component_1.frag -o build/runtime-graphics/gather_component_1.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_component_2.frag -o build/runtime-graphics/gather_component_2.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_component_3.frag -o build/runtime-graphics/gather_component_3.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_gather_dref.frag -o build/runtime-graphics/gather_dref.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_distance.vert -o build/runtime-graphics/clip_distance.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_cull_distance.vert -o build/runtime-graphics/cull_distance.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_distance.vert -o build/runtime-graphics/clip_cull_distance.vert.spv
