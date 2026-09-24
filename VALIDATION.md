@@ -4696,6 +4696,20 @@ payload was restored. This is Vulkan 1.0 selection neutrality, not an
 applicable original Int16 or subgroup CTS pass. The receipt does not record
 firmware, so this run makes no new firmware claim.
 
+After the diagnostic switch and PSBC Int16 option were added, the ordinary
+default-off build of this branch passed the same frozen 507-case selection:
+run `run-634753171512544`, signed eboot SHA-256
+`b6e2f729755d1a96fe621933c9418c20f606e50b9e0b9321118e8a510e810e48`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`85f1777cd6cf897a384225f21111dee714bc4c5e87038d7ebd2aeaf5d59c0771`.
+The strict receipt had 507 Pass, zero Fail, NotSupported, missing, unexpected
+or duplicate cases, and clean title closure. An earlier attempt with this
+identical eboot stopped while emitting QPA before a final receipt; it was
+closed and is not counted as an acceptance run. Firmware was not
+independently recorded in these receipts.
+
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
 `subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
 Add and Min cases and graphics-stage subgroup operations beyond the bounded
