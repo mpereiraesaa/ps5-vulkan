@@ -180,6 +180,7 @@ VkResult ps5vk_runtime_compile_compute_features(
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
     opts.enable_storage_buffer_16bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_16BIT);
+    opts.enable_int16 = !!(feature_mask & PS5VK_FEATURE_SHADER_INT16);
     opts.enable_physical_storage_buffer_addresses =
         !!(feature_mask & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
     opts.enable_vulkan_memory_model =

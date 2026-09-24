@@ -51,7 +51,7 @@ def storage8_vk10_extension_form(target: Path) -> None:
 def main():
     sources = {name: ROOT / f"experiments/compute/{name}.comp" for name in
                ("minimal", "xor", "shared_grid", "resource_abi", "push_specialization",
-                "storage8", "storage16", "sync_producer", "sync_consumer",
+                "storage8", "storage16", "shader_int16", "sync_producer", "sync_consumer",
                 "shared_atomic_multiwave")}
     sources.update({name: ROOT / f"experiments/compute/{name}.comp"
                     for name in ("t08_address", "t08_memory_model_queue", "t08_memory_model")})
