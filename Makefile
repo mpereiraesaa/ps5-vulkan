@@ -125,6 +125,8 @@ check-sanitize: check-thread-sanitize
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/color_detile.c src/texture_dma.c tests/test_color_rect_clear.c -o build/tests/test_color_rect_clear_sanitized
 	./build/tests/test_color_rect_clear_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state_sanitized
+	./build/tests/test_image_layout_state_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c src/depth_detile.c tests/test_readback_commands.c -o build/tests/test_readback_commands_sanitized
 	./build/tests/test_readback_commands_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/texture_dma.c src/graphics_sync.c tests/test_upload_commands.c -o build/tests/test_upload_commands_sanitized
