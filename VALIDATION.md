@@ -4682,6 +4682,18 @@ payload. Firmware was not recorded in these receipts. This proves one bounded
 16-bit subgroup types, other stages or operations, original CTS, either public
 T08 feature bit, or a higher public `apiVersion`.
 
+The ordinary build of this exact code then passed its unchanged frozen
+upstream acceptance selection: **507 Pass, zero Fail, zero NotSupported, zero
+missing or unexpected** in strict run `run-626719354771127`. Signed eboot
+SHA-256 `3f86fcea1ccc275720ff73605722dc1ee0e03955b5fb7f3d17e70cc4964b1ccd`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+QPA SHA-256 `de2a135debe7effbe381f7b83812db0d5995f4a940ce9b003039616cceb43955`,
+and log SHA-256 `66c5d6a48c932ca2b71b5b48f24f953287516feea8e2b63aaa55a6d1671072ea`
+bind that run to the default-off profile. The title closed and the previous
+payload was restored. This selection contains no applicable subgroup leaf;
+its result proves neutral acceptance, not subgroup conformance.
+
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
 nested struct. Two workgroups produced 64 exact values with zero mismatches and
