@@ -44,6 +44,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#ifndef PS5VK_SAMPLER_MIRROR_CASE
+#define PS5VK_SAMPLER_MIRROR_CASE -1
+#endif
 #if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY
 extern int32_t sceAgcDriverGetTFRing(uint64_t *,uint32_t *);
 extern int32_t sceAgcDriverSetTFRing(uint64_t,uint32_t);
@@ -189,6 +192,10 @@ static uint64_t scene_now_ns(void)
 }
 static unsigned diagnostic_iterations(void)
 {
+#if PS5VK_SAMPLER_MIRROR_CASE >= PS5VK_SAMPLER_MIRROR_FIRST_CASE
+    /* Every mirror variant has its own SDK-linked executable. */
+    return 1;
+#endif
 #if PS5VK_OCCLUSION_QUERY_API_PROBE || PS5VK_GATHER_FORM
     /* These diagnostic modes each carry one artifact-bound transaction. */
     return 1;
@@ -289,7 +296,9 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
         struct ps5vk_sampler_core_case c;
         if(ps5vk_sampler_core_case(probe_case,&c))fail("sampler-core-case",-1);
-        si.addressModeU=si.addressModeV=si.addressModeW=c.address_mode;
+        if(c.mirror_axis==1)si.addressModeU=c.address_mode;
+        else if(c.mirror_axis==2)si.addressModeV=c.address_mode;
+        else si.addressModeU=si.addressModeV=si.addressModeW=c.address_mode;
         si.borderColor=c.border_color;
         si.magFilter=c.mag_filter;
         si.minFilter=c.min_filter;
@@ -709,10 +718,15 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
                         scene_vertices[vertex].uv_angle[0]=u[vertex];
                         scene_vertices[vertex].uv_angle[1]=v[vertex];
                     }
-                } else for(unsigned vertex=0;vertex<3;++vertex)
-                    scene_vertices[vertex].uv_angle[0]=scene_vertices[vertex].uv_angle[1]=c.uv;
-                ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_INPUT case=%u name=%s uv_milli=%d minification=%u expected_bgra=%08x",
-                    witness_index,c.name,(int)(c.uv*1000.0f),c.minification,c.expected_bgra);
+                } else for(unsigned vertex=0;vertex<3;++vertex) {
+                    scene_vertices[vertex].uv_angle[0]=c.uv;
+                    scene_vertices[vertex].uv_angle[1]=c.mirror_axis?c.uv_v:c.uv;
+                }
+                ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_INPUT case=%u name=%s uv_milli=%d uv_v_milli=%d mirror_axis=%u filter=%s minification=%u expected_bgra=%08x",
+                    witness_index,c.name,(int)(c.uv*1000.0f),
+                    (int)((c.mirror_axis?c.uv_v:c.uv)*1000.0f),c.mirror_axis,
+                    c.mag_filter==VK_FILTER_LINEAR?"linear":"nearest",
+                    c.minification,c.expected_bgra);
             } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==11 ||
                       PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
                 if(ps5vk_scene_probe_triangle_uv(scene_vertices))
@@ -1301,14 +1315,18 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
             expected_bgra,expected,other,first_other,valid);
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
         struct ps5vk_sampler_core_case c;size_t expected=0,other=0;
+        uint32_t first_sample=0;
         if(ps5vk_sampler_core_case(witness_index,&c))fail("sampler-core-case",-1);
         for(size_t i=0;i<words;++i) {
-            if(pixels[i]==c.expected_bgra)++expected;
+            if(!first_sample && pixels[i]!=background)first_sample=pixels[i];
+            if(pixels[i]==c.expected_bgra ||
+               (witness_index>=PS5VK_SAMPLER_MIRROR_FIRST_CASE &&
+                ps5vk_sampler_core_color_near(pixels[i],c.expected_bgra,1)))++expected;
             else if(pixels[i]!=background)++other;
         }
         valid=expected==(c.minification?1u:373248u) && !other;
-        ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_READBACK case=%u name=%s expected_bgra=%08x expected=%zu other=%zu valid=%d",
-            witness_index,c.name,c.expected_bgra,expected,other,valid);
+        ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_READBACK case=%u name=%s expected_bgra=%08x actual_bgra=%08x expected=%zu other=%zu valid=%d",
+            witness_index,c.name,c.expected_bgra,first_sample,expected,other,valid);
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE)valid=stats.changed<=
         (uint64_t)pipeline->scissor.extent.width*pipeline->scissor.extent.height && !stats.bad_alpha && !stats.bad_sum;
 #if PS5VK_GATHER_FORM
@@ -4764,6 +4782,18 @@ int main(void)
     di.ppEnabledExtensionNames=host_query_device_extensions;
     di.pNext=&host_query_features;
 #endif
+#if PS5VK_SAMPLER_MIRROR_CASE >= PS5VK_SAMPLER_MIRROR_FIRST_CASE
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    const char *sampler_extensions[]={VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
+        VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME};
+    di.enabledExtensionCount=2;
+    di.ppEnabledExtensionNames=sampler_extensions;
+#else
+    const char *sampler_extension=VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME;
+    di.enabledExtensionCount=1;
+    di.ppEnabledExtensionNames=&sampler_extension;
+#endif
+#endif
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE || PS5VK_SAMPLE_RATE_PROBE || PS5VK_OCCLUSION_QUERY_API_PROBE || (PS5VK_GATHER_FORM>=2 && PS5VK_GATHER_FORM<=4)
     VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
@@ -5313,6 +5343,9 @@ int main(void)
 #endif
     for (unsigned iteration=0;iteration<diagnostic_iterations();++iteration) {
         unsigned witness_index=PS5VK_GRAPHICS_WITNESSES==2 && iteration==3?5:iteration;
+#if PS5VK_SAMPLER_MIRROR_CASE >= PS5VK_SAMPLER_MIRROR_FIRST_CASE
+        witness_index=PS5VK_SAMPLER_MIRROR_CASE;
+#endif
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
         if(PS5VK_GRAPHICS_SCISSOR_PROBE==13) {
             binding_mode=iteration%3;
@@ -5348,7 +5381,8 @@ int main(void)
             scissor=(VkRect2D){{(int32_t)ps5vk_scene_witnesses[witness_index].x,(int32_t)ps5vk_scene_witnesses[witness_index].y},{1,1}};
         } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==13 || ps5vk_scene_full_frame_probe(PS5VK_GRAPHICS_SCISSOR_PROBE)) {
             depth.depthTestEnable=VK_FALSE;
-            scissor=PS5VK_GRAPHICS_SCISSOR_PROBE==6 && witness_index>=6 ?
+            scissor=PS5VK_GRAPHICS_SCISSOR_PROBE==6 &&
+                witness_index>=6 && witness_index<PS5VK_SAMPLER_MIRROR_FIRST_CASE ?
                 (VkRect2D){{960,540},{1,1}}:(VkRect2D){{0,0},{1920,1080}};
         } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==15 && PS5VK_OCCLUSION_DEPTH_PROBE) {
             /* Center of the deterministic planar triangle, after the
