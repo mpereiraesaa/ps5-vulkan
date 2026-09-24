@@ -14,6 +14,40 @@ def _require(condition, label):
         raise ValueError(label)
 
 
+def validate_stream(log, receipt, bye_reason):
+    _require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"), "log hash")
+    _require(receipt.get("protocol") == "ps5log/1" and
+             receipt.get("transport") == "tcp" and
+             receipt.get("clean") is True and receipt.get("bye") is True and
+             receipt.get("gaps") == [] and receipt.get("raw_lines") == 0,
+             "complete TCP receipt")
+    lines = log.decode("utf-8", errors="strict").splitlines()
+    _require(len(lines) > 2 and lines[0].startswith("HELLO ps5log/1 "), "hello")
+    identity = dict(item.split("=", 1) for item in lines[0].split()[2:])
+    manifest_identity = receipt.get("identity", {})
+    _require(identity.get("title") == TITLE and identity.get("app") == APP and
+             all(identity.get(key) == manifest_identity.get(key)
+                 for key in ("title", "app", "boot")), "stream identity")
+    _require(lines[-1].startswith("BYE seq=") and
+             lines[-1].endswith(" reason=" + bye_reason), "complete BYE")
+
+    messages = []
+    previous_time = -1
+    for sequence, line in enumerate(lines[1:-1], 1):
+        fields = line.split("\t", 3)
+        _require(len(fields) == 4 and fields[0] == str(sequence), "sequence")
+        timestamp = int(fields[1])
+        _require(timestamp >= previous_time, "clock ordering")
+        previous_time = timestamp
+        _require(fields[2] in ("MARK", "INFO") and
+                 "CHECK failed" not in fields[3] and
+                 "REQUIRE failed" not in fields[3], "runtime failure")
+        messages.append(fields[3])
+    _require(receipt.get("last_seq") == len(messages), "manifest sequence")
+
+    return messages
+
+
 def validate(log, receipt, artifact):
     _require(artifact.get("title") == TITLE and
              artifact.get("profile") == PROFILE and
@@ -42,35 +76,7 @@ def validate(log, receipt, artifact):
                  for value in shader_hashes),
              "cube-array shader identities")
 
-    _require(hashlib.sha256(log).hexdigest() == receipt.get("sha256"), "log hash")
-    _require(receipt.get("protocol") == "ps5log/1" and
-             receipt.get("transport") == "tcp" and
-             receipt.get("clean") is True and receipt.get("bye") is True and
-             receipt.get("gaps") == [] and receipt.get("raw_lines") == 0,
-             "complete TCP receipt")
-    lines = log.decode("utf-8", errors="strict").splitlines()
-    _require(len(lines) > 2 and lines[0].startswith("HELLO ps5log/1 "), "hello")
-    identity = dict(item.split("=", 1) for item in lines[0].split()[2:])
-    manifest_identity = receipt.get("identity", {})
-    _require(identity.get("title") == TITLE and identity.get("app") == APP and
-             all(identity.get(key) == manifest_identity.get(key)
-                 for key in ("title", "app", "boot")), "stream identity")
-    _require(lines[-1].startswith("BYE seq=") and
-             lines[-1].endswith(" reason=consumer-cube-array-end"), "complete BYE")
-
-    messages = []
-    previous_time = -1
-    for sequence, line in enumerate(lines[1:-1], 1):
-        fields = line.split("\t", 3)
-        _require(len(fields) == 4 and fields[0] == str(sequence), "sequence")
-        timestamp = int(fields[1])
-        _require(timestamp >= previous_time, "clock ordering")
-        previous_time = timestamp
-        _require(fields[2] in ("MARK", "INFO") and
-                 "CHECK failed" not in fields[3] and
-                 "REQUIRE failed" not in fields[3], "runtime failure")
-        messages.append(fields[3])
-    _require(receipt.get("last_seq") == len(messages), "manifest sequence")
+    messages = validate_stream(log, receipt, "consumer-cube-array-end")
 
     def one(prefix):
         found = [message for message in messages if message.startswith(prefix)]

@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTROL = ROOT / "tools/control.py"
 sys.path.insert(0, str(ROOT / "tools"))
 from verify_consumer_resource_abi import validate  # noqa: E402
+from verify_bc_filter_witness import validate as validate_bc_filter
 from verify_cube_array_witness import validate as validate_cube_array  # noqa: E402
 
 
@@ -76,7 +77,10 @@ def main() -> int:
                         help="Require the complete typed uniform-texel format witness")
     parser.add_argument("--cube-array-witness", action="store_true",
                         help="Require the two-cube/six-face sampled-image witness")
+    parser.add_argument("--bc-filter-witness", action="store_true")
     args = parser.parse_args()
+    if args.bc_filter_witness and (args.cube_array_witness or args.texel_rgba8 or args.texel_formats):
+        parser.error("BC filter witness is an independent finite profile")
     if args.cube_array_witness and (args.texel_rgba8 or args.texel_formats):
         parser.error("Cube-array witness is an independent finite profile")
 
@@ -91,7 +95,9 @@ def main() -> int:
         log = wait_for_log(args.runs_dir, known, args.timeout)
         receipt = json.loads(log.with_suffix(".json").read_text())
         artifact = json.loads(args.artifact.read_text())
-        if args.cube_array_witness:
+        if args.bc_filter_witness:
+            result = validate_bc_filter(log.read_bytes(), receipt, artifact)
+        elif args.cube_array_witness:
             result = validate_cube_array(log.read_bytes(), receipt, artifact)
         else:
             result = validate(log.read_bytes(), receipt, artifact,

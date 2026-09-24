@@ -93,13 +93,20 @@ static void report_physical_device_contract(VkInstance instance,
         VK_FORMAT_R32_UINT, &texel);
     vkGetPhysicalDeviceFormatProperties(physical_device,
         VK_FORMAT_UNDEFINED, &unsupported);
+    /* The BC sampling witness uses the diagnostic SDK that also exposes
+     * RGBA8 destinations for BC blits. Keep the exact shipping query intact. */
+    VkFormatFeatureFlags bc_blit_dst = 0;
+#if defined(CONSUMER_BC_FILTER_WITNESS) && CONSUMER_BC_FILTER_WITNESS
+    bc_blit_dst = VK_FORMAT_FEATURE_BLIT_DST_BIT;
+#endif
     REQUIRE(!bgra.linearTilingFeatures &&
             bgra.bufferFeatures == VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT &&
             bgra.optimalTilingFeatures == VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT &&
             /* RGBA8 is the one format with a linear-tiling role: the pinned
              * upstream draw module's host-readback staging image, whose only
              * usage is a transfer destination. */
-            rgba.linearTilingFeatures == VK_FORMAT_FEATURE_TRANSFER_DST_BIT &&
+            rgba.linearTilingFeatures ==
+                (VK_FORMAT_FEATURE_TRANSFER_DST_BIT | bc_blit_dst) &&
             /* RGBA8 also carries the witnessed uniform-texel-buffer role. */
             rgba.bufferFeatures == (VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
                                     VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT) &&
@@ -111,7 +118,7 @@ static void report_physical_device_contract(VkInstance instance,
                  VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
                  /* DXVK262-T06: the blend role the upstream dual-source
                   * family gates every leaf on, witnessed on hardware. */
-                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) &&
+                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT | bc_blit_dst) &&
             !depth.linearTilingFeatures && !depth.bufferFeatures &&
             /* TRANSFER_DST is the whole-subresource vkCmdClearDepthStencilImage
              * this profile executes, and TRANSFER_SRC is the whole-surface
