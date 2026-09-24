@@ -526,6 +526,75 @@ static void bc_source_subresources(VkFormat format, VkFilter filter)
     vkDestroyImage(device,destination,NULL); vkDestroyImage(device,source,NULL);
 }
 
+static void bc_destination_subresources(VkFormat destination_format, VkFilter filter)
+{
+    void *src_map=NULL,*dst_map=NULL;
+    VkImage source=make_image_subresources(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        8,8,2,3,VK_IMAGE_TILING_OPTIMAL,&src_map);
+    VkImage destination=make_image_subresources(destination_format,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        17,9,3,4,VK_IMAGE_TILING_OPTIMAL,&dst_map);
+    struct ps5vk_texture_mip_layout src,dst;
+    assert(!ps5vk_texture_mip_layout_for_slices(source->info.format,8,8,3,2,&src));
+    assert(!ps5vk_texture_mip_layout_for_slices(destination_format,17,9,4,3,&dst));
+    memset(src_map,0xa5,(size_t)src.bytes);
+    for(unsigned layer=0;layer<3;++layer)for(unsigned mip=0;mip<2;++mip) {
+        uint8_t block[8]={31,0,0,0,0,0,0,0}; /* blue in unselected mip/layer */
+        if(mip && layer==1){block[0]=0;block[1]=0xf8;}
+        if(mip && layer==2){block[0]=0xe0;block[1]=7;}
+        unsigned blocks=mip ? 1 : 2;
+        for(unsigned y=0;y<blocks;++y)for(unsigned x=0;x<blocks;++x)
+            memcpy((uint8_t *)src_map+layer*src.layer_stride+src.levels[mip].offset+
+                y*src.levels[mip].row_pitch+x*8,block,8);
+    }
+    uint8_t *expected=malloc((size_t)dst.bytes); assert(expected);
+    source->layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    destination->layout=VK_IMAGE_LAYOUT_GENERAL;
+    for(unsigned mip=0;mip<3;++mip) {
+        unsigned width=17>>mip,height=9>>mip;
+        memset(dst_map,0xa5,(size_t)dst.bytes);memset(expected,0xa5,(size_t)dst.bytes);
+        VkImageBlit blit={.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,1,1,2},
+            .srcOffsets={{0,0,0},{4,4,1}},
+            .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,mip,1,2},
+            .dstOffsets={{1,0,0},{(int)width,(int)height,1}}};
+        VkCommandBuffer command=begin();
+        vkCmdBlitImage(command,source,source->layout,destination,destination->layout,1,&blit,filter);
+        assert(command->state==PS5VK_RECORDING);
+        submit_and_wait(command);
+        for(unsigned layer=1;layer<3;++layer)for(unsigned y=0;y<height;++y)
+            for(unsigned x=1;x<width;++x) {
+                uint8_t *pixel=expected+layer*dst.layer_stride+dst.levels[mip].offset+
+                    y*dst.levels[mip].row_pitch+x*4;
+                pixel[0]=layer==1 ? 255 : 0;pixel[1]=layer==2 ? 255 : 0;
+                pixel[2]=0;pixel[3]=255;
+            }
+        assert(!memcmp(dst_map,expected,(size_t)dst.bytes));
+    }
+    for(unsigned invalid=0;invalid<10;++invalid) {
+        VkImageBlit blit={.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,1,1,2},
+            .srcOffsets={{0,0,0},{4,4,1}},
+            .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,2,1,2},
+            .dstOffsets={{0,0,0},{4,2,1}}};
+        if(invalid==0)blit.dstSubresource.mipLevel=3;
+        if(invalid==1)blit.dstSubresource.mipLevel=UINT32_MAX;
+        if(invalid==2)blit.dstSubresource.baseArrayLayer=4;
+        if(invalid==3)blit.dstSubresource.baseArrayLayer=UINT32_MAX;
+        if(invalid==4)blit.dstSubresource.baseArrayLayer=3; /* two layers overrun */
+        if(invalid==5)blit.srcSubresource.layerCount=blit.dstSubresource.layerCount=UINT32_MAX;
+        if(invalid==6)blit.srcSubresource.layerCount=blit.dstSubresource.layerCount=0;
+        if(invalid==7)blit.dstSubresource.layerCount=1;
+        if(invalid==8)blit.dstOffsets[1].x=5; /* padded ceil width is not Vulkan width */
+        if(invalid==9)blit.dstOffsets[1].y=3;
+        VkCommandBuffer command=begin();
+        vkCmdBlitImage(command,source,source->layout,destination,destination->layout,1,&blit,filter);
+        assert(command->state!=PS5VK_RECORDING && command->operation_count==0);
+        assert(!memcmp(dst_map,expected,(size_t)dst.bytes));
+    }
+    free(expected);
+    vkDestroyImage(device,destination,NULL);vkDestroyImage(device,source,NULL);
+}
+
 static void bc_all_formats_blit(void)
 {
     const uint8_t zero[16]={0};
@@ -823,6 +892,8 @@ int main(void)
                 general_destination ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, srgb);
     bc_source_subresources(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,VK_FILTER_NEAREST);
     bc_source_subresources(VK_FORMAT_BC3_UNORM_BLOCK,VK_FILTER_LINEAR);
+    bc_destination_subresources(VK_FORMAT_R8G8B8A8_UNORM,VK_FILTER_NEAREST);
+    bc_destination_subresources(VK_FORMAT_R8G8B8A8_SRGB,VK_FILTER_LINEAR);
     bc_all_formats_blit();
     for (int variant=0;variant<6;++variant) {
         bc_scaled_blit(VK_FILTER_NEAREST,variant,0);
