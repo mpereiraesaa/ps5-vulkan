@@ -12,6 +12,10 @@ int main(void)
     assert(!ps5vk_depth_layout(129, 128, &layout) && layout.bytes == 131072);
     assert(ps5vk_depth_layout(0, 1080, &layout) == -1 && layout.bytes == 0);
     assert(ps5vk_depth_layout(16385, 1, &layout) == -1);
+    assert(!ps5vk_depth16_layout(128, 128, &layout));
+    assert(layout.bytes == 65536 && layout.pitch == 128 && layout.padded_height == 128);
+    assert(layout.alignment == 65536 && layout.swizzle_mode == 24);
+    assert(ps5vk_depth16_layout(127, 128, &layout) == -1 && layout.bytes == 0);
     VkImageCreateInfo info = {.format=VK_FORMAT_D32_SFLOAT, .imageType=VK_IMAGE_TYPE_2D,
         .extent={1920,1080,1}, .mipLevels=1, .arrayLayers=1, .samples=VK_SAMPLE_COUNT_1_BIT,
         .tiling=VK_IMAGE_TILING_OPTIMAL,.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};

@@ -6,6 +6,11 @@
  * scalar/vector varyings at whole locations and the bounded clip/cull distance
  * declarations of graphics_stages.h; rejects unsupported interfaces. */
 int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *);
+/* Returns 1 when an OpCapability is present, 0 when absent, and -1 for a
+ * malformed instruction stream. Used to gate SPIR-V capabilities on the
+ * logical device's enabled core features. */
+int ps5vk_spirv_module_uses_extended_gather(
+    const struct ps5vk_graphics_module_key *);
 /* Validated TCS entrypoint OutputVertices; zero on unsupported/malformed input.
  * Independent of the pipeline input patchControlPoints. */
 unsigned ps5vk_spirv_tess_output_points(const struct ps5vk_graphics_module_key *);

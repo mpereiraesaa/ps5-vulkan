@@ -24,7 +24,9 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 20/62 ready with 42 blockers. The ordered table preserves the
+live matrix is 25/62 ready with 37 blockers after T07's four resource and
+precise-query features passed the ordinary 829-case selection twice and T08
+DeviceScope passed its ordinary SDK KHR witness and public query. The ordered table preserves the
 original tranche membership.
 
 T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
@@ -33,11 +35,12 @@ default-off diagnostic compute route has twice read back 128 exact 32-bit
 `OpGroupNonUniformBroadcast` results with runtime source IDs and clean guards.
 An independent default-off compute IAdd gate now has host pipeline and actual
 witness-shader compiler evidence plus two strict GPU readbacks of 128/128
-exact 32-bit values with clean guards and retirement. It still has no
-applicable original CTS Pass. A separate default-off signed Int8 compute IAdd
-witness also passed twice with 128 exact wrapped results, zero guard errors
-and clean retirement. This covers one narrow-type operation, not the broader
-type, operation or stage matrix.
+exact 32-bit values with clean guards and retirement. Both witnesses passed
+twice again on the combined T07 and Int16 source; current artifact and run
+identities are in `VALIDATION.md`. A separate default-off signed Int8 compute
+IAdd witness passed twice with 128 exact wrapped results, zero guard errors
+and clean retirement on its recorded artifact. This still has no applicable
+original CTS Pass or broad narrow-type, operation and stage coverage.
 The Broadcast result advances implementation evidence only: the Vulkan 1.1
 extended-types contract still needs narrow types and its applicable original
 CTS, while the Vulkan 1.2 dynamic-ID contract still needs a legal public API
@@ -46,18 +49,20 @@ route and applicable original CTS. Neither row is counted ready or satisfied.
 Tranche delivery and DXVK profile scoring are different gates. The current
 matrix still leaves `geometryShader` and `tessellationShader` as blockers:
 their native witness receipts have not been admitted to the DXVK evidence
-ledger, and the 99 passing tessellation cases are outside its frozen CTS
-selection. This is **evidence reconciliation**, not unfinished T04 rendering
-work. Promote the exact cases and receipts, then regenerate the matrix and
-rerun its gates before changing its count. T07 may proceed using the merged
+ledger, so their native axis is still `reported-not-executed`. This is
+**evidence reconciliation**, not unfinished T04 rendering work. Admit the exact
+receipts (and, optionally, the 99 passing tessellation cases as a
+`cts-focused-pass` record), then regenerate the matrix and rerun its gates
+before changing its count. T07 may proceed using the merged
 T04 implementation; it need not wait for that accounting change. The current
 score is derived from `conformance_inventory/dxvk_v262_matrix.json`.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
-11_0 baseline. Reaching 62/62 means that this profile has complete API,
-implementation, applicable CTS and native evidence. It does **not** by itself
-constitute Vulkan 1.3 conformance: the wider cumulative core contract and the
-official conformance process remain separate obligations.
+11_0 baseline, and the goal is running our DXVK v2.6.2 build on PS5. Reaching
+62/62 means that this profile has complete API, implementation and native
+evidence with no observed applicable CTS failure. It is **not** Vulkan 1.3 conformance: whole-suite CTS
+and the official conformance process are separate goals that no tranche waits
+for and this project does not claim.
 
 ## Ordered tranches
 
@@ -77,7 +82,86 @@ official conformance process remain separate obligations.
 | 12 | T12 — Inline uniform blocks | 7 | Descriptor implementation plus six measured limits. |
 | 13 | T13 — VK_EXT_robustness2 | 3 | Null descriptors and robust resource access. |
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
-| 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
+| 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work, the mandatory 1.0–1.3 core surface and a native run of our DXVK build. |
+
+### T07 combined diagnostic status before public reporting (2026-09-24)
+
+The BC diagnostic route passed three focused original selections: 48/48
+compressed-texture sampling, 128/128 compatible blits and 74/74 copies,
+including mip and array-layer readback. Separate SDK witnesses checked
+interior multi-layer copies and sampled output. A 757-case selection combining
+these 250 BC leaves with the 507 frozen cases is prepared but has not run.
+The cube-array image-view CTS case passed twice; a SDK witness sampled two
+cubes, all six faces and a
+nonzero view base twice each. The original precise-occlusion CTS case passed
+twice and in a 508/508 combined selection, and a native API witness checked
+zero, one and three covered samples with result retrieval and reset. The D32
+comparison-gather leaf passed twice. Exact receipts and artifact hashes are
+recorded in [VALIDATION.md](../VALIDATION.md).
+
+These are bounded diagnostic results. All four T07 feature bits remain off in
+the shipping profile. The cube-compatible sampled colour-attachment role has
+a host-tested tiled descriptor and a packaged render-to-sample witness, but
+that witness has not run on hardware. A 577-case measurement selection now
+includes all 70 applicable original extended-gather leaves alongside the 507
+frozen cases, but it has not run. The complete public feature, frozen CTS and
+combined acceptance audit remain pending.
+
+### T07 public reporting candidate (2026-09-24)
+
+The ordinary build in the T07 candidate now reports `imageCubeArray`,
+`textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise` without diagnostic switches. Its public SDK capability
+probe passed with eboot SHA-256
+`c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae`
+in run `20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2`.
+That probe observed 26/62 requested values; it checks reporting, not execution.
+
+The frozen selection now includes 829 original upstream cases. The ordinary
+CTS package has eboot SHA-256
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`
+and case-list SHA-256
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+Its strict PS5 acceptance remains pending. The four T07 rows therefore remain
+blocked on the CTS axis, and the checked DXVK matrix stays at 20/62 ready with
+42 blockers. [VALIDATION.md](../VALIDATION.md#t07-public-reporting-candidate-2026-09-24)
+separates the candidate from the earlier diagnostic runs.
+
+### T07 public CTS promotion (2026-09-24)
+
+On owner-reported firmware 12.02, the ordinary package above completed two
+strict 829/829 Pass runs, `run-3158572987094` and `run-3231483363368`, with
+zero Fail, NotSupported, missing, unexpected or duplicate cases. The four
+T07 groups each passed twice: cube arrays 1/1, BC 250/250, extended gather
+70/70 and precise occlusion 1/1. Both reports verified the exact eboot and
+selection hashes, complete QPA, clean log transport and normal title closure.
+The four rows now satisfy API, implementation, original CTS and native-evidence
+axes; after the separate T08 DeviceScope KHR witness and public query, the
+checked matrix is **25/62 ready with 37 blockers**. DeviceScope has no
+applicable original message-passing CTS leaf under API 1.0. The earlier
+candidate paragraph records its status before these runs. Full receipt and
+artifact hashes are in [VALIDATION.md](../VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
+
+For T08's extended subgroup Int16 operands, the pinned original Vulkan 1.0
+compute indexing factory is now packaged as an independent `shaderInt16`
+prerequisite. Its `opaccesschain_u16` leaf reaches the original CTS support
+check, which reports `NotSupported` because the shipping core bit is false.
+The one-leaf diagnostic receipt and artifact identity are in `VALIDATION.md`.
+The current frozen acceptance selection remains 829 cases; the Int16 leaf is
+only in a separate diagnostic selection. A build combining that factory with
+the default-off Int16 diagnostic route passed the original 128-value GPU
+oracle twice after forwarding `shaderInt16` to PSBC. Exact artifact and QPA
+identities are in `VALIDATION.md`. Public `shaderInt16`, subgroup features and
+`apiVersion` stay off; the broader Int16 operand matrix, subgroup properties,
+original subgroup CTS and combined profile still need evidence.
+
+T08 has four satisfied requirements on `main`: buffer device address,
+standard uniform-buffer layout, the base Vulkan memory model and DeviceScope.
+Both subgroup bits remain blockers. The Int8 compute compiler probe is default
+off and supplies no public subgroup, `shaderInt8` or API-version credit. A
+combined runtime GPU readback remains the next implementation gate; any later
+public promotion also needs the required narrow-type contracts and applicable
+original CTS under a legal profile. Work toward DXVK continues on API 1.0.
 
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
@@ -87,14 +171,34 @@ a baseline requirement is missing, duplicated or unknown, or if the initially
 satisfied `robustBufferAccess` regresses. It also enforces dependency order and
 the final API promotion gate.
 
+### T08 subgroup profile prerequisites
+
+The pinned registry and original CTS impose different routes for the two T08
+subgroup bits. The actionable format and stage matrix is in
+`conformance_inventory/subgroup_profile_contract.json`; its host checker keeps
+the current public reporting closed while these prerequisites are incomplete.
+
+| Requirement | Legal route and original CTS gate | Current state |
+| --- | --- | --- |
+| `shaderSubgroupExtendedTypes` | `VK_KHR_shader_subgroup_extended_types` requires Vulkan 1.1; the feature is core in 1.2. The original CTS also requires `VK_KHR_shader_float16_int8`, which independently depends on Vulkan 1.1 at this registry pin. Broadcast and arithmetic cases need subgroup `supportedStages` for the tested stage and `supportedOperations` with `BALLOT` and `ARITHMETIC` respectively. The 8/16/64-bit integer and 16-bit float formats need their respective shader features, with storage access for 8/16-bit CTS buffers. | Public bit off; API 1.0; no accepted subgroup CTS or complete native witness. |
+| `subgroupBroadcastDynamicId` | Only `VkPhysicalDeviceVulkan12Features` at this registry pin; the original nonconstant broadcast cases require Vulkan 1.2, SPIR-V 1.5, the feature bit, a supported stage and `BALLOT`. | Public bit off; API 1.0; no extension alias or accepted CTS route. |
+
+`VkPhysicalDeviceSubgroupProperties` supplies `subgroupSize`, `supportedStages`,
+`supportedOperations` and `quadOperationsInAllStages` through properties2.
+The current Vulkan 1.0 KHR query explicitly returns zero for all four fields.
+Compute subgroup support is required by the original CTS;
+other stages depend on their reported masks. The quad field does not establish
+broadcast support. Neither subgroup bit nor `apiVersion` changes in this slice.
+
 ## Readiness versus profile completion
 
 For Vulkan 1.1–1.3 rows, implementation can be ready before the device is
 allowed to advertise the target API version. The backlog therefore reports two
 different facts:
 
-* **implementation ready** means real implementation, applicable CTS and native
-  evidence are green; it does not assert that the capability is advertised;
+* **implementation ready** means real implementation and native evidence are
+  green and no applicable CTS leaf was observed failing; it does not assert
+  that the capability is advertised;
 * **profile satisfied** additionally requires the public API axis and final
   fail-closed verdict to be green.
 
@@ -103,15 +207,30 @@ final Vulkan 1.3.204 gate or creating a circular dependency.
 
 ## Definition of done for a requirement
 
-A row is counted complete only when all four evidence axes in the live matrix
-are green:
+A row is counted complete only when all three gating axes in the live matrix
+are green and its CTS record shows no observed failure:
 
 1. the public query reports the exact supported value and device creation
    accepts it;
-2. the implementation is real and fail-closed for unsupported combinations;
-3. applicable focused upstream CTS passes without weakening its oracle;
-4. an artifact-bound native PS5 run proves execution, output and clean
-   lifecycle through `ps5log/1`.
+2. the implementation is real and fail-closed for unsupported combinations,
+   with host tests for its contract;
+3. an artifact-bound native PS5 run proves execution, output and clean
+   lifecycle through `ps5log/1`; `native-evidence` must name its run ids,
+   artifact SHA-256 and references.
+
+Upstream CTS is regression evidence, not a readiness gate. The matrix records
+it per capability as `cts-pass` (original leaves in the frozen regression
+selection), `cts-focused-pass` (original leaves outside that selection passing
+in a focused run whose run ids, artifact SHA-256 and case-list SHA-256 are
+recorded, with every named case `Pass`), `mapped-not-run` or `not-mapped`.
+A missing, unmapped or unrun leaf does not block an implemented,
+native-witnessed capability. An observed applicable failure, `cts-fail`, stays
+in the ledger and blocks the row until it is explained or fixed. NotSupported,
+Skip and Fail never count as a pass, and no historical report is rewritten.
+Use focused CTS where it validates a concrete contract or helps debugging;
+whole-suite CTS and general Vulkan conformance are not gates for a row or for
+the final API promotion, which instead requires our DXVK v2.6.2 build to create
+its device and run natively.
 
 Properties require measured, defensible values rather than copied profile
 floors. Extensions are enumerated only after every extension capability used by

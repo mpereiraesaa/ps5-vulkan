@@ -1,0 +1,102 @@
+{
+  "schema": "ps5vk-subgroup-profile-contract/1",
+  "registry": {
+    "commit": "b51f6b865c18fc5b33990d12f75e8dfd672cede6",
+    "path": "third_party/vulkan-headers/registry/vk.xml"
+  },
+  "cts": {
+    "commit": "a0270c1897597e6c77679870e10415398a13001c",
+    "utility": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsTestsUtils.cpp",
+    "broadcast": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp",
+    "arithmetic": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp"
+  },
+  "routes": {
+    "shaderSubgroupExtendedTypes": {
+      "extension": "VK_KHR_shader_subgroup_extended_types",
+      "extension_min_api": "1.1",
+      "core_api": "1.2",
+      "query_create": "VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR",
+      "core_query_create": "VkPhysicalDeviceVulkan12Features",
+      "cts_requirements": ["subgroup API 1.1", "supportedStages for the tested stage", "supportedOperations BALLOT for broadcast and ARITHMETIC for arithmetic", "format-specific shader and storage features"]
+    },
+    "subgroupBroadcastDynamicId": {
+      "extension": null,
+      "core_api": "1.2",
+      "query_create": "VkPhysicalDeviceVulkan12Features",
+      "cts_requirements": ["subgroup API 1.1", "supportedStages for the tested stage", "supportedOperations BALLOT", "subgroupBroadcastDynamicId", "SPIR-V 1.5 for nonconstant ID"]
+    }
+  },
+  "api11_command_gate": {
+    "registry_feature": "VK_BASE_VERSION_1_1",
+    "core_commands": [
+      "vkEnumerateInstanceVersion",
+      "vkBindBufferMemory2",
+      "vkBindImageMemory2",
+      "vkGetDeviceGroupPeerMemoryFeatures",
+      "vkCmdSetDeviceMask",
+      "vkEnumeratePhysicalDeviceGroups",
+      "vkGetImageMemoryRequirements2",
+      "vkGetBufferMemoryRequirements2",
+      "vkGetImageSparseMemoryRequirements2",
+      "vkGetPhysicalDeviceFeatures2",
+      "vkGetPhysicalDeviceProperties2",
+      "vkGetPhysicalDeviceFormatProperties2",
+      "vkGetPhysicalDeviceImageFormatProperties2",
+      "vkGetPhysicalDeviceQueueFamilyProperties2",
+      "vkGetPhysicalDeviceMemoryProperties2",
+      "vkGetPhysicalDeviceSparseImageFormatProperties2",
+      "vkTrimCommandPool",
+      "vkGetDeviceQueue2",
+      "vkGetPhysicalDeviceExternalBufferProperties",
+      "vkGetPhysicalDeviceExternalFenceProperties",
+      "vkGetPhysicalDeviceExternalSemaphoreProperties"
+    ],
+    "current_core_dispatch": [],
+    "note": "KHR-suffixed entry points do not provide the required core command names; implementing the names alone would not establish full Vulkan 1.1 conformance."
+  },
+  "properties": {
+    "query": "VkPhysicalDeviceSubgroupProperties via VkPhysicalDeviceProperties2",
+    "core_1_1_alias": "VkPhysicalDeviceVulkan11Properties",
+    "fields": ["subgroupSize", "supportedStages", "supportedOperations", "quadOperationsInAllStages"],
+    "stage_rule": "CTS fails when compute is absent from supportedStages; other tested stages may be NotSupported",
+    "broadcast_operation": "VK_SUBGROUP_FEATURE_BALLOT_BIT",
+    "arithmetic_operation": "VK_SUBGROUP_FEATURE_ARITHMETIC_BIT",
+    "quad_rule": "quadOperationsInAllStages concerns QUAD only; it is not a broadcast prerequisite"
+  },
+  "cts_extended_type_extension_gate": ["VK_KHR_shader_subgroup_extended_types", "VK_KHR_shader_float16_int8"],
+  "cts_float16_int8_prerequisite": {
+    "extension": "VK_KHR_shader_float16_int8",
+    "registry_depends": "VK_KHR_get_physical_device_properties2,VK_VERSION_1_1",
+    "core_api": "1.2",
+    "current_public": false
+  },
+  "cts_stages": {
+    "compute": "VK_SHADER_STAGE_COMPUTE_BIT; missing compute subgroup support is a CTS Fail",
+    "graphics": "VK_SHADER_STAGE_ALL_GRAPHICS; supportedStages must intersect the tested mask",
+    "framebuffer": ["VK_SHADER_STAGE_VERTEX_BIT", "VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT", "VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT", "VK_SHADER_STAGE_GEOMETRY_BIT"],
+    "optional": ["VK_SHADER_STAGE_MESH_BIT_EXT", "VK_SHADER_STAGE_TASK_BIT_EXT", "SHADER_STAGE_ALL_RAY_TRACING"],
+    "framebuffer_narrow_storage": "8/16-bit framebuffer cases additionally require uniformAndStorageBuffer8BitAccess or uniformAndStorageBuffer16BitAccess",
+    "required_subgroup_size": "separate CTS variants require VK_EXT_subgroup_size_control, computeFullSubgroups and requiredSubgroupSizeStages"
+  },
+  "cts_formats": {
+    "8-bit signed/unsigned integer scalar and vec2/3/4": ["shaderSubgroupExtendedTypes", "shaderInt8", "storageBuffer8BitAccess"],
+    "16-bit signed/unsigned integer scalar and vec2/3/4": ["shaderSubgroupExtendedTypes", "shaderInt16", "storageBuffer16BitAccess"],
+    "16-bit float scalar and vec2/3/4": ["shaderSubgroupExtendedTypes", "shaderFloat16", "storageBuffer16BitAccess"],
+    "64-bit signed/unsigned integer scalar and vec2/3/4": ["shaderSubgroupExtendedTypes", "shaderInt64"],
+    "64-bit float scalar and vec2/3/4": ["shaderFloat64"]
+  },
+  "current": {
+    "api": "1.0",
+    "subgroup_properties": "no supported stages or operations",
+    "shaderSubgroupExtendedTypes": false,
+    "subgroupBroadcastDynamicId": false,
+    "cts": "no accepted original subgroup leaves",
+    "native": "no complete extended-types or dynamic-ID profile witness"
+  },
+  "next_evidence": [
+    "Implement and query truthful subgroupSize (power of two), supportedStages and supportedOperations; prove the compute stage, BALLOT Broadcast and ARITHMETIC reductions/scans before selecting their respective CTS leaves.",
+    "For each narrow type, establish shader feature, storage feature where CTS requires it, and compiler/runtime behavior before enabling the extended-types feature.",
+    "Implement true runtime-selected Broadcast ID, then validate the core Vulkan 1.2 query/create route before enabling subgroupBroadcastDynamicId.",
+    "Register and run unchanged applicable CTS leaves, verify their QPA results, and obtain artifact-bound native output evidence before matrix promotion."
+  ]
+}

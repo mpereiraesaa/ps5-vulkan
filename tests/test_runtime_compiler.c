@@ -199,6 +199,24 @@ int main(void)
         free(narrow_code);
         free(narrow_spv);
     }
+    /* Core Int16 arithmetic is separate from 16-bit storage. The fixture
+     * declares Int16 alone and uses only 32-bit storage buffers. */
+    size_t int16_bytes = 0;
+    uint32_t *int16_spv = read_file("build/test-shaders/shader_int16.spv", &int16_bytes);
+    assert(int16_spv);
+    struct ps5vk_compiled_program int16_program = {0};
+    uint32_t *int16_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(int16_spv, int16_bytes / 4,
+        "main", &layout, NULL, 0, &int16_program, &int16_code) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!int16_code);
+    assert(ps5vk_runtime_compile_compute_features(int16_spv, int16_bytes / 4,
+        "main", &layout, NULL, PS5VK_FEATURE_SHADER_INT16,
+        &int16_program, &int16_code) == VK_SUCCESS);
+    assert(int16_code && int16_program.code_words &&
+           int16_program.descriptor_count == 2);
+    free(int16_code);
+    free(int16_spv);
     /* The pinned compiler fixtures declare the actual SPIR-V capabilities.
      * The adapter must keep each option off until its logical-device bit is
      * enabled; DeviceScope also needs the base Vulkan memory model. */
@@ -252,6 +270,46 @@ int main(void)
         free(t08_code);
         free(spirv);
     }
+    /* The owned typed subgroup shader keeps Int8 behind the internal probe.
+     * This proves compiler lowering only; Vulkan 1.2 eligibility and GPU
+     * execution require separate evidence before public feature reporting. */
+    size_t int8_bytes = 0;
+    uint32_t *int8_spv = read_file(
+        "build/test-shaders/t08_subgroup_int8_iadd_runtime.spv", &int8_bytes);
+    assert(int8_spv);
+    VkBool32 has_int8 = VK_FALSE, has_arithmetic = VK_FALSE, has_iadd = VK_FALSE;
+    for (size_t at = 5; at < int8_bytes / 4;) {
+        size_t length = int8_spv[at] >> 16;
+        uint32_t opcode = int8_spv[at] & 0xffffu;
+        assert(length && length <= int8_bytes / 4 - at);
+        if (opcode == 17u && length == 2) {
+            has_int8 |= int8_spv[at + 1] == 39u;
+            has_arithmetic |= int8_spv[at + 1] == 63u;
+        }
+        has_iadd |= opcode == 349u; /* OpGroupNonUniformIAdd */
+        at += length;
+    }
+    assert(has_int8 && has_arithmetic && has_iadd);
+    struct VkPipelineLayout_T int8_layout = {0};
+    int8_layout.set_count = 1;
+    int8_layout.sets[0].count = 1;
+    int8_layout.sets[0].binding[0].count = 1;
+    int8_layout.sets[0].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    int8_layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    struct ps5vk_compiled_program int8_program = {0};
+    uint32_t *int8_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(int8_spv, int8_bytes / 4,
+        "main", &int8_layout, NULL, 0, &int8_program, &int8_code) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!int8_code);
+    assert(ps5vk_runtime_compile_compute_features(int8_spv, int8_bytes / 4,
+        "main", &int8_layout, NULL, PS5VK_FEATURE_SHADER_INT8_COMPUTE,
+        &int8_program, &int8_code) == VK_SUCCESS);
+    assert(int8_code && int8_program.code_words && int8_program.gfx == 1013 &&
+           int8_program.wave_size == 32);
+    free(int8_code);
+    free(int8_spv);
+
     /* The original ssbo_local_barrier_multiple_groups shader uses GLSL450
      * OpMemoryModel and Device-scope barriers. Advertising the separate KHR
      * base feature on the logical device must not reinterpret that legacy
@@ -301,13 +359,15 @@ int main(void)
     /* 4. Test error handling */
     struct ps5vk_compiled_program bad_prog;
     uint32_t *bad_code = NULL;
+    /* Every mask bit is now assigned; reject an invalid feature dependency. */
     assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
-        NULL, UINT32_C(0x80000000), &bad_prog, &bad_code) == VK_ERROR_FEATURE_NOT_PRESENT);
+        NULL, PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE, &bad_prog,
+        &bad_code) == VK_ERROR_FEATURE_NOT_PRESENT);
     /* Every graphics-only device feature the console platform reports and the
      * pinned CTS enables on the device it creates must be transparent to the
-     * compute adapter: the mask of a real T03 device compiles a compute shader
-     * exactly like the bare mask does. A promotion candidate that forgot one
-     * of these bits failed every compute pipeline on hardware. */
+     * compute adapter: the full device mask compiles a compute shader exactly
+     * like the bare mask does. A promotion candidate that forgot one of these
+     * bits failed every compute pipeline on hardware. */
     {
         struct ps5vk_compiled_program graphics_device_program;
         uint32_t *graphics_device_code = NULL;
@@ -315,10 +375,19 @@ int main(void)
             PS5VK_FEATURE_STORAGE_BUFFER_8BIT | PS5VK_FEATURE_STORAGE_BUFFER_16BIT |
             PS5VK_FEATURE_SHADER_DRAW_PARAMETERS | PS5VK_FEATURE_MULTIVIEW |
             PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE | PS5VK_FEATURE_MULTI_DRAW_INDIRECT |
-            PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32;
+            PS5VK_FEATURE_FULL_DRAW_INDEX_UINT32 |
+            PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
         assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
             NULL, graphics_device_mask, &graphics_device_program,
             &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* The default-off core shaderInt16 bit must pass the adapter mask.
+         * Module and pipeline validation decide whether Int16 is enabled. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, graphics_device_mask | PS5VK_FEATURE_SHADER_INT16,
+            &graphics_device_program, &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);
         /* Standard UBO layout changes SPIR-V layout validation, not PSBC's
@@ -357,10 +426,24 @@ int main(void)
             &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);
-        /* A bit above every known feature still fails closed. */
+        /* T07 image/gather/query bits at 24-27 are legal on the same logical
+         * device and must not be confused with unknown bits. */
+        const uint32_t t07_device_mask = t06_device_mask |
+            PS5VK_FEATURE_IMAGE_CUBE_ARRAY |
+            PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED |
+            PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
+            PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
         graphics_device_code = NULL;
         assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
-            NULL, t06_device_mask | (1u << 31), &graphics_device_program,
+            NULL, t07_device_mask, &graphics_device_program,
+            &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* A device-scope request without the base memory model fails closed. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, t06_device_mask | PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE,
+            &graphics_device_program,
             &graphics_device_code) == VK_ERROR_FEATURE_NOT_PRESENT);
     }
 

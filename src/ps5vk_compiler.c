@@ -155,11 +155,10 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_DEPTH_CLAMP |
                           PS5VK_FEATURE_FILL_MODE_NON_SOLID |
                           PS5VK_FEATURE_MULTI_VIEWPORT |
-                          /* The four DXVK262-T06 bits govern fragment and
-                          * fixed-function graphics behaviour. A compute
-                          * pipeline created on the same logical device must
-                          * ignore them, while every unknown bit outside this
-                          * explicit list remains fail-closed. */
+                          /* Graphics-only device features are accepted on a
+                           * compute pipeline without changing the PSBC
+                           * compile options. The adapter still rejects any
+                           * unknown feature bit outside this allow-list. */
                           PS5VK_FEATURE_INDEPENDENT_BLEND |
                           PS5VK_FEATURE_DUAL_SRC_BLEND |
                           PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS |
@@ -167,15 +166,25 @@ VkResult ps5vk_runtime_compile_compute_features(
                           PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS |
                           PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
                           PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE |
-                          PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT))
+                           PS5VK_FEATURE_IMAGE_CUBE_ARRAY |
+                          PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED |
+                          PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
+                          PS5VK_FEATURE_TEXTURE_COMPRESSION_BC |
+                          /* The UBO layout gate is checked at module creation;
+                           * Int16 is forwarded to the PSBC compute adapter. */
+                          PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT |
+                           PS5VK_FEATURE_SHADER_INT16 |
+                           PS5VK_FEATURE_SHADER_INT8_COMPUTE))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if ((feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE) &&
         !(feature_mask & PS5VK_FEATURE_VULKAN_MEMORY_MODEL))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     opts.enable_storage_buffer_8bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_8BIT);
+    opts.enable_int8 = !!(feature_mask & PS5VK_FEATURE_SHADER_INT8_COMPUTE);
     opts.enable_storage_buffer_16bit_access =
         !!(feature_mask & PS5VK_FEATURE_STORAGE_BUFFER_16BIT);
+    opts.enable_int16 = !!(feature_mask & PS5VK_FEATURE_SHADER_INT16);
     opts.enable_physical_storage_buffer_addresses =
         !!(feature_mask & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS);
     opts.enable_vulkan_memory_model =
