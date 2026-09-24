@@ -20,6 +20,7 @@
 #include "vktPipelineBlendTests.hpp"
 #include "vktPipelineMultisampleTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
+#include "vktSpvAsmIndexingTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
 #include "vktDrawShaderDrawParametersTests.hpp"
@@ -39,6 +40,8 @@
 #include "vktFragmentOperationsTests.hpp"
 #include "vktRenderPassTests.hpp"
 #include "vktUniformBlockTests.hpp"
+#include "subgroups/vktSubgroupsBallotBroadcastTests.hpp"
+#include "subgroups/vktSubgroupsArithmeticTests.hpp"
 #include "vktQueryPoolTests.hpp"
 #include "vktShaderRenderTextureGatherTests.hpp"
 #include "vktTestGroupUtil.hpp"
@@ -96,6 +99,17 @@ FocusedVkTestPackage::~FocusedVkTestPackage(void)
 
 void FocusedVkTestPackage::init(void)
 {
+    // Original subgroup Broadcast and arithmetic factories and support checks. No subgroup
+    // leaves enter the frozen selection until the public API/profile gate is
+    // satisfied and their unchanged oracles pass on hardware.
+    {
+        de::MovePtr<tcu::TestCaseGroup> subgroupGroup(
+            new tcu::TestCaseGroup(m_testCtx, "subgroups"));
+        subgroupGroup->addChild(vkt::subgroups::createSubgroupsBallotBroadcastTests(m_testCtx));
+        subgroupGroup->addChild(vkt::subgroups::createSubgroupsArithmeticTests(m_testCtx));
+        addChild(subgroupGroup.release());
+    }
+
     // ubo: unchanged upstream standard-layout cases and their buffer oracle.
     // The case list selects a bounded subset; registration alone changes no
     // public feature report or frozen acceptance selection.
@@ -411,6 +425,9 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createWorkgroupMemoryComputeGroup(m_testCtx));
+        // Original Vulkan 1.0 Int16 indexing leaves give the dormant core
+        // shaderInt16 route an applicable CTS oracle once it is measured.
+        computeGroup->addChild(vkt::SpirVAssembly::createIndexingComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocusedVolatileAtomicComputeGroup(m_testCtx));
         instructionGroup->addChild(computeGroup.release());
         spirvGroup->addChild(instructionGroup.release());

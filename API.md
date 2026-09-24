@@ -5,6 +5,13 @@ PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely. Each
 capability below states its evidence boundary when it is narrower than native
 hardware acceptance.
 
+This document describes the ordinary build at the T07 `main` checkpoint.
+Earlier measurements below are dated history, not the current advertised
+profile. A missing focused CTS result is not, by itself, a reason to reject an
+otherwise implemented and strictly GPU-witnessed capability; an observed CTS
+failure remains a defect to investigate. The public device still reports
+Vulkan 1.0, and no complete 1.1/1.2/1.3 core contract is claimed.
+
 ## Capability introspection
 
 The independently staged consumer includes an optional DXVK 2.6.2 D3D11
@@ -23,10 +30,11 @@ mean the driver advertises them; the reported device version remains Vulkan
 
 ## Core feature negotiation
 
-- `robustBufferAccess` is the one Vulkan 1.0 core feature currently reported
-  true. Device creation accepts it through either `pEnabledFeatures` or the
-  `VkPhysicalDeviceFeatures2` chain, rejects malformed booleans, and rejects
-  every unreported core feature.
+- `robustBufferAccess` is reported true. Device creation accepts it through
+  either `pEnabledFeatures` or the `VkPhysicalDeviceFeatures2` chain, rejects
+  malformed booleans, and rejects every unreported core feature. Other
+  graphics feature bits are listed individually below; this is not a claim
+  that only one Vulkan 1.0 feature is available.
 - Storage and uniform buffer descriptors carry their actual byte extent and
   use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
   the bound buffer span. This is the implementation basis for the feature, not
@@ -70,11 +78,14 @@ mean the driver advertises them; the reported device version remains Vulkan
 
 ## Graphics
 
-- Exactly one vertex stage and one fragment stage per graphics pipeline.
-- Triangle-list and triangle-strip topology, fill rasterization and line
-  width 1. Triangle strips are accepted and linked with the pinned GFX1013
-  primitive type 6, but no strip draw has a native witness yet; every other
-  topology is refused at pipeline creation.
+- Runtime vertex/fragment graphics pipelines plus the bounded, hardware-tested
+  geometry and tessellation stage combinations described in
+  [TESSELLATION_STATUS.md](TESSELLATION_STATUS.md). Do not infer arbitrary
+  shader-stage combinations from these witnesses.
+- Indexed and non-indexed triangle draws, with separately measured non-solid
+  fill, depth clamp/bias and viewport selection. Some additional topologies
+  and vertex-input modes remain fail-closed; see their individual contracts
+  and [VALIDATION.md](VALIDATION.md).
 - Up to 16 vertex bindings numbered 0–15, per-vertex input, with up to 32 attribute
   locations. Supported attributes are `R8` and `R8G8` UNORM/SNORM/UINT/SINT;
   `R8G8B8A8` UNORM/SNORM/UINT/SINT; packed `A8B8G8R8`
@@ -99,12 +110,13 @@ mean the driver advertises them; the reported device version remains Vulkan
   has no native witness of its own yet, so this list does not claim it.
 - Indexed and non-indexed draws. Index buffers support `uint16` and `uint32`,
   including offsets and signed base vertex.
-- One viewport and scissor, supplied statically at pipeline creation or through
-  `vkCmdSetViewport` / `vkCmdSetScissor` before each affected draw.
-- One BGRA8 presentation attachment or RGBA8 off-screen color attachment and
-  one sample. `LOAD`, `CLEAR`, `DONT_CARE`, `STORE` and
-  `DONT_CARE` store semantics are supported by the bounded native path.
-  Blending, logic ops and multisampling are unsupported.
+- Static or dynamic viewport/scissor state, with the measured multi-viewport
+  path gated by the advertised `multiViewport` feature.
+- One or two BGRA8/RGBA8 colour attachments with bounded load/store semantics,
+  independent and dual-source blending, and 1x/2x/4x colour sample counts.
+  Per-sample shading, input-attachment reads and resolve are measured at 2x
+  and 4x. Logic ops, multisampled depth and sampled multisample images remain
+  unsupported.
 - One or two subpasses may be described, recorded and **executed**. The native
   two-subpass path is deliberately bounded: both subpasses use the same colour
   and optional D32 attachment with the same layouts, and accept either no
@@ -114,34 +126,14 @@ mean the driver advertises them; the reported device version remains Vulkan
   stencil and depth bounds are unsupported.
 - Face culling and front-face selection are encoded by the native backend.
 
-All seven remaining Vulkan 1.0 dynamic-state setters are public and retain
-validated command-buffer state: line width, depth bias, blend constants, depth
-bounds and the three stencil masks/references. Because `wideLines` and
-`depthBiasClamp` are not advertised, their valid recording subset is line width
-`1.0` and depth-bias clamp `0.0`. Graphics pipeline creation still rejects
-these seven `VkDynamicState` values: the native draw backend does not yet
-consume them. Recording therefore establishes a real, non-interfering state
-contract without claiming dynamic blending, stencil, depth bounds or depth
-bias execution. Viewport and scissor remain the only dynamic states consumed by
-draws.
-
-The DXVK262-T05 rasterization and viewport states - `depthBiasClamp`,
-`depthClamp`, `fillModeNonSolid` and `multiViewport` - are implemented end to
-end behind a build-time measurement gate (`PS5VK_RASTER_DIAGNOSTIC`) and are
-**not advertised**: the shipping platform mask sets none of the four bits, a
-request for one is still rejected before device creation, and the profile keeps
-reporting `maxViewports` 1. They are gated rather than shipped because no
-upstream CTS leaf is applicable to them yet - the candidate families and their
-exact blocking reasons are in [UPSTREAM_CTS.md](UPSTREAM_CTS.md) - and because
-the first hardware run of their own witnesses leaves six of thirty-one raster
-cases unverified, as recorded in
-[VALIDATION.md#rasterization-and-viewport-witnesses](VALIDATION.md#rasterization-and-viewport-witnesses).
-The shader-selected viewport path itself is now measured - a geometry stage
-routing sixteen primitives to sixteen banks through `gl_ViewportIndex` - so
-`multiViewport` is held back by the missing upstream leaf and the six cases
-rather than by the driver.
-Nothing here should be read as these features being usable by an application
-today.
+The remaining Vulkan 1.0 dynamic-state setters retain validated command-buffer
+state. Their native draw effects are supported only where separately documented;
+recording a setter does not imply that every dynamic pipeline mode executes.
+The four rasterization and viewport features `depthBiasClamp`, `depthClamp`,
+`fillModeNonSolid` and `multiViewport` are advertised in the ordinary graphics
+build following the native pixel witnesses and focused qualification recorded
+in [VALIDATION.md](VALIDATION.md). The diagnostic build switch used during
+development is not required to request those features now.
 
 DXVK262-T06 finished at the other end: `dualSrcBlend` **is advertised** by the
 shipping platform. The path is the one described above - exact `SRC1` register
@@ -427,9 +419,12 @@ smaller incompatible layer pitches. The graphics profile reports
   later segment is prepared or launched. Destination ranges are flushed through
   the memory backend before following GPU use.
 
-The transfer family remains deliberately bounded. The image-copy profile below
-does not imply general image formats, tiling, blit or resolve support; blit and
-resolve remain fail-closed entry points.
+The transfer family remains deliberately bounded. The historical RGBA8-only
+image-copy profile below was the first supported slice, not the whole current
+surface: T07 added BC copy/blit paths with their own format, mip and layer
+constraints and strict native witnesses. Resolve is supported only in the
+measured multisampled-colour attachment path. Neither result establishes a
+general image transfer, blit or resolve implementation.
 
 ## Image copy and colour clear
 

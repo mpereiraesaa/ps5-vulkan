@@ -1869,6 +1869,73 @@ static void tessellation_feature_negotiation(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void shader_int16_core_route(void)
+{
+    VkInstance instance_with_features2 = features2_instance();
+    VkPhysicalDevice p = physical(instance_with_features2);
+    assert(!(p->platform.supported_features & PS5VK_FEATURE_SHADER_INT16));
+    VkPhysicalDeviceFeatures reported;
+    vkGetPhysicalDeviceFeatures(p, &reported);
+    assert(!reported.shaderInt16);
+    VkDeviceQueueCreateInfo queue; float priority;
+    VkDeviceCreateInfo info = device_info(&queue, &priority);
+    VkPhysicalDeviceFeatures requested = {.shaderInt16 = VK_TRUE};
+    info.pEnabledFeatures = &requested;
+    const unsigned before = opened;
+    VkDevice device = VK_NULL_HANDLE;
+    assert(vkCreateDevice(p, &info, NULL, &device) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !device && opened == before);
+
+    /* Host-only capable-platform simulation; the shipping platform mask is
+     * unchanged until native and original CTS evidence justify promotion. */
+    p->platform.supported_features |= PS5VK_FEATURE_SHADER_INT16;
+    vkGetPhysicalDeviceFeatures(p, &reported);
+    assert(reported.shaderInt16);
+    VkPhysicalDeviceFeatures2 reported2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    vkGetPhysicalDeviceFeatures2KHR(p, &reported2);
+    assert(reported2.features.shaderInt16);
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features & PS5VK_FEATURE_SHADER_INT16);
+    vkDestroyDevice(device, NULL);
+
+    VkPhysicalDeviceFeatures2 chained = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .features.shaderInt16 = VK_TRUE};
+    info.pEnabledFeatures = NULL;
+    info.pNext = &chained;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(device->enabled_features & PS5VK_FEATURE_SHADER_INT16);
+    vkDestroyDevice(device, NULL);
+    chained.features.shaderInt16 = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(!(device->enabled_features & PS5VK_FEATURE_SHADER_INT16));
+    vkDestroyDevice(device, NULL);
+    vkDestroyInstance(instance_with_features2, NULL);
+}
+
+static void unadvertised_subgroup_properties(void)
+{
+    VkInstance i = features2_instance();
+    VkPhysicalDevice p = physical(i);
+    assert(VK_API_VERSION_MAJOR(p->platform.properties.apiVersion) == 1);
+    assert(VK_API_VERSION_MINOR(p->platform.properties.apiVersion) == 0);
+    VkPhysicalDeviceSubgroupProperties subgroup = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
+        .subgroupSize = 99u,
+        .supportedStages = VK_SHADER_STAGE_ALL,
+        .supportedOperations = VK_SUBGROUP_FEATURE_BALLOT_BIT,
+        .quadOperationsInAllStages = VK_TRUE};
+    VkPhysicalDeviceProperties2 properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &subgroup};
+    vkGetPhysicalDeviceProperties2KHR(p, &properties);
+    assert(!subgroup.subgroupSize && !subgroup.supportedStages &&
+           !subgroup.supportedOperations && !subgroup.quadOperationsInAllStages);
+    assert(properties.properties.apiVersion == VK_API_VERSION_1_0);
+    vkDestroyInstance(i, NULL);
+}
+
 static void memory_model_feature_negotiation(void)
 {
     VkInstance i = features2_instance();
@@ -2257,6 +2324,8 @@ int main(void)
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     consumer_physical_queries();
     tessellation_feature_negotiation();
+    shader_int16_core_route();
+    unadvertised_subgroup_properties();
     memory_model_feature_negotiation();
     single_device_group_creation();
     buffer_address_command_gate();

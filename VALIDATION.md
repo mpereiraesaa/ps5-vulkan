@@ -1,5 +1,21 @@
 # Runtime graphics validation
 
+## Current evidence policy (2026-09-24)
+
+This file preserves dated hardware receipts, including failed candidates; a
+historical requirement to run every selected CTS leaf twice is not the current
+delivery rule. For a new capability, require a public-API contract, positive
+and negative host tests, and **one** strict native run tied to the exact build
+artifact, with a deterministic GPU-visible oracle and clean lifecycle. Repeat a
+run when its result is ambiguous, flaky, or changed by a fix, not merely to
+produce a second identical receipt. Focused upstream CTS is valuable for
+regression and diagnosis but an absent or unmapped CTS case is not, by itself,
+a reason to withhold an otherwise measured bounded capability. A real failing
+applicable CTS result must remain visible and be investigated; this policy
+does not turn failures into passes. None of these project checks is a claim of
+Vulkan conformance or a complete core-version implementation. The ordinary
+device still reports Vulkan 1.0.
+
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
@@ -1674,7 +1690,7 @@ new CTS or hardware claim was attached to the original structural slice.
 Secondary command buffers and one bounded two-subpass profile left that list
 later through the native evidence recorded below.
 
-## Current capability gap ledger (unsupported, not planned)
+## Current capability gap ledger (bounded or unsupported)
 
 The 137/137 figure above is structural. This ledger is the current list of
 exported boundaries that do not execute the general Vulkan operation their name
@@ -1690,12 +1706,15 @@ drift away from the documents again.
 
 <!-- capability-gap-ledger:begin -->
 
-- `vkCmdBlitImage` — unsupported. No GPU scaling or filtering path exists, no
-  blit feature bit is advertised, and the call records nothing.
-- `vkCmdResolveImage` — unsupported. Multisample image creation is not
-  implemented, and a single-sample copy is never accepted as a resolve.
-- `vkCmdClearAttachments` — unsupported. There is no in-render-pass attachment
-  clear path.
+- `vkCmdBlitImage` — bounded. The T07 BC-to-RGBA8 path accepts selected
+  compressed source shapes, mip/layer ranges and nearest/linear filtering;
+  general format, scaling and blit combinations remain unsupported.
+- `vkCmdResolveImage` — unsupported as a standalone command. The separately
+  measured 2x/4x colour-attachment resolve path does not make this entry point
+  a general image resolve.
+- `vkCmdClearAttachments` — bounded. One BGRA8/RGBA8 colour attachment or a
+  D16 depth attachment may be cleared over validated in-pass rectangles;
+  other aspects, formats, attachment combinations and scopes are unsupported.
 - `vkCmdClearDepthStencilImage` — bounded, not general. The whole subresource of
   a one-sample `VK_FORMAT_D32_SFLOAT` 2D target clears to a depth value in
   `[0,1]`, and that single shape is qualified on hardware. Stencil aspects,
@@ -1722,10 +1741,10 @@ drift away from the documents again.
 - `vkQueueBindSparse` — unsupported. No queue advertises
   `VK_QUEUE_SPARSE_BINDING_BIT`, and the call fails closed without mutating
   queue, fence or semaphore state.
-- Real query results — unsupported. Only bounded occlusion pools are created.
-  Reset is ordered and observable, but `vkGetQueryPoolResults` reports
-  `VK_NOT_READY` with an untouched destination, and occlusion begin/end,
-  `vkCmdCopyQueryPoolResults` and timestamp writes are fail-closed.
+- Real query results — bounded. Occlusion begin/end, result retrieval and
+  `vkCmdCopyQueryPoolResults` publish measured counts; the precise path has a
+  public-SDK witness. Timestamp and pipeline-statistics pools remain
+  unsupported, and `vkCmdWriteTimestamp` stays fail-closed because
   `timestampValidBits` is reported as zero.
 
 <!-- capability-gap-ledger:end -->
@@ -4654,12 +4673,113 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
+The host route for core `shaderInt16` maps the legacy and Features2 query,
+device opt-in, shader-module gate, compute pipeline gate and compiler feature
+mask. The compute adapter forwards that bit to PSBC's `enable_int16` option.
+A host fixture declares only `Int16` and `Shader` capabilities, with 32-bit
+storage buffers: it is rejected without `shaderInt16` and compiles with it.
+The ordinary platform bit remains false. The original CTS measurement below
+establishes one bounded GPU prerequisite, followed by outstanding combined
+subgroup profile checks; it does not establish subgroup correctness.
+
+An isolated diagnostic build combined this route with the unchanged pinned
+indexing factory from the separate original-CTS registration change. With
+`PS5VK_SHADER_INT16_DIAGNOSTIC=1`, the original Vulkan 1.0
+`spirv_assembly.instruction.compute.indexing.input.struct.opaccesschain_u16`
+leaf passed its 128-value GPU oracle twice on the same signed eboot SHA-256
+`b602a2d71019d08c4a290007b746675173cbeb80ca0b5654228c1b0da0fcf345`.
+The one-leaf selection SHA-256 was
+`a49a36073c093f0e5e13f88d7b36be9255c5235cfa17c3c11583fe486d8286b9`:
+run `run-633858541401345` had QPA SHA-256
+`99d80d69b7f863cca7cb3ad2498891b153fa3d876359f854d11ca27bacfdc452`,
+and run `run-633899483926515` had QPA SHA-256
+`00bc3640af0723be07938ddcef7b52ac4758e872e76dff4b0b5c5c7864e866a2`.
+Both strict receipts recorded one Pass, zero Fail/NotSupported/missing or
+unexpected cases, and clean title closure. A preceding diagnostic eboot
+`25e0ed2ca670870214cfc8ec33c03cc972ced1614c7a320346d6ed7cd990588b`
+reached pipeline creation but failed with `VK_ERROR_UNKNOWN` because the
+compiler adapter had not forwarded the Int16 option. These measurements do
+not promote public `shaderInt16`, either subgroup bit, or `apiVersion`.
+Firmware was not independently recorded in these receipts.
+
+The unchanged frozen upstream acceptance selection on this default-off route
+passed 507/507 original cases, with zero Fail, NotSupported, missing,
+unexpected or duplicate results. The strict receipt verified signed eboot
+SHA-256 `a52ae2b604e722ad793bb54aa06a0b9cd5d24875c09d72a4d717ca26e6965380`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`9302316ca811d8359e5077f132d45ad93f7e8f0fe55551cfd24d5b9d64fb3b2d`
+for run `run-624227907988111`. The title closed, and the previously accepted
+payload was restored. This is Vulkan 1.0 selection neutrality, not an
+applicable original Int16 or subgroup CTS pass. The receipt does not record
+firmware, so this run makes no new firmware claim.
+
+After the diagnostic switch and PSBC Int16 option were added, the ordinary
+default-off build of this branch passed the same frozen 507-case selection:
+run `run-634753171512544`, signed eboot SHA-256
+`b6e2f729755d1a96fe621933c9418c20f606e50b9e0b9321118e8a510e810e48`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`85f1777cd6cf897a384225f21111dee714bc4c5e87038d7ebd2aeaf5d59c0771`.
+The strict receipt had 507 Pass, zero Fail, NotSupported, missing, unexpected
+or duplicate cases, and clean title closure. An earlier attempt with this
+identical eboot stopped while emitting QPA before a final receipt; it was
+closed and is not counted as an acceptance run. Firmware was not
+independently recorded in these receipts.
+The unchanged arithmetic factory first requires subgroup support and
+`VK_SUBGROUP_FEATURE_ARITHMETIC_BIT` in `supportedOperations`, then checks the
+operand format and any 8/16-bit uniform-buffer storage requirement. Package
+registration alone does not satisfy these gates or validate an oracle.
+
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
 `subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
 Add and Min cases and graphics-stage subgroup operations beyond the bounded
 vertex and fragment Broadcast draws remain unproven on hardware. These
 diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
+
+The host `VkPhysicalDeviceProperties2KHR` contract now writes zero to all four
+`VkPhysicalDeviceSubgroupProperties` fields for this Vulkan 1.0 profile, even
+when the caller supplied nonzero prior values. This closes an ambiguous public
+query; it does not measure subgroup size, stages or operations on hardware.
+Those values, a legal Vulkan 1.1 or 1.2 route, the feature bits and targeted
+native execution evidence remain prerequisites to subgroup promotion. The
+original subgroup CTS cases remain ineligible under the public API 1.0.
+
+The unchanged frozen upstream acceptance selection on this query-only change
+passed 507/507 original cases with zero Fail, NotSupported, missing, unexpected
+or duplicate results. The strict receipt verified the signed eboot SHA-256
+`c88bb1a66b8f8690b833fd74e9a3ed99a8769dc576731265042014d48a516f01`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`a09dfd8ba9483c26cb388f99196bab6c69b552fee42c3ad40110e4bb3af14536`
+for run `run-623240048430401`. The title closed, and the previously accepted
+payload was restored. This proves neutrality for the selected Vulkan 1.0 CTS
+suite; it includes no applicable original subgroup leaf. The receipt does not
+record firmware, so this run makes no new firmware claim.
+
+The focused CTS package now links and registers the unchanged original
+`subgroups.ballot_broadcast` and `subgroups.arithmetic` factories, but the
+frozen 507-case acceptance selection still contains no subgroup leaf. A
+separate diagnostic selection
+added the pinned mustpass cases `compute.subgroupbroadcast_i8vec4` and
+`compute.subgroupbroadcast_nonconst_uint` to the 507 controls. Run
+`run-619192142197878` reported 507 Pass and both subgroup leaves
+`NotSupported`, each at `vktSubgroupsBallotBroadcastTests.cpp:265` with
+"Subgroup operations are not supported"; there were no missing or unexpected
+cases. The verified QPA SHA-256 was
+`91a93da09d6e82d4ec2d870ce896e87f85ad1bcda8c33213a2e340fafc206cc7`,
+the signed eboot SHA-256 was
+`5c252dd90d2ef8e29cf6dfc15bd51f779949159173c6d983006b2e531763ef89`,
+and the diagnostic selection hash was
+`d5694f3de21a6d00086566d56f58bda26106cf02c7b7b74a4292736838b124c4`.
+The title closed and the accepted payload was restored. Firmware was not
+recorded in this receipt. This run verifies runtime registration and the
+current first support gate; it supplies no subgroup CTS pass or feature
+promotion evidence.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
@@ -4781,8 +4901,8 @@ under the same frozen selection.
 
 ### Vulkan memory model DeviceScope
 
-The separate DeviceScope bit stays false. In a diagnostic build, two unchanged
-same-dispatch cross-workgroup runs on eboot
+The earlier diagnostic build kept the separate DeviceScope bit false in the
+ordinary profile. Two unchanged same-dispatch cross-workgroup runs on eboot
 `035e0a631e4f5521543b33c16f45c19e67e0beb3ce998180fe414f3cda0a1e40`
 each observed all 1024 producer/consumer pairs with zero skips, value failures
 or guard mismatches and bounded fence completion: runs
@@ -4790,8 +4910,46 @@ or guard mismatches and bounded fence completion: runs
 `20260923T110031778Z_PPSA99994_ps5vk_0x1e8718860bd81`. The original
 `vktMemoryModelMessagePassing.cpp` support check rejects API versions below
 1.1 before querying the feature, so no original DeviceScope leaf is eligible
-on this Vulkan 1.0 profile. That CTS/API boundary prevents promotion despite
-the bounded GPU result.
+on this Vulkan 1.0 profile.
+
+The ordinary SDK candidate now advertises `vulkanMemoryModelDeviceScope=1`
+through `VK_KHR_vulkan_memory_model` while leaving `apiVersion=1.0.0`.
+Its SDK-linked witness uses SPIR-V 1.0 VulkanKHR Device-scope acquire/release
+atomics and checks public query, opt-in and the required base-model dependency.
+Signed eboot SHA-256
+`2fc3798c759d71395a5f3256ec74c558705f9613bc0b5811ce23d677ec2ab560`
+passed twice after integrating the subgroup-properties change from main: runs
+`20260924T205016235Z_PPSA99994_ps5vk_0xad3993a0361` and
+`20260924T205028932Z_PPSA99994_ps5vk_0xad68e0ca74e` each observed
+1024/1024 producer-consumer pairs, zero skipped pairs, value or guard
+mismatches, bounded fence completion and clean retirement. Both runs closed
+the title, restored the acceptance eboot and left the console idle. The
+receipt did not record firmware.
+
+The separate ordinary public-ABI capability probe, signed eboot SHA-256
+`0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff`,
+strictly verified all 62 query records in run
+`20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178` (log SHA-256
+`3972ab2ecf71688a19b70c361d132c278b70186bc0166bcd941f33d9179503f0`).
+It observed DeviceScope true through the KHR feature chain, 27 requested
+query values and 35 query blockers; the query probe does not execute shaders.
+The checked four-axis DXVK matrix reaches 25/62 ready, with 37 blockers.
+DeviceScope's CTS axis is `not-mapped`, not `cts-pass`; the bounded witness
+does not establish general Vulkan conformance or all memory-model litmus cases.
+
+The pinned registry permits the `VK_KHR_vulkan_memory_model` feature query and
+device-create chain through `VkPhysicalDeviceVulkanMemoryModelFeatures` when
+`VK_KHR_get_physical_device_properties2` is present. This route does not
+require reporting Vulkan 1.1, but it does not remove the original CTS gate:
+the `ext` message-passing factory checks for Vulkan 1.1 before the
+`vulkanMemoryModelDeviceScope` feature, including its `device` scope cases.
+The API feature consistency cases instead target the Vulkan 1.2/1.3 aggregate
+rules. The next eligible validation requires an independently justified Vulkan
+1.1 public profile, registration and compilation of that unchanged original
+message-passing factory in the CTS runner, and passing selected `ext/device`
+leaves. The bounded KHR witness above cannot substitute for those leaves. The
+public DeviceScope bit is enabled through the extension route with native
+evidence; this is not an original CTS pass or a Vulkan 1.1 core-version claim.
 
 ### Buffer device address
 
@@ -4874,6 +5032,41 @@ not independently recorded in these T08 receipts. The bounded result does
 not claim capture replay, multiple-device addressing or additional image
 formats.
 
+### Original core Int16 indexing CTS route
+
+The focused package now links the unchanged pinned
+`vktSpvAsmIndexingTests.cpp` compute factory. Its Vulkan 1.0
+`spirv_assembly.instruction.compute.indexing.input.struct.opaccesschain_u16`
+leaf uses `OpCapability Int16`, requests core `shaderInt16`, and compares its
+buffer reads against the original 128-value oracle. It is not a subgroup leaf;
+it measures a prerequisite for extended subgroup Int16 operands. At this
+historical measurement stage, the 507-case acceptance manifest was unchanged;
+the later T07 promotion expanded the frozen selection to 829 cases.
+
+A one-leaf diagnostic selection on signed eboot SHA-256
+`01a1457e5b8fc64005f3d96f30b5f2a4f3eb8a75924cb1942ec30a7dcf053eab`
+and selection SHA-256
+`a49a36073c093f0e5e13f88d7b36be9255c5235cfa17c3c11583fe486d8286b9`
+registered and ran that exact original leaf. Run `run-632095073483134`
+reported one `NotSupported`, zero missing or unexpected cases, and QPA
+SHA-256 `e0fe2a27be5d65c6616231e6e62ebabc935a7ed6021c9fae13b1cdcaef25914a`.
+Its first support gate was `shaderInt16` at
+`vktSpvAsmComputeShaderCase.cpp:437`. The title closed cleanly and the
+accepted payload was restored. This confirms case reachability and the
+shipping feature blocker, not Int16 GPU correctness or any subgroup feature.
+The next measurement requires a separately reviewed diagnostic `shaderInt16`
+capability, then this unchanged case must pass with artifact-bound GPU output
+before a public bit can be considered. Firmware was not recorded in the receipt.
+
+The ordinary build of this exact code passed the unchanged frozen CTS
+selection in strict run `run-632263053027911`: 507 Pass, zero Fail,
+NotSupported, missing or unexpected, with clean title closure. It used the
+same signed eboot SHA-256, selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`
+and QPA SHA-256
+`db86c4f4a583a68babbac9c2b490c386d3d4a3187238ec4406ec358fe3fe713e`.
+This is neutral acceptance of the existing profile; the Int16 leaf was only
+in the separate diagnostic selection above.
 ## T07 BC mip and array-layer transfer measurement (2026-09-24)
 
 The pinned original BC oracle has also passed in two earlier focused diagnostic

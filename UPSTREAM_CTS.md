@@ -15,6 +15,15 @@ It is deliberately separate from the two other suites in this repository:
 Nothing here is a claim of Vulkan conformance or of complete CTS coverage. The
 selection is intentionally small and is frozen in a committed manifest.
 
+Focused CTS is a diagnostic and regression tool, not a prerequisite for every
+capability delivered to a native consumer. An unmapped or not-yet-run case does
+not negate a bounded public-API implementation with an artifact-bound GPU
+witness. Conversely, a failing applicable CTS case must be recorded and
+investigated; it cannot be silently treated as a pass or excluded to make a
+promotion appear green. Strict CTS report verification continues to apply to
+every CTS run we actually claim. Earlier selections and multiple-run receipts
+below are historical evidence, not a requirement to repeat every future run.
+
 ## Integration layout
 
 | File | Role |

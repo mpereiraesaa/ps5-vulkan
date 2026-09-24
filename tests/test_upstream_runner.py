@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tools.run_upstream_cts import RunIncomplete, wait_for_finalized_run
+
 from cts.upstream_runner import (
     parse_upstream_log_lines,
     parse_qpa_results,
@@ -34,6 +36,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "cts/upstream/manifest.json"
 
 class TestUpstreamRunner(unittest.TestCase):
+    def test_closed_incomplete_capture_fails_without_waiting_for_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runs = Path(directory)
+            log = runs / "20260924T000000000Z_PPSA99994_upstream-cts_example.log"
+            log.write_text("1\t1\tQPA\tCHUNK seq=0 size=1 data=YQ==\n")
+            log.with_suffix(".json").write_text(json.dumps({
+                "protocol": "ps5log/1", "title": "PPSA99994",
+                "clean": False, "bye": False, "close_reason": "eof",
+            }))
+            with mock.patch("tools.run_upstream_cts.time.sleep") as sleep:
+                with self.assertRaisesRegex(RunIncomplete, "finalized incomplete"):
+                    wait_for_finalized_run(runs, "PPSA99994", set(), 300)
+                sleep.assert_not_called()
+
     def setUp(self):
         self.manifest = {
             "cases": [

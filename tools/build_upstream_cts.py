@@ -46,8 +46,8 @@ def tessellation_build_profile(environment):
             # concurrent `make check` restaged the SDK without the switch
             # reported every selected leaf NotSupported for sampleRateShading.
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
-            "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
             "PS5VK_DEPTH_STENCIL_DIAGNOSTIC",
+            "PS5VK_SHADER_INT16_DIAGNOSTIC",
         )
     }
     return {
@@ -1044,6 +1044,12 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeTestsUtil.cpp",
+        # Original subgroup Broadcast and arithmetic bodies, support gates and GPU oracles.
+        # Registration alone does not select a case or advertise a feature.
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsScanHelpers.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsTestsUtils.cpp",
         # Original dynamic-state compute/transfer non-interference module.  It
         # is compiled directly from the pinned checkout; no body or oracle is
         # copied into the integration.
@@ -1207,6 +1213,7 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmGraphicsShaderTestUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmUtils.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIndexingTests.cpp",
         ROOT / "cts/upstream/volatile_atomic_focus.cpp",
     ]
     for src in test_cpp:

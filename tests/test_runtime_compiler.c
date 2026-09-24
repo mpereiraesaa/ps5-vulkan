@@ -199,6 +199,24 @@ int main(void)
         free(narrow_code);
         free(narrow_spv);
     }
+    /* Core Int16 arithmetic is separate from 16-bit storage. The fixture
+     * declares Int16 alone and uses only 32-bit storage buffers. */
+    size_t int16_bytes = 0;
+    uint32_t *int16_spv = read_file("build/test-shaders/shader_int16.spv", &int16_bytes);
+    assert(int16_spv);
+    struct ps5vk_compiled_program int16_program = {0};
+    uint32_t *int16_code = NULL;
+    assert(ps5vk_runtime_compile_compute_features(int16_spv, int16_bytes / 4,
+        "main", &layout, NULL, 0, &int16_program, &int16_code) ==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!int16_code);
+    assert(ps5vk_runtime_compile_compute_features(int16_spv, int16_bytes / 4,
+        "main", &layout, NULL, PS5VK_FEATURE_SHADER_INT16,
+        &int16_program, &int16_code) == VK_SUCCESS);
+    assert(int16_code && int16_program.code_words &&
+           int16_program.descriptor_count == 2);
+    free(int16_code);
+    free(int16_spv);
     /* The pinned compiler fixtures declare the actual SPIR-V capabilities.
      * The adapter must keep each option off until its logical-device bit is
      * enabled; DeviceScope also needs the base Vulkan memory model. */
@@ -302,6 +320,14 @@ int main(void)
         assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
             NULL, graphics_device_mask, &graphics_device_program,
             &graphics_device_code) == VK_SUCCESS);
+        assert(graphics_device_code && graphics_device_program.code_words > 0);
+        free(graphics_device_code);
+        /* The default-off core shaderInt16 bit must pass the adapter mask.
+         * Module and pipeline validation decide whether Int16 is enabled. */
+        graphics_device_code = NULL;
+        assert(ps5vk_runtime_compile_compute_features(spv1, spv1_words, "main", &layout,
+            NULL, graphics_device_mask | PS5VK_FEATURE_SHADER_INT16,
+            &graphics_device_program, &graphics_device_code) == VK_SUCCESS);
         assert(graphics_device_code && graphics_device_program.code_words > 0);
         free(graphics_device_code);
         /* Standard UBO layout changes SPIR-V layout validation, not PSBC's
