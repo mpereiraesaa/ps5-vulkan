@@ -960,6 +960,9 @@ def main():
                             occlusion_precise_probe=int(occlusion_precise_probe),
                             occlusion_depth_probe=int(occlusion_depth_probe),
                             occlusion_query_api_probe=int(occlusion_query_api_probe),
+                            d16_depth_witness=int(d16_depth_witness),
+                            d16_depth_attachment_diagnostic=int(
+                                os.environ.get("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC", "0")),
                             scissor_register_load="indirect-plus-direct-replay" if int(scissor_probe) else "indirect",
                             scene_draw_partition="two-36-index-draws" if scene_split == "1" else "single-draw",
                             exit_control=exit_control, keep_agc_module=keep_agc_module,

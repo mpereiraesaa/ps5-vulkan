@@ -4942,3 +4942,33 @@ This diagnostic selection contains one D32 comparison-gather leaf. It does
 not establish the other typed gather profiles or public
 `shaderImageGatherExtended` reporting, which remains off pending the full T07
 audit.
+
+## T07 D16 depth attachment diagnostic witness (2026-09-24)
+
+The isolated 128×128 D16 attachment route now records the exact
+UNDEFINED-to-depth-attachment barrier and bounded full-surface depth clear;
+host tests reject wrong aspects, partial rectangles and unsupported dependency
+scopes. The native diagnostic SDK and SDK-linked offscreen witness built from
+this tree. The witness uses a render-pass load clear and depth-tested draw; the
+original synchronization CTS `vkCmdClearAttachments` path still needs its own
+upstream run and is not inferred from this witness.
+
+Signed eboot SHA-256
+`effb18b754835b2c878c8a1917c0ccd3ffd6bc1491037bf7cabea1b600a7f2df`
+passed the strict artifact-bound witness twice. Each run queried the bounded
+D16 format, rendered two frames at 128×128, observed 2888 changed colour
+pixels after a depth clear to 1.0 and zero after a clear to 0.0, completed the
+GPU submissions, reported no readback mismatches, released all allocations and
+closed cleanly:
+
+- `20260924T113700629Z_PPSA99994_ps5vk_0x2390372da9382`, log SHA-256
+  `06c81851c0e2554b74f777030d27760717d1266710c2e42fa3865e7a9dd5b1ab`.
+- `20260924T113722973Z_PPSA99994_ps5vk_0x23908a69edcad`, log SHA-256
+  `f38a16c42f8d76f7ce8bebc213bb7694de60fd8be6479395b9781e8b1e67d4b9`.
+
+The first diagnostic attempt used an auxiliary 1920×1080 region scan on this
+128×128 target and ended before the second frame; it is not counted as
+evidence. That scan is now excluded from the D16 variant, whose independent
+depth oracle remains active. The canonical eboot was restored after all three
+attempts. Firmware was not recorded. Public feature reporting remains
+unchanged.

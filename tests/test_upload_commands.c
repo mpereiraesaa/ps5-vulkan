@@ -429,4 +429,35 @@ int main(void)
         words+256,flush)==VK_SUCCESS);
     assert(ps5vk_layout_require(&layouts,&image,VK_IMAGE_LAYOUT_GENERAL)==VK_SUCCESS);
     assert(image.layout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    struct VkImage_T d16={.device=&device,.layout=VK_IMAGE_LAYOUT_UNDEFINED,
+        .info={.imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_D16_UNORM,
+        .extent={128,128,1},.mipLevels=1,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+        .usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT}};
+    struct ps5vk_operation d16_transition={.type=PS5VK_IMAGE_BARRIER,
+        .src_stage=VK_PIPELINE_STAGE_HOST_BIT,
+        .dst_stage=VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .image_barrier={.image=&d16,.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            .dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT}};
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&d16_transition,1,NULL,&layouts,&cursor,
+        words+256,flush)==VK_SUCCESS);
+    assert(cursor-words==PS5VK_GRAPHICS_ACQUIRE_WORDS && layouts.count==1);
+    assert(ps5vk_layout_require(&layouts,&d16,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)==VK_SUCCESS);
+    d16_transition.src_stage=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&d16_transition,1,NULL,&layouts,&cursor,
+        words+256,flush)==VK_SUCCESS);
+    d16_transition.src_stage=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    layouts=(struct ps5vk_layout_state){0};cursor=words;
+    assert(ps5vk_upload_commands(&device,&d16_transition,1,NULL,&layouts,&cursor,
+        words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && !layouts.count && cursor==words);
+    d16_transition.src_stage=VK_PIPELINE_STAGE_HOST_BIT;
+    d16_transition.image_barrier.dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    assert(ps5vk_upload_commands(&device,&d16_transition,1,NULL,&layouts,&cursor,
+        words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT && !layouts.count && cursor==words);
 }

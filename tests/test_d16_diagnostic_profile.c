@@ -56,6 +56,7 @@ int main(void)
         .extent={128,128,1}, .mipLevels=1, .arrayLayers=1,
         .samples=VK_SAMPLE_COUNT_1_BIT, .tiling=VK_IMAGE_TILING_OPTIMAL,
         .usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT}};
+    assert(ps5vk_d16_attachment_image(&image));
     VkMemoryRequirements requirements;
     assert(ps5vk_native_image_requirements(&device, &image.info, &requirements) == VK_SUCCESS);
     assert(requirements.size == 65536 && requirements.alignment == 65536);
@@ -73,10 +74,12 @@ int main(void)
     }
     assert(found_z_info);
     image.info.extent.width=127;
+    assert(!ps5vk_d16_attachment_image(&image));
     assert(ps5vk_native_image_requirements(&device, &image.info, &requirements) ==
         VK_ERROR_FORMAT_NOT_SUPPORTED);
     image.info.extent.width=128;
     image.info.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    assert(!ps5vk_d16_attachment_image(&image));
     assert(ps5vk_native_image_requirements(&device, &image.info, &requirements) ==
         VK_ERROR_FORMAT_NOT_SUPPORTED);
 

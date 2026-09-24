@@ -736,19 +736,29 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearAttachments(VkCommandBuffer c,
         c->level!=VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         c->render_pass_contents!=VK_SUBPASS_CONTENTS_INLINE ||
         c->operation_count>PS5VK_MAX_OPERATIONS || rect_count>PS5VK_MAX_OPERATIONS-c->operation_count ||
-        attachments[0].aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT || attachments[0].colorAttachment!=0) {
+        (attachments[0].aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT &&
+         attachments[0].aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT)) {
         ps5vk_command_invalidate(c);
         return;
     }
     const struct ps5vk_subpass *subpass=ps5vk_render_pass_subpass(c->render_pass,c->subpass);
-    if(!subpass || !c->framebuffer || subpass->color[0].attachment>=c->framebuffer->attachment_count) {
+    const VkBool32 depth=attachments[0].aspectMask==VK_IMAGE_ASPECT_DEPTH_BIT;
+    const uint32_t attachment=depth ? (subpass?subpass->depth.attachment:VK_ATTACHMENT_UNUSED) :
+        (subpass?subpass->color[0].attachment:VK_ATTACHMENT_UNUSED);
+    if(!subpass || !c->framebuffer || attachment>=c->framebuffer->attachment_count ||
+       (!depth && attachments[0].colorAttachment!=0)) {
         ps5vk_command_invalidate(c);return;
     }
-    VkImageView view=c->framebuffer->attachments[subpass->color[0].attachment];
-    uint32_t word;
-    if(!view || !view->image || !(view->image->info.format==VK_FORMAT_B8G8R8A8_UNORM?
+    VkImageView view=c->framebuffer->attachments[attachment];
+    uint32_t word=0;
+    const VkBool32 clear_valid=depth ? (view && view->image &&
+        ps5vk_d16_attachment_image(view->image) &&
+        ps5vk_depth_attachment_clear_word(VK_FORMAT_D16_UNORM,
+            attachments[0].clearValue.depthStencil.depth,&word)) :
+        (view && view->image && (view->image->info.format==VK_FORMAT_B8G8R8A8_UNORM?
         ps5vk_color_clear_bgra8(attachments[0].clearValue.color.float32,&word):
-        ps5vk_color_clear_rgba8(attachments[0].clearValue.color.float32,&word))) {
+        ps5vk_color_clear_rgba8(attachments[0].clearValue.color.float32,&word)));
+    if(!clear_valid) {
         ps5vk_command_invalidate(c);return;
     }
     VkRect2D render_area={0};

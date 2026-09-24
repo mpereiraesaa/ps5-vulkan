@@ -986,6 +986,30 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             if(recorded->subpass!=subpass_index || !ps5vk_clear_attachment_valid(recorded)) {
                 rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=2;goto fail;
             }
+            if(ps5vk_d16_attachment_image(recorded->image_destination)) {
+                void *address;VkDeviceSize bytes;
+                rc=ps5vk_image_span(d,recorded->image_destination,&address,&bytes);
+                if(rc!=VK_SUCCESS || bytes!=65536u) {
+                    rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=3;goto fail;
+                }
+                BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u);
+                size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
+                    (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),i+1u);
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=4;goto fail;}cursor+=n;
+                n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=5;goto fail;}cursor+=n;
+                cache(address,(size_t)bytes);
+                n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,
+                    bytes,recorded->clear_word);
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=6;goto fail;}cursor+=n;
+                n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=7;goto fail;}cursor+=n;
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_D16_CLEAR_PREPARED serial=%llu word=%08x bytes=%llu",
+                    (unsigned long long)j->serial,recorded->clear_word,
+                    (unsigned long long)bytes);
+                continue;
+            }
             VkImageView view=recorded->framebuffer->attachments[
                 ps5vk_render_pass_subpass(pass,subpass_index)->color[0].attachment];
             void *address;VkDeviceSize bytes,stride;

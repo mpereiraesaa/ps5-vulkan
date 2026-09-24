@@ -1012,6 +1012,89 @@ static void readback_return_recording(void)
     vkFreeMemory(device,memory,NULL);
 }
 
+static void d16_attachment_recording(void)
+{
+    VkImage image=make_image_extent(VK_FORMAT_D16_UNORM,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,128u,128u,NULL);
+    VkImageViewCreateInfo vi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=image,.viewType=VK_IMAGE_VIEW_TYPE_2D,.format=VK_FORMAT_D16_UNORM,
+        .components={VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY,
+                     VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY},
+        .subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,1}};
+    VkImageView view=VK_NULL_HANDLE;
+    assert(vkCreateImageView(device,&vi,NULL,&view)==VK_SUCCESS);
+    VkAttachmentDescription attachment={.format=VK_FORMAT_D16_UNORM,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference reference={0,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpass={.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pDepthStencilAttachment=&reference};
+    VkRenderPassCreateInfo pi={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount=1,.pAttachments=&attachment,.subpassCount=1,
+        .pSubpasses=&subpass};
+    VkRenderPass pass=VK_NULL_HANDLE;
+    assert(vkCreateRenderPass(device,&pi,NULL,&pass)==VK_SUCCESS);
+    VkFramebufferCreateInfo fi={.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass=pass,.attachmentCount=1,.pAttachments=&view,
+        .width=128,.height=128,.layers=1};
+    VkFramebuffer framebuffer=VK_NULL_HANDLE;
+    assert(vkCreateFramebuffer(device,&fi,NULL,&framebuffer)==VK_SUCCESS);
+    VkImageMemoryBarrier barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.image=image,
+        .subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,1}};
+    VkRenderPassBeginInfo bi={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass=pass,.framebuffer=framebuffer,
+        .renderArea={.extent={128,128}}};
+    VkClearAttachment clear={.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT,
+        .clearValue={.depthStencil={0.5f,0}}};
+    VkClearRect full={.rect={.extent={128,128}},.layerCount=1};
+    VkCommandBuffer command=begin();
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_HOST_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        0,0,NULL,0,NULL,1,&barrier);
+    assert(command->state==PS5VK_RECORDING && command->operation_count==1);
+    vkCmdBeginRenderPass(command,&bi,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdClearAttachments(command,1,&clear,1,&full);
+    assert(command->state==PS5VK_RECORDING && command->operation_count==3);
+    assert(command->operations[2].clear_word==UINT32_C(0x80008000));
+    assert(ps5vk_clear_attachment_valid(&command->operations[2]));
+    vkCmdEndRenderPass(command);
+    assert(vkEndCommandBuffer(command)==VK_SUCCESS);
+    VkClearRect partial=full;
+    partial.rect.extent.width=127u;
+    VkCommandBuffer partial_command=begin();
+    vkCmdPipelineBarrier(partial_command,VK_PIPELINE_STAGE_HOST_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        0,0,NULL,0,NULL,1,&barrier);
+    vkCmdBeginRenderPass(partial_command,&bi,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdClearAttachments(partial_command,1,&clear,1,&partial);
+    assert(partial_command->state==PS5VK_INVALID &&
+        partial_command->operation_count==2);
+    VkCommandBuffer bad=begin();
+    barrier.subresourceRange.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+    vkCmdPipelineBarrier(bad,VK_PIPELINE_STAGE_HOST_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        0,0,NULL,0,NULL,1,&barrier);
+    assert(bad->state==PS5VK_INVALID && !bad->operation_count);
+    VkCommandBuffer buffers[]={command,partial_command,bad};
+    vkFreeCommandBuffers(device,pool,3,buffers);
+    vkDestroyFramebuffer(device,framebuffer,NULL);
+    vkDestroyRenderPass(device,pass,NULL);
+    vkDestroyImageView(device,view,NULL);
+    vkDestroyImage(device,image,NULL);
+}
+
 int main(void)
 {
     VkInstance instance;
@@ -2024,6 +2107,7 @@ int main(void)
     vkDestroyImage(device, depth, NULL);
     vkDestroyImage(device, destination, NULL);
     vkDestroyImage(device, source, NULL);
+    d16_attachment_recording();
     vkDestroyCommandPool(device, pool, NULL);
     input_attachment_shape();
     vkDestroyDevice(device, NULL);

@@ -1348,6 +1348,11 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          (b->dstAccessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
          !(b->dstAccessMask & ~(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
                                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)));
+    if(ps5vk_d16_attachment_image(image))return
+        b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+        b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+        !b->srcAccessMask &&
+        b->dstAccessMask==VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     if(readback)return
         ps5vk_color_discard_barrier(b) ||
         ps5vk_color_readback_reuse_barrier(b) ||
@@ -1497,7 +1502,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
             /* A depth target is ordered through its depth aspect; every other
              * role in this profile is colour. */
             b->subresourceRange.aspectMask!=((ps5vk_depth_clear_image(image) ||
-                ps5vk_d32_gather_image(image))?
+                ps5vk_d32_gather_image(image) || ps5vk_d16_attachment_image(image))?
                 (VkImageAspectFlags)VK_IMAGE_ASPECT_DEPTH_BIT:
                 (VkImageAspectFlags)VK_IMAGE_ASPECT_COLOR_BIT) ||
             !ps5vk_image_range_resolve(image, &b->subresourceRange, &resolved) ||

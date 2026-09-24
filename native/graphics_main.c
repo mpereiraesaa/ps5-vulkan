@@ -793,7 +793,9 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     VkCommandBufferAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
     VkCommandBuffer cb; CHECK(vkAllocateCommandBuffers(d,&ai,&cb));
+#if PS5VK_OCCLUSION_QUERY_API_PROBE
     VkCommandBuffer query_cb=VK_NULL_HANDLE;
+#endif
     VkCommandBuffer draw_cb=cb;
     VkCommandBufferBeginInfo bi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     CHECK(vkBeginCommandBuffer(cb,&bi));
@@ -1289,6 +1291,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
         (unsigned long long)stats.changed,words,(unsigned long long)stats.bad_alpha,(unsigned long long)stats.bad_sum,
         (unsigned)pipeline->viewport.width,(unsigned)pipeline->viewport.height,valid);
     if(!valid)fail("triangle-readback",-1);
+#if !PS5VK_D16_DEPTH_WITNESS
     if(PS5VK_GRAPHICS_SCISSOR_PROBE && PS5VK_GRAPHICS_SCISSOR_PROBE!=7 &&
        PS5VK_GRAPHICS_SCISSOR_PROBE!=8 && PS5VK_GRAPHICS_SCISSOR_PROBE!=9) {
         uint64_t selected=0;
@@ -1320,6 +1323,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
             if(region.unexpected)fail("region-color",-1);
         }
     }
+#endif
     if(set_layout && !PS5VK_GATHER_FORM && PS5VK_GRAPHICS_SCISSOR_PROBE!=6 &&
        PS5VK_GRAPHICS_SCISSOR_PROBE!=7 && PS5VK_GRAPHICS_SCISSOR_PROBE!=9 &&
        PS5VK_GRAPHICS_SCISSOR_PROBE!=10) {
