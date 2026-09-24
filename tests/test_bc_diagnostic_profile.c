@@ -13,10 +13,12 @@ int main(void)
         VK_FORMAT_BC6H_UFLOAT_BLOCK, VK_FORMAT_BC6H_SFLOAT_BLOCK,
         VK_FORMAT_BC7_UNORM_BLOCK, VK_FORMAT_BC7_SRGB_BLOCK,
     };
+    const VkFormat bc_blit_sources[] = {
+        VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_FORMAT_BC3_UNORM_BLOCK,
+    };
     const VkFormatFeatureFlags required =
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
-        VK_FORMAT_FEATURE_BLIT_SRC_BIT |
         VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
         VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
     const VkImageUsageFlags sampled_upload =
@@ -33,9 +35,15 @@ int main(void)
         assert(ps5vk_texture_format_witnessed(bc_formats[i],
             PS5VK_FORMAT_CAP_SAMPLED_IMAGE |
             PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR |
-            PS5VK_FORMAT_CAP_BLIT_SRC |
             PS5VK_FORMAT_CAP_TRANSFER_SRC |
             PS5VK_FORMAT_CAP_TRANSFER_DST));
+        VkBool32 blit_source = 0;
+        for (unsigned j = 0; j < sizeof(bc_blit_sources) / sizeof(bc_blit_sources[0]); ++j)
+            blit_source |= bc_formats[i] == bc_blit_sources[j];
+        assert(((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0) ==
+               (blit_source != 0));
+        assert(ps5vk_texture_format_witnessed(bc_formats[i], PS5VK_FORMAT_CAP_BLIT_SRC) ==
+               blit_source);
         assert(ps5vk_texture_format_image_usage(bc_formats[i], sampled_upload));
         assert(ps5vk_texture_format_image_usage(bc_formats[i], VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
         assert(ps5vk_texture_format_image_usage(bc_formats[i],
