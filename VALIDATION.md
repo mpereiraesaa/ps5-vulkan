@@ -5099,10 +5099,12 @@ integrity and clean lifecycle for each run; the canonical payload was restored
 after each. Firmware was not recorded. This evidence qualifies the diagnostic
 cube-array path, including a nonzero view base. Public `imageCubeArray`
 reporting and frozen CTS selection remain unchanged pending their promotion
-audit and combined acceptance. One promotion blocker is already concrete:
+audit and combined acceptance. The audit found that
 `vkGetPhysicalDeviceImageFormatProperties` accepts the cube-compatible RGBA8
-`SAMPLED | COLOR_ATTACHMENT` usage used by the object-management CTS, but
-`ps5vk_texture_descriptor` refuses a sampled descriptor for any image that
-also has `COLOR_ATTACHMENT` usage. The CTS above checks view creation, not
-sampling from that tiled attachment. Public reporting must stay off until the
-advertised usage has a working descriptor and a native sampling witness.
+`SAMPLED | COLOR_ATTACHMENT` usage used by the object-management CTS, while
+the old descriptor path refused its sampled role. A host regression reproduced
+that refusal. The current candidate emits the tiled descriptor and uses the
+attachment layer stride for a 2D view; the same regression now passes. The CTS
+above checks view creation, not sampling from that tiled attachment. Public
+reporting must stay off until a native witness proves the new descriptor and
+the combined upstream selection remains passing.

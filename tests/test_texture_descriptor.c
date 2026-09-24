@@ -6,6 +6,8 @@
 #include <string.h>
 static VkResult allocate(void *c,VkDeviceSize n,void **a,void **b)
 {(void)c;*a=aligned_alloc(256,(n+255)&~(VkDeviceSize)255);*b=*a;return *a?VK_SUCCESS:VK_ERROR_OUT_OF_HOST_MEMORY;}
+static VkResult allocate_tiled(void *c,VkDeviceSize n,void **a,void **b)
+{(void)c;*a=aligned_alloc(131072,(n+131071)&~(VkDeviceSize)131071);*b=*a;return *a?VK_SUCCESS:VK_ERROR_OUT_OF_HOST_MEMORY;}
 static void release(void *c,void *p){(void)c;free(p);}
 static VkResult cache(void *c,void *p,VkDeviceSize o,VkDeviceSize n)
 {(void)c;(void)p;(void)o;(void)n;return VK_SUCCESS;}
@@ -154,6 +156,47 @@ int main(void)
         VK_ERROR_FEATURE_NOT_PRESENT);
     d.enabled_features|=PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
     vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
+
+    /* The cube-compatible sampled+attachment role accepted by the public
+     * format query must produce a descriptor for its tiled backing too. The
+     * object-management CTS only creates this image and view, so it cannot
+     * detect a descriptor refusal when an application samples the view. */
+    d.max_allocation=2u<<20;
+    d.memory.allocate=allocate_tiled;
+    VkImageCreateInfo tiled_cube_ii=layered_ii;
+    tiled_cube_ii.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkImage tiled_cube_image;
+    tiled_cube_ii.mipLevels=2;
+    assert(vkCreateImage(&d,&tiled_cube_ii,NULL,&tiled_cube_image)==
+        VK_ERROR_FORMAT_NOT_SUPPORTED);
+    tiled_cube_ii.mipLevels=1;
+    assert(vkCreateImage(&d,&tiled_cube_ii,NULL,&tiled_cube_image)==VK_SUCCESS &&
+        tiled_cube_image->requirements.size==12u*131072u);
+    VkMemoryAllocateInfo tiled_cube_ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=tiled_cube_image->requirements.size};
+    VkDeviceMemory tiled_cube_memory;
+    assert(vkAllocateMemory(&d,&tiled_cube_ai,NULL,&tiled_cube_memory)==VK_SUCCESS);
+    assert(vkBindImageMemory(&d,tiled_cube_image,tiled_cube_memory,0)==VK_SUCCESS);
+    layered_vi.image=tiled_cube_image;
+    layered_vi.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,12};
+    VkImageView tiled_cube_view;
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&tiled_cube_view)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,tiled_cube_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[3]==0xb1b00facu && layered_words[4]==11u);
+    vkDestroyImageView(&d,tiled_cube_view,NULL);
+    layered_vi.viewType=VK_IMAGE_VIEW_TYPE_2D;
+    layered_vi.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,6,1};
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&tiled_cube_view)==VK_SUCCESS);
+    void *tiled_cube_base;VkDeviceSize tiled_cube_bytes;
+    assert(ps5vk_image_span(&d,tiled_cube_image,&tiled_cube_base,&tiled_cube_bytes)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,tiled_cube_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[0]==(uint32_t)(((uintptr_t)tiled_cube_base+6u*131072u)>>8) &&
+        layered_words[3]==0x91b00facu && !layered_words[4]);
+    vkDestroyImageView(&d,tiled_cube_view,NULL);
+    vkDestroyImage(&d,tiled_cube_image,NULL);
+    vkFreeMemory(&d,tiled_cube_memory,NULL);
+    d.memory.allocate=allocate;
+    d.max_allocation=16384;
 
     layered_ii.flags=0;layered_ii.imageType=VK_IMAGE_TYPE_3D;
     layered_ii.extent=(VkExtent3D){4,4,3};layered_ii.arrayLayers=1;

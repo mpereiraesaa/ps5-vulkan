@@ -163,6 +163,10 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     const int attachment=(info->usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 || depth;
     const int cube=info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    if (cube && info->usage == (VK_IMAGE_USAGE_SAMPLED_BIT |
+                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+        info->mipLevels != 1)
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     if ((info->flags && !cube) ||
         (cube && (info->imageType!=VK_IMAGE_TYPE_2D || info->arrayLayers<6 ||
                   info->extent.width!=info->extent.height ||
