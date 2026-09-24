@@ -11,6 +11,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class NativeDiagnosticOptions(unittest.TestCase):
+    def test_shader_int16_diagnostic_has_distinct_build_identity(self):
+        from tools.build_upstream_cts import tessellation_build_profile
+
+        ordinary = tessellation_build_profile({})
+        measured = tessellation_build_profile({"PS5VK_SHADER_INT16_DIAGNOSTIC": "1"})
+        self.assertEqual("0", ordinary["switches"]["PS5VK_SHADER_INT16_DIAGNOSTIC"])
+        self.assertFalse(ordinary["experimental"])
+        self.assertEqual("1", measured["switches"]["PS5VK_SHADER_INT16_DIAGNOSTIC"])
+        self.assertTrue(measured["experimental"])
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("#if defined(PS5VK_SHADER_INT16_DIAGNOSTIC) && PS5VK_SHADER_INT16_DIAGNOSTIC", platform)
+        self.assertNotIn("PS5VK_SHADER_INT16_DIAGNOSTIC", (ROOT / "src/vk_device.c").read_text())
+
     def test_promoted_fragment_feature_has_no_diagnostic_switch(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
         builder = (ROOT / "tools/build_sdk.py").read_text()

@@ -47,6 +47,7 @@ def tessellation_build_profile(environment):
             # reported every selected leaf NotSupported for sampleRateShading.
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
             "PS5VK_MEMORY_MODEL_DIAGNOSTIC",
+            "PS5VK_SHADER_INT16_DIAGNOSTIC",
         )
     }
     return {
