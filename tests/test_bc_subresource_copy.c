@@ -28,10 +28,13 @@ static void free_memory(void *ctx, void *backing) { (void)ctx; free(backing); }
 struct cache_event { void *backing; VkDeviceSize offset,size; int invalidate; };
 static struct cache_event events[32];
 static unsigned event_count;
+static int fail_invalidate_after=-1;
 static VkResult cache_sync(void *backing,VkDeviceSize offset,VkDeviceSize size,int invalidate)
 {
     assert(event_count<32);
     events[event_count++]=(struct cache_event){backing,offset,size,invalidate};
+    if(invalidate && fail_invalidate_after>=0 && !fail_invalidate_after--)
+        return VK_ERROR_MEMORY_MAP_FAILED;
     return VK_SUCCESS;
 }
 static VkResult flush_sync(void *ctx, void *backing, VkDeviceSize offset, VkDeviceSize size)
@@ -147,6 +150,13 @@ static void submit_and_wait(VkCommandBuffer command)
 }
 
 
+static void set_layout(VkImage image,VkImageLayout layout)
+{
+    const VkImageSubresourceRange whole={VK_IMAGE_ASPECT_COLOR_BIT,0,
+        VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
+    assert(ps5vk_image_layout_transition(image,&whole,VK_IMAGE_LAYOUT_UNDEFINED,layout));
+}
+
 static void round_trip(VkFormat format, int general)
 {
     enum { N = 4096 };
@@ -243,6 +253,137 @@ static void round_trip(VkFormat format, int general)
     vkDestroyBuffer(device,download,NULL);
     vkFreeMemory(device,mem,NULL);vkFreeMemory(device,um,NULL);vkFreeMemory(device,dm,NULL);
 }
+static void image_copy(VkFormat format,VkFormat destination_format,int same_image)
+{
+    struct ps5vk_texture_mip_layout layout,destination_layout;
+    assert(!ps5vk_texture_mip_layout_for_slices(format,17,13,3,3,&layout));
+    assert(!ps5vk_texture_mip_layout_for_slices(destination_format,same_image?17:513,13,3,3,&destination_layout));
+    void *src_map,*dst_map;
+    VkImage src=make_image_subresources(format,VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT,17,13,3,3,VK_IMAGE_TILING_OPTIMAL,&src_map);
+    VkImage dst=src;
+    if(same_image)dst_map=src_map;
+    else dst=make_image_subresources(destination_format,VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT,513,13,3,3,VK_IMAGE_TILING_OPTIMAL,&dst_map);
+    for(size_t i=0;i<layout.bytes;++i)((unsigned char *)src_map)[i]=(unsigned char)(i*13+19);
+    if(!same_image)memset(dst_map,0xa5,(size_t)destination_layout.bytes);
+    unsigned char *before=malloc((size_t)layout.bytes),*expected=malloc((size_t)destination_layout.bytes),
+        *initial=malloc((size_t)destination_layout.bytes);
+    assert(before && expected && initial);memcpy(before,src_map,(size_t)layout.bytes);
+    memcpy(initial,dst_map,(size_t)destination_layout.bytes);
+    memcpy(expected,dst_map,(size_t)destination_layout.bytes);
+    set_layout(src,VK_IMAGE_LAYOUT_GENERAL);set_layout(dst,VK_IMAGE_LAYOUT_GENERAL);
+    VkImageCopy regions[2]={
+        {.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,1,0,2},
+         .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,1,1,2},.extent={8,6,1}},
+        {.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,2,0,1},
+         .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,2,0,1},.extent={4,3,1}}};
+    if(same_image) {
+        regions[0]=(VkImageCopy){.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+            .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},.dstOffset={4,0,0},.extent={4,8,1}};
+        regions[1]=(VkImageCopy){.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,1,0,1},
+            .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,1,2,1},.extent={8,6,1}};
+    }
+    VkDeviceSize sb[2],ss[2],db[2],ds[2];
+    const unsigned block_bytes=ps5vk_texture_format_lookup(format)->bytes_per_block;
+    for(unsigned i=0;i<2;++i) {
+        const VkImageCopy *r=&regions[i];
+        const struct ps5vk_texture_mip_level *sm=&layout.levels[r->srcSubresource.mipLevel];
+        const struct ps5vk_texture_mip_level *dm=&destination_layout.levels[r->dstSubresource.mipLevel];
+        const unsigned rows=(r->extent.height+3)/4,bytes=((r->extent.width+3)/4)*block_bytes;
+        sb[i]=r->srcSubresource.baseArrayLayer*layout.layer_stride+sm->offset+
+            (r->srcOffset.y/4)*sm->row_pitch+(r->srcOffset.x/4)*block_bytes;
+        db[i]=r->dstSubresource.baseArrayLayer*destination_layout.layer_stride+dm->offset+
+            (r->dstOffset.y/4)*dm->row_pitch+(r->dstOffset.x/4)*block_bytes;
+        ss[i]=(r->srcSubresource.layerCount-1)*layout.layer_stride+(rows-1)*sm->row_pitch+bytes;
+        ds[i]=(r->dstSubresource.layerCount-1)*destination_layout.layer_stride+(rows-1)*dm->row_pitch+bytes;
+        for(unsigned z=0;z<r->srcSubresource.layerCount;++z)
+        for(unsigned y=0;y<(r->extent.height+3)/4;++y) {
+            size_t so=(r->srcSubresource.baseArrayLayer+z)*layout.layer_stride+sm->offset+
+                (r->srcOffset.y/4+y)*sm->row_pitch+(r->srcOffset.x/4)*block_bytes;
+            size_t to=(r->dstSubresource.baseArrayLayer+z)*destination_layout.layer_stride+dm->offset+
+                (r->dstOffset.y/4+y)*dm->row_pitch+(r->dstOffset.x/4)*block_bytes;
+            memcpy(expected+to,before+so,((r->extent.width+3)/4)*block_bytes);
+        }
+    }
+    VkCommandBuffer c=begin();
+    vkCmdCopyImage(c,src,VK_IMAGE_LAYOUT_GENERAL,dst,VK_IMAGE_LAYOUT_GENERAL,2,regions);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+    VkImageSubresourceRange late={VK_IMAGE_ASPECT_COLOR_BIT,
+        regions[1].dstSubresource.mipLevel,1,regions[1].dstSubresource.baseArrayLayer,
+        regions[1].dstSubresource.layerCount};
+    assert(ps5vk_image_layout_transition(dst,&late,VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
+    event_count=0;
+    assert(ps5vk_image_linear_execute(device,&c->operations[0])==VK_ERROR_DEVICE_LOST);
+    assert(!event_count && !memcmp(dst_map,initial,(size_t)destination_layout.bytes));
+    assert(ps5vk_image_layout_transition(dst,&late,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL));
+    fail_invalidate_after=1;event_count=0;
+    assert(ps5vk_image_linear_execute(device,&c->operations[0])==VK_ERROR_DEVICE_LOST);
+    assert(event_count==2 && !memcmp(dst_map,initial,(size_t)destination_layout.bytes));
+    fail_invalidate_after=-1;
+    event_count=0;submit_and_wait(c);
+    assert(event_count==4 && events[0].invalidate && events[1].invalidate &&
+        !events[2].invalidate && !events[3].invalidate);
+    for(unsigned i=0;i<2;++i) {
+        expect_cache(src_map,sb[i],ss[i],1);
+        expect_cache(dst_map,db[i],ds[i],0);
+    }
+    assert(!memcmp(dst_map,expected,(size_t)destination_layout.bytes));
+    if(!same_image)assert(!memcmp(src_map,before,(size_t)layout.bytes));
+    if(format==VK_FORMAT_BC1_RGBA_UNORM_BLOCK && !same_image) {
+        VkImage incompatible=make_image_subresources(VK_FORMAT_BC3_UNORM_BLOCK,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT,17,13,3,3,VK_IMAGE_TILING_OPTIMAL,NULL);
+        c=begin();vkCmdCopyImage(c,src,VK_IMAGE_LAYOUT_GENERAL,incompatible,
+            VK_IMAGE_LAYOUT_GENERAL,1,regions);
+        assert(c->state==PS5VK_INVALID && !c->operation_count);
+        VkDeviceMemory memory=incompatible->memory;
+        vkDestroyImage(device,incompatible,NULL);vkFreeMemory(device,memory,NULL);
+    }
+    VkImageCopy bad[2]={regions[0],regions[1]};bad[1].dstSubresource.baseArrayLayer=3;
+    c=begin();vkCmdCopyImage(c,src,VK_IMAGE_LAYOUT_GENERAL,dst,VK_IMAGE_LAYOUT_GENERAL,2,bad);
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
+    if(same_image) {
+        bad[1]=regions[1];bad[0].dstOffset=bad[0].srcOffset;
+        c=begin();vkCmdCopyImage(c,src,VK_IMAGE_LAYOUT_GENERAL,dst,VK_IMAGE_LAYOUT_GENERAL,2,bad);
+        assert(c->state==PS5VK_INVALID && !c->operation_count);
+        /* Each corresponding pair is disjoint; dst[0] aliases src[1]. */
+        bad[0]=regions[0];bad[1]=regions[1];
+        bad[1].srcSubresource=bad[0].dstSubresource;
+        bad[1].srcOffset=bad[0].dstOffset;bad[1].extent=(VkExtent3D){4,4,1};
+        c=begin();vkCmdCopyImage(c,src,VK_IMAGE_LAYOUT_GENERAL,dst,VK_IMAGE_LAYOUT_GENERAL,2,bad);
+        assert(c->state==PS5VK_INVALID && !c->operation_count);
+    }
+    assert(!memcmp(dst_map,expected,(size_t)destination_layout.bytes));
+    if(same_image) {
+        c=begin();vkCmdCopyImage(c,src,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            dst,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,2,regions);
+        assert(c->state==PS5VK_INVALID && !c->operation_count);
+        /* Separate cells can use distinct transfer layouts despite MAX_ENUM
+         * in the image-wide summary, and source/destination mip indices differ. */
+        VkImageCopy mixed={.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,1,0,1},
+            .dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,1,1},.extent={4,4,1}};
+        VkImageSubresourceRange sr={VK_IMAGE_ASPECT_COLOR_BIT,1,1,0,1};
+        VkImageSubresourceRange dr={VK_IMAGE_ASPECT_COLOR_BIT,0,1,1,1};
+        assert(ps5vk_image_layout_transition(src,&sr,VK_IMAGE_LAYOUT_GENERAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
+        assert(ps5vk_image_layout_transition(dst,&dr,VK_IMAGE_LAYOUT_GENERAL,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
+        assert(src->layout==VK_IMAGE_LAYOUT_MAX_ENUM);
+        memcpy(expected+layout.layer_stride+layout.levels[0].offset,
+            (unsigned char *)src_map+layout.levels[1].offset,block_bytes);
+        c=begin();vkCmdCopyImage(c,src,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            dst,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&mixed);
+        event_count=0;submit_and_wait(c);
+        assert(!memcmp(dst_map,expected,(size_t)destination_layout.bytes));
+    }
+    free(before);free(expected);free(initial);
+    VkDeviceMemory sm=src->memory,dm=dst->memory;
+    if(!same_image){vkDestroyImage(device,dst,NULL);vkFreeMemory(device,dm,NULL);}
+    vkDestroyImage(device,src,NULL);vkFreeMemory(device,sm,NULL);
+}
+
 int main(void)
 {
     VkInstance instance;
@@ -268,6 +409,10 @@ int main(void)
         round_trip(VK_FORMAT_R8G8B8A8_UNORM,general);
         round_trip(VK_FORMAT_R8G8B8A8_SRGB,general);
     }
+    image_copy(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,VK_FORMAT_BC4_SNORM_BLOCK,0);
+    image_copy(VK_FORMAT_BC3_UNORM_BLOCK,VK_FORMAT_BC7_SRGB_BLOCK,0);
+    image_copy(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,VK_FORMAT_BC1_RGBA_UNORM_BLOCK,1);
+    image_copy(VK_FORMAT_BC7_SRGB_BLOCK,VK_FORMAT_BC7_SRGB_BLOCK,1);
     vkDestroyCommandPool(device,pool,NULL);
     vkDestroyDevice(device,NULL);vkDestroyInstance(instance,NULL);
     puts("BC and RGBA subresource copies: pass");return 0;

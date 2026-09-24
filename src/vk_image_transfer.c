@@ -1,9 +1,9 @@
 /*
  * Vulkan 1.0 image copy and colour image clear.
  *
- * Implemented role: RGBA8 with TRANSFER_SRC|TRANSFER_DST usage, backed by the
- * padded linear layout (ps5vk_texture_layout). Copy and clear are row copies or
- * row memsets on host-visible direct memory, executed in submission order at
+ * RGBA8 and BC transfers share padded linear mip/layer storage. Copy and
+ * clear execute as bounded row copies or row memsets over host-visible direct
+ * memory, in submission order at
  * the head of the queue chain. Every write flushes the exact bound destination
  * allocation range before a following GPU segment.
  */
@@ -20,8 +20,8 @@
 #define INVALID VK_ERROR_UNKNOWN
 
 /* Return non-zero for overlap or an address-range representation failure.  The
- * implementation conservatively rejects distinct Vulkan resources backed by
- * overlapping allocation spans; its row copies may therefore use memcpy. */
+ * legacy paths compare allocation spans; BC copies compare the actual rows
+ * so disjoint regions in the same allocation remain valid. */
 static int spans_overlap(const void *a, VkDeviceSize a_bytes,
     const void *b, VkDeviceSize b_bytes)
 {
@@ -155,6 +155,8 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
     if (!op) return PS5VK_IMAGE_DOMAIN_NONE;
     switch (op->type) {
     case PS5VK_COPY_IMAGE:
+        if (ps5vk_bc_linear_image(op->image_source) &&
+            ps5vk_bc_linear_image(op->image_destination)) return PS5VK_IMAGE_DOMAIN_LINEAR;
         /* A linear staging destination is the pinned host readback: its source
          * must be the colour attachment whose tiled surface is detiled below.
          * Any other combination is not an implemented copy at all. */
@@ -214,6 +216,140 @@ static int layout_is_transfer_destination(VkImageLayout layout)
 { return layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL || layout == VK_IMAGE_LAYOUT_GENERAL; }
 
 
+/* BC image copies preserve block bytes; equal block sizes are compatible even
+ * when the sampled interpretation differs. Each side uses its own mip pitch. */
+static int bc_image_copy_plan(VkImage source, VkDeviceSize source_bytes,
+    VkImage destination, VkDeviceSize destination_bytes, const VkImageCopy *r,
+    struct ps5vk_texture_copy *src, struct ps5vk_texture_copy *dst)
+{
+    if (r->srcSubresource.layerCount != r->dstSubresource.layerCount) return 0;
+    const VkBufferImageCopy sr = {.imageSubresource=r->srcSubresource,
+        .imageOffset=r->srcOffset,.imageExtent=r->extent};
+    const VkBufferImageCopy dr = {.imageSubresource=r->dstSubresource,
+        .imageOffset=r->dstOffset,.imageExtent=r->extent};
+    return ps5vk_texture_copy_plan_for_image(source,UINT64_MAX,source_bytes,&sr,src)==VK_SUCCESS &&
+        ps5vk_texture_copy_plan_for_image(destination,UINT64_MAX,destination_bytes,&dr,dst)==VK_SUCCESS &&
+        src->row_bytes==dst->row_bytes && src->rows==dst->rows && src->slices==dst->slices;
+}
+
+static VkDeviceSize bc_image_copy_span(const struct ps5vk_texture_copy *p)
+{
+    /* The planner already checked the complete sum for overflow and bounds. */
+    return (VkDeviceSize)(p->slices-1)*p->destination_slice_pitch+
+        (VkDeviceSize)(p->rows-1)*p->destination_pitch+p->row_bytes;
+}
+
+/* Rows are ordered within each layer, and layers within the allocation. Merge
+ * the two interval streams in linear time. Padding never counts as copied
+ * data, allowing disjoint regions of one image even when their bounds overlap. */
+static int bc_image_copy_overlap(const void *a,const struct ps5vk_texture_copy *ap,
+    const void *b,const struct ps5vk_texture_copy *bp)
+{
+    const unsigned char *ab=(const unsigned char *)a+ap->destination_offset;
+    const unsigned char *bb=(const unsigned char *)b+bp->destination_offset;
+    if (!spans_overlap(ab,bc_image_copy_span(ap),bb,bc_image_copy_span(bp))) return 0;
+    uint32_t az=0,ay=0,bz=0,by=0;
+    while (az<ap->slices && bz<bp->slices) {
+        const unsigned char *ar=ab+(VkDeviceSize)az*ap->destination_slice_pitch+
+            (VkDeviceSize)ay*ap->destination_pitch;
+        const unsigned char *br=bb+(VkDeviceSize)bz*bp->destination_slice_pitch+
+            (VkDeviceSize)by*bp->destination_pitch;
+        if (spans_overlap(ar,ap->row_bytes,br,bp->row_bytes)) return 1;
+        if ((uintptr_t)ar<(uintptr_t)br) {
+            if (++ay==ap->rows) {ay=0;++az;}
+        } else {
+            if (++by==bp->rows) {by=0;++bz;}
+        }
+    }
+    return 0;
+}
+
+static VkResult bc_image_copy_validate(VkDevice d,VkImage source,VkImageLayout source_layout,
+    VkImage destination,VkImageLayout destination_layout,uint32_t count,const VkImageCopy *regions)
+{
+    void *source_address,*destination_address;
+    VkDeviceSize source_bytes,destination_bytes;
+    if (!count || !regions || !ps5vk_bc_linear_image(source) ||
+        !ps5vk_bc_linear_image(destination) ||
+        !(source->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+        !(destination->info.usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+        !layout_is_transfer_source(source_layout) ||
+        !layout_is_transfer_destination(destination_layout) ||
+        ps5vk_texture_format_lookup(source->info.format)->bytes_per_block !=
+            ps5vk_texture_format_lookup(destination->info.format)->bytes_per_block ||
+        ps5vk_image_span(d,source,&source_address,&source_bytes)!=VK_SUCCESS ||
+        ps5vk_image_span(d,destination,&destination_address,&destination_bytes)!=VK_SUCCESS)
+        return INVALID;
+    for (uint32_t i=0;i<count;++i) {
+        struct ps5vk_texture_copy src,dst;
+        if (!bc_image_copy_plan(source,source_bytes,destination,destination_bytes,
+                &regions[i],&src,&dst)) return INVALID;
+        for (uint32_t j=0;j<count;++j) {
+            struct ps5vk_texture_copy other_src,other_dst;
+            const VkImageSubresourceLayers *a=&regions[i].srcSubresource;
+            const VkImageSubresourceLayers *b=&regions[j].dstSubresource;
+            if (source==destination && a->mipLevel==b->mipLevel &&
+                (uint64_t)a->baseArrayLayer<(uint64_t)b->baseArrayLayer+b->layerCount &&
+                (uint64_t)b->baseArrayLayer<(uint64_t)a->baseArrayLayer+a->layerCount &&
+                (source_layout!=VK_IMAGE_LAYOUT_GENERAL ||
+                 destination_layout!=VK_IMAGE_LAYOUT_GENERAL)) return INVALID;
+            if (!bc_image_copy_plan(source,source_bytes,destination,destination_bytes,
+                    &regions[j],&other_src,&other_dst) ||
+                bc_image_copy_overlap(source_address,&src,destination_address,&other_dst) ||
+                (i<j && bc_image_copy_overlap(destination_address,&dst,
+                    destination_address,&other_dst))) return INVALID;
+        }
+    }
+    return VK_SUCCESS;
+}
+
+static VkResult bc_image_copy_execute(VkDevice d,const struct ps5vk_operation *op)
+{
+    const VkImageCopy *regions=op->owned_payload;
+    void *source_address,*destination_address;
+    VkDeviceSize source_bytes,destination_bytes;
+    if (ps5vk_image_span(d,op->image_source,&source_address,&source_bytes)!=VK_SUCCESS ||
+        ps5vk_image_span(d,op->image_destination,&destination_address,&destination_bytes)!=VK_SUCCESS)
+        return VK_ERROR_DEVICE_LOST;
+    /* A late region's stale layout must not leave an earlier region written. */
+    for (uint32_t i=0;i<op->image_region_count;++i) {
+        const VkImageSubresourceLayers *s=&regions[i].srcSubresource,*t=&regions[i].dstSubresource;
+        if (!ps5vk_image_layout_matches(op->image_source,s->mipLevel,s->baseArrayLayer,
+                s->layerCount,op->image_source_layout) ||
+            !ps5vk_image_layout_matches(op->image_destination,t->mipLevel,t->baseArrayLayer,
+                t->layerCount,op->image_destination_layout)) return VK_ERROR_DEVICE_LOST;
+    }
+    /* Invalidate every source before any write: two disjoint regions can share
+     * a cache line, and a later invalidate must not discard an earlier copy. */
+    for (uint32_t i=0;i<op->image_region_count;++i) {
+        struct ps5vk_texture_copy src,dst;
+        if (!bc_image_copy_plan(op->image_source,source_bytes,op->image_destination,
+                destination_bytes,&regions[i],&src,&dst) ||
+            ps5vk_image_invalidate_range(d,op->image_source,src.destination_offset,
+                bc_image_copy_span(&src))!=VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
+    }
+    for (uint32_t i=0;i<op->image_region_count;++i) {
+        struct ps5vk_texture_copy src,dst;
+        if (!bc_image_copy_plan(op->image_source,source_bytes,op->image_destination,
+                destination_bytes,&regions[i],&src,&dst)) return VK_ERROR_DEVICE_LOST;
+        for (uint32_t z=0;z<src.slices;++z)
+        for (uint32_t y=0;y<src.rows;++y)
+            memcpy((unsigned char *)destination_address+dst.destination_offset+
+                (VkDeviceSize)z*dst.destination_slice_pitch+(VkDeviceSize)y*dst.destination_pitch,
+                (const unsigned char *)source_address+src.destination_offset+
+                (VkDeviceSize)z*src.destination_slice_pitch+(VkDeviceSize)y*src.destination_pitch,
+                src.row_bytes);
+    }
+    for (uint32_t i=0;i<op->image_region_count;++i) {
+        struct ps5vk_texture_copy src,dst;
+        if (!bc_image_copy_plan(op->image_source,source_bytes,op->image_destination,
+                destination_bytes,&regions[i],&src,&dst) ||
+            ps5vk_image_flush_range(d,op->image_destination,dst.destination_offset,
+                bc_image_copy_span(&dst))!=VK_SUCCESS) return VK_ERROR_DEVICE_LOST;
+    }
+    return VK_SUCCESS;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
     VkImageLayout source_layout, VkImage destination, VkImageLayout destination_layout,
     uint32_t region_count, const VkImageCopy *regions)
@@ -225,6 +361,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
     VkDevice d = c->pool->device;
     void *source_address = NULL, *destination_address = NULL;
     VkDeviceSize source_bytes = 0, destination_bytes = 0;
+    if (ps5vk_bc_linear_image(source) && ps5vk_bc_linear_image(destination)) {
+        if (bc_image_copy_validate(d,source,source_layout,destination,destination_layout,
+                region_count,regions)!=VK_SUCCESS) {ps5vk_command_invalidate(c);return;}
+        struct ps5vk_operation *op=ps5vk_command_reserve_operation_with_payload(c,
+            PS5VK_COPY_IMAGE,PS5VK_OPERATION_OUTSIDE_RENDER_PASS,regions,
+            (size_t)region_count*sizeof(*regions));
+        if (!op) return;
+        op->image_source=source;op->image_destination=destination;
+        op->image_source_layout=source_layout;op->image_destination_layout=destination_layout;
+        op->image_region_count=region_count;
+        return;
+    }
     /* The pinned draw module's host readback: the tiled colour attachment is
      * copied into the linear staging image, both in GENERAL, one whole-surface
      * region with no offsets (vktDrawImageObjectUtil.cpp:424-425). The staging
@@ -793,6 +941,14 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
         if (ps5vk_image_span(d, b->image, &address, &bytes) != VK_SUCCESS) return INVALID;
         return VK_SUCCESS;
     }
+    if (op->type==PS5VK_COPY_IMAGE && ps5vk_bc_linear_image(op->image_source) &&
+        ps5vk_bc_linear_image(op->image_destination)) {
+        if (!op->owned_payload || op->owned_payload_size!=
+                (size_t)op->image_region_count*sizeof(VkImageCopy)) return INVALID;
+        return bc_image_copy_validate(d,op->image_source,op->image_source_layout,
+            op->image_destination,op->image_destination_layout,op->image_region_count,
+            op->owned_payload);
+    }
     if (op->type == PS5VK_COPY_IMAGE) {
         /* The pinned host readback: the tiled colour attachment in GENERAL into
          * the linear staging image in GENERAL, one whole-surface region. The
@@ -925,6 +1081,8 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
             b->oldLayout, b->newLayout)) return VK_ERROR_DEVICE_LOST;
         return VK_SUCCESS;
     }
+    if (op->type==PS5VK_COPY_IMAGE && ps5vk_bc_linear_image(op->image_source) &&
+        ps5vk_bc_linear_image(op->image_destination)) return bc_image_copy_execute(d,op);
     if (op->type == PS5VK_COPY_IMAGE) {
         /* The tiled colour attachment was painted by an earlier submission.
          * Segments are executed in recorded order and a segment starts only
