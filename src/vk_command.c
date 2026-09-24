@@ -1282,7 +1282,8 @@ static int compute_scope(VkPipelineStageFlags stages, VkAccessFlags access)
 }
 static int command_scope(VkPipelineStageFlags stages,VkAccessFlags access)
 { return texture_scope(stages,access) || compute_scope(stages,access); }
-static int image_barrier_profile(const VkImageMemoryBarrier *b)
+static int image_barrier_profile(const VkImageMemoryBarrier *b,
+    VkPipelineStageFlags src_stage,VkPipelineStageFlags dst_stage)
 {
     VkImage image=b->image;
     const VkImageUsageFlags usage=image->info.usage;
@@ -1354,6 +1355,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
         !b->srcAccessMask &&
         b->dstAccessMask==VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     if(readback)return
+        ps5vk_precise_query_colour_barrier(b,src_stage,dst_stage) ||
         ps5vk_color_discard_barrier(b) ||
         ps5vk_color_readback_reuse_barrier(b) ||
         (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
@@ -1498,7 +1500,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
             !image || image->device!=c->pool->device ||
-            !image_barrier_profile(b) ||
+            !image_barrier_profile(b,src,dst) ||
             /* A depth target is ordered through its depth aspect; every other
              * role in this profile is colour. */
             b->subresourceRange.aspectMask!=((ps5vk_depth_clear_image(image) ||

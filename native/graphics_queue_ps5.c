@@ -36,6 +36,7 @@ enum { PS5VK_QUERY_COUNTER_PAIRS = 64, PS5VK_QUERY_SLOT_BYTES = 1024,
 #include "graphics_pipeline_ps5.h"
 #include "runtime_graphics_compiler.h"
 extern unsigned ps5vk_draw_prepare_site;
+extern unsigned ps5vk_draw_state_site;
 extern unsigned ps5vk_input_attachment_gate_site;
 extern int32_t sceAgcDriverGetTFRing(uint64_t *,uint32_t *);
 extern int32_t sceAgcDriverSetTFRing(uint64_t,uint32_t);
@@ -1396,9 +1397,9 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 (uintptr_t)p->pair,vertex_usage,&targets,draw);
         } else rc=ps5vk_native_prepare_resource_draw(d,op,&begin->render_area,defaults,(uintptr_t)p->pair,&targets,draw);
         if(rc!=VK_SUCCESS) {
-            ps5log_printf(PS5LOG_ERR,"PS5VK_DRAW_RESOURCE_PREPARE_FAILED serial=%llu vertex_mask=%x bindings=%u attributes=%u rc=%d",
+            ps5log_printf(PS5LOG_ERR,"PS5VK_DRAW_RESOURCE_PREPARE_FAILED serial=%llu vertex_mask=%x bindings=%u attributes=%u site=%u state_site=%u rc=%d",
                 (unsigned long long)j->serial,vertex_usage,key.vertex_binding_count,
-                key.vertex_attribute_count,(int)rc);
+                key.vertex_attribute_count,ps5vk_draw_prepare_site,ps5vk_draw_state_site,(int)rc);
             draw_site=31;goto fail;
         }
         ++j->count;

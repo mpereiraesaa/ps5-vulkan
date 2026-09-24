@@ -1095,6 +1095,49 @@ static void d16_attachment_recording(void)
     vkDestroyImage(device,image,NULL);
 }
 
+static void precise_query_colour_barriers(void)
+{
+    /* vktQueryPoolOcclusionTests.cpp::recordRender uses GENERAL for its
+     * 128x128 RGBA8 colour attachment, then copies it after the draw. */
+    VkImage image=make_image_extent(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        128u,128u,NULL);
+    VkDeviceMemory memory=image->memory;
+    VkImageMemoryBarrier barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,.newLayout=VK_IMAGE_LAYOUT_GENERAL,
+        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.image=image,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+    VkCommandBuffer command=begin();
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0,0,NULL,0,NULL,1,&barrier);
+    barrier.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.oldLayout=VK_IMAGE_LAYOUT_GENERAL;
+    barrier.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&barrier);
+    assert(command->state==PS5VK_RECORDING && command->operation_count==2);
+    assert(vkEndCommandBuffer(command)==VK_SUCCESS);
+
+    VkCommandBuffer wrong_stage=begin();
+    barrier.srcAccessMask=0;
+    barrier.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout=VK_IMAGE_LAYOUT_GENERAL;
+    vkCmdPipelineBarrier(wrong_stage,VK_PIPELINE_STAGE_HOST_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0,0,NULL,0,NULL,1,&barrier);
+    assert(wrong_stage->state==PS5VK_INVALID);
+    VkCommandBuffer buffers[]={command,wrong_stage};
+    vkFreeCommandBuffers(device,pool,2,buffers);
+    vkDestroyImage(device,image,NULL);
+    vkFreeMemory(device,memory,NULL);
+}
+
 int main(void)
 {
     VkInstance instance;
@@ -2108,6 +2151,7 @@ int main(void)
     vkDestroyImage(device, destination, NULL);
     vkDestroyImage(device, source, NULL);
     d16_attachment_recording();
+    precise_query_colour_barriers();
     vkDestroyCommandPool(device, pool, NULL);
     input_attachment_shape();
     vkDestroyDevice(device, NULL);

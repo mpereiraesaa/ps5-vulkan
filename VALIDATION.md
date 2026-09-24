@@ -5003,3 +5003,38 @@ evidence. That scan is now excluded from the D16 variant, whose independent
 depth oracle remains active. The canonical eboot was restored after all three
 attempts. Firmware was not recorded. Public feature reporting remains
 unchanged.
+
+## T07 precise occlusion original CTS measurement (2026-09-24)
+
+The unchanged pinned `dEQP-VK.query_pool.occlusion_query.basic_precise` case
+uses a 128×128 D16 depth attachment and an RGBA8 colour attachment read back
+after rendering. The diagnostic path now accepts the case's exact colour
+barriers in both the recorder and native executor. Its rasterizer enables
+depth bias with all factors zero; the native draw path programs the D16
+fixed-depth bias format and continues to reject nonzero D16 bias factors.
+The corresponding host tests cover the admitted shapes and nearby refusals.
+
+The original CTS case passed twice with the upstream oracle unchanged: run
+`run-632898402692343` (QPA SHA-256
+`7d74fdcb4b14babe9eff66131af7617c8d3e09ed0006f7ef8cdc0647b7592ba4`)
+and run `run-632934419376926` (QPA SHA-256
+`72125c75b71eef1cd8aa0ebf422d0db532747d73c8695908bc367cd8bce0e67a`).
+Both strict receipts recorded 1 Pass, zero Fail, zero NotSupported, exact
+selection identity, complete report and clean title closure. The one-case
+selection SHA-256 was
+`a356b3c615fd7ed79f0e6f744e7fd7825bb13209645006e091a4e95a42d6dafc`.
+
+The same signed eboot SHA-256
+`a39b620eae748e7f688880e4b3c13604b9d21675b22d216c6a0f66b9b2b7b998`
+then passed a measurement selection containing the 507 frozen acceptance
+leaves plus this precise case: **508/508 Pass**, zero Fail, zero NotSupported,
+zero missing or unexpected. Run `run-633094482815947` recorded QPA SHA-256
+`70f78ac11d6bc61b12c45006306a7248d0a7da5b9972e982fc218e67e73932f4`
+and selection SHA-256
+`60bf95c41062832cffc3f6e95f5ee19c6ac47cce1c007b5c5fddec6b85a09d85`;
+identity, report completion and clean closure were verified. The canonical
+payload was restored after each run. Firmware was not recorded.
+
+This is diagnostic evidence for one original precise-query leaf and a neutral
+507-case regression. The frozen selection and public `occlusionQueryPrecise`
+reporting have not been promoted; the full T07 capability audit remains open.

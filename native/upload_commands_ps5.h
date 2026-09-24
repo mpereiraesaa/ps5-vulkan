@@ -216,6 +216,7 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
                  op->src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
                  op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                ps5vk_precise_query_colour_barrier(b,op->src_stage,op->dst_stage) ||
                 /* The pinned texture renderer restores its colour target
                  * after copyImageToBuffer. Keep this explicit handback in the
                  * same graphics serial as the readback and preserve the final
