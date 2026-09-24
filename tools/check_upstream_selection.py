@@ -215,7 +215,11 @@ def _texture_gather_leaf_requirements(text: str) -> dict[str, list[str]]:
         'const int wrapSNdx = wrapCaseNdx;',
         'const int wrapTNdx = (wrapCaseNdx + 1) % DE_LENGTH_OF_ARRAY(wrapModes);',
         '{"2d", TEXTURETYPE_2D}', '{"2d_array", TEXTURETYPE_2D_ARRAY}',
-        '{"cube", TEXTURETYPE_CUBE}', '{"rgba8",',
+        '{"cube", TEXTURETYPE_CUBE}',
+        '{"rgba8", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::UNORM_INT8)}',
+        '{"rgba8ui", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::UNSIGNED_INT8)}',
+        '{"rgba8i", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::SIGNED_INT8)}',
+        '{"depth32f", tcu::TextureFormat(tcu::TextureFormat::D, tcu::TextureFormat::FLOAT)}',
         '{"size_pot", IVec3(64, 64, 3)}', '{"size_npot", IVec3(17, 23, 3)}',
         'offsetSize == OFFSETSIZE_MINIMUM_REQUIRED ? "min_required_offset"',
         'void TextureGather2DCase::checkSupport(Context &context) const\n{\n'
@@ -224,6 +228,8 @@ def _texture_gather_leaf_requirements(text: str) -> dict[str, list[str]]:
         '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
         'void TextureGatherCubeCase::checkSupport(Context &context) const\n{\n'
         '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'case tcu::Sampler::COMPAREMODE_LESS:\n        return "less";',
+        'string() + "compare_" + compareModeName(compareMode)',
         'offsetSize == OFFSETSIZE_IMPLEMENTATION_MAXIMUM', '"implementation_offset"',
     )
     if not all(fragment in text for fragment in required_fragments):
@@ -262,7 +268,37 @@ def _texture_gather_leaf_requirements(text: str) -> dict[str, list[str]]:
     for pair in wrap_pairs:
         path = ("dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot." + pair)
         result[path] = ["core:shaderImageGatherExtended"]
+
+    # The pinned format table also registers typed integer gather and Dref
+    # formats. Keep one power-of-two 2D case for each operation family and
+    # every wrap pair for UINT/SINT; these paths exercise the same original
+    # image-gather oracle with integer sampler/result types. Their resource
+    # profiles are tracked separately from the RGBA8_UNORM measurements.
+    for texture_format in ("rgba8ui", "rgba8i"):
+        for group in group_types:
+            intermediate = "" if group == "basic" else ".min_required_offset"
+            for pair in wrap_pairs:
+                path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                        f".2d.{texture_format}.size_pot." + pair)
+                result[path] = ["core:shaderImageGatherExtended"]
+
+    # Dref gather uses a shadow sampler and the factory places it beneath the
+    # generated compare_less group. Pin one original minimum-offset 2D leaf
+    # whose query reaches the depth sampled-image resource path.
+    result["dEQP-VK.shaderrender.texture_gather.offset.min_required_offset."
+           "2d.depth32f.size_pot.compare_less.clamp_to_edge_repeat"] = [
+               "core:shaderImageGatherExtended"]
     return result
+
+
+def _texture_gather_generated_segments(text: str) -> set[str]:
+    """Return group names composed by the pinned gather factory."""
+    if ('string() + "compare_" + compareModeName(compareMode)' in text and
+            'case tcu::Sampler::COMPAREMODE_LESS:\n        return "less";' in text and
+            '{"depth32f", tcu::TextureFormat(tcu::TextureFormat::D, '
+            'tcu::TextureFormat::FLOAT)}' in text):
+        return {"compare_less"}
+    return set()
 
 
 def _precise_occlusion_leaf_requirements(text: str) -> dict[str, list[str]]:
@@ -1807,6 +1843,8 @@ def main() -> int:
             generated_segments.add("uint")
         ubo_generated_paths = (_ubo_generated_paths(text)
                                if source_path.name == "vktUniformBlockTests.cpp" else frozenset())
+        if source_path.as_posix().endswith(GATHER_TEST_SOURCE):
+            generated_segments |= _texture_gather_generated_segments(text)
         for segment in segments[1:-1]:
             if (not _quoted_in(segment, searchable) and
                     segment not in generated_segments and

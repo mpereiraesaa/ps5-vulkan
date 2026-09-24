@@ -93,11 +93,11 @@ class UpstreamSelectionTests(unittest.TestCase):
         # point_1px shapes moved to plain-point-line-pipeline-refused, whose
         # pipeline shape this profile refuses at creation. Seven T08 volatile
         # atomic leaves and two original buffer-device-address leaves belong
-        # to acceptance. The 111 diagnostics include the 66 refusal/gap records
-        # plus 45 source-derived gather measurements; these remain diagnostic
+        # to acceptance. The 136 diagnostics include the 66 refusal/gap records
+        # plus 70 source-derived gather measurements; these remain diagnostic
         # and are not a public promotion. `leaves` counts every
         # attachment_write_mask leaf the pinned factory generates.
-        self.assertEqual((507, 111, 48),
+        self.assertEqual((507, 136, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]
@@ -207,11 +207,32 @@ class UpstreamSelectionTests(unittest.TestCase):
             path = ("dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8."
                     "size_pot." + pair)
             self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        for texture_format in ("rgba8ui", "rgba8i"):
+            for group in ("basic", "offset", "offset_dynamic", "offsets"):
+                intermediate = "" if group == "basic" else ".min_required_offset"
+                for pair in ("clamp_to_edge_repeat", "repeat_mirrored_repeat",
+                             "mirrored_repeat_clamp_to_edge"):
+                    path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                            f".2d.{texture_format}.size_pot." + pair)
+                    self.assertEqual(["core:shaderImageGatherExtended"], gather[path])
+        dref = ("dEQP-VK.shaderrender.texture_gather.offset.min_required_offset."
+                "2d.depth32f.size_pot.compare_less.clamp_to_edge_repeat")
+        self.assertEqual(["core:shaderImageGatherExtended"], gather[dref])
+        self.assertEqual(24, sum(".rgba8ui." in path or ".rgba8i." in path
+                                 for path in gather))
+        self.assertEqual({"compare_less"},
+                         self.gate._texture_gather_generated_segments(gather_text))
         self.assertEqual(["core:occlusionQueryPrecise"], query[
             "dEQP-VK.query_pool.occlusion_query.basic_precise"])
 
         self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
             gather_text.replace('"min_required_offset"', '"invented_offset"', 1)))
+        self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
+            gather_text.replace('"rgba8ui"', '"invented_integer_format"', 1)))
+        self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
+            gather_text.replace('return "less";', 'return "invented_compare_mode";', 1)))
+        self.assertEqual(set(), self.gate._texture_gather_generated_segments(
+            gather_text.replace('return "less";', 'return "invented_compare_mode";', 1)))
         self.assertEqual({}, self.gate._texture_gather_leaf_requirements(
             gather_text.replace(
                 "void TextureGather2DCase::checkSupport(Context &context) const\n{\n"

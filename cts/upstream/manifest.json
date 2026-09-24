@@ -5768,6 +5768,66 @@
       "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
     },
     {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8i.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8i.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8ui.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.basic.2d.rgba8ui.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
       "category": "t07-gather-measured",
       "expected_status": "Pass",
       "features_required": [
@@ -5858,6 +5918,16 @@
       "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
     },
     {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.depth32f.size_pot.compare_less.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the D32 comparison-sampler Dref gather form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
       "category": "t07-gather-measured",
       "expected_status": "Pass",
       "features_required": [
@@ -5916,6 +5986,66 @@
       "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
       "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
       "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8i.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8i.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8ui.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset.min_required_offset.2d.rgba8ui.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
     },
     {
       "category": "t07-gather-measured",
@@ -6038,6 +6168,66 @@
       "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
     },
     {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8i.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8i.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8ui.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offset_dynamic.min_required_offset.2d.rgba8ui.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
       "category": "t07-gather-measured",
       "expected_status": "Pass",
       "features_required": [
@@ -6126,6 +6316,66 @@
       "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8.size_pot.repeat_mirrored_repeat",
       "rationale": "Original pinned texture_gather oracle previously passed with the diagnostic extended-gather profile; remains diagnostic-only while public feature reporting stays gated.",
       "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2783"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8i.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8i.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8ui.size_pot.clamp_to_edge_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
+    },
+    {
+      "category": "t07-gather-typed-diagnostic",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:shaderImageGatherExtended"
+      ],
+      "path": "dEQP-VK.shaderrender.texture_gather.offsets.min_required_offset.2d.rgba8ui.size_pot.repeat_mirrored_repeat",
+      "rationale": "Original pinned CTS image oracle for the typed RGBA8 integer sampler and render-target form; remains diagnostic until its source/result image roles are supported and the unchanged oracle passes.",
+      "source": "external/vulkancts/modules/vulkan/shaderrender/vktShaderRenderTextureGatherTests.cpp:2677"
     },
     {
       "category": "t07-gather-measured",
