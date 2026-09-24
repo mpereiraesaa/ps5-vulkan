@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILES = {'bc1-mip': ('BC1_RGB_UNORM', 131, 1, 8),
             'bc1-layer': ('BC1_RGB_UNORM', 131, 0, 8),
             'bc3-tail': ('BC3_UNORM', 137, 3, 16),
-            'bc1-imagecopy': ('BC1_RGB_UNORM', 131, 1, 8)}
+            'bc1-imagecopy': ('BC1_RGB_UNORM', 131, 1, 8),
+            'bc1-partial-layers': ('BC1_RGB_UNORM', 131, 1, 8)}
 MIPS, LAYERS, TARGET, GUARD = 4, 3, 64, 32
 
 
@@ -33,14 +34,16 @@ def block(seed, block_bytes):
 
 def generate(profile):
     fmt, value, selected_mip, block_bytes = PROFILES[profile]
-    selected_layer = 1 if profile == 'bc1-layer' else 2
+    partial = profile == 'bc1-partial-layers'
+    selected_layer = 1 if profile == 'bc1-layer' or partial else 2
+    extent = [37,29] if partial else [13,9]
     upload = bytearray([0xcd] * GUARD)
     expected = bytearray([0xa5] * GUARD)
     regions = []
     selected_blocks = []
     for layer in range(LAYERS):
         for mip in range(MIPS):
-            width, height = max(1, 13 >> mip), max(1, 9 >> mip)
+            width, height = max(1, extent[0] >> mip), max(1, extent[1] >> mip)
             columns, rows = (width + 3) // 4, (height + 3) // 4
             pitch = (columns + 1) * block_bytes
             offset = len(upload)
@@ -60,20 +63,40 @@ def generate(profile):
     selected = regions[selected_layer*MIPS + selected_mip]
     image_copy = profile == 'bc1-imagecopy'
     patch_offset = regions[selected_mip]['offset'] if image_copy else len(upload)
-    if not image_copy:
-        patch_size = selected['rows'] * selected['pitch']
-        upload.extend([0xcd] * (patch_size + GUARD))
     columns = (selected['width']+3)//4
+    if partial:
+        # One region covers two layers. Padding separates rows AND layers;
+        # upload and readback deliberately use different strides.
+        upload.extend([0xcd] * (2*48 + GUARD))
+        partial_read_offset = len(expected)
+        expected.extend([0xa5] * (2*96 + GUARD))
+        for layer_index in range(2):
+            destination = regions[(selected_layer+layer_index)*MIPS+selected_mip]
+            for x in range(2):
+                data = block(701+layer_index*113+x, block_bytes)
+                src = patch_offset+layer_index*48+x*block_bytes
+                dst = destination['offset']+destination['pitch']+(1+x)*block_bytes
+                read = partial_read_offset+layer_index*96+x*block_bytes
+                upload[src:src+block_bytes] = data
+                expected[dst:dst+block_bytes] = data
+                expected[read:read+block_bytes] = data
+    else:
+        if not image_copy:
+            patch_size = selected['rows'] * selected['pitch']
+            upload.extend([0xcd] * (patch_size + GUARD))
+        for y in range(selected['rows']):
+            for x in range(columns):
+                at = y*selected['pitch'] + x*block_bytes
+                if image_copy:
+                    data = bytes(upload[patch_offset+at:patch_offset+at+block_bytes])
+                else:
+                    data = block(701+y*columns+x, block_bytes)
+                    upload[patch_offset+at:patch_offset+at+block_bytes] = data
+                expected[selected['offset']+at:selected['offset']+at+block_bytes] = data
     for y in range(selected['rows']):
         for x in range(columns):
-            at = y*selected['pitch'] + x*block_bytes
-            if image_copy:
-                data = bytes(upload[patch_offset+at:patch_offset+at+block_bytes])
-            else:
-                data = block(701+y*columns+x, block_bytes)
-                upload[patch_offset+at:patch_offset+at+block_bytes] = data
-            expected[selected['offset']+at:selected['offset']+at+block_bytes] = data
-            selected_blocks.append(data)
+            at = selected['offset']+y*selected['pitch']+x*block_bytes
+            selected_blocks.append(expected[at:at+block_bytes])
     rgba = bytearray()
     for y in range(TARGET):
         for x in range(TARGET):
@@ -83,14 +106,20 @@ def generate(profile):
             rgba.extend(int(v*255+.5) for v in rgb)
             rgba.append(data[0] if block_bytes == 16 else 255)
     contract = dict(profile=profile, format='VK_FORMAT_'+fmt+'_BLOCK', format_value=value,
-                    extent=[13,9], mip_levels=MIPS, array_layers=LAYERS,
+                    extent=extent, mip_levels=MIPS, array_layers=LAYERS,
                     selected_mip=selected_mip, selected_layer=selected_layer,
                     selected_extent=[selected['width'],selected['height']],
-                    subresources=12, preserved_subresources=11, target_extent=[64,64],
+                    subresources=12, preserved_subresources=10 if partial else 11, target_extent=[64,64],
                     filter='nearest', tolerance=1, readback_bytes=len(expected),
                     input_sha256=sha(upload), raw_reference_sha256=sha(expected),
                     reference_sha256=sha(rgba), reference_generator_sha256=sha(Path(__file__).read_bytes()),
                     rgb_decoder_sha256=sha((ROOT/'tools/prepare_consumer_bc_filter.py').read_bytes()))
+    if partial:
+        contract.update(operation='buffer-to-image-interior-multilayer',
+                        copy_offset=[4,4,0], copy_extent=[8,4,1], copy_layers=2,
+                        upload_row_length=12, upload_image_height=8,
+                        readback_row_length=16, readback_image_height=12,
+                        partial_read_offset=partial_read_offset)
     if image_copy:
         contract.update(operation='image-to-image', source_mip=selected_mip, source_layer=0)
     return bytes(upload), bytes(expected), bytes(rgba), regions, patch_offset, contract
@@ -113,6 +142,11 @@ def main():
     header += '};\n'
     constants = dict(FORMAT=contract['format'], MIP=contract['selected_mip'], LAYER=contract['selected_layer'],
                      PATCH_OFFSET=patch, TOLERANCE=1,
+                     WIDTH=contract['extent'][0], HEIGHT=contract['extent'][1],
+                     PRESERVED=contract['preserved_subresources'],
+                     COPY_LAYERS=contract.get('copy_layers',1),
+                     PARTIAL_LAYERS=int(args.profile == 'bc1-partial-layers'),
+                     PARTIAL_READ_OFFSET=contract.get('partial_read_offset',0),
                      IMAGE_COPY=int(args.profile == 'bc1-imagecopy'))
     for name, value in constants.items():
         header += f'#define BC_SUBRESOURCE_{name} {value}\n'

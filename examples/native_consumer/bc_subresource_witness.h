@@ -27,9 +27,9 @@ static void run_bc_subresource_witness(VkPhysicalDevice physical, VkDevice devic
                                    VkQueue queue)
 {
     ps5log_printf(PS5LOG_MARK,
-        "PS5VK_CONSUMER_BC_SUBRESOURCE_START profile=%s format=%u image=13x9 mips=4 layers=3 mip=%u layer=%u"
+        "PS5VK_CONSUMER_BC_SUBRESOURCE_START profile=%s format=%u image=%ux%u mips=4 layers=3 mip=%u layer=%u"
         " input_sha256=%s raw_reference_sha256=%s reference_sha256=%s",
-        BC_SUBRESOURCE_PROFILE, (unsigned)BC_SUBRESOURCE_FORMAT, BC_SUBRESOURCE_MIP, BC_SUBRESOURCE_LAYER,
+        BC_SUBRESOURCE_PROFILE, (unsigned)BC_SUBRESOURCE_FORMAT, BC_SUBRESOURCE_WIDTH, BC_SUBRESOURCE_HEIGHT, BC_SUBRESOURCE_MIP, BC_SUBRESOURCE_LAYER,
         BC_SUBRESOURCE_INPUT_SHA256, BC_SUBRESOURCE_RAW_REFERENCE_SHA256,
         BC_SUBRESOURCE_REFERENCE_SHA256);
 
@@ -54,7 +54,7 @@ static void run_bc_subresource_witness(VkPhysicalDevice physical, VkDevice devic
         .flags = 0,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = BC_SUBRESOURCE_FORMAT,
-        .extent = {13, 9, 1},
+        .extent = {BC_SUBRESOURCE_WIDTH, BC_SUBRESOURCE_HEIGHT, 1},
         .mipLevels = 4,
         .arrayLayers = BC_SUBRESOURCE_STORAGE_LAYERS,
         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -391,7 +391,7 @@ static void run_bc_subresource_witness(VkPhysicalDevice physical, VkDevice devic
     /* Only the selected mip/layer becomes writable. Other subresources
      * remain readable; their exact bytes and all readback padding are checked. */
     sampled_barrier.subresourceRange = (VkImageSubresourceRange){
-        VK_IMAGE_ASPECT_COLOR_BIT, BC_SUBRESOURCE_MIP, 1, BC_SUBRESOURCE_LAYER, 1};
+        VK_IMAGE_ASPECT_COLOR_BIT, BC_SUBRESOURCE_MIP, 1, BC_SUBRESOURCE_LAYER, BC_SUBRESOURCE_COPY_LAYERS};
     sampled_barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     sampled_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     sampled_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -414,6 +414,13 @@ static void run_bc_subresource_witness(VkPhysicalDevice physical, VkDevice devic
 #else
     VkBufferImageCopy patch = bc_subresource_regions[BC_SUBRESOURCE_LAYER * 4 + BC_SUBRESOURCE_MIP];
     patch.bufferOffset = BC_SUBRESOURCE_PATCH_OFFSET;
+#if BC_SUBRESOURCE_PARTIAL_LAYERS
+    patch.bufferRowLength = 12;
+    patch.bufferImageHeight = 8;
+    patch.imageSubresource.layerCount = 2;
+    patch.imageOffset = (VkOffset3D){4, 4, 0};
+    patch.imageExtent = (VkExtent3D){8, 4, 1};
+#endif
     vkCmdCopyBufferToImage(command_buffer, upload_buffer, sampled_image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &patch);
 #endif
@@ -438,6 +445,17 @@ static void run_bc_subresource_witness(VkPhysicalDevice physical, VkDevice devic
                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback_buffer,
                            11, raw_copies + 1);
     sampled_barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+#if BC_SUBRESOURCE_PARTIAL_LAYERS
+    VkBufferImageCopy interior_read = patch;
+    interior_read.bufferOffset = BC_SUBRESOURCE_PARTIAL_READ_OFFSET +
+        BC_SUBRESOURCE_TARGET_WIDTH * BC_SUBRESOURCE_TARGET_HEIGHT * 4;
+    interior_read.bufferRowLength = 16;
+    interior_read.bufferImageHeight = 12;
+    vkCmdCopyImageToBuffer(command_buffer, sampled_image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readback_buffer,
+                           1, &interior_read);
+#endif
+    sampled_barrier.subresourceRange.layerCount = 1;
     sampled_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     sampled_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     sampled_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -525,8 +543,8 @@ static void run_bc_subresource_witness(VkPhysicalDevice physical, VkDevice devic
         raw_mismatches += raw[i] != bc_subresource_raw_expected[i];
     }
     ps5log_printf(PS5LOG_MARK,
-        "PS5VK_CONSUMER_BC_SUBRESOURCE_RAW bytes=%u subresources=12 preserved=11 mismatches=%u",
-        (unsigned)sizeof(bc_subresource_raw_expected), raw_mismatches);
+        "PS5VK_CONSUMER_BC_SUBRESOURCE_RAW bytes=%u subresources=12 preserved=%u mismatches=%u",
+        (unsigned)sizeof(bc_subresource_raw_expected), BC_SUBRESOURCE_PRESERVED, raw_mismatches);
     REQUIRE(raw_mismatches == 0, "all BC subresources and readback guards match exact reference bytes");
 
     const uint8_t *pixels = readback_bytes;

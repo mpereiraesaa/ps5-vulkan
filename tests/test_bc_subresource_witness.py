@@ -19,7 +19,9 @@ class BCSubresourceReferenceTests(unittest.TestCase):
                 self.assertEqual(generate(profile), generate(profile))
                 self.assertEqual(len(regions), 12)
                 self.assertEqual(len(pixels), 64*64*4)
-                self.assertEqual(contract['selected_extent'], [max(1,13>>mip),max(1,9>>mip)])
+                self.assertEqual(contract['selected_extent'], [max(1,n>>mip) for n in contract['extent']])
+                if profile == 'bc1-partial-layers':
+                    continue  # The independent block-by-block oracle below covers this profile.
                 layer = contract['selected_layer']
                 touched = set()
                 for r in regions:
@@ -41,7 +43,9 @@ class BCSubresourceReferenceTests(unittest.TestCase):
 
     def test_known_bc1_and_bc3_samples(self):
         for profile in PROFILES:
-            upload, _, pixels, _, patch, _ = generate(profile)
+            upload, _, pixels, regions, patch, contract = generate(profile)
+            if profile == 'bc1-partial-layers':
+                patch = regions[contract['selected_layer']*4+contract['selected_mip']]['offset']
             block_bytes = PROFILES[profile][3]
             at = patch+(8 if block_bytes==16 else 0)
             endpoint = int.from_bytes(upload[at:at+2], 'little')
@@ -107,7 +111,9 @@ class BCSubresourceReferenceTests(unittest.TestCase):
                     actual = candidate(upload,regions[index],block_bytes)
                     mismatches = sum(any(abs(a-b)>1 for a,b in zip(actual[i:i+4],expected[i:i+4]))
                                      for i in range(0,len(expected),4))
-                    self.assertGreaterEqual(mismatches, 1024)
+                    self.assertGreaterEqual(mismatches, 500 if profile == 'bc1-partial-layers' and label == 'stale-upload' else 1024)
+            if profile == 'bc1-partial-layers':
+                continue  # Full raw and stride faults are checked separately below.
             # Copying the replacement into layer zero instead of the selected layer
             # corrupts a preserved subresource and leaves the selected one stale.
             wrong = bytearray(raw)
@@ -135,6 +141,48 @@ class BCSubresourceReferenceTests(unittest.TestCase):
                     self.assertEqual(raw[offset],0xa5)
                     wrong=bytearray(raw); wrong[offset]=0xcd
                     self.assertEqual(sum(a!=b for a,b in zip(wrong,raw)),1)
+
+    def test_partial_multilayer_blocks_strides_and_exterior_preservation(self):
+        upload, raw, pixels, regions, patch, contract = generate('bc1-partial-layers')
+        self.assertEqual(contract['selected_extent'], [18,14])
+        self.assertEqual(contract['preserved_subresources'], 10)
+        touched=set(); changed=[]
+        for r in regions:
+            for y in range(r['rows']):
+                for x in range((r['width']+3)//4):
+                    at=r['offset']+y*r['pitch']+x*8
+                    is_patch=r['mip']==1 and r['layer'] in (1,2) and y==1 and x in (1,2)
+                    source=patch+(r['layer']-1)*48+(x-1)*8 if is_patch else at
+                    self.assertEqual(raw[at:at+8],upload[source:source+8])
+                    if is_patch:
+                        changed.append((r['layer'],x,y))
+                        self.assertNotEqual(raw[at:at+8],upload[at:at+8])
+                    touched.update(range(at,at+8))
+        self.assertEqual(changed,[(1,1,1),(1,2,1),(2,1,1),(2,2,1)])
+        read=contract['partial_read_offset']
+        for layer in range(2):
+            self.assertEqual(raw[read+layer*96:read+layer*96+16],
+                             upload[patch+layer*48:patch+layer*48+16])
+            touched.update(range(read+layer*96,read+layer*96+16))
+        self.assertTrue(all(v==0xa5 for i,v in enumerate(raw) if i not in touched))
+        self.assertGreater(len(raw)-len(touched), 900)
+        # Collapsing the upload/readback layer stride, or swapping layers,
+        # cannot reproduce the expected interior bytes.
+        self.assertNotEqual(upload[patch:patch+16],upload[patch+48:patch+64])
+        self.assertNotEqual(upload[patch+24:patch+40],upload[patch+48:patch+64])
+        self.assertEqual(raw[read+32:read+48],bytes([0xa5])*16)
+        self.assertEqual(raw[read+64:read+80],bytes([0xa5])*16)
+        # Independent normalized endpoints over the complete 18x14 image.
+        # Integer nearest mapping avoids the generator's floating point path.
+        expected=bytearray()
+        for y in range(64):
+            for x in range(64):
+                bx=((2*x+1)*18//128)//4; by=((2*y+1)*14//128)//4
+                seed=701+bx-1 if by==1 and bx in (1,2) else 53+17+by*5+bx
+                rgb=(((seed*7+3)%31+1,31),((seed*11+5)%63+1,63),((seed*13+9)%31+1,31))
+                expected.extend((v*255+den//2)//den for v,den in rgb)
+                expected.append(255)
+        self.assertEqual(pixels,expected)
 
 
 class BCConsumerPhysicalQueryTests(unittest.TestCase):
@@ -204,12 +252,28 @@ class BCSubresourceVerifierTests(unittest.TestCase):
         self.contract.update(vert_spirv_sha256='1'*64, frag_spirv_sha256='2'*64)
         self.artifact['bc_subresource'] = self.contract
         for key in ('profile', 'format_value', 'selected_mip', 'selected_layer', 'input_sha256',
-                    'raw_reference_sha256', 'reference_sha256', 'readback_bytes'):
+                    'raw_reference_sha256', 'reference_sha256', 'readback_bytes', 'preserved_subresources'):
             # Replace named fields, avoiding unrelated occurrences of 1 or 131.
             field = {'format_value':'format', 'selected_mip':'mip', 'selected_layer':'layer',
-                     'readback_bytes':'bytes'}.get(key, key)
+                     'readback_bytes':'bytes', 'preserved_subresources':'preserved'}.get(key, key)
             self.messages = [m.replace(f"{field}={old[key]}", f"{field}={self.contract[key]}")
                              for m in self.messages]
+
+        self.messages = [m.replace('image='+'x'.join(map(str,old['extent'])),
+                                   'image='+'x'.join(map(str,self.contract['extent'])))
+                         for m in self.messages]
+
+    def test_partial_layers_run_and_geometry_identity(self):
+        self.switch_profile('bc1-partial-layers')
+        result = self.run_validation()
+        self.assertEqual(result['preserved_subresources'], 10)
+        for key,value in (('copy_layers',1), ('copy_offset',[0,0,0]),
+                          ('copy_extent',[7,4,1]), ('upload_image_height',4),
+                          ('readback_image_height',8), ('extent',[13,9])):
+            old=self.contract[key]; self.contract[key]=value
+            with self.assertRaisesRegex(ValueError,'independent contract'):
+                self.run_validation()
+            self.contract[key]=old
 
     def test_bc3_tail_run(self):
         self.switch_profile('bc3-tail')
@@ -223,7 +287,7 @@ class BCSubresourceVerifierTests(unittest.TestCase):
         self.assertEqual(result['operation'], 'buffer-to-image')
 
     def test_runtime_mip_and_layer_identity_cannot_drift(self):
-        for profile in ('bc1-mip', 'bc1-layer', 'bc1-imagecopy', 'bc3-tail'):
+        for profile in PROFILES:
             self.setUp()
             self.switch_profile(profile)
             start = self.messages[1]

@@ -38,12 +38,12 @@ def validate(log, receipt, artifact):
     _require(one(PREFIX+'FEATURE ') == PREFIX+'FEATURE textureCompressionBC=1 enabled_by_features2=1',
              'BC feature negotiation')
     _require(one(PREFIX+'START ') ==
-             f"{PREFIX}START profile={contract['profile']} format={contract['format_value']} image=13x9 mips=4 layers=3 mip={contract['selected_mip']} layer={contract['selected_layer']} "
+             f"{PREFIX}START profile={contract['profile']} format={contract['format_value']} image={contract['extent'][0]}x{contract['extent'][1]} mips=4 layers=3 mip={contract['selected_mip']} layer={contract['selected_layer']} "
              f"input_sha256={contract['input_sha256']} raw_reference_sha256={contract['raw_reference_sha256']} reference_sha256={contract['reference_sha256']}",
              'BC input and reference identity')
     _require(one(PREFIX+'FENCE ') == PREFIX+'FENCE complete=1 timeout_ns=300000000', 'bounded fence completion')
     _require(one(PREFIX+'RAW ') ==
-             f"{PREFIX}RAW bytes={contract['readback_bytes']} subresources=12 preserved=11 mismatches=0",
+             f"{PREFIX}RAW bytes={contract['readback_bytes']} subresources=12 preserved={contract['preserved_subresources']} mismatches=0",
              'all subresource bytes and guards')
     result = re.fullmatch(PREFIX+r'RESULT pixels=4096 mismatches=0 max_error=(\d+) tolerance=1',
                           one(PREFIX+'RESULT '))
@@ -58,7 +58,7 @@ def validate(log, receipt, artifact):
                 operation=contract.get('operation', 'buffer-to-image'),
                 selected_mip=contract['selected_mip'], selected_layer=contract['selected_layer'],
                 readback_bytes=contract['readback_bytes'], subresources_checked=12,
-                preserved_subresources=11, pixels_checked=4096, mismatches=0,
+                preserved_subresources=contract['preserved_subresources'], pixels_checked=4096, mismatches=0,
                 max_error=int(result[1]), fence_complete=True)
     if contract.get('operation') == 'image-to-image':
         verified.update(source_mip=contract['source_mip'], source_layer=contract['source_layer'])
