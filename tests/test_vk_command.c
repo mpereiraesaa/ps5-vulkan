@@ -1450,47 +1450,67 @@ static void imageless_second_color_multiview_layers(void)
 {
     struct VkDevice_T d = {.graphics_enabled = VK_TRUE,
         .enabled_features_t09 = PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER};
-    VkAttachmentDescription descriptions[2] = {
+    VkAttachmentDescription descriptions[3] = {
+        {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT},
         {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT},
         {.format=VK_FORMAT_B8G8R8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT}};
+    VkAttachmentReference input = {2, VK_IMAGE_LAYOUT_GENERAL};
     struct ps5vk_subpass subpass = {.color_count=2,
         .color={{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
                 {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},
+        .input_count=1,
         .depth={.attachment=VK_ATTACHMENT_UNUSED}};
-    struct VkRenderPass_T pass = {.device=&d, .attachment_count=2,
+    struct VkRenderPass_T pass = {.device=&d, .attachment_count=3,
         .subpass_count=1, .attachments=descriptions, .subpasses=&subpass,
+        .inputs=&input, .input_count=1,
         .multiview={.present=VK_TRUE, .subpass_count=1, .view_masks={0x3fu}}};
-    VkFormat formats[2] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM};
-    VkFramebufferAttachmentImageInfo image_info[2] = {
+    /* A later subpass with a smaller mask must not lower a slot's bound. */
+    struct ps5vk_subpass two_subpasses[2] = {subpass, subpass};
+    pass.subpasses=two_subpasses;
+    pass.subpass_count=2;
+    pass.multiview.subpass_count=2;
+    pass.multiview.view_masks[1]=0x03u;
+    assert(ps5vk_framebuffer_attachment_view_count(&pass, 1) == 6);
+    assert(ps5vk_framebuffer_attachment_view_count(&pass, 2) == 6);
+    pass.subpasses=&subpass;
+    pass.subpass_count=1;
+    pass.multiview.subpass_count=1;
+    VkFormat formats[3] = {VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_UNORM};
+    VkFramebufferAttachmentImageInfo image_info[3] = {
         {.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO,
          .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .width=8, .height=8,
          .layerCount=6, .viewFormatCount=1, .pViewFormats=&formats[0]},
         {.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO,
          .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .width=8, .height=8,
-         .layerCount=6, .viewFormatCount=1, .pViewFormats=&formats[1]}};
+         .layerCount=6, .viewFormatCount=1, .pViewFormats=&formats[1]},
+        {.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO,
+         .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+         .width=8, .height=8, .layerCount=6,
+         .viewFormatCount=1, .pViewFormats=&formats[2]}};
     VkFramebufferAttachmentsCreateInfo attachments = {
         .sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO,
-        .attachmentImageInfoCount=2, .pAttachmentImageInfos=image_info};
+        .attachmentImageInfoCount=3, .pAttachmentImageInfos=image_info};
     VkFramebufferCreateInfo create = {.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .pNext=&attachments, .flags=VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT,
-        .renderPass=&pass, .attachmentCount=2, .width=8, .height=8, .layers=1};
+        .renderPass=&pass, .attachmentCount=3, .width=8, .height=8, .layers=1};
     VkFramebuffer fb = VK_NULL_HANDLE;
     assert(vkCreateFramebuffer(&d, &create, NULL, &fb) == VK_SUCCESS);
-    struct VkImage_T images[2] = {0};
-    struct VkImageView_T views[2] = {0};
-    VkImageView provided[2] = {&views[0], &views[1]};
-    for (unsigned i = 0; i < 2; ++i) {
+    struct VkImage_T images[3] = {0};
+    struct VkImageView_T views[3] = {0};
+    VkImageView provided[3] = {&views[0], &views[1], &views[2]};
+    for (unsigned i = 0; i < 3; ++i) {
         images[i].device=&d; images[i].memory=(VkDeviceMemory)(uintptr_t)1;
         images[i].info.extent=(VkExtent3D){8,8,1};
         images[i].info.samples=VK_SAMPLE_COUNT_1_BIT;
-        images[i].info.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        images[i].info.usage=image_info[i].usage;
         views[i].device=&d; views[i].image=&images[i];
         views[i].format=VK_FORMAT_B8G8R8A8_UNORM;
         views[i].range.levelCount=1; views[i].range.layerCount=6;
     }
     VkRenderPassAttachmentBeginInfo supplied = {
         .sType=VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO,
-        .attachmentCount=2, .pAttachments=provided};
+        .attachmentCount=3, .pAttachments=provided};
     VkRenderPassBeginInfo begin = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .pNext=&supplied, .renderPass=&pass, .framebuffer=fb,
         .renderArea={.extent={8,8}}};
@@ -1502,8 +1522,15 @@ static void imageless_second_color_multiview_layers(void)
     assert(c->state == PS5VK_INVALID);
     views[1].range.layerCount=6;
     assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    views[2].range.layerCount=5;
     vkCmdBeginRenderPass(c, &begin, VK_SUBPASS_CONTENTS_INLINE);
-    assert(c->state == PS5VK_RECORDING && c->framebuffer->attachments[1] == &views[1]);
+    assert(c->state == PS5VK_INVALID);
+    views[2].range.layerCount=6;
+    assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+    vkCmdBeginRenderPass(c, &begin, VK_SUBPASS_CONTENTS_INLINE);
+    assert(c->state == PS5VK_RECORDING &&
+           c->framebuffer->attachments[1] == &views[1] &&
+           c->framebuffer->attachments[2] == &views[2]);
     vkDestroyCommandPool(&d, p, NULL);
     vkDestroyFramebuffer(&d, fb, NULL);
     assert(!d.graphics_objects);

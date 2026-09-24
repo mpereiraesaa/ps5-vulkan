@@ -50,7 +50,7 @@ static inline VkFramebuffer ps5vk_framebuffer_original(VkFramebuffer fb)
 {
     return fb && fb->original ? fb->original : fb;
 }
-/* Highest view used by any colour, resolve or depth reference to this slot. */
+/* Highest view used by any colour, resolve, depth or input reference to this slot. */
 static inline uint32_t ps5vk_framebuffer_attachment_view_count(
     VkRenderPass pass, uint32_t attachment)
 {
@@ -64,10 +64,13 @@ static inline uint32_t ps5vk_framebuffer_attachment_view_count(
             used |= subpass->color[c].attachment == attachment;
         for (uint32_t c = 0; c < subpass->resolve_count; ++c)
             used |= subpass->resolve[c].attachment == attachment;
+        for (uint32_t i = 0; i < subpass->input_count; ++i)
+            used |= pass->inputs[subpass->input_first + i].attachment == attachment;
         if (!used) continue;
         const uint32_t mask = multiview->view_masks[s];
         for (uint32_t bit = 0; bit < 32u; ++bit)
-            if (mask & (UINT32_C(1) << bit)) views = bit + 1u;
+            if ((mask & (UINT32_C(1) << bit)) && views < bit + 1u)
+                views = bit + 1u;
     }
     return views;
 }
