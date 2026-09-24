@@ -306,6 +306,8 @@ class NativeDiagnosticOptions(unittest.TestCase):
                       "must be 0 or 1")
 
     def test_t09_diagnostics_are_bounded_and_graphics_only(self):
+        from tools.build_upstream_cts import tessellation_build_profile
+
         for name in ("PS5VK_HOST_QUERY_RESET_DIAGNOSTIC",
                      "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
                      "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC"):
@@ -313,6 +315,9 @@ class NativeDiagnosticOptions(unittest.TestCase):
                 self.rejected({name: "1"}, "requires the graphics profile API")
                 self.rejected({"PS5VK_GRAPHICS_API": "unused", name: "2"},
                               "must be 0 or 1")
+                profile = tessellation_build_profile({name: "1"})
+                self.assertTrue(profile["experimental"])
+                self.assertEqual(profile["switches"][name], "1")
         self.rejected({"PS5VK_SAMPLER_MIRROR_CASE": "8"},
                       "requires an SDK-linked graphics build")
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
