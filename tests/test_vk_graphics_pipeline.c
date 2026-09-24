@@ -740,6 +740,37 @@ int main(void)
             d.enabled_features=saved_features|required;
             assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==VK_SUCCESS);
             vkDestroyPipeline(&d,tess_pipeline,NULL);
+            /* VkPipelineTessellationDomainOriginStateCreateInfo
+             * (VK_KHR_maintenance2): refused without the extension; with it,
+             * UPPER_LEFT is the default origin and accepted, LOWER_LEFT is
+             * refused because nothing flips the domain coordinate, and a value
+             * outside the enum is invalid. */
+            {
+                VkPipelineTessellationDomainOriginStateCreateInfo origin={
+                    .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO,
+                    .domainOrigin=VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT};
+                VkPipelineTessellationStateCreateInfo with_origin=tessellation;
+                with_origin.pNext=&origin;
+                tess_info.pTessellationState=&with_origin;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+                       VK_ERROR_FEATURE_NOT_PRESENT && !tess_pipeline);
+                d.maintenance2_extension_enabled=VK_TRUE;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==VK_SUCCESS);
+                vkDestroyPipeline(&d,tess_pipeline,NULL);
+                origin.domainOrigin=VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+                       VK_ERROR_FEATURE_NOT_PRESENT && !tess_pipeline);
+                origin.domainOrigin=(VkTessellationDomainOrigin)7;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+                       VK_ERROR_UNKNOWN && !tess_pipeline);
+                origin.domainOrigin=VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
+                VkPipelineTessellationDomainOriginStateCreateInfo twice=origin;
+                origin.pNext=&twice;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+                       VK_ERROR_FEATURE_NOT_PRESENT && !tess_pipeline);
+                d.maintenance2_extension_enabled=VK_FALSE;
+                tess_info.pTessellationState=&tessellation;
+            }
             for(unsigned i=0;i<2;++i) {
                 d.enabled_features=(saved_features|required)&~(i?PS5VK_FEATURE_GEOMETRY_SHADER:PS5VK_FEATURE_TESSELLATION_SHADER);
                 unsigned calls=acquired;tess_pipeline=(void *)(uintptr_t)1;

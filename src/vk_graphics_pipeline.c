@@ -153,6 +153,28 @@ static int specialization_key(const VkSpecializationInfo *info,
     return 1;
 }
 
+/* The tessellation state's chain. VK_KHR_maintenance2 adds exactly one
+ * structure to it, VkPipelineTessellationDomainOriginStateCreateInfo, accepted
+ * once and only on a device that enabled the extension. UPPER_LEFT is the
+ * origin the state has without the structure, so it changes nothing.
+ * LOWER_LEFT would need the evaluation stage's domain coordinate flipped, which
+ * the compiler adapter does not do; it is refused rather than silently drawn
+ * with the upper-left origin. tessellationShader itself stays unadvertised, so
+ * no shipping pipeline reaches this. Any other structure stays fail-closed. */
+static VkResult tessellation_domain_origin(VkDevice d,
+    const VkPipelineTessellationStateCreateInfo *t)
+{
+    const VkBaseInStructure *next=(const VkBaseInStructure *)t->pNext;
+    if (!next) return VK_SUCCESS;
+    if (next->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO ||
+        next->pNext || !d->maintenance2_extension_enabled)
+        return refuse(11);
+    const VkTessellationDomainOrigin origin=
+        ((const VkPipelineTessellationDomainOriginStateCreateInfo *)next)->domainOrigin;
+    if (origin == VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT) return VK_SUCCESS;
+    if (origin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT) return refuse(11);
+    return VK_ERROR_UNKNOWN;
+}
 static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                        const VkAllocationCallbacks *allocator, VkPipeline *out)
 {
@@ -245,10 +267,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (tcs) {
         const VkPipelineTessellationStateCreateInfo *t=in->pTessellationState;
         if (!t || t->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO ||
-            t->pNext || t->flags || !t->patchControlPoints ||
+            t->flags || !t->patchControlPoints ||
             t->patchControlPoints > PS5VK_MAX_PATCH_CONTROL_POINTS ||
             ia->topology != VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)
             return refuse(11);
+        VkResult origin=tessellation_domain_origin(d,t);
+        if (origin!=VK_SUCCESS) return origin;
     }
     if (in->pTessellationState &&
        in->pTessellationState->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO)
