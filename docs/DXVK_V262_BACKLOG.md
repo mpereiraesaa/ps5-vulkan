@@ -188,6 +188,19 @@ Vulkan 1.2 aggregate and API 1.3 requirement remain unadvertised. Run IDs,
 hashes and lifecycle evidence are in
 [VALIDATION.md](../VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25).
 
+### T09 sampler W native evidence (2026-09-25)
+
+Six strict SDK draws exercised 3D W mirror clamp with nearest and linear
+filtering at negative, inside and positive-edge coordinates. Each matched
+373,248 CPU/readback pixels with a clean lifecycle. Together with the eight
+earlier U/V draws, they move the DXVK sampler row's native axis to
+`native-evidence`. The two focused original 3D CTS leaves still reported
+`Fail` during image upload before W sampling; neither leaf has a PASS. The
+ordinary public sampler feature and KHR extension remain disabled, so the
+requirement is still an API blocker and the matrix remains **26/62 ready with
+36 blockers**. Exact run IDs and hashes are in
+[VALIDATION.md](../VALIDATION.md#t09-sampler-mirror-clamp-diagnostic-measurement-2026-09-24).
+
 ## Readiness versus profile completion
 
 For Vulkan 1.1–1.3 rows, implementation can be ready before the device is
