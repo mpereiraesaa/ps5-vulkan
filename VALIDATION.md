@@ -5038,3 +5038,26 @@ payload was restored after each run. Firmware was not recorded.
 This is diagnostic evidence for one original precise-query leaf and a neutral
 507-case regression. The frozen selection and public `occlusionQueryPrecise`
 reporting have not been promoted; the full T07 capability audit remains open.
+
+## T07 precise occlusion native API witness (2026-09-24)
+
+The SDK-linked native diagnostic uses a depth-tested draw and the Vulkan
+occlusion-query API with the precise bit enabled. Its independent verifier
+requires direct and copied 32-bit and 64-bit counts of zero, one and three,
+availability for each result, wait and partial-result paths, secondary-command
+execution, a same-pool reset and repeat, completed submissions, zero leaked
+allocations, ps5log/1 integrity and an exact match to the signed eboot.
+
+The signed eboot SHA-256
+`1975dd0757438c9a4df8121c3a9576bb041cc8c18031f0c6488fa71045eefae5`
+passed that verifier twice with identical query results:
+
+- `20260924T135031940Z_PPSA99994_ps5vk_0x2404cb3638f3e`, log SHA-256
+  `6e49354fd07c2e952c0d32d73cadbf66a6405770a0bb94f6c6151945e9c2ed87`.
+- `20260924T135057995Z_PPSA99994_ps5vk_0x24052c4740042`, log SHA-256
+  `65c632958ceb03ada66c9e3dd6ca38375c7fcff3d21a4fc9ca55845c657ea771`.
+
+Both titles closed cleanly and the canonical payload was restored. Firmware
+was not recorded. Together with the original CTS result above, this covers a
+bounded precise-query implementation; the shipping feature bit and frozen CTS
+selection remain unchanged pending the remaining T07 promotion checks.
