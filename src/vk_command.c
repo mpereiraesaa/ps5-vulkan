@@ -1332,6 +1332,20 @@ static int compute_scope(VkPipelineStageFlags stages, VkAccessFlags access)
 }
 static int command_scope(VkPipelineStageFlags stages,VkAccessFlags access)
 { return texture_scope(stages,access) || compute_scope(stages,access); }
+/* Whether per-aspect depth/stencil barriers and the separate/mixed layouts
+ * are accepted: only on a device that enabled separateDepthStencilLayouts.
+ * The private PS5VK_DEPTH_STENCIL_DIAGNOSTIC build accepts them without the
+ * negotiation so the on-console witness can measure the path before any
+ * build advertises the feature. */
+static VkBool32 separate_depth_stencil_layouts(VkDevice d)
+{
+#if defined(PS5VK_DEPTH_STENCIL_DIAGNOSTIC) && PS5VK_DEPTH_STENCIL_DIAGNOSTIC
+    (void)d;
+    return VK_TRUE;
+#else
+    return (d->enabled_features_t09 & PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS) != 0;
+#endif
+}
 static int image_barrier_profile(const VkImageMemoryBarrier *b,
     VkPipelineStageFlags src_stage,VkPipelineStageFlags dst_stage)
 {
@@ -1552,11 +1566,22 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         if(!c->pool->device->graphics_enabled ||
             b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
             !command_scope(src,b->srcAccessMask) || !command_scope(dst,b->dstAccessMask) ||
-            (!texture_layout_supported(b->oldLayout) && b->oldLayout!=VK_IMAGE_LAYOUT_UNDEFINED) ||
-            !texture_layout_supported(b->newLayout) ||
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
-            !image || image->device!=c->pool->device ||
+            !image || image->device!=c->pool->device) {invalid(c);return;}
+        /* The combined depth/stencil attachment is ordered per aspect: its own
+         * validator owns the aspect mask and the per-aspect layouts. */
+        if(ps5vk_depth_stencil_attachment_image(image)) {
+            if(!ps5vk_depth_stencil_barrier(b,separate_depth_stencil_layouts(c->pool->device)) ||
+               !ps5vk_image_range_resolve(image,&b->subresourceRange,&resolved) ||
+               resolved.baseMipLevel || resolved.baseArrayLayer || resolved.levelCount!=1 ||
+               resolved.layerCount!=1 ||
+               ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS)
+                {invalid(c);return;}
+            continue;
+        }
+        if((!texture_layout_supported(b->oldLayout) && b->oldLayout!=VK_IMAGE_LAYOUT_UNDEFINED) ||
+            !texture_layout_supported(b->newLayout) ||
             !image_barrier_profile(b,src,dst) ||
             /* A depth target is ordered through its depth aspect; every other
              * role in this profile is colour. */

@@ -8,8 +8,14 @@
 #include "color_attachment_contract.h"
 #include "color_barrier.h"
 #include "vk_image_transfer.h"
+#include "depth_layout.h"
 
-struct ps5vk_readback_plan { VkImage image; VkBuffer buffer; VkDeviceSize layer_stride; };
+/* `aspect` is zero for a colour or depth-only surface and names the one
+ * aspect a copy reads from the combined depth/stencil attachment. */
+struct ps5vk_readback_plan {
+    VkImage image; VkBuffer buffer; VkDeviceSize layer_stride;
+    VkImageAspectFlags aspect;
+};
 
 /* The render-pass module reads back every attachment its pass rendered, in one
  * command buffer: one handover barrier and one whole-surface copy per target,
@@ -75,11 +81,119 @@ static inline VkResult ps5vk_readback_partition(
  * separate submission. This only validates and stages the layout: the caller
  * must flush CB/DB caches and observe its exact GPU serial before detiling or
  * publishing host bytes. A plan is not evidence of a completed transfer. */
+/* One aspect of the combined depth/stencil attachment read back into a
+ * buffer. Two recorded shapes, like the single-aspect readback below:
+ *
+ *   staged    one image barrier that hands the aspect (or both) to
+ *             TRANSFER_SRC, the copy of one aspect, the host barrier and the
+ *             aggregate the recorder appends;
+ *   unstaged  the copy, the host barrier and the aggregate, for an aspect an
+ *             earlier submission already moved to TRANSFER_SRC.
+ *
+ * The copied aspect must be in TRANSFER_SRC in this transaction - checked per
+ * aspect, so the other aspect may be anywhere - and the barrier moves only
+ * the aspects it names. Nothing is staged on refusal. */
+static inline VkResult ps5vk_depth_stencil_readback_commands(VkDevice d,
+    const struct ps5vk_operation *ops,unsigned count,
+    struct ps5vk_layout_state *layouts,struct ps5vk_readback_plan *out)
+{
+    if(!d || !ops || !layouts || !out || (count!=4 && count!=3))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    const int staged=count==4;
+    const struct ps5vk_operation *copy=&ops[staged?1:0];
+    const struct ps5vk_operation *host=&ops[staged?2:1];
+    const struct ps5vk_operation *aggregate=&ops[staged?3:2];
+    if((staged && ops[0].type!=PS5VK_IMAGE_BARRIER) || copy->type!=PS5VK_COPY_IMAGE_BUFFER ||
+       host->type!=PS5VK_BARRIER || aggregate->type!=PS5VK_BARRIER)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkImage image=copy->copy_image;
+    const VkBufferImageCopy *r=&copy->copy_region;
+    const VkImageAspectFlags aspect=r->imageSubresource.aspectMask;
+    const uint64_t texel=aspect==VK_IMAGE_ASPECT_STENCIL_BIT?1u:4u;
+    if(!ps5vk_depth_stencil_attachment_image(image) || image->device!=d ||
+       !(image->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+       (aspect!=VK_IMAGE_ASPECT_DEPTH_BIT && aspect!=VK_IMAGE_ASPECT_STENCIL_BIT) ||
+       copy->copy_layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL || !copy->copy_destination ||
+       r->bufferOffset || (r->bufferRowLength && r->bufferRowLength!=image->info.extent.width) ||
+       (r->bufferImageHeight && r->bufferImageHeight!=image->info.extent.height) ||
+       r->imageSubresource.mipLevel || r->imageSubresource.baseArrayLayer ||
+       r->imageSubresource.layerCount!=1 || r->imageOffset.x || r->imageOffset.y ||
+       r->imageOffset.z || r->imageExtent.width!=image->info.extent.width ||
+       r->imageExtent.height!=image->info.extent.height || r->imageExtent.depth!=1 ||
+       host->buffer_barrier.buffer!=copy->copy_destination ||
+       host->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT || host->dst_stage!=VK_PIPELINE_STAGE_HOST_BIT ||
+       host->src_access!=VK_ACCESS_TRANSFER_WRITE_BIT || host->dst_access!=VK_ACCESS_HOST_READ_BIT ||
+       aggregate->buffer_barrier.buffer || aggregate->src_access || aggregate->dst_access ||
+       aggregate->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
+       aggregate->dst_stage!=VK_PIPELINE_STAGE_HOST_BIT)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    const uint64_t pixels=(uint64_t)image->info.extent.width*image->info.extent.height;
+    struct ps5vk_depth_stencil_layout planes;
+    void *source,*destination;VkDeviceSize source_bytes,destination_bytes;
+    if(ps5vk_depth_stencil_layout(image->info.extent.width,image->info.extent.height,&planes) ||
+       ps5vk_image_span(d,image,&source,&source_bytes)!=VK_SUCCESS ||
+       ps5vk_buffer_span(d,copy->copy_destination,0,VK_WHOLE_SIZE,&destination,
+           &destination_bytes)!=VK_SUCCESS ||
+       source_bytes<planes.bytes || destination_bytes<pixels*texel ||
+       (host->buffer_barrier.size!=VK_WHOLE_SIZE && host->buffer_barrier.size<pixels*texel))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    uintptr_t src=(uintptr_t)source,dst=(uintptr_t)destination;
+    if(src<dst ? source_bytes>dst-src : pixels*texel>src-dst)return VK_ERROR_FEATURE_NOT_PRESENT;
+    struct ps5vk_layout_state updated=*layouts;
+    if(staged) {
+        const VkImageMemoryBarrier *b=&ops[0].image_barrier;
+        if(b->image!=image || !ps5vk_depth_stencil_barrier(b,VK_TRUE) ||
+           !(b->subresourceRange.aspectMask&aspect) ||
+           b->newLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+           !(b->dstAccessMask&VK_ACCESS_TRANSFER_READ_BIT) ||
+           !(ops[0].dst_stage&VK_PIPELINE_STAGE_TRANSFER_BIT))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        VkResult rc=ps5vk_layout_transition_aspects(&updated,image,
+            b->subresourceRange.aspectMask,b->oldLayout,b->newLayout);
+        if(rc!=VK_SUCCESS)return rc;
+    }
+    VkResult rc=ps5vk_layout_require_aspects(&updated,image,aspect,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    if(rc!=VK_SUCCESS)return rc;
+    *layouts=updated;
+    *out=(struct ps5vk_readback_plan){image,copy->copy_destination,planes.bytes,aspect};
+    return VK_SUCCESS;
+}
+
+/* Caller must have observed the exact GPU completion serial and invalidated
+ * the source. One aspect's plane, detiled with its own 64KB_Z_X equation. */
+static inline int ps5vk_depth_stencil_readback_detile(VkImage image,
+    VkImageAspectFlags aspect,void *destination,size_t destination_bytes,
+    const void *source,size_t source_bytes)
+{
+    struct ps5vk_depth_stencil_layout planes;
+    if(!ps5vk_depth_stencil_attachment_image(image) || !source ||
+       ps5vk_depth_stencil_layout(image->info.extent.width,image->info.extent.height,&planes) ||
+       source_bytes<planes.bytes)return -1;
+    const uint32_t w=image->info.extent.width,h=image->info.extent.height;
+    if(aspect==VK_IMAGE_ASPECT_DEPTH_BIT)
+        return ps5vk_depth_64k_zx_detile(destination,destination_bytes,source,
+            (size_t)planes.depth.bytes,w,h);
+    if(aspect==VK_IMAGE_ASPECT_STENCIL_BIT)
+        return ps5vk_stencil_64k_zx_detile(destination,destination_bytes,
+            (const unsigned char *)source+planes.stencil_offset,(size_t)planes.stencil_bytes,w,h);
+    return -1;
+}
+
 static inline VkResult ps5vk_readback_commands(VkDevice d,
     const struct ps5vk_operation *ops,unsigned count,VkImage color,
     struct ps5vk_layout_state *layouts,struct ps5vk_readback_plan *out,
     unsigned *failure_site)
 {
+    /* The combined depth/stencil attachment has its own per-aspect shape. */
+    if(ops && (count==3 || count==4) &&
+       ps5vk_depth_stencil_attachment_image(
+           ops[count==4?1:0].type==PS5VK_COPY_IMAGE_BUFFER?ops[count==4?1:0].copy_image:NULL)) {
+        if(color){if(failure_site)*failure_site=12;return VK_ERROR_FEATURE_NOT_PRESENT;}
+        VkResult rc=ps5vk_depth_stencil_readback_commands(d,ops,count,layouts,out);
+        if(rc!=VK_SUCCESS && failure_site)*failure_site=13;
+        return rc;
+    }
 #define READBACK_REFUSE(site) do { if(failure_site)*failure_site=(site); return VK_ERROR_FEATURE_NOT_PRESENT; } while(0)
     /* Two recorded shapes. The colour readback transitions its attachment
      * itself, so it is four operations: the image barrier, the copy, the host
@@ -223,7 +337,7 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
         }
         *layouts=updated;
     }
-    *out=(struct ps5vk_readback_plan){image,copy->copy_destination,stride};
+    *out=(struct ps5vk_readback_plan){image,copy->copy_destination,stride,0};
     return VK_SUCCESS;
 #undef READBACK_REFUSE
 }

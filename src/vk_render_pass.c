@@ -1,5 +1,6 @@
 #include "vk_render_pass.h"
 #include "color_attachment_contract.h"
+#include "depth_stencil_layout.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -9,6 +10,39 @@
 #else
 #define PASS_MARK(...) ((void)0)
 #endif
+
+/* The depth-aspect layouts a pass with an explicit stencil table may name for
+ * a combined attachment: anything that means an attachment, read-only,
+ * GENERAL or transfer state for the depth aspect, including the separate
+ * DEPTH_* layouts (VK_KHR_separate_depth_stencil_layouts). */
+static int separate_depth_layout(VkImageLayout value, int initial, int reference)
+{
+    VkImageLayout p;
+    if (initial && value == VK_IMAGE_LAYOUT_UNDEFINED) return 1;
+    if (!ps5vk_layout_for_aspect(value, VK_IMAGE_ASPECT_DEPTH_BIT, &p)) return 0;
+    return p == VK_IMAGE_LAYOUT_GENERAL || p == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
+        (!reference && (p == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+                        p == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
+}
+
+/* The same for the stencil half, which never takes a combined layout from the
+ * stencil structures (VkAttachmentDescriptionStencilLayout and
+ * VkAttachmentReferenceStencilLayout name STENCIL_* or aspect-neutral
+ * layouts only). */
+static int separate_stencil_layout(VkImageLayout value, int initial, int reference)
+{
+    VkImageLayout p;
+    if (initial && value == VK_IMAGE_LAYOUT_UNDEFINED) return 1;
+    if (value == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+        value == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
+        ps5vk_layout_is_mixed_depth_stencil(value) ||
+        !ps5vk_layout_for_aspect(value, VK_IMAGE_ASPECT_STENCIL_BIT, &p)) return 0;
+    return p == VK_IMAGE_LAYOUT_GENERAL || p == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL ||
+        (!reference && (p == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+                        p == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
+}
 
 static int layout(VkImageLayout value, int depth, int initial)
 {
@@ -40,7 +74,8 @@ static int input_layout(VkImageLayout value)
  * reference it follows - and a non-empty preserve list is outside the bounded
  * profile. */
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
-    struct ps5vk_subpass *out, uint32_t *input_count, uint32_t *preserve_count)
+    VkBool32 separate, struct ps5vk_subpass *out, uint32_t *input_count,
+    uint32_t *preserve_count)
 {
     /* A subpass names the colour attachments this profile serves, or none at
      * all. Zero is how
@@ -125,8 +160,9 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
              out->depth.attachment == out->color[i].attachment))
             return VK_ERROR_UNKNOWN;
     if (out->depth.attachment != VK_ATTACHMENT_UNUSED &&
-        out->depth.layout != VK_IMAGE_LAYOUT_GENERAL &&
-        out->depth.layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        (separate ? !separate_depth_layout(out->depth.layout, 0, 1) :
+         (out->depth.layout != VK_IMAGE_LAYOUT_GENERAL &&
+          out->depth.layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)))
         return VK_ERROR_UNKNOWN;
     /* pResolveAttachments, when present, carries exactly one entry per colour
      * reference: entry i resolves colour reference i, and an entry may be
@@ -207,6 +243,13 @@ static VkResult owned_bytes(const VkRenderPassCreateInfo *info, size_t *total)
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     const VkRenderPassCreateInfo *info, const VkAllocationCallbacks *allocator, VkRenderPass *out)
 {
+    return ps5vk_render_pass_create(d, info, NULL, allocator, out);
+}
+
+VkResult ps5vk_render_pass_create(VkDevice d, const VkRenderPassCreateInfo *info,
+    const struct ps5vk_render_pass_stencil_layouts *stencil,
+    const VkAllocationCallbacks *allocator, VkRenderPass *out)
+{
     PASS_MARK("PS5VK_RENDER_PASS_CREATE attachments=%u subpasses=%u dependencies=%u",
         info ? info->attachmentCount : 0u, info ? info->subpassCount : 0u,
         info ? info->dependencyCount : 0u);
@@ -244,7 +287,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     uint32_t preserve_counts[PS5VK_MAX_SUBPASSES];
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
         VkResult rc = subpass_valid(&info->pSubpasses[i], info->attachmentCount,
-                                    &colors[i], &input_counts[i], &preserve_counts[i]);
+                                    stencil != NULL, &colors[i], &input_counts[i],
+                                    &preserve_counts[i]);
         if (rc != VK_SUCCESS) return rc;
         depths[i] = colors[i].depth;
     }
@@ -323,8 +367,41 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
         if (a->flags ||
             ((as_colour || as_resolve) && !ps5vk_color_target_format_supported(a->format)) ||
             (as_depth && a->format != VK_FORMAT_D32_SFLOAT &&
-                         a->format != VK_FORMAT_D16_UNORM))
+                         a->format != VK_FORMAT_D16_UNORM &&
+                         a->format != VK_FORMAT_D32_SFLOAT_S8_UINT))
             return VK_ERROR_FEATURE_NOT_PRESENT;
+        /* With an explicit stencil table the depth half of a combined
+         * attachment may use the separate DEPTH_* layouts, and its stencil
+         * half is checked on its own; without one, both ride on one combined
+         * layout exactly as before. A depth reference in a separate layout
+         * must name a combined attachment. */
+        const int combined = as_depth && ps5vk_format_is_combined_depth_stencil(a->format);
+        if (stencil && combined) {
+            if (!separate_depth_layout(a->initialLayout, 1, 0) ||
+                !separate_depth_layout(a->finalLayout, 0, 0) ||
+                !separate_stencil_layout(stencil->initial[i], 1, 0) ||
+                !separate_stencil_layout(stencil->final[i], 0, 0) ||
+                (a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&
+                 a->initialLayout == VK_IMAGE_LAYOUT_UNDEFINED) ||
+                (a->stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&
+                 stencil->initial[i] == VK_IMAGE_LAYOUT_UNDEFINED) ||
+                a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
+                a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
+                a->stencilLoadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
+                a->stencilStoreOp > VK_ATTACHMENT_STORE_OP_DONT_CARE)
+                return VK_ERROR_UNKNOWN;
+            for (uint32_t s = 0; s < info->subpassCount; ++s)
+                if (depths[s].attachment == i &&
+                    !separate_stencil_layout(stencil->reference[s], 0, 1))
+                    return VK_ERROR_UNKNOWN;
+            continue;
+        }
+        if (as_depth)
+            for (uint32_t s = 0; s < info->subpassCount; ++s)
+                if (depths[s].attachment == i &&
+                    depths[s].layout != VK_IMAGE_LAYOUT_GENERAL &&
+                    depths[s].layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                    return VK_ERROR_UNKNOWN;
         if (a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
             a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
             a->stencilLoadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->stencilLoadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
@@ -476,6 +553,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     pass->preserves = preserves;
     pass->preserve_count = preserve_total;
     pass->multiview = owned_multiview;
+    /* The stencil halves: explicit for a combined attachment when a table
+     * was supplied, the combined layouts otherwise. */
+    for (uint32_t i = 0; i < info->attachmentCount; ++i) {
+        const int explicit_stencil = stencil &&
+            ps5vk_format_is_combined_depth_stencil(info->pAttachments[i].format);
+        pass->stencil.initial[i] = explicit_stencil ? stencil->initial[i] :
+            info->pAttachments[i].initialLayout;
+        pass->stencil.final[i] = explicit_stencil ? stencil->final[i] :
+            info->pAttachments[i].finalLayout;
+    }
+    for (uint32_t s = 0; s < info->subpassCount; ++s) {
+        const uint32_t a = depths[s].attachment;
+        pass->stencil.reference[s] = (stencil && a != VK_ATTACHMENT_UNUSED &&
+            ps5vk_format_is_combined_depth_stencil(info->pAttachments[a].format)) ?
+            stencil->reference[s] : depths[s].layout;
+    }
     ++d->graphics_objects; *out = pass; return VK_SUCCESS;
 }
 
