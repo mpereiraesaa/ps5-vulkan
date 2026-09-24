@@ -6,8 +6,8 @@
 int ps5vk_color_clear_bgra8(const float rgba[4], uint32_t *out);
 int ps5vk_color_clear_rgba8(const float rgba[4], uint32_t *out);
 /* Integer clear values are packed into R,G,B,A byte lanes. UINT keeps each
- * component's low eight bits; out-of-range SINT values are refused because
- * Vulkan leaves their conversion undefined. */
+ * component's low eight bits. Out-of-range SINT clear results are undefined
+ * by Vulkan; the low bits are this implementation's deterministic choice. */
 int ps5vk_color_clear_rgba8_uint(const uint32_t rgba[4], uint32_t *out);
 int ps5vk_color_clear_rgba8_sint(const int32_t rgba[4], uint32_t *out);
 #endif

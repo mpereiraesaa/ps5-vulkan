@@ -20,6 +20,6 @@ int main(void)
            value==UINT32_C(0x2cff8000));
     assert(ps5vk_color_clear_rgba8_sint((int32_t[]){-128,-1,1,127},&value) &&
            value==UINT32_C(0x7f01ff80));
-    assert(!ps5vk_color_clear_rgba8_sint((int32_t[]){-129,-1,1,127},&value) &&
-           value==UINT32_C(0x7f01ff80));
+    assert(ps5vk_color_clear_rgba8_sint((int32_t[]){-129,-1,1,127},&value) &&
+           value==UINT32_C(0x7f01ff7f));
 }

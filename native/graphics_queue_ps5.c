@@ -742,8 +742,9 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         if(image->info.format!=colour_format[a] || begin->clear_count<=a || !clear_ok ||
            begin->render_area.offset.x || begin->render_area.offset.y ||
            begin->render_area.extent.width!=image->info.extent.width ||
-           begin->render_area.extent.height!=image->info.extent.height)
-            {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
+           begin->render_area.extent.height!=image->info.extent.height) {
+            rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;
+        }
     }
     if(depth) {
         const uint32_t a=depth_attachment;
@@ -943,24 +944,34 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     }
     ps5_agc_register defaults[PS5_COLOR_REGISTER_COUNT];
     if(ps5_color_select_runtime_defaults(defaults,sceAgcGetRegisterDefaults())) {rc=VK_ERROR_INITIALIZATION_FAILED;draw_site=__LINE__;goto fail;}
-    /* One whole-surface fill per colour target that asked to be cleared, in
-     * attachment order, each followed by the acquire that publishes it. The
-     * targets are independent surfaces, so a second fill can neither observe
-     * nor disturb the first. */
+    /* Clear only the layers named by each attachment view. Filling the image's
+     * whole allocation would erase the other faces of an array attachment. */
     for(uint32_t k=0;k<color_count;++k) {
         const uint32_t a=colour_attachment[k];
         if(!color_plan[a].clear)continue;
-        void *address;VkDeviceSize bytes;
-        VkImage image=begin->framebuffer->attachments[a]->image;
+        void *address;VkDeviceSize bytes,stride;
+        VkImageView view=begin->framebuffer->attachments[a];
+        VkImage image=view->image;
         rc=ps5vk_image_span(d,image,&address,&bytes);
         if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
-        cache(address,(size_t)bytes);
-        size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,bytes,clear_word[a]);
+        rc=ps5vk_native_layer_footprint(d,image,&stride);
+        if(rc!=VK_SUCCESS || !stride ||
+           view->range.baseArrayLayer>=image->info.arrayLayers ||
+           !view->range.layerCount ||
+           view->range.layerCount>image->info.arrayLayers-view->range.baseArrayLayer ||
+           stride>bytes/image->info.arrayLayers) {
+            rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=__LINE__;goto fail;
+        }
+        const VkDeviceSize offset=(VkDeviceSize)view->range.baseArrayLayer*stride;
+        const VkDeviceSize clear_bytes=(VkDeviceSize)view->range.layerCount*stride;
+        cache((uint8_t *)address+offset,(size_t)clear_bytes);
+        size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),
+            (uintptr_t)address+offset,clear_bytes,clear_word[a]);
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
         n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;
         ps5log_printf(PS5LOG_MARK,"PS5VK_COLOR_CLEAR_PREPARED serial=%llu target=%u bgra=%08x bytes=%llu",
-            (unsigned long long)j->serial,a,clear_word[a],(unsigned long long)bytes);
+            (unsigned long long)j->serial,a,clear_word[a],(unsigned long long)clear_bytes);
     }
     if(depth && depth_plan.clear) {
         void *address;VkDeviceSize bytes;

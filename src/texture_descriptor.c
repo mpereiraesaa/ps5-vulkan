@@ -11,6 +11,7 @@
 #include "texture_descriptor.h"
 #include "texture_layout.h"
 #include "texture_format.h"
+#include "depth_layout.h"
 #include <string.h>
 
 /* The GFX10 image fields both encoders share, and nothing else. The sampled
@@ -43,6 +44,13 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
         if(image->requirements.size%image->info.arrayLayers)
             return VK_ERROR_UNKNOWN;
         layer_stride=image->requirements.size/image->info.arrayLayers;
+        /* The sampler derives its array pitch from the tiled footprint. A
+         * smaller attachment layer padded to the target's 128 KiB alignment
+         * would silently sample each face twice. Refuse that descriptor. */
+        struct ps5vk_depth_layout tiled;
+        if(ps5vk_depth_layout(image->info.extent.width,
+            image->info.extent.height,&tiled) || tiled.bytes!=layer_stride)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     void *base;VkDeviceSize bytes;
     VkResult rc=ps5vk_image_span(d,image,&base,&bytes);if(rc!=VK_SUCCESS)return rc;

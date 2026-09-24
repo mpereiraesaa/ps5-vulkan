@@ -4981,8 +4981,12 @@ cases, selection SHA-256
 Its BC-only diagnostic package linked 416 translation units and signed eboot
 SHA-256 `69e3e392a7236b3a405a7cde2d8df32a26d364da36894d7091f26e41334c5027`;
 the build manifest records 757 selected cases and the BC diagnostic switch as
-`1`. This selection has not run; it is not the frozen acceptance selection or
-a public feature promotion.
+`1`. The combined diagnostic selection passed **757/757** original cases with
+zero Fail, NotSupported, missing or unexpected cases in
+`20260924T154900553Z_PPSA99994_upstream-cts_0x246c3c80f0d8f`. Its strict
+receipt verified exact identity, report completion and clean closure. This is
+a measurement selection; the frozen acceptance selection and public bit remain
+unchanged.
 
 ## T07 D32 comparison-gather diagnostic measurement (2026-09-24)
 
@@ -5022,9 +5026,20 @@ its build manifest records the gather, RGBA8 integer attachment and D32
 sampled diagnostic switches as `1`, with BC off. A separate 532-case selection
 of only the 25 typed leaves uses the same executable but a different selection
 SHA-256, `5702b90f15a93d623277846891b1bd47d4765f3f02a4b6f646b38a573d333b2a`.
-Neither new selection has run on hardware. The 45 previously catalogued RGBA8
-leaves and the 25 typed leaves still require exact combined-branch acceptance
-before the public feature can be reconsidered.
+The complete 577-case selection passed twice with zero Fail, NotSupported,
+missing or unexpected cases on signed eboot SHA-256
+`16607e56d97cbb5c5df0502aa341bb4daab2e6880d84aa08b7107e28e2555751`:
+`20260924T161005906Z_PPSA99994_upstream-cts_0x247ea63df31f6` and
+`20260924T161103848Z_PPSA99994_upstream-cts_0x247f7e176f2d4`. Both strict
+receipts verified the original QPA oracle, exact identity and clean closure.
+The twelve earlier RGBA8 SINT refusals came from out-of-range integer clear
+values. Vulkan leaves their converted result undefined; the driver now accepts
+them using a deterministic low-byte conversion. Independent SDK-linked GPU
+readbacks passed constant, dynamic and four-offset forms in runs
+`20260924T160859672Z_PPSA99994_ps5vk_0x247daf8292e93`,
+`20260924T160915319Z_PPSA99994_ps5vk_0x247de9ca34ded` and
+`20260924T160929553Z_PPSA99994_ps5vk_0x247e1ed220fc3`. Public reporting
+and the frozen selection remain unchanged pending promotion.
 
 ## T07 D16 depth attachment diagnostic witness (2026-09-24)
 
@@ -5155,11 +5170,18 @@ audit and combined acceptance. The audit found that
 `vkGetPhysicalDeviceImageFormatProperties` accepts the cube-compatible RGBA8
 `SAMPLED | COLOR_ATTACHMENT` usage used by the object-management CTS, while
 the old descriptor path refused its sampled role. A host regression reproduced
-that refusal. The current candidate emits the tiled descriptor and uses the
-attachment layer stride for a 2D view; the same regression now passes. The CTS
-above checks view creation, not sampling from that tiled attachment. Public
-reporting must stay off until a native witness proves the new descriptor and
-the combined upstream selection remains passing.
+that refusal. The CTS above checks view creation, not sampling from that tiled
+attachment. A native 4×4 render-to-sample probe exposed a layer-pitch mismatch:
+the target used 128 KiB per layer while the sampler advanced 64 KiB, so eleven
+of twelve faces read the wrong colour. The descriptor now refuses that shape
+before it can silently render wrong pixels. At 256×256 the pitches match; the
+independent tiled attachment-to-sample witness passed twice with twelve correct
+faces and 12,288 correct pixels, including strict artifact and lifecycle
+verification in `20260924T160809323Z_PPSA99994_ps5vk_0x247cf3f1ba220` on
+eboot SHA-256
+`941ba1a5aac7d7a69745efec339807adc2539ed150923646033177b03f9fc097`.
+Public reporting and the frozen selection remain unchanged pending promotion
+and combined shipping acceptance.
 
 ## T07 four-axis promotion audit (2026-09-24)
 
@@ -5172,9 +5194,9 @@ above leaves these promotion gates open:
 
 | Feature | Public query and device | Executable path and refusal | Original CTS oracle | Artifact-bound PS5 witness and remaining gate |
 | --- | --- | --- | --- | --- |
-| `imageCubeArray` | Host negotiation passes; shipping bit off. | Transfer-backed arrays sample two cubes, including a nonzero view base. Tiled colour-attachment sampling has a host-tested candidate. | Original image-view leaf passed twice; it checks view creation, not tiled attachment sampling. | Transfer-backed SDK witness passed twice per view base. The signed tiled render-to-sample witness has not run; then combined CTS and shipping acceptance are required. |
-| `textureCompressionBC` | Host negotiation passes; shipping bit and format roles off. | Diagnostic sampling, blit and mip/layer copy paths are bounded by format, layout and region checks. | Original focused selections passed 48/48 sampling, 128/128 blit and 74/74 copy. The 757-case combined selection has not run. | SDK filter and mip/layer witnesses passed on diagnostic builds. Run the 757-case selection on the combined branch, then promote the public format roles and bit and repeat shipping acceptance. |
-| `shaderImageGatherExtended` | Host negotiation passes; shipping bit off. | Diagnostic compiler accepts bounded gather forms; RGBA8 integer attachment and D32 comparison roles remain build-gated. | One original D32 comparison leaf passed twice. A 577-case selection covering all 70 eligible gather leaves has been built but not run. | The standalone native gather witness and full typed CTS selection have not run. Their oracle and resource results determine whether the bit can be promoted. |
+| `imageCubeArray` | Host negotiation passes; shipping bit off. | Transfer-backed arrays sample two cubes, including a nonzero view base. The tiled path samples 256×256 attachment faces and refuses incompatible smaller pitches. | Original image-view leaf passed twice; it checks view creation, not tiled attachment sampling. | Transfer-backed SDK witness passed twice per view base; tiled 256×256 witness passed twice with 12,288 correct pixels. Public promotion and shipping acceptance remain. |
+| `textureCompressionBC` | Host negotiation passes; shipping bit and format roles off. | Diagnostic sampling, blit and mip/layer copy paths are bounded by format, layout and region checks. | Original focused selections passed 48/48 sampling, 128/128 blit and 74/74 copy; combined selection passed 757/757. | SDK filter and mip/layer witnesses passed on diagnostic builds. Public format roles, feature bit and shipping acceptance remain. |
+| `shaderImageGatherExtended` | Host negotiation passes; shipping bit off. | Diagnostic compiler accepts bounded gather forms; RGBA8 integer attachment and D32 comparison roles remain build-gated. | All 70 eligible original gather leaves passed in a 577/577 combined selection twice. | Native constant, dynamic and four-offset GPU readbacks passed. Public roles, bit and shipping acceptance remain. |
 | `occlusionQueryPrecise` | Host negotiation passes; shipping bit off. | Diagnostic query state, ZPASS and bounded result read/copy paths passed host and native checks. | Original D16 precise case passed twice and in a 508/508 combined selection. | SDK-linked API witness passed twice with 0/1/3 samples and result variants. Promotion still needs an enabled shipping build, frozen CTS update and exact post-promotion acceptance. |
 
 No row is promoted by the passing subset of another row. All new combined

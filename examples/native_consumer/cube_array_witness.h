@@ -16,7 +16,7 @@ enum {
     CUBE_ARRAY_CUBE_COUNT = 2,
     CUBE_ARRAY_LAYER_COUNT = CUBE_ARRAY_FACE_COUNT * CUBE_ARRAY_CUBE_COUNT,
     CUBE_ARRAY_STORAGE_LAYERS = CUBE_ARRAY_LAYER_COUNT + CONSUMER_CUBE_ARRAY_BASE_LAYER,
-    CUBE_ARRAY_FACE_EXTENT = 4,
+    CUBE_ARRAY_FACE_EXTENT = CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT ? 256 : 4,
     CUBE_ARRAY_CELL_EXTENT = 16,
     CUBE_ARRAY_TARGET_WIDTH = CUBE_ARRAY_LAYER_COUNT * CUBE_ARRAY_CELL_EXTENT,
     CUBE_ARRAY_TARGET_HEIGHT = 64,
@@ -416,7 +416,9 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
     VkCommandBufferBeginInfo begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
     };
+#if !CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
     CHECK(vkBeginCommandBuffer(command_buffer, &begin_info));
+#endif
 
     VkImageMemoryBarrier cube_barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -438,6 +440,7 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
     };
 #if CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
     for (unsigned layer = 0; layer < CUBE_ARRAY_STORAGE_LAYERS; ++layer) {
+        CHECK(vkBeginCommandBuffer(command_buffer, &begin_info));
         uint8_t rgba[4];
         cube_array_expected_color(layer, rgba);
         VkClearValue face_clear = {.color = {.float32 = {
@@ -453,8 +456,32 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
             .pClearValues = &face_clear,
         };
         vkCmdBeginRenderPass(command_buffer, &face_begin, VK_SUBPASS_CONTENTS_INLINE);
+        VkClearAttachment face_attachment = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .colorAttachment = 0,
+            .clearValue = face_clear,
+        };
+        VkClearRect face_rect = {
+            .rect = {{0, 0}, {CUBE_ARRAY_FACE_EXTENT, CUBE_ARRAY_FACE_EXTENT}},
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        };
+        vkCmdClearAttachments(command_buffer, 1, &face_attachment, 1, &face_rect);
         vkCmdEndRenderPass(command_buffer);
+        CHECK(vkEndCommandBuffer(command_buffer));
+        VkSubmitInfo face_submit = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &command_buffer,
+        };
+        CHECK(vkQueueSubmit(queue, 1, &face_submit, fence));
+        REQUIRE(vkWaitForFences(device, 1, &fence, VK_TRUE,
+                                UINT64_C(5000000000)) == VK_SUCCESS,
+                "cube-array face clear completes within its bounded fence");
+        CHECK(vkResetFences(device, 1, &fence));
+        CHECK(vkResetCommandBuffer(command_buffer, 0));
     }
+    CHECK(vkBeginCommandBuffer(command_buffer, &begin_info));
     vkCmdPipelineBarrier(command_buffer,
                          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0,
@@ -555,6 +582,17 @@ static void run_cube_array_witness(VkPhysicalDevice physical, VkDevice device,
 
     const uint8_t *pixels = readback_bytes;
     uint32_t mismatches = 0;
+#if CONSUMER_CUBE_ARRAY_TILED_ATTACHMENT
+    for (unsigned cell = 0; cell < CUBE_ARRAY_STORAGE_LAYERS; ++cell) {
+        const uint8_t *actual = pixels + cell * CUBE_ARRAY_CELL_EXTENT * 4u;
+        uint8_t expected[4];
+        cube_array_expected_color(cell + CONSUMER_CUBE_ARRAY_BASE_LAYER, expected);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_CONSUMER_CUBE_ARRAY_CELL cell=%u actual=%u,%u,%u,%u expected=%u,%u,%u,%u",
+            cell, actual[0], actual[1], actual[2], actual[3],
+            expected[0], expected[1], expected[2], expected[3]);
+    }
+#endif
     for (unsigned y = 0; y < CUBE_ARRAY_TARGET_HEIGHT; ++y) {
         for (unsigned x = 0; x < CUBE_ARRAY_TARGET_WIDTH; ++x) {
             const unsigned cell = x / CUBE_ARRAY_CELL_EXTENT;

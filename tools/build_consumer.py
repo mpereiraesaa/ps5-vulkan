@@ -598,7 +598,8 @@ def main():
                 "base_array_layer": args.cube_array_base_layer,
                 "source": "tiled-attachment" if args.cube_array_tiled_attachment
                           else "linear-upload",
-                "face_extent": [4, 4],
+                "face_extent": [256, 256] if args.cube_array_tiled_attachment
+                               else [4, 4],
                 "target_extent": [192, 64],
                 "format": "VK_FORMAT_R8G8B8A8_UNORM",
                 "vertex_spirv_sha256": hashlib.sha256(

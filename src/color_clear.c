@@ -35,9 +35,8 @@ int ps5vk_color_clear_rgba8_sint(const int32_t rgba[4], uint32_t *out)
     if (!rgba || !out) return 0;
     uint32_t c[4];
     for (unsigned i=0;i<4;++i) {
-        /* Out-of-range SINT clear values are undefined by Vulkan; keep this
-         * bounded profile deterministic by rejecting them before recording. */
-        if(rgba[i]<-128 || rgba[i]>127)return 0;
+        /* Vulkan leaves out-of-range SINT clear results undefined. Use the
+         * low eight bits as a deterministic result, as for UINT clears. */
         c[i]=(uint8_t)rgba[i];
     }
     *out=c[0]|(c[1]<<8)|(c[2]<<16)|(c[3]<<24);

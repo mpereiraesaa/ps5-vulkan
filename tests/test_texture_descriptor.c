@@ -157,10 +157,8 @@ int main(void)
     d.enabled_features|=PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
     vkDestroyImageView(&d,layered_view,NULL);vkDestroyImage(&d,layered_image,NULL);
 
-    /* The cube-compatible sampled+attachment role accepted by the public
-     * format query must produce a descriptor for its tiled backing too. The
-     * object-management CTS only creates this image and view, so it cannot
-     * detect a descriptor refusal when an application samples the view. */
+    /* Small tiled faces need 128 KiB target alignment but the sampler advances
+     * by their 64 KiB tile: refuse before a wrong face can be sampled. */
     d.max_allocation=2u<<20;
     d.memory.allocate=allocate_tiled;
     VkImageCreateInfo tiled_cube_ii=layered_ii;
@@ -181,17 +179,16 @@ int main(void)
     layered_vi.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,12};
     VkImageView tiled_cube_view;
     assert(vkCreateImageView(&d,&layered_vi,NULL,&tiled_cube_view)==VK_SUCCESS);
-    assert(ps5vk_texture_descriptor(&d,tiled_cube_view,sampler,layered_words)==VK_SUCCESS &&
-        layered_words[3]==0xb1b00facu && layered_words[4]==11u);
+    assert(ps5vk_texture_descriptor(&d,tiled_cube_view,sampler,layered_words)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
     vkDestroyImageView(&d,tiled_cube_view,NULL);
     layered_vi.viewType=VK_IMAGE_VIEW_TYPE_2D;
     layered_vi.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,6,1};
     assert(vkCreateImageView(&d,&layered_vi,NULL,&tiled_cube_view)==VK_SUCCESS);
     void *tiled_cube_base;VkDeviceSize tiled_cube_bytes;
     assert(ps5vk_image_span(&d,tiled_cube_image,&tiled_cube_base,&tiled_cube_bytes)==VK_SUCCESS);
-    assert(ps5vk_texture_descriptor(&d,tiled_cube_view,sampler,layered_words)==VK_SUCCESS &&
-        layered_words[0]==(uint32_t)(((uintptr_t)tiled_cube_base+6u*131072u)>>8) &&
-        layered_words[3]==0x91b00facu && !layered_words[4]);
+    assert(ps5vk_texture_descriptor(&d,tiled_cube_view,sampler,layered_words)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
     vkDestroyImageView(&d,tiled_cube_view,NULL);
     VkCommandPoolCreateInfo tiled_pool_info={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     VkCommandPool tiled_pool;
@@ -216,6 +213,25 @@ int main(void)
     assert(tiled_cb->state==PS5VK_RECORDING && tiled_cb->operation_count==1);
     assert(vkEndCommandBuffer(tiled_cb)==VK_SUCCESS);
     vkDestroyCommandPool(&d,tiled_pool,NULL);
+    vkDestroyImage(&d,tiled_cube_image,NULL);
+    vkFreeMemory(&d,tiled_cube_memory,NULL);
+    /* A 256-square face occupies four whole 64 KiB tiles, matching the
+     * target's layer stride; this is the attachment-to-sampler shape witnessed
+     * by the SDK consumer on hardware. */
+    d.max_allocation=4u<<20;
+    tiled_cube_ii.extent=(VkExtent3D){256,256,1};
+    assert(vkCreateImage(&d,&tiled_cube_ii,NULL,&tiled_cube_image)==VK_SUCCESS &&
+        tiled_cube_image->requirements.size==12u*262144u);
+    tiled_cube_ai.allocationSize=tiled_cube_image->requirements.size;
+    assert(vkAllocateMemory(&d,&tiled_cube_ai,NULL,&tiled_cube_memory)==VK_SUCCESS);
+    assert(vkBindImageMemory(&d,tiled_cube_image,tiled_cube_memory,0)==VK_SUCCESS);
+    layered_vi.image=tiled_cube_image;
+    layered_vi.viewType=VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+    layered_vi.subresourceRange=(VkImageSubresourceRange){VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,12};
+    assert(vkCreateImageView(&d,&layered_vi,NULL,&tiled_cube_view)==VK_SUCCESS);
+    assert(ps5vk_texture_descriptor(&d,tiled_cube_view,sampler,layered_words)==VK_SUCCESS &&
+        layered_words[3]==0xb1b00facu && layered_words[4]==11u);
+    vkDestroyImageView(&d,tiled_cube_view,NULL);
     vkDestroyImage(&d,tiled_cube_image,NULL);
     vkFreeMemory(&d,tiled_cube_memory,NULL);
     d.memory.allocate=allocate;

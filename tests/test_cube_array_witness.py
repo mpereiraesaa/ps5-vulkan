@@ -83,6 +83,10 @@ class CubeArrayWitnessTests(unittest.TestCase):
 
     def test_tiled_attachment_source_requires_rendered_layer_marker(self):
         self.artifact["cube_array"]["source"] = "tiled-attachment"
+        self.artifact["cube_array"]["face_extent"] = [256, 256]
+        self.messages[1] = self.messages[1].replace("image=4x4", "image=256x256")
+        self.log = self.log.replace(b"image=4x4", b"image=256x256")
+        self.receipt["sha256"] = hashlib.sha256(self.log).hexdigest()
         with self.assertRaisesRegex(ValueError, "PS5VK_CONSUMER_CUBE_ARRAY_SOURCE"):
             validate(self.log, self.receipt, self.artifact)
         self.messages.insert(2,
@@ -96,7 +100,7 @@ class CubeArrayWitnessTests(unittest.TestCase):
         self.receipt["last_seq"] = len(self.messages)
         self.assertEqual(validate(self.log, self.receipt, self.artifact)["mismatches"], 0)
         self.artifact["cube_array"]["source"] = "linear-upload"
-        with self.assertRaisesRegex(ValueError, "linear upload source"):
+        with self.assertRaisesRegex(ValueError, "cube-array artifact contract"):
             validate(self.log, self.receipt, self.artifact)
 
     def test_out_of_bounds_view_is_refused(self):
