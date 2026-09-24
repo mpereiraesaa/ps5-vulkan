@@ -1043,6 +1043,12 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeTestsUtil.cpp",
+        # Original subgroup Broadcast and arithmetic bodies, support gates and GPU oracles.
+        # Registration alone does not select a case or advertise a feature.
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsScanHelpers.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsTestsUtils.cpp",
         # Original dynamic-state compute/transfer non-interference module.  It
         # is compiled directly from the pinned checkout; no body or oracle is
         # copied into the integration.

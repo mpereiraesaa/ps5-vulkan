@@ -1,5 +1,21 @@
 # Runtime graphics validation
 
+## Current evidence policy (2026-09-24)
+
+This file preserves dated hardware receipts, including failed candidates; a
+historical requirement to run every selected CTS leaf twice is not the current
+delivery rule. For a new capability, require a public-API contract, positive
+and negative host tests, and **one** strict native run tied to the exact build
+artifact, with a deterministic GPU-visible oracle and clean lifecycle. Repeat a
+run when its result is ambiguous, flaky, or changed by a fix, not merely to
+produce a second identical receipt. Focused upstream CTS is valuable for
+regression and diagnosis but an absent or unmapped CTS case is not, by itself,
+a reason to withhold an otherwise measured bounded capability. A real failing
+applicable CTS result must remain visible and be investigated; this policy
+does not turn failures into passes. None of these project checks is a claim of
+Vulkan conformance or a complete core-version implementation. The ordinary
+device still reports Vulkan 1.0.
+
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 
@@ -1674,7 +1690,7 @@ new CTS or hardware claim was attached to the original structural slice.
 Secondary command buffers and one bounded two-subpass profile left that list
 later through the native evidence recorded below.
 
-## Current capability gap ledger (unsupported, not planned)
+## Current capability gap ledger (bounded or unsupported)
 
 The 137/137 figure above is structural. This ledger is the current list of
 exported boundaries that do not execute the general Vulkan operation their name
@@ -1690,12 +1706,15 @@ drift away from the documents again.
 
 <!-- capability-gap-ledger:begin -->
 
-- `vkCmdBlitImage` — unsupported. No GPU scaling or filtering path exists, no
-  blit feature bit is advertised, and the call records nothing.
-- `vkCmdResolveImage` — unsupported. Multisample image creation is not
-  implemented, and a single-sample copy is never accepted as a resolve.
-- `vkCmdClearAttachments` — unsupported. There is no in-render-pass attachment
-  clear path.
+- `vkCmdBlitImage` — bounded. The T07 BC-to-RGBA8 path accepts selected
+  compressed source shapes, mip/layer ranges and nearest/linear filtering;
+  general format, scaling and blit combinations remain unsupported.
+- `vkCmdResolveImage` — unsupported as a standalone command. The separately
+  measured 2x/4x colour-attachment resolve path does not make this entry point
+  a general image resolve.
+- `vkCmdClearAttachments` — bounded. One BGRA8/RGBA8 colour attachment or a
+  D16 depth attachment may be cleared over validated in-pass rectangles;
+  other aspects, formats, attachment combinations and scopes are unsupported.
 - `vkCmdClearDepthStencilImage` — bounded, not general. The whole subresource of
   a one-sample `VK_FORMAT_D32_SFLOAT` 2D target clears to a depth value in
   `[0,1]`, and that single shape is qualified on hardware. Stencil aspects,
@@ -1722,10 +1741,10 @@ drift away from the documents again.
 - `vkQueueBindSparse` — unsupported. No queue advertises
   `VK_QUEUE_SPARSE_BINDING_BIT`, and the call fails closed without mutating
   queue, fence or semaphore state.
-- Real query results — unsupported. Only bounded occlusion pools are created.
-  Reset is ordered and observable, but `vkGetQueryPoolResults` reports
-  `VK_NOT_READY` with an untouched destination, and occlusion begin/end,
-  `vkCmdCopyQueryPoolResults` and timestamp writes are fail-closed.
+- Real query results — bounded. Occlusion begin/end, result retrieval and
+  `vkCmdCopyQueryPoolResults` publish measured counts; the precise path has a
+  public-SDK witness. Timestamp and pipeline-statistics pools remain
+  unsupported, and `vkCmdWriteTimestamp` stays fail-closed because
   `timestampValidBits` is reported as zero.
 
 <!-- capability-gap-ledger:end -->
@@ -4654,12 +4673,37 @@ available. The shipping Vulkan 1.0 device has neither extension route.
 | 16-bit float | `shaderFloat16` and `storageBuffer16BitAccess` | `shaderFloat16` false |
 | 64-bit float | `shaderFloat64` | `shaderFloat64` false |
 
+The unchanged arithmetic factory first requires subgroup support and
+`VK_SUBGROUP_FEATURE_ARITHMETIC_BIT` in `supportedOperations`, then checks the
+operand format and any 8/16-bit uniform-buffer storage requirement. Package
+registration alone does not satisfy these gates or validate an oracle.
+
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
 `subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
 Add and Min cases and graphics-stage subgroup operations beyond the bounded
 vertex and fragment Broadcast draws remain unproven on hardware. These
 diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
+
+The focused CTS package now links and registers the unchanged original
+`subgroups.ballot_broadcast` and `subgroups.arithmetic` factories, but the
+frozen 507-case acceptance selection still contains no subgroup leaf. A
+separate diagnostic selection
+added the pinned mustpass cases `compute.subgroupbroadcast_i8vec4` and
+`compute.subgroupbroadcast_nonconst_uint` to the 507 controls. Run
+`run-619192142197878` reported 507 Pass and both subgroup leaves
+`NotSupported`, each at `vktSubgroupsBallotBroadcastTests.cpp:265` with
+"Subgroup operations are not supported"; there were no missing or unexpected
+cases. The verified QPA SHA-256 was
+`91a93da09d6e82d4ec2d870ce896e87f85ad1bcda8c33213a2e340fafc206cc7`,
+the signed eboot SHA-256 was
+`5c252dd90d2ef8e29cf6dfc15bd51f779949159173c6d983006b2e531763ef89`,
+and the diagnostic selection hash was
+`d5694f3de21a6d00086566d56f58bda26106cf02c7b7b74a4292736838b124c4`.
+The title closed and the accepted payload was restored. Firmware was not
+recorded in this receipt. This run verifies runtime registration and the
+current first support gate; it supplies no subgroup CTS pass or feature
+promotion evidence.
 
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
