@@ -45,7 +45,8 @@ class T08SubgroupContracts(unittest.TestCase):
     def test_original_cts_eligibility(self):
         source = CTS / "vktSubgroupsTestsUtils.cpp"
         broadcast = CTS / "vktSubgroupsBallotBroadcastTests.cpp"
-        if not source.is_file() or not broadcast.is_file():
+        arithmetic = CTS / "vktSubgroupsArithmeticTests.cpp"
+        if not source.is_file() or not broadcast.is_file() or not arithmetic.is_file():
             self.skipTest("pinned upstream CTS unavailable")
         utilities = source.read_text()
         factory = broadcast.read_text()
@@ -58,6 +59,10 @@ class T08SubgroupContracts(unittest.TestCase):
         self.assertIn("shaderSubgroupExtendedTypes && shaderFloat16", utilities)
         self.assertIn("subgroupbroadcast_nonconst", factory)
         self.assertIn("isSubgroupBroadcastDynamicIdSupported(context)", factory)
+        arithmetic_source = arithmetic.read_text()
+        self.assertIn("VK_SUBGROUP_FEATURE_ARITHMETIC_BIT", arithmetic_source)
+        self.assertIn("subgroups::getAllFormats()", arithmetic_source)
+        self.assertIn("isFormatSupportedForDevice(context, caseDef.format)", arithmetic_source)
 
     def test_runtime_id_and_narrow_type_compiler_gate(self):
         glslang = shutil.which("glslangValidator")

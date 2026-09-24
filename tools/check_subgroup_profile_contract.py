@@ -47,7 +47,7 @@ def check_registry(root, contract):
             "extended types feature query/create chain changed")
 
 
-def check_cts(utils, broadcast, contract):
+def check_cts(utils, broadcast, arithmetic, contract):
     require(contract["cts_extended_type_extension_gate"] ==
             ["VK_KHR_shader_subgroup_extended_types", "VK_KHR_shader_float16_int8"],
             "CTS extension gate changed")
@@ -76,6 +76,15 @@ def check_cts(utils, broadcast, contract):
     require("supportedOperations" in utils and
             "VK_SUBGROUP_FEATURE_BALLOT_BIT" in broadcast,
             "CTS ballot property gate changed")
+    require(contract["properties"]["arithmetic_operation"] ==
+            "VK_SUBGROUP_FEATURE_ARITHMETIC_BIT" and
+            "isSubgroupFeatureSupportedForDevice(context, VK_SUBGROUP_FEATURE_ARITHMETIC_BIT)" in arithmetic and
+            "isSubgroupSupported(context)" in arithmetic and
+            "isFormatSupportedForDevice(context, caseDef.format)" in arithmetic and
+            "is8BitUBOStorageSupported(context)" in arithmetic and
+            "is16BitUBOStorageSupported(context)" in arithmetic and
+            "getAllFormats()" in arithmetic,
+            "CTS arithmetic operation or format gate changed")
     require("OPTYPE_BROADCAST_NONCONST" in broadcast and
             "isSubgroupBroadcastDynamicIdSupported(context)" in broadcast and
             "SPIRV_VERSION_1_5" in broadcast,
@@ -151,11 +160,12 @@ def check(root=ROOT):
     cts_root = root / "third_party/vk-gl-cts"
     utils = cts_root / contract["cts"]["utility"]
     broadcast = cts_root / contract["cts"]["broadcast"]
-    if utils.is_file() and broadcast.is_file():
+    arithmetic = cts_root / contract["cts"]["arithmetic"]
+    if utils.is_file() and broadcast.is_file() and arithmetic.is_file():
         actual = subprocess.check_output(
             ["git", "-C", str(cts_root), "rev-parse", "HEAD"], text=True).strip()
         require(actual == contract["cts"]["commit"], "CTS checkout is not pinned")
-        check_cts(utils.read_text(), broadcast.read_text(), contract)
+        check_cts(utils.read_text(), broadcast.read_text(), arithmetic.read_text(), contract)
     report = json.loads((root / "conformance_inventory/reporting_matrix.json").read_text())
     matrix = json.loads((root / "conformance_inventory/dxvk_v262_matrix.json").read_text())
     check_reporting(contract, report, matrix,

@@ -80,7 +80,7 @@ the current public reporting closed while these prerequisites are incomplete.
 
 | Requirement | Legal route and original CTS gate | Current state |
 | --- | --- | --- |
-| `shaderSubgroupExtendedTypes` | `VK_KHR_shader_subgroup_extended_types` requires Vulkan 1.1; the feature is core in 1.2. Broadcast cases need subgroup `supportedStages` for the tested stage and `supportedOperations` with `BALLOT`. The 8/16/64-bit integer and 16-bit float formats need their respective shader features, with storage access for 8/16-bit CTS buffers. | Public bit off; API 1.0; no accepted subgroup CTS or complete native witness. |
+| `shaderSubgroupExtendedTypes` | `VK_KHR_shader_subgroup_extended_types` requires Vulkan 1.1; the feature is core in 1.2. Original Broadcast and arithmetic cases need subgroup `supportedStages` for the tested stage and `supportedOperations` with `BALLOT` and `ARITHMETIC` respectively. The 8/16/64-bit integer and 16-bit float formats need their respective shader features, with storage access for 8/16-bit CTS buffers. | Public bit off; API 1.0; no accepted subgroup CTS or complete native witness. |
 | `subgroupBroadcastDynamicId` | Only `VkPhysicalDeviceVulkan12Features` at this registry pin; the original nonconstant broadcast cases require Vulkan 1.2, SPIR-V 1.5, the feature bit, a supported stage and `BALLOT`. | Public bit off; API 1.0; no extension alias or accepted CTS route. |
 
 `VkPhysicalDeviceSubgroupProperties` supplies `subgroupSize`, `supportedStages`,
