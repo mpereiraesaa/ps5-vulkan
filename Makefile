@@ -187,6 +187,8 @@ check-sanitize:
 	./build/tests/test_vk_memory_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_device.c -o build/tests/test_vk_device_sanitized
 	./build/tests/test_vk_device_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_timeline_device.c -o build/tests/test_timeline_device_sanitized
+	./build/tests/test_timeline_device_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tools/dump_device_reporting.c -o build/tests/dump_device_reporting_sanitized
 	./build/tests/dump_device_reporting_sanitized > /dev/null
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_pipeline_cache.c -o build/tests/test_pipeline_cache_sanitized
@@ -386,6 +388,8 @@ check:
 	./build/tests/test_vk_memory
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_device.c -o build/tests/test_vk_device
 	./build/tests/test_vk_device
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_timeline_device.c -o build/tests/test_timeline_device
+	./build/tests/test_timeline_device
 	# Reporting audit: dump what the public query paths report and check it
 	# against the pinned specification tables and the pinned CTS consumer rules.
 	$(PYTHON) tools/check_reporting_matrix.py --check

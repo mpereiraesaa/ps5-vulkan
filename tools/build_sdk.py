@@ -250,6 +250,14 @@ def main():
             raise SystemExit("PS5VK_MEMORY_MODEL_DIAGNOSTIC must be 0 or 1")
         if memory_model_diagnostic == "1":
             native_cflags.append("-DPS5VK_MEMORY_MODEL_DIAGNOSTIC=1")
+        # Private measurement build (DXVK262-T09 timelineSemaphore): report
+        # VK_KHR_timeline_semaphore so its public-SDK witness can negotiate it
+        # before the shipping platform advertises it. Off by default.
+        timeline_diagnostic = os.environ.get("PS5VK_TIMELINE_DIAGNOSTIC", "0")
+        if timeline_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_TIMELINE_DIAGNOSTIC must be 0 or 1")
+        if timeline_diagnostic == "1":
+            native_cflags.append("-DPS5VK_TIMELINE_DIAGNOSTIC=1")
         # Private diagnostic build (DXVK262-T04): make the graphics adapter log
         # the pipeline key field by field when it refuses a pipeline, so one
         # CTS run names the refused condition. Same shape as the switch above:
