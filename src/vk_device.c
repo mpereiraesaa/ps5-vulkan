@@ -91,6 +91,14 @@ static const struct core_feature_bit {
      PS5VK_FEATURE_FRAGMENT_STORES_AND_ATOMICS},
     {offsetof(VkPhysicalDeviceFeatures, sampleRateShading),
      PS5VK_FEATURE_SAMPLE_RATE_SHADING},
+    /* T07 sampled-image capabilities. These mappings only expose the public
+     * query/enable path when the platform supplies its measured bit; the
+     * native platform leaves both disabled until implementation and CTS
+     * evidence are complete. */
+    {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),
+     PS5VK_FEATURE_IMAGE_CUBE_ARRAY},
+    {offsetof(VkPhysicalDeviceFeatures, textureCompressionBC),
+     PS5VK_FEATURE_TEXTURE_COMPRESSION_BC},
 };
 
 static void get_core_features(const struct ps5vk_platform *platform,

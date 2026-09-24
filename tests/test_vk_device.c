@@ -1319,6 +1319,63 @@ static void negative(void)
         memset(&features, 0, sizeof(features));
         features.robustBufferAccess = VK_TRUE;
     }
+    /* T07 cube arrays and BC compression use the same one-member/one-platform
+     * bit contract. The fixture turns the bits on only to prove the query and
+     * logical-device routes; platform defaults remain disabled pending native
+     * and applicable CTS evidence. */
+    {
+        const struct { size_t offset; uint32_t bit; } t07[2] = {
+            {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),
+             PS5VK_FEATURE_IMAGE_CUBE_ARRAY},
+            {offsetof(VkPhysicalDeviceFeatures, textureCompressionBC),
+             PS5VK_FEATURE_TEXTURE_COMPRESSION_BC},
+        };
+        const uint32_t saved = p->platform.supported_features;
+        const VkBool32 yes = VK_TRUE;
+        VkPhysicalDeviceFeatures reported;
+        vkGetPhysicalDeviceFeatures(p, &reported);
+        assert(!reported.imageCubeArray && !reported.textureCompressionBC);
+        for (unsigned n = 0; n < 2; ++n) {
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t07[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+
+            p->platform.supported_features = saved | t07[n].bit;
+            vkGetPhysicalDeviceFeatures(p, &reported);
+            for (unsigned other = 0; other < 2; ++other) {
+                VkBool32 value;
+                memcpy(&value, (unsigned char *)&reported + t07[other].offset,
+                       sizeof(value));
+                assert(value == (other == n ? VK_TRUE : VK_FALSE));
+            }
+            memset(&features, 0, sizeof(features));
+            memcpy((unsigned char *)&features + t07[n].offset, &yes, sizeof(yes));
+            d=(VkDevice)(uintptr_t)1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d);
+            assert(d->enabled_features == t07[n].bit);
+            vkDestroyDevice(d, NULL);
+            p->platform.supported_features = saved;
+        }
+
+        const uint32_t all_bits = t07[0].bit | t07[1].bit;
+        p->platform.supported_features = saved | all_bits;
+        VkPhysicalDeviceFeatures2 all = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2
+        };
+        vkGetPhysicalDeviceFeatures2KHR(p, &all);
+        assert(all.features.imageCubeArray && all.features.textureCompressionBC);
+        VkDeviceCreateInfo chained = info;
+        chained.pEnabledFeatures = NULL;
+        chained.pNext = &all;
+        d=(VkDevice)(uintptr_t)1;
+        assert(vkCreateDevice(p,&chained,NULL,&d)==VK_SUCCESS && d);
+        assert(d->enabled_features == (PS5VK_FEATURE_ROBUST_BUFFER_ACCESS | all_bits));
+        vkDestroyDevice(d, NULL);
+        p->platform.supported_features = saved;
+        memset(&features, 0, sizeof(features));
+        features.robustBufferAccess = VK_TRUE;
+    }
     info.pEnabledFeatures = NULL; priority = NAN;
     assert(vkCreateDevice(p, &info, NULL, &d) != VK_SUCCESS);
     priority = 0.0f;
