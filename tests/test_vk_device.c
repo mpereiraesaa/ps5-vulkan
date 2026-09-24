@@ -481,7 +481,8 @@ static void lifecycle(void)
         VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,&ip)==VK_SUCCESS &&
         ip.maxExtent.width==PS5VK_MAX_IMAGE_CUBE && ip.maxExtent.height==PS5VK_MAX_IMAGE_CUBE &&
-        ip.maxExtent.depth==1 && ip.maxArrayLayers==6);
+        ip.maxExtent.depth==1 &&
+        ip.maxArrayLayers==(PS5VK_MAX_IMAGE_ARRAY_LAYERS/6u)*6u);
     for(unsigned variant=0;variant<2;++variant) {
         memset(&ip,0xff,sizeof(ip));
         assert(vkGetPhysicalDeviceImageFormatProperties(p,

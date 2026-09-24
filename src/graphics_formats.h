@@ -198,7 +198,12 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         width=height=PS5VK_MAX_IMAGE_2D;layers=PS5VK_MAX_IMAGE_ARRAY_LAYERS;
     } else if(sampled && type==VK_IMAGE_TYPE_2D &&
               flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) {
-        width=height=PS5VK_MAX_IMAGE_CUBE;layers=6;
+        width=height=PS5VK_MAX_IMAGE_CUBE;
+        /* Cube-compatible 2D arrays can contain any whole number of cubes.
+         * imageCubeArray gates CUBE_ARRAY views, not image creation or the
+         * image-format-properties query, so report the highest legal
+         * six-layer multiple under the device's general array-layer limit. */
+        layers=(PS5VK_MAX_IMAGE_ARRAY_LAYERS/6u)*6u;
     } else if(sampled && type==VK_IMAGE_TYPE_3D && !flags) {
         width=height=depth=PS5VK_MAX_IMAGE_3D;
     } else return VK_ERROR_FORMAT_NOT_SUPPORTED;
