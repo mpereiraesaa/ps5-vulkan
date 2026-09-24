@@ -72,6 +72,12 @@ def rows(records, name):
 
 def validate_artifact(manifest_path, artifact_path):
     manifest = json.loads(Path(manifest_path).read_text())
+    require(manifest.get("host_query_reset_probe", 0) in (0, 1),
+            "manifest host query reset mode")
+    if manifest.get("host_query_reset_probe") == 1:
+        require(manifest.get("occlusion_query_api_probe") == 1 and
+                manifest.get("runtime_sdk") is True,
+                "host query reset requires the SDK query API witness")
     if manifest.get("occlusion_query_api_probe") == 1:
         require(manifest.get("stage") == "graphics-api-offscreen-draw" and
                 manifest.get("runtime_sdk") is True and
@@ -191,6 +197,20 @@ def validate_query_api(path, records, manifest, artifact_digest):
     require(len(completed) >= 2, "original and same-pool repeat submissions completed")
     require(len(close) == 1 and close[0][1].get("rc") == "0" and
             close[0][1].get("allocations_bytes") == "0", "clean platform close")
+    if manifest.get("host_query_reset_probe") == 1:
+        host = rows(records, "PS5VK_HOST_QUERY_RESET")
+        require(len(host) == 2, "host reset and reused query records")
+        require(host[0][1] == {
+            "phase": "after_reset", "old": "1,0,3",
+            "availability": "0,0,0", "status": "not_ready",
+        }, "host reset must invalidate all results after the first execution")
+        require(host[1][1] == {
+            "phase": "after_reuse", "values": "1,0,3",
+            "availability": "1,1,1", "completed": "1",
+        }, "same query slots must produce known values after reset")
+        require(created[0][0] < completed[0][0] < host[0][0] <
+                completed[-1][0] < host[1][0] < result[0][0] < close[0][0],
+                "host reset must fall between two completed executions")
     fields = result[0][1]
     expected = {
         "passed_samples": "1",
@@ -262,6 +282,7 @@ def validate_query_api(path, records, manifest, artifact_digest):
             "copy_wait": True,
             "partial": True,
             "same_pool_reset_repeat": True,
+            "host_query_reset": manifest.get("host_query_reset_probe") == 1,
             "artifact_eboot_sha256": artifact_digest,
         },
         "log": str(path),
