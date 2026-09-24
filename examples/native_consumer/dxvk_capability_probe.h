@@ -218,6 +218,16 @@ static int run_dxvk262_capability_probe(void)
             "DXVK262_HOST_QUERY_RESET_QUERY route=VK_EXT_host_query_reset "
             "hostQueryReset=%u", host_query_reset.hostQueryReset);
     }
+    /* Vulkan 1.0 exposes mirror clamp through a KHR device extension. There
+     * is no separate extension feature query: enumeration is the public route. */
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME)) {
+        features12.samplerMirrorClampToEdge = VK_TRUE;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_SAMPLER_MIRROR_CLAMP_QUERY "
+            "route=VK_KHR_sampler_mirror_clamp_to_edge samplerMirrorClampToEdge=1");
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",

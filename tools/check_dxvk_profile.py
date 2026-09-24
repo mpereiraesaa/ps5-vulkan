@@ -39,6 +39,7 @@ MEMORY_MODEL_IDS = {
 }
 BDA_ID = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
 HOST_QUERY_RESET_ID = "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset"
+SAMPLER_MIRROR_CLAMP_ID = "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge"
 DEVICE_SCOPE_ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
 DIAGNOSTIC_IMPLEMENTATIONS = {
     "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": (
@@ -165,6 +166,18 @@ def host_query_reset_axes(row: dict, query: dict, extensions: set[str],
              "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_query_pool.c",
                       "conformance_inventory/reporting_matrix.json"],
              "detail": "Reviewed EXT feature query, opt-in, range and pending-use validation."})
+
+
+def sampler_mirror_clamp_axes(row: dict, extensions: set[str]) -> tuple[dict, dict] | None:
+    if (row["id"] != SAMPLER_MIRROR_CLAMP_ID or
+            "VK_KHR_sampler_mirror_clamp_to_edge" not in extensions):
+        return None
+    return ({"state": "satisfied", "observed": True, "expected": row["expected"],
+             "via": "VK_KHR_sampler_mirror_clamp_to_edge",
+             "detail": "KHR device extension on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised."},
+            {"state": "implemented", "refs": ["native/platform_ps5.c", "src/vk_device.c",
+                                               "src/vk_sampler.c"],
+             "detail": "Public KHR enumeration and device opt-in use the native mirror-clamp sampler path."})
 
 
 def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, dict] | None:
@@ -524,8 +537,11 @@ def generate() -> dict:
             extensions, feature_reports)
         if host_query_reset is not None:
             api, implementation = host_query_reset
+        sampler_mirror_clamp = sampler_mirror_clamp_axes(requirement, extensions)
+        if sampler_mirror_clamp is not None:
+            api, implementation = sampler_mirror_clamp
         diagnostic = diagnostic_implementation(identifier)
-        if diagnostic is not None:
+        if diagnostic is not None and sampler_mirror_clamp is None:
             implementation = diagnostic
         cts = cts_join(related, override.get("cts"), selected_cases, diagnostic_cases)
         if "native" in override:
