@@ -134,6 +134,11 @@ def main():
         not graphics_api or os.environ.get("PS5VK_USE_SDK") != "1"
     ):
         raise SystemExit("PS5VK_SAMPLER_MIRROR_CASE requires an SDK-linked graphics build")
+    if sampler_mirror_case != "-1" and (
+        scissor_probe != "6" or os.environ.get("PS5VK_GRAPHICS_DRAW") != "1" or
+        os.environ.get("PS5VK_GRAPHICS_PRESENT") == "1"
+    ):
+        raise SystemExit("PS5VK_SAMPLER_MIRROR_CASE requires scissor probe 6, draw and no presentation")
     clip_cull_probe = os.environ.get("PS5VK_CLIP_CULL_PROBE", "0")
     if clip_cull_probe not in ("0", "1") or (clip_cull_probe == "1" and not graphics_api):
         raise SystemExit("PS5VK_CLIP_CULL_PROBE requires the graphics profile API and must be 0 or 1")
