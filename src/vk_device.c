@@ -437,7 +437,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkExtensionProperties properties[10];
+    /* Ten conditional pushes follow (storage class, 8-bit, 16-bit, draw
+     * parameters, multiview, memory model, device group, buffer address, UBO
+     * layout, timeline). Keep headroom so a new entry cannot overflow the
+     * array before this bound is revisited; each push site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 10, DEVICE_EXTENSION_SLOTS = 16 };
+    _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
+                   "device extension array too small");
+    VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
     uint32_t total = 0;
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
@@ -803,6 +810,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         p->platform.close(&d->memory); result = VK_ERROR_INITIALIZATION_FAILED;
     }
     if (result != VK_SUCCESS) { ps5vk_object_free(d, &saved, custom); return result; }
+    if (pthread_mutex_init(&d->queue_lock, NULL)) {
+        p->platform.close(&d->memory); ps5vk_object_free(d, &saved, custom);
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
     d->physical = p; d->queue.device = d; d->queue.next_serial = 1;
     d->queue.priority_class = q->pQueuePriorities[0] >= 0.5f ? 1u : 0u;
     d->enabled_features = enabled_features;
@@ -854,6 +865,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
         d->pipeline_cache = NULL;
     }
     d->physical->platform.close(&d->memory);
+    pthread_mutex_destroy(&d->queue_lock);
     --d->physical->instance->devices;
     VkAllocationCallbacks a = d->allocator; VkBool32 custom = d->custom_allocator;
     ps5vk_object_free(d, &a, custom);

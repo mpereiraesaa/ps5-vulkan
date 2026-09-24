@@ -381,6 +381,14 @@ smaller incompatible layer pitches. The graphics profile reports
   backend's exact completion. A submission whose head waits on a value no
   queued work signals does not block `vkQueueSubmit`; later records queue
   behind it and native jobs are prepared only when they reach the head.
+  A host signal starts the work it releases before returning, so an
+  application that only polls mapped memory afterwards still sees it run.
+  Known limit: because such a job is prepared at the head rather than inside
+  `vkQueueSubmit`, a preparation failure there (for example exhausted native
+  command memory) cannot be returned by the submit call. It marks the device
+  lost and is reported as `VK_ERROR_DEVICE_LOST` by the next wait, poll or
+  submission; the timeline payload and fence of the failed work never
+  advance.
   `maxTimelineSemaphoreValueDifference` is `UINT64_MAX` because every value is
   ordered with full-width comparisons. The extension is reported only by the
   default-off `PS5VK_TIMELINE_DIAGNOSTIC` measurement build until promoted.

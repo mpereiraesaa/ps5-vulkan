@@ -3,6 +3,7 @@
 
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
+#include <pthread.h>
 #include "graphics_limits.h"
 #include "sample_rate_contract.h"
 
@@ -343,24 +344,28 @@ struct VkDevice_T {
     VkBool32 lost;
     /* VK_KHR_timeline_semaphore was enabled on this device. */
     VkBool32 timeline_extension_enabled;
-    /* Serializes queue progression, submission and timeline payloads between
-     * threads: vkSignalSemaphoreKHR, vkWaitSemaphoresKHR and
+    /* Serializes queue progression, submission, timeline payloads and fence
+     * state between threads: vkSignalSemaphoreKHR, vkWaitSemaphoresKHR and
      * vkGetSemaphoreCounterValueKHR may run concurrently with the queue.
-     * Zero is unlocked, so hand-built devices need no initialization. */
-    uint32_t queue_lock;
+     * vkCreateDevice initializes it and vkDestroyDevice destroys it. Host
+     * tests that hand-build a zeroed device rely on the host C library, where
+     * an all-zero mutex is the default static initializer. */
+    pthread_mutex_t queue_lock;
 };
 
 void ps5vk_device_enable_runtime_compiler(VkDevice device);
 
-/* A short spin lock: the protected regions poll or launch backend work but
- * never pause, so waiters release it around every progress pause. */
+/* A blocking mutex, not a spin lock. The locked regions can be long: they
+ * start queue work, which runs native prepare and launch (the native launch
+ * waits for GPU completion and may sleep for up to its timeout), frontend
+ * copies, diagnostic logging and allocator callbacks. Waiters therefore sleep
+ * in the kernel instead of spinning against a fixed-priority holder. Queue
+ * waits release it around every progress pause. It is not recursive: no
+ * locked region calls back into a locking entry point. */
 static inline void ps5vk_device_lock(VkDevice device)
-{
-    while (__atomic_exchange_n(&device->queue_lock, 1u, __ATOMIC_ACQUIRE))
-        while (__atomic_load_n(&device->queue_lock, __ATOMIC_RELAXED)) {}
-}
+{ (void)pthread_mutex_lock(&device->queue_lock); }
 static inline void ps5vk_device_unlock(VkDevice device)
-{ __atomic_store_n(&device->queue_lock, 0u, __ATOMIC_RELEASE); }
+{ (void)pthread_mutex_unlock(&device->queue_lock); }
 
 void *ps5vk_object_alloc(const VkAllocationCallbacks *fallback,
     const VkAllocationCallbacks *given, size_t size, VkSystemAllocationScope scope,

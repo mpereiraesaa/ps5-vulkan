@@ -345,10 +345,12 @@ static void wait_before_signal(void)
      * after the backend reports exact completion. */
     assert(host_signal(&d, gate, 4) == VK_SUCCESS);
     assert(wait_value(&d, done, 20, 0) == VK_TIMEOUT && !f.launches);
+    /* The releasing host signal starts the job itself: no wait is needed
+     * for released work to run. */
     assert(host_signal(&d, gate, 5) == VK_SUCCESS);
-    assert(!f.launches);  /* the host signal itself never runs queue work */
-    assert(wait_value(&d, done, 20, 0) == VK_TIMEOUT);
     assert(f.prepares == 1 && f.launches == 1 && f.launched[0] == 1);
+    assert(wait_value(&d, done, 20, 0) == VK_TIMEOUT);
+    assert(f.prepares == 1 && f.launches == 1);
     assert(counter(&d, done) == 15 && !fence->signaled);
     f.complete = 1;
     assert(wait_value(&d, done, 21, 0) == VK_SUCCESS);
@@ -369,6 +371,67 @@ static void wait_before_signal(void)
     vkDestroySemaphore(&d, done, NULL);
     vkDestroyCommandPool(&d, pool, NULL);
     assert(!d.semaphores && !d.fences && !d.lifetime_errors);
+}
+
+/* A host signal must start the work it releases even when the application
+ * never calls a queue wait afterwards and only inspects other state: here a
+ * frontend fill into mapped memory and a native job's launch. */
+static VkResult memory_allocate(void *ctx, VkDeviceSize n, void **a, void **b)
+{ (void)ctx; *a = *b = calloc(1, n); return *a ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY; }
+static void memory_release(void *ctx, void *b) { (void)ctx; free(b); }
+static VkResult memory_sync(void *ctx, void *b, VkDeviceSize offset, VkDeviceSize bytes)
+{ (void)ctx; (void)b; (void)offset; (void)bytes; return VK_SUCCESS; }
+static void signal_starts_released_work(void)
+{
+    struct fixture f = {.auto_complete = 1};
+    struct VkDevice_T d;
+    init_device(&d, &f);
+    d.memory = (struct ps5vk_memory_backend){NULL, memory_allocate, memory_release,
+                                             memory_sync, memory_sync};
+    d.buffer_alignment = 4; d.noncoherent_atom = 4; d.max_allocation = 1024;
+    VkMemoryAllocateInfo mi = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                               .allocationSize = 64};
+    VkDeviceMemory memory;
+    assert(vkAllocateMemory(&d, &mi, NULL, &memory) == VK_SUCCESS);
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 64,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer buffer;
+    assert(vkCreateBuffer(&d, &bi, NULL, &buffer) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, buffer, memory, 0) == VK_SUCCESS);
+    volatile uint32_t *words = NULL;
+    assert(vkMapMemory(&d, memory, 0, VK_WHOLE_SIZE, 0, (void **)&words) == VK_SUCCESS);
+
+    VkCommandPool pool;
+    VkCommandBuffer fill = command_buffer(&d, &pool, 0);
+    VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    assert(vkResetCommandBuffer(fill, 0) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(fill, &begin) == VK_SUCCESS);
+    vkCmdFillBuffer(fill, buffer, 0, 16, 0x7117e5a3u);
+    assert(vkEndCommandBuffer(fill) == VK_SUCCESS);
+    VkCommandPool native_pool;
+    VkCommandBuffer native = command_buffer(&d, &native_pool, 0);
+
+    VkSemaphore gate = make_semaphore(&d, VK_SEMAPHORE_TYPE_TIMELINE, 0);
+    VkSemaphore done = make_semaphore(&d, VK_SEMAPHORE_TYPE_TIMELINE, 0);
+    assert(submit(&d, gate, 1, NULL, 0, fill, NULL) == VK_SUCCESS);
+    assert(submit(&d, NULL, 0, done, 1, native, NULL) == VK_SUCCESS);
+    assert(words[0] == 0 && words[3] == 0 && !f.launches && d.submission);
+    assert(host_signal(&d, gate, 1) == VK_SUCCESS);
+    /* No wait, counter query or fence call: read memory and the backend's
+     * own bookkeeping directly. */
+    assert(words[0] == 0x7117e5a3u && words[3] == 0x7117e5a3u && words[4] == 0);
+    assert(f.prepares == 1 && f.launches == 1 && f.launched[0] == 2);
+    assert(fill->state == PS5VK_EXECUTABLE);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && counter(&d, done) == 1);
+
+    vkUnmapMemory(&d, memory);
+    vkDestroySemaphore(&d, gate, NULL);
+    vkDestroySemaphore(&d, done, NULL);
+    vkDestroyCommandPool(&d, pool, NULL);
+    vkDestroyCommandPool(&d, native_pool, NULL);
+    vkDestroyBuffer(&d, buffer, NULL);
+    vkFreeMemory(&d, memory, NULL);
+    assert(!d.semaphores && !d.lifetime_errors);
 }
 
 /* Twelve chained submissions each wait for the previous value, like the
@@ -649,6 +712,7 @@ int main(void)
     host_signal_and_wait();
     wait_before_signal();
     ordered_chain();
+    signal_starts_released_work();
     binary_behind_timeline();
     submit_validation();
     failure_rollback();
