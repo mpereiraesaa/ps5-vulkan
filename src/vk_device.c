@@ -92,9 +92,7 @@ static const struct core_feature_bit {
     {offsetof(VkPhysicalDeviceFeatures, sampleRateShading),
      PS5VK_FEATURE_SAMPLE_RATE_SHADING},
     /* T07 sampled-image capabilities. These mappings only expose the public
-     * query/enable path when the platform supplies its bit. The native T07
-     * candidate enables them; ordinary-build CTS acceptance is tracked
-     * separately from this mapping. */
+     * query/enable path when the platform supplies its bit. */
     {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),
      PS5VK_FEATURE_IMAGE_CUBE_ARRAY},
     {offsetof(VkPhysicalDeviceFeatures, textureCompressionBC),

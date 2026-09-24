@@ -104,7 +104,7 @@ DXVK support is tracked against the immutable DXVK **v2.6.2** profile
 into a checked-in machine-readable profile and joined independently to the
 current public API, reviewed implementation, CTS and native evidence.
 
-The fail-closed matrix currently proves **20/62** requirements completely:
+The fail-closed matrix currently proves **24/62** requirements completely:
 `robustBufferAccess`, multiview and its two required limits, the three
 indirect/indexed draw features `drawIndirectFirstInstance`,
 `multiDrawIndirect` (with `maxDrawIndirectCount = 65535`) and
@@ -115,14 +115,15 @@ base `vulkanMemoryModel` and bounded `bufferDeviceAddress` through their Vulkan
 1.0 KHR routes, and the four rasterization and viewport features
 `depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`. The blend
 features draw into two colour attachments; sample-rate shading runs once per
-sample at 2x and 4x. Multiview is queried through its
+sample at 2x and 4x. The four T07 features `imageCubeArray`,
+`textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise` passed twice in the 829-case ordinary upstream CTS
+selection. Multiview is queried through its
 explicit KHR route. `geometryShader` and `tessellationShader` are positive on
 the API, implementation and CTS axes but their native axis is still
-`reported-not-executed`, so they stay among the other 42 requirements that
+`reported-not-executed`, so they stay among the other 38 requirements that
 remain blockers, together with the API-version requirement. This is an
 implementation roadmap, not a DXVK compatibility claim.
-
-T04 (geometry, tessellation and clip/cull distances) is implemented,
 hardware-validated and merged. The default graphics build passed a focused
 403/403 upstream run, including 99 tessellation-related cases. The separate
 fail-closed DXVK matrix has not yet admitted the geometry/tessellation native

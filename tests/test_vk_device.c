@@ -1360,7 +1360,7 @@ static void negative(void)
     /* Every T07 core feature uses the same one-member/one-platform bit
      * contract. This host fixture starts with the bits off and turns each on
      * to prove the query and logical-device routes independently of the
-     * native platform's current reporting candidate. */
+     * native platform's reporting decision. */
     {
         const struct { size_t offset; uint32_t bit; } t07[] = {
             {offsetof(VkPhysicalDeviceFeatures, imageCubeArray),

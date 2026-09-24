@@ -310,16 +310,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     /* Two-cube GPU readback and the applicable upstream case qualify this bit.
      * Unsupported tiled layer pitches still fail at descriptor creation. */
     platform->supported_features |= PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
-    /* BC sampling, filtering and transfer roles passed focused original CTS;
-     * format queries expose only implemented roles. Ordinary frozen-selection
-     * acceptance for this public candidate remains pending. */
+    /* BC sampling, filtering and transfer roles passed original CTS;
+     * format queries expose only implemented roles. */
     platform->supported_features |= PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
-    /* Precise occlusion has native counter and focused original CTS evidence;
-     * ordinary frozen-selection acceptance remains pending. */
+    /* Precise occlusion has native counter and original CTS evidence. */
     platform->supported_features |= PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
     /* Constant, dynamic, four-offset and Dref forms have GPU readback and
-     * focused original CTS coverage at the required offset limits; ordinary
-     * frozen-selection acceptance remains pending. */
+     * original CTS coverage at the required offset limits. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
 #endif
 #else

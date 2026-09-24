@@ -5226,3 +5226,36 @@ The ordinary CTS package signed eboot SHA-256
 `95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`;
 shipping hardware acceptance of that package remains pending. The checked
 four-axis DXVK matrix therefore remains at 20/62 ready and 42 blockers.
+
+## T07 public upstream CTS promotion (2026-09-24)
+
+On firmware **12.02** (owner-reported), the ordinary public T07 build ran the
+frozen 829-case original upstream CTS selection twice. The eboot SHA-256 was
+`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`;
+the selection SHA-256 was
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+No T07 diagnostic switch was used. Both strict receipts verified the exact
+payload and selection, full QPA, case identities and title lifecycle. Each
+reported **829 Pass, zero Fail, zero NotSupported, zero missing, zero unexpected
+and zero duplicate** cases. The original CTS oracles were unchanged.
+
+| Strict receipt | Logging run | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- |
+| `run-3158572987094` | `20260924T182430756Z_PPSA99994_upstream-cts_0x2df693153d2` | `fdb0e8c0a8d9f4ee1025dca852bb76e1808de13304836f3679384a4a9272b4a6` | `3fecac2d959988f5187864bca1afdbdb2dbdc77f8976cd7320e6235886d6b367` |
+| `run-3231483363368` | `20260924T182543668Z_PPSA99994_upstream-cts_0x2f0634174f1` | `48a30ff0f1dbd164d5cbb0aaa656375d8a4eac21710185167a99c4de7db84b12` | `98c00e1b2b01657fe238ade5fda5680e11c5d58948b46144c07227c767fd963a` |
+
+The source logs used ps5log/1, closed with BYE and had zero sequence gaps. The
+T07 groups passed in **both** runs: `imageCubeArray` 1/1,
+`textureCompressionBC` 250/250 (48 sampling, 128 blit, 74 image/mip copies),
+`shaderImageGatherExtended` 70/70 and `occlusionQueryPrecise` 1/1. The full
+frozen selection passed with the four public bits enabled. The public ABI probe
+in the preceding section observed 26/62 requested query values; the joined
+four-axis DXVK matrix now has **24/62 satisfied and 38 blockers**. Native
+witness receipts and hashes for each feature are recorded in the T07 sections
+above and bound in `conformance_inventory/dxvk_v262_evidence.json`.
+
+The console window restored the previous ordinary payload, whose exact-self
+eboot SHA-256 was
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
+The wrapper released the console and the subsequent status reported
+`running=none`.

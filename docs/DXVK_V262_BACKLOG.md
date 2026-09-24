@@ -24,7 +24,8 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 20/62 ready with 42 blockers. The ordered table preserves the
+live matrix is 24/62 ready with 38 blockers after T07's four resource and
+precise-query features passed the ordinary 829-case selection twice. The ordered table preserves the
 original tranche membership.
 
 Tranche delivery and DXVK profile scoring are different gates. The current
@@ -105,6 +106,19 @@ Its strict PS5 acceptance remains pending. The four T07 rows therefore remain
 blocked on the CTS axis, and the checked DXVK matrix stays at 20/62 ready with
 42 blockers. [VALIDATION.md](../VALIDATION.md#t07-public-reporting-candidate-2026-09-24)
 separates the candidate from the earlier diagnostic runs.
+
+### T07 public CTS promotion (2026-09-24)
+
+On owner-reported firmware 12.02, the ordinary package above completed two
+strict 829/829 Pass runs, `run-3158572987094` and `run-3231483363368`, with
+zero Fail, NotSupported, missing, unexpected or duplicate cases. The four
+T07 groups each passed twice: cube arrays 1/1, BC 250/250, extended gather
+70/70 and precise occlusion 1/1. Both reports verified the exact eboot and
+selection hashes, complete QPA, clean log transport and normal title closure.
+The four rows now satisfy API, implementation, original CTS and native-evidence
+axes; the checked matrix is **24/62 ready with 38 blockers**. The earlier
+candidate paragraph records its status before these runs. Full receipt and
+artifact hashes are in [VALIDATION.md](../VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
 
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership

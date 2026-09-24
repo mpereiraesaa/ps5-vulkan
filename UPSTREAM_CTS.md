@@ -69,6 +69,13 @@ were the same thing:
   and selection SHA-256
   `d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`;
   see [the evidence](VALIDATION.md#buffer-device-address-khr-promotion).
+  T07's ordinary 829-case selection passed twice on owner-reported firmware
+  12.02, with zero Fail, NotSupported, missing or unexpected cases. Both runs
+  used eboot SHA-256
+  `95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`
+  and selection SHA-256
+  `81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`;
+  see [the T07 promotion evidence](VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
   The manifest also carries 66 diagnostic paths, which remain outside strict
   acceptance. Earlier dated sections below record the smaller selections used
   at each promotion and preserve their historical counts.
