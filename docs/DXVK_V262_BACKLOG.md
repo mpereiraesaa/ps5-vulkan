@@ -34,7 +34,10 @@ default-off diagnostic compute route has twice read back 128 exact 32-bit
 An independent default-off compute IAdd gate now has host pipeline and actual
 witness-shader compiler evidence plus two strict GPU readbacks of 128/128
 exact 32-bit values with clean guards and retirement. It still has no
-applicable original CTS Pass or narrow-type/stage coverage.
+applicable original CTS Pass. A separate default-off signed Int8 compute IAdd
+witness also passed twice with 128 exact wrapped results, zero guard errors
+and clean retirement. This covers one narrow-type operation, not the broader
+type, operation or stage matrix.
 The Broadcast result advances implementation evidence only: the Vulkan 1.1
 extended-types contract still needs narrow types and its applicable original
 CTS, while the Vulkan 1.2 dynamic-ID contract still needs a legal public API

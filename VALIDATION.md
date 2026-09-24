@@ -4709,6 +4709,27 @@ bounded 32-bit compute IAdd GPU path, not original CTS or broader subgroup
 operation/type/stage coverage. It does not report the public `ARITHMETIC`
 operation bit or either T08 feature.
 
+A separate default-off SDK witness exercises signed Int8 scalar
+`OpGroupNonUniformIAdd` in compute. Its signed eboot SHA-256 is
+`674e7db8d66e86b4f3826e4867f66725c5a3b0d7b5085d2d05dad7b9c598085b`;
+the shader and consumer source SHA-256 values are
+`f2bfd54fcbf09b35288b12e45e49d09ad3a30709cfb371857eab41e9f2d7f879`
+and `ad877bf0ee569ba1dedb1bb82c2ea9e75110d7a94bf8fa213e44e7d92638060a`.
+Two strict ps5log/1 runs of this exact payload each verified 128/128 wrapped
+8-bit results across four subgroups, zero value and guard mismatches, digest
+`eac277c5`, a completed fence, clean resource retirement and title closure:
+
+- `20260924T182841508Z_PPSA99994_ps5vk_0x319cb27ae6a`, log SHA-256
+  `fb7f6c603ed12fc0379fd5e958cfa1cb5e1f9eb597c0a6f16260e192bdc1a106`.
+- `20260924T182855467Z_PPSA99994_ps5vk_0x31d0b2d3c83`, log SHA-256
+  `e51b5c5c9031eb94a61b43cf76f2abce63395287d290ccc9f34dad21146d5066`.
+
+The previous payload was restored after each run. Firmware was not recorded
+in these receipts. This establishes one bounded signed Int8 compute IAdd path;
+it does not establish the full narrow-type, operation or stage matrix, an
+applicable original CTS pass, public `shaderInt8`, either subgroup bit or a
+higher public `apiVersion`.
+
 The earlier default-off Broadcast-only build passed its unchanged frozen
 upstream acceptance selection: **507 Pass, zero Fail, zero NotSupported, zero
 missing or unexpected** in strict run `run-626719354771127`. Signed eboot
