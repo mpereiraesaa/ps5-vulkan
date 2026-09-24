@@ -95,7 +95,11 @@ class BCSubresourceReferenceTests(unittest.TestCase):
             upload, raw, expected, regions, patch, contract = generate(profile)
             mip, layer = contract['selected_mip'], contract['selected_layer']
             block_bytes=PROFILES[profile][3]
-            candidates = [('wrong-mip',layer*4+(mip+1)%4), ('stale-upload',layer*4+mip)]
+            candidates = [('stale-upload',layer*4+mip)]
+            # Include the common failure that ignores baseMipLevel and samples
+            # mip zero, as well as every other stored mip.
+            candidates += [(f'wrong-mip-{other}',layer*4+other) for other in range(4)
+                           if other != mip]
             candidates += [(f'wrong-layer-{other}',other*4+mip) for other in range(3)
                            if other != layer and not (profile == 'bc1-imagecopy' and other == 0)]
             for label, index in candidates:
@@ -217,6 +221,20 @@ class BCSubresourceVerifierTests(unittest.TestCase):
         self.assertEqual((result['selected_mip'], result['selected_layer']), (0, 1))
         self.assertEqual(result['preserved_subresources'], 11)
         self.assertEqual(result['operation'], 'buffer-to-image')
+
+    def test_runtime_mip_and_layer_identity_cannot_drift(self):
+        for profile in ('bc1-mip', 'bc1-layer', 'bc1-imagecopy', 'bc3-tail'):
+            self.setUp()
+            self.switch_profile(profile)
+            start = self.messages[1]
+            for field, original, wrong in (
+                ('mip', self.contract['selected_mip'], (self.contract['selected_mip']+1)%4),
+                ('layer', self.contract['selected_layer'], 0)):
+                with self.subTest(profile=profile, field=field):
+                    self.messages[1] = start.replace(f'{field}={original} ', f'{field}={wrong} ')
+                    with self.assertRaisesRegex(ValueError, 'input and reference identity'):
+                        self.run_validation()
+            self.messages[1] = start
 
     def test_image_copy_run_and_source_identity(self):
         self.switch_profile('bc1-imagecopy')
