@@ -22,6 +22,14 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_device_scope_diagnostic_switch_is_retired(self):
+        retired = "PS5VK_MEMORY_MODEL_" + "DIAGNOSTIC"
+        for relative in ("native/platform_ps5.c", "tools/build_sdk.py",
+                         "tools/build_upstream_cts.py", "tools/check_dxvk_profile.py",
+                         "tools/build_t08_memory_model_witness.py"):
+            with self.subTest(relative=relative):
+                self.assertNotIn(retired, (matrix.ROOT / relative).read_text())
+
     def test_shipping_memory_model_and_address_extensions(self):
         extensions = matrix.implemented_device_extensions()
         self.assertIn("VK_KHR_vulkan_memory_model", extensions)
@@ -70,6 +78,13 @@ class DxvkMatrixTests(unittest.TestCase):
         api, implementation = matrix.memory_model_axes(scope, query, extensions, reports)
         self.assertEqual(("blocker", "missing"),
                          (api["state"], implementation["state"]))
+        reported_scope = {**query, "vulkanMemoryModelDeviceScope": True}
+        scope_reports = {**reports, "vulkanMemoryModelDeviceScope": {
+            "kind": "extension-feature", "reported": True, "verdict": "satisfied"}}
+        api, implementation = matrix.memory_model_axes(
+            scope, reported_scope, extensions, scope_reports)
+        self.assertEqual(("satisfied", "implemented"),
+                         (api["state"], implementation["state"]))
         for bad in ({}, {**query, "route": "VK_VERSION_1_2"},
                     {**query, "vulkanMemoryModel": False,
                      "vulkanMemoryModelDeviceScope": True}):
@@ -87,8 +102,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                     "native-evidence", "satisfied"),
             "vulkanMemoryModel": ("satisfied", "implemented", "cts-pass",
                                   "native-evidence", "satisfied"),
-            "vulkanMemoryModelDeviceScope": ("blocker", "implemented", "not-mapped",
-                                             "native-evidence", "blocker"),
+            "vulkanMemoryModelDeviceScope": ("satisfied", "implemented", "not-mapped",
+                                             "native-evidence", "satisfied"),
         }
         for feature, states in expected.items():
             row = rows[prefix + feature]
@@ -178,8 +193,8 @@ class DxvkMatrixTests(unittest.TestCase):
         # independently witnessed fragment-storage and dual-source features, and
         # the four T05 rasterization and viewport features, and the four T07
         # resource/query features advance; API 1.3 remains a separate blocker.
-        self.assertEqual(24, document["summary"]["satisfied"])
-        self.assertEqual(38, document["summary"]["blocker"])
+        self.assertEqual(25, document["summary"]["satisfied"])
+        self.assertEqual(37, document["summary"]["blocker"])
 
     def test_t07_public_rows_have_all_four_axes_and_original_cts_cases(self):
         rows = {row["id"]: row for row in matrix.generate()["requirements"]}
@@ -205,8 +220,8 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(24, document["summary"]["satisfied"])
-        self.assertEqual(38, document["summary"]["blocker"])
+        self.assertEqual(25, document["summary"]["satisfied"])
+        self.assertEqual(37, document["summary"]["blocker"])
         self.assertEqual(
             [
                          "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
@@ -231,6 +246,7 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
                          "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
                          "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+                         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
             ],
@@ -276,8 +292,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(24, document["summary"]["satisfied"])
-                self.assertEqual(38, document["summary"]["blocker"])
+                self.assertEqual(25, document["summary"]["satisfied"])
+                self.assertEqual(37, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 
@@ -395,16 +411,15 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual({"pass": 26, "fail": 0, "no-evidence": 36},
                          document["summary"]["dimensions"]["cts"])
 
-    def test_unmapped_cts_does_not_block_but_the_api_axis_still_does(self):
-        """DeviceScope is implemented and native-witnessed with no mapped CTS leaf:
-        it is implementation ready, yet stays a profile blocker while unadvertised."""
+    def test_unmapped_cts_allows_artifact_bound_khr_device_scope(self):
+        """The Vulkan 1.0 KHR DeviceScope route has independent native evidence."""
         rows = {r["id"]: r for r in matrix.generate()["requirements"]}
         row = rows[matrix.DEVICE_SCOPE_ID]
-        self.assertEqual(("blocker", "implemented", "not-mapped", "native-evidence"),
+        self.assertEqual(("satisfied", "implemented", "not-mapped", "native-evidence"),
                          tuple(row[axis]["state"] for axis in
                                ("api", "implementation", "cts", "native")))
-        self.assertEqual("blocker", row["verdict"])
-        self.assertTrue(matrix.row_ready({**row, "api": {"state": "satisfied"}}))
+        self.assertEqual("satisfied", row["verdict"])
+        self.assertFalse(matrix.row_ready({**row, "api": {"state": "blocker"}}))
         evidence = json.loads(matrix.EVIDENCE.read_text())
         original = matrix.EVIDENCE
         with tempfile.TemporaryDirectory() as tmp:

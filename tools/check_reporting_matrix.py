@@ -276,6 +276,22 @@ ADVERTISED_FEATURES["vulkanMemoryModel"] = {
     "cts": _MEMORY_MODEL_VOLATILE_CTS,
 }
 
+ADVERTISED_FEATURES["vulkanMemoryModelDeviceScope"] = {
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;"),
+        ("src/vk_device.c", "VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME"),
+        ("src/vk_pipeline.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
+        ("src/ps5vk_compiler.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
+        ("native/runtime_graphics_compiler.c", "enable_vulkan_memory_model_device_scope"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query and opt-in route enables Device-scope "
+               "atomics; an ordinary SDK cross-workgroup GPU witness passed "
+               "twice with artifact-bound results"),
+    # The original message-passing CTS factory rejects API < 1.1 before its
+    # DeviceScope query. This is not a CTS pass or a core-version claim.
+    "cts": (),
+}
+
 ADVERTISED_FEATURES["bufferDeviceAddress"] = {
     "citations": (
         ("native/platform_ps5.c",

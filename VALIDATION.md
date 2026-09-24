@@ -4846,8 +4846,8 @@ under the same frozen selection.
 
 ### Vulkan memory model DeviceScope
 
-The separate DeviceScope bit stays false. In a diagnostic build, two unchanged
-same-dispatch cross-workgroup runs on eboot
+The earlier diagnostic build kept the separate DeviceScope bit false in the
+ordinary profile. Two unchanged same-dispatch cross-workgroup runs on eboot
 `035e0a631e4f5521543b33c16f45c19e67e0beb3ce998180fe414f3cda0a1e40`
 each observed all 1024 producer/consumer pairs with zero skips, value failures
 or guard mismatches and bounded fence completion: runs
@@ -4855,8 +4855,32 @@ or guard mismatches and bounded fence completion: runs
 `20260923T110031778Z_PPSA99994_ps5vk_0x1e8718860bd81`. The original
 `vktMemoryModelMessagePassing.cpp` support check rejects API versions below
 1.1 before querying the feature, so no original DeviceScope leaf is eligible
-on this Vulkan 1.0 profile. That CTS/API boundary prevents promotion despite
-the bounded GPU result.
+on this Vulkan 1.0 profile.
+
+The ordinary SDK candidate now advertises `vulkanMemoryModelDeviceScope=1`
+through `VK_KHR_vulkan_memory_model` while leaving `apiVersion=1.0.0`.
+Its SDK-linked witness uses SPIR-V 1.0 VulkanKHR Device-scope acquire/release
+atomics and checks public query, opt-in and the required base-model dependency.
+Signed eboot SHA-256
+`2fc3798c759d71395a5f3256ec74c558705f9613bc0b5811ce23d677ec2ab560`
+passed twice after integrating the subgroup-properties change from main: runs
+`20260924T205016235Z_PPSA99994_ps5vk_0xad3993a0361` and
+`20260924T205028932Z_PPSA99994_ps5vk_0xad68e0ca74e` each observed
+1024/1024 producer-consumer pairs, zero skipped pairs, value or guard
+mismatches, bounded fence completion and clean retirement. Both runs closed
+the title, restored the acceptance eboot and left the console idle. The
+receipt did not record firmware.
+
+The separate ordinary public-ABI capability probe, signed eboot SHA-256
+`0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff`,
+strictly verified all 62 query records in run
+`20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178` (log SHA-256
+`3972ab2ecf71688a19b70c361d132c278b70186bc0166bcd941f33d9179503f0`).
+It observed DeviceScope true through the KHR feature chain, 27 requested
+query values and 35 query blockers; the query probe does not execute shaders.
+The checked four-axis DXVK matrix reaches 25/62 ready, with 37 blockers.
+DeviceScope's CTS axis is `not-mapped`, not `cts-pass`; the bounded witness
+does not establish general Vulkan conformance or all memory-model litmus cases.
 
 ### Buffer device address
 

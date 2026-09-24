@@ -194,26 +194,9 @@ def implemented_device_extensions() -> set[str]:
     missing = sorted(token for token in tokens if token not in definitions)
     if missing:
         raise ValueError("unresolved device extension macros: " + ", ".join(missing))
-    # Compiling a conditional KHR route does not mean the shipping platform
-    # reports that extension. Count only the bits assigned to the native
-    # platform's supported-features mask, keeping the capability probe aligned
-    # until a measured promotion changes that mask.
+    # Count only bits assigned to the native platform's supported-features
+    # mask, keeping the capability probe aligned with the ordinary build.
     platform_source = (ROOT / "native/platform_ps5.c").read_text()
-    # A default-off measurement build is not the shipping capability probe.
-    # Strip only this explicitly named conditional block, and fail closed if
-    # its preprocessor boundary is malformed rather than counting its bits.
-    for name in ("PS5VK_MEMORY_MODEL_DIAGNOSTIC",):
-        guard = f"#if defined({name}) && {name}"
-        if guard in platform_source:
-            pattern = re.compile(r"^" + re.escape(guard) + r"\n.*?^#endif\s*$",
-                                 re.MULTILINE | re.DOTALL)
-            blocks = list(pattern.finditer(platform_source))
-            if (len(blocks) != 1 or
-                    re.search(r"^#(?:if|ifdef|ifndef|elif|else)\b",
-                              blocks[0].group()[len(guard):],
-                              re.MULTILINE)):
-                raise ValueError(f"malformed {name} guard")
-            platform_source = pattern.sub("", platform_source)
     platform_source = re.sub(r"/\*.*?\*/|//[^\n]*", "", platform_source, flags=re.DOTALL)
     assignments = re.findall(r"platform->supported_features\s*(?:\|=|=)\s*(.*?);",
                              platform_source, re.DOTALL)

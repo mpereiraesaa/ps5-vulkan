@@ -24,8 +24,9 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 24/62 ready with 38 blockers after T07's four resource and
-precise-query features passed the ordinary 829-case selection twice. The ordered table preserves the
+live matrix is 25/62 ready with 37 blockers after T07's four resource and
+precise-query features passed the ordinary 829-case selection twice and T08
+DeviceScope passed its ordinary SDK KHR witness and public query. The ordered table preserves the
 original tranche membership.
 
 Tranche delivery and DXVK profile scoring are different gates. The current
@@ -118,7 +119,9 @@ T07 groups each passed twice: cube arrays 1/1, BC 250/250, extended gather
 70/70 and precise occlusion 1/1. Both reports verified the exact eboot and
 selection hashes, complete QPA, clean log transport and normal title closure.
 The four rows now satisfy API, implementation, original CTS and native-evidence
-axes; the checked matrix is **24/62 ready with 38 blockers**. The earlier
+axes; after the separate T08 DeviceScope KHR witness and public query, the
+checked matrix is **25/62 ready with 37 blockers**. DeviceScope has no
+applicable original message-passing CTS leaf under API 1.0. The earlier
 candidate paragraph records its status before these runs. Full receipt and
 artifact hashes are in [VALIDATION.md](../VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
 
