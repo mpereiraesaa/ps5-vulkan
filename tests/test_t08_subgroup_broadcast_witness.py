@@ -8,9 +8,21 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from run_t08_subgroup_broadcast_witness import expected_digest, verify
+from build_upstream_cts import tessellation_build_profile
 
 
 class SubgroupWitnessTests(unittest.TestCase):
+    def test_diagnostic_switch_has_distinct_cts_build_identity(self):
+        ordinary = tessellation_build_profile({})
+        diagnostic = tessellation_build_profile({
+            "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1"})
+        self.assertEqual(ordinary["switches"]["PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC"],
+                         "0")
+        self.assertEqual(diagnostic["switches"]["PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC"],
+                         "1")
+        self.assertFalse(ordinary["experimental"])
+        self.assertTrue(diagnostic["experimental"])
+
     def setUp(self):
         self.log = (
             b"T08_SUBGROUP_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.0\n"
