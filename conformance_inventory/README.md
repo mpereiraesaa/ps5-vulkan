@@ -325,12 +325,16 @@ four evidence axes:
 
 1. the value exposed by the public API;
 2. reviewed implementation support;
-3. an exact CTS pass; and
-4. exact native evidence.
+3. upstream CTS evidence: exact original leaves passing in the frozen
+   selection or in a focused run bound to an artifact and case list (every
+   named case Pass; NotSupported, Skip and Fail never count); and
+4. exact native evidence with run ids and an artifact SHA-256.
 
-A row is satisfied only when all four axes are positive. Unknown or absent
-evidence is a blocker. The checked matrix currently records 24/62 satisfied
-(`robustBufferAccess`, three multiview requirements, the three indirect and
+A row is satisfied when the API, implementation and native axes are positive
+and no applicable CTS leaf was observed failing. CTS is regression evidence: a
+missing or unrun leaf does not block, an observed failure does. Unknown or
+absent API, implementation or native evidence is a blocker. The checked
+matrix currently records 24/62 satisfied (`robustBufferAccess`, three multiview requirements, the three indirect and
 indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
 `fullDrawIndexUint32`, the `shaderClipDistance`/`shaderCullDistance` pair,
 `fragmentStoresAndAtomics`, `dualSrcBlend`, `independentBlend`,

@@ -37,7 +37,10 @@ class DxvkBacklogTests(unittest.TestCase):
         # DXVK262-T06 independentBlend (2026-09-22) and then sampleRateShading
         # (2026-09-23) were promoted, followed by T07's four resource/query
         # rows on 2026-09-24.
-        self.assertEqual(23, summary["implementation_ready"])
+        # CTS is regression evidence, not a readiness gate: the implemented,
+        # native-witnessed vulkanMemoryModelDeviceScope is implementation ready
+        # although no CTS leaf is mapped; its unadvertised API axis still blocks.
+        self.assertEqual(24, summary["implementation_ready"])
         self.assertEqual(23, summary["profile_satisfied"])
         self.assertEqual(38, summary["remaining_profile_blockers"])
         self.assertEqual({
@@ -119,6 +122,43 @@ class DxvkBacklogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "final tranche must contain only"):
             backlog.validate(broken, self.matrix)
 
+
+    def test_only_an_observed_cts_failure_blocks_readiness(self):
+        baseline = backlog.validate(self.document, self.matrix)
+        for state in ("cts-focused-pass", "mapped-not-run", "not-mapped"):
+            with self.subTest(state=state):
+                changed = copy.deepcopy(self.matrix)
+                row = next(item for item in changed["requirements"]
+                           if item["id"] == "feature:VkPhysicalDeviceFeatures:imageCubeArray")
+                row["cts"]["state"] = state
+                summary = backlog.validate(self.document, changed)
+                self.assertEqual(baseline["implementation_ready"],
+                                 summary["implementation_ready"])
+        failed = copy.deepcopy(self.matrix)
+        row = next(item for item in failed["requirements"]
+                   if item["id"] == "feature:VkPhysicalDeviceFeatures:imageCubeArray")
+        row["cts"]["state"] = "cts-fail"
+        summary = backlog.validate(self.document, failed)
+        self.assertEqual(baseline["implementation_ready"] - 1, summary["implementation_ready"])
+
+    def test_gate_policy_must_match_the_matrix_cts_routes(self):
+        drifted = copy.deepcopy(self.matrix)
+        drifted["policy"]["cts_blocking_states"] = []
+        with self.assertRaisesRegex(ValueError, "CTS blocking states"):
+            backlog.validate(self.document, drifted)
+        for gate in ("profile_completion_gate", "implementation_readiness_gate"):
+            with self.subTest(gate=gate):
+                broken = copy.deepcopy(self.document)
+                broken["policy"][gate]["cts_blocking"] = []
+                with self.assertRaisesRegex(ValueError, "gate drift"):
+                    backlog.validate(broken, self.matrix)
+
+    def test_api_promotion_no_longer_demands_whole_suite_cts(self):
+        final = self.document["tranches"][-1]["acceptance"]
+        self.assertIn("our DXVK v2.6.2 build creates its device", final)
+        self.assertIn("mandatory is implemented", final)
+        self.assertIn("any observed applicable failure blocks", final)
+        self.assertIn("whole-suite CTS and official conformance are separate", final)
 
 if __name__ == "__main__":
     unittest.main()
