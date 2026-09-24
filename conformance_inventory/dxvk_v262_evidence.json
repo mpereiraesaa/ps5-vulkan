@@ -2091,6 +2091,24 @@
       }
     },
     "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge": {
+      "cts": {
+        "state": "cts-focused-pass",
+        "cases": [
+          "dEQP-VK.pipeline.monolithic.sampler.view_type.3d.format.r8g8b8a8_unorm.address_modes.all_mode_mirror_clamp_to_edge"
+        ],
+        "result": {
+          "Pass": 1
+        },
+        "run_ids": [
+          "20260924T225630973Z_PPSA99994_upstream-cts_0x11b7346e8255"
+        ],
+        "artifact_sha256": "ddc59b40852806bee34f144358bc28386acfd067714edbfb4a8f17c0b1999cb1",
+        "case_list_sha256": "67d8bfece3acc7305bd211738997b8cfbf2746bc0421ba2719d1372f8a03b627",
+        "refs": [
+          "VALIDATION.md#t09-sampler-mirror-clamp-compact-cts-measurement-2026-09-24"
+        ],
+        "note": "Pinned upstream 8x8x8 3D address-mode leaf passed its original W sampling oracle with strict lifecycle. The earlier two larger 3D filtering leaves still failed during image upload before sampling and are retained in VALIDATION.md."
+      },
       "native": {
         "state": "native-evidence",
         "run_ids": [
