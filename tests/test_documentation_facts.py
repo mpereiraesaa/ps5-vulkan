@@ -69,12 +69,16 @@ def ledger_entries():
 
 def d32_capabilities():
     """Capability tokens of the D32 row, read from the deciding table."""
-    match = re.search(r"BUFFER\(VK_FORMAT_D32_SFLOAT,\s*([A-Z_ |]+)\)",
+    match = re.search(
+        r"\{\s*VK_FORMAT_D32_SFLOAT,\s*4,\s*"
+        r"UINT32_C\(0x01600000\),\s*\{4,\s*0,\s*0,\s*1\},\s*"
+        r"([A-Z0-9_ |]+),",
                       (ROOT / "src/texture_format.c").read_text())
     if not match:
-        raise AssertionError("the D32 row left src/texture_format.c")
+        raise AssertionError("the D32 encoding row left src/texture_format.c")
     return {token.strip().replace("CAP_", "", 1)
-            for token in match.group(1).split("|") if token.strip()}
+            for token in match.group(1).split("|")
+            if token.strip().startswith("CAP_")}
 
 
 class TestCommandSurfaceDocumentation(unittest.TestCase):

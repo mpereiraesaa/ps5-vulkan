@@ -329,7 +329,7 @@ four evidence axes:
 4. exact native evidence.
 
 A row is satisfied only when all four axes are positive. Unknown or absent
-evidence is a blocker. The checked matrix currently records 20/62 satisfied
+evidence is a blocker. The checked matrix currently records 24/62 satisfied
 (`robustBufferAccess`, three multiview requirements, the three indirect and
 indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
 `fullDrawIndexUint32`, the `shaderClipDistance`/`shaderCullDistance` pair,
@@ -337,7 +337,9 @@ indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
 `sampleRateShading`, `uniformBufferStandardLayout`, base `vulkanMemoryModel`
 and bounded `bufferDeviceAddress`
 through their Vulkan 1.0 KHR routes, and the four rasterization and viewport features
-`depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`) and 42
+`depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`, plus
+`imageCubeArray`, `textureCompressionBC`, `shaderImageGatherExtended` and
+`occlusionQueryPrecise`) and 38
 blockers.
 
 T04's implementation and focused native validation are

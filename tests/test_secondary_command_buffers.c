@@ -144,7 +144,8 @@ static void inheritance_contract(void)
         {"render-pass-continue-without-a-pass",
          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT, {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO}},
-        /* queries this device does not execute at all */
+        /* Primary occlusion queries execute, but inherited-query and
+         * pipeline-statistics capabilities remain unsupported. */
         {"occlusion-query", 0, {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
             .occlusionQueryEnable = VK_TRUE}},
         {"query-flags", 0, {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,

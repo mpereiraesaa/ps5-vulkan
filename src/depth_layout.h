@@ -10,4 +10,8 @@ struct ps5vk_depth_layout {
  * footprint only, which does not require the pipe XOR topology. The pixel
  * addressing that does is in src/depth_detile.c. */
 int ps5vk_depth_layout(uint32_t width, uint32_t height, struct ps5vk_depth_layout *out);
+/* The diagnostic D16 attachment is deliberately one 128x128, one-sample
+ * 64KB_Z_X surface. Its 16-bit texels occupy one 64 KiB block. No general
+ * D16 tiling or transfer-addressing role is implied. */
+int ps5vk_depth16_layout(uint32_t width, uint32_t height, struct ps5vk_depth_layout *out);
 #endif

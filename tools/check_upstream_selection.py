@@ -29,6 +29,7 @@ BDA_BUILD_SOURCE = ROOT / "tools/build_upstream_cts.py"
 # sources, not from the selection itself.
 DEVICE_SOURCE = ROOT / "src/vk_device.c"
 INTERNAL_HEADER = ROOT / "src/vk_internal.h"
+PLATFORM_SOURCE = ROOT / "native/platform_ps5.c"
 # The driver's own image-usage surfaces, and the pinned upstream helper that
 # builds the resources a selected family actually needs.
 IMAGE_USAGE_CREATE_SOURCE = ROOT / "src/vk_memory.c"
@@ -40,6 +41,10 @@ MULTIVIEW_TEST_SOURCE = ("external/vulkancts/modules/vulkan/multiview/"
                          "vktMultiViewRenderTests.cpp")
 # The shared draw utility that names the clipping module's clip_volume leaves.
 DRAW_UTIL_SOURCE = "external/vulkancts/modules/vulkan/util/vktDrawUtil.cpp"
+GATHER_TEST_SOURCE = ("external/vulkancts/modules/vulkan/shaderrender/"
+                     "vktShaderRenderTextureGatherTests.cpp")
+OCCLUSION_TEST_SOURCE = ("external/vulkancts/modules/vulkan/query_pool/"
+                         "vktQueryPoolOcclusionTests.cpp")
 # The exact execution requirements a contract must name. Every key is required
 # and must be a real boolean; anything else - a missing key, an unknown one, a
 # non-boolean value - fails closed rather than being ignored, because the
@@ -194,6 +199,120 @@ def _focused_bda_leaf_paths(text: str, integration: str, builder: str) -> frozen
     prefix = ("dEQP-VK.binding_model.buffer_device_address."
               "set0.depth1.basessbo.load.nostore.single.std140.")
     return frozenset((prefix + "comp", prefix + "comp_offset_nonzero"))
+
+def _texture_gather_leaf_requirements(text: str) -> dict[str, list[str]]:
+    """Return only original gather leaves derived from the pinned factory.
+
+    The factory composes gather operation groups and wrap-pair case names from
+    fixed tables. Bind the recognition to those constructions and to the
+    factory's fixed texture/format/size tables, so unrelated literals in this
+    large shader module cannot make a fabricated path traceable.
+    """
+    required_fragments = (
+        'return "basic";', 'return "offset";', 'return "offset_dynamic";',
+        'return "offsets";',
+        'string() + wrapModes[wrapSNdx].name + "_" + wrapModes[wrapTNdx].name',
+        'const int wrapSNdx = wrapCaseNdx;',
+        'const int wrapTNdx = (wrapCaseNdx + 1) % DE_LENGTH_OF_ARRAY(wrapModes);',
+        '{"2d", TEXTURETYPE_2D}', '{"2d_array", TEXTURETYPE_2D_ARRAY}',
+        '{"cube", TEXTURETYPE_CUBE}',
+        '{"rgba8", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::UNORM_INT8)}',
+        '{"rgba8ui", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::UNSIGNED_INT8)}',
+        '{"rgba8i", tcu::TextureFormat(tcu::TextureFormat::RGBA, tcu::TextureFormat::SIGNED_INT8)}',
+        '{"depth32f", tcu::TextureFormat(tcu::TextureFormat::D, tcu::TextureFormat::FLOAT)}',
+        '{"size_pot", IVec3(64, 64, 3)}', '{"size_npot", IVec3(17, 23, 3)}',
+        'offsetSize == OFFSETSIZE_MINIMUM_REQUIRED ? "min_required_offset"',
+        'void TextureGather2DCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'void TextureGather2DArrayCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'void TextureGatherCubeCase::checkSupport(Context &context) const\n{\n'
+        '    context.requireDeviceCoreFeature(DEVICE_CORE_FEATURE_SHADER_IMAGE_GATHER_EXTENDED);',
+        'case tcu::Sampler::COMPAREMODE_LESS:\n        return "less";',
+        'string() + "compare_" + compareModeName(compareMode)',
+        'offsetSize == OFFSETSIZE_IMPLEMENTATION_MAXIMUM', '"implementation_offset"',
+    )
+    if not all(fragment in text for fragment in required_fragments):
+        return {}
+    wraps = re.search(r"wrapModes\[\]\s*=\s*\{(.*?);", text, re.DOTALL)
+    if not wraps:
+        return {}
+    wrap_names = re.findall(r'\{\s*"([a-z_]+)"\s*,\s*tcu::Sampler::[A-Z_]+\s*\}',
+                            wraps.group(1))
+    if wrap_names != ["clamp_to_edge", "repeat", "mirrored_repeat"]:
+        return {}
+    group_types = ("basic", "offset", "offset_dynamic", "offsets")
+    # Derive the measured 2D/2D-array RGBA8 shapes from the pinned dimension
+    # and size tables. Every recognized operation uses the same adjacent wrap
+    # pairs produced by the pinned three-element table.
+    wrap_pairs = [f"{wrap_names[index]}_{wrap_names[(index + 1) % len(wrap_names)]}"
+                  for index in range(len(wrap_names))]
+    result: dict[str, list[str]] = {}
+    for texture_type, sizes in (("2d", ("size_pot", "size_npot")),
+                                ("2d_array", ("size_pot",))):
+        for size in sizes:
+            for group in group_types:
+                for pair in wrap_pairs:
+                    intermediate = "" if group == "basic" else ".min_required_offset"
+                    path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                            f".{texture_type}.rgba8.{size}." + pair)
+                    result[path] = ["core:shaderImageGatherExtended"]
+                    if group != "basic":
+                        implementation_path = (
+                            "dEQP-VK.shaderrender.texture_gather." + group +
+                            f".implementation_offset.{texture_type}.rgba8.{size}." + pair)
+                        result[implementation_path] = ["core:shaderImageGatherExtended"]
+    # The pinned cube case is basic gather only and its checkSupport explicitly
+    # requires shaderImageGatherExtended. Keep this source-derived subset to
+    # the factory's RGBA8 power-of-two ordinary cube leaves.
+    for pair in wrap_pairs:
+        path = ("dEQP-VK.shaderrender.texture_gather.basic.cube.rgba8.size_pot." + pair)
+        result[path] = ["core:shaderImageGatherExtended"]
+
+    # The pinned format table also registers typed integer gather and Dref
+    # formats. Keep one power-of-two 2D case for each operation family and
+    # every wrap pair for UINT/SINT; these paths exercise the same original
+    # image-gather oracle with integer sampler/result types. Their resource
+    # profiles are tracked separately from the RGBA8_UNORM measurements.
+    for texture_format in ("rgba8ui", "rgba8i"):
+        for group in group_types:
+            intermediate = "" if group == "basic" else ".min_required_offset"
+            for pair in wrap_pairs:
+                path = ("dEQP-VK.shaderrender.texture_gather." + group + intermediate +
+                        f".2d.{texture_format}.size_pot." + pair)
+                result[path] = ["core:shaderImageGatherExtended"]
+
+    # Dref gather uses a shadow sampler and the factory places it beneath the
+    # generated compare_less group. Pin one original minimum-offset 2D leaf
+    # whose query reaches the depth sampled-image resource path.
+    result["dEQP-VK.shaderrender.texture_gather.offset.min_required_offset."
+           "2d.depth32f.size_pot.compare_less.clamp_to_edge_repeat"] = [
+               "core:shaderImageGatherExtended"]
+    return result
+
+
+def _texture_gather_generated_segments(text: str) -> set[str]:
+    """Return group names composed by the pinned gather factory."""
+    if ('string() + "compare_" + compareModeName(compareMode)' in text and
+            'case tcu::Sampler::COMPAREMODE_LESS:\n        return "less";' in text and
+            '{"depth32f", tcu::TextureFormat(tcu::TextureFormat::D, '
+            'tcu::TextureFormat::FLOAT)}' in text):
+        return {"compare_less"}
+    return set()
+
+
+def _precise_occlusion_leaf_requirements(text: str) -> dict[str, list[str]]:
+    """Recognize the original basic precise occlusion query case."""
+    construction = (
+        'new QueryPoolOcclusionTest<BasicOcclusionQueryTestInstance>' in text and
+        '"basic_precise", testVector' in text and
+        'testVector.queryControlFlags = vk::VK_QUERY_CONTROL_PRECISE_BIT;' in text and
+        ': TestCaseGroup(testCtx, "occlusion_query")' in text
+    )
+    if not construction:
+        return {}
+    return {"dEQP-VK.query_pool.occlusion_query.basic_precise":
+            ["core:occlusionQueryPrecise"]}
 
 
 def _memoized(function):
@@ -1072,6 +1191,128 @@ def _copy_and_blit_simple_image_leaf_names(function_text: str) -> set[str]:
     }
 
 
+def _format_array(text: str, name: str) -> set[str]:
+    """Read one terminated format table, without borrowing enums from neighbours."""
+    match = re.search(r"\b" + re.escape(name) +
+                      r"\[\]\s*=\s*\{(.*?)VK_FORMAT_UNDEFINED\s*\};",
+                      text, re.DOTALL)
+    return {token.lower() for token in re.findall(r"VK_FORMAT_([A-Z0-9_]+)",
+                                               match.group(1))} if match else set()
+
+
+@_memoized
+def _bc_compressed_sampling_paths(text: str) -> set[str]:
+    """Names generated by the compressed texture 2D factory."""
+    if not all(part in text for part in (
+            'nameBase + "_2d_" + sizes[sizeNdx].name + backingModes[backingNdx].name',
+            'compressedTextureTests->addChild(new TextureTestCase<Compressed2DTestInstance>(',
+            'const string nameBase  = de::toLower(formatStr.substr(10));',
+            '{"", TextureBinding::IMAGE_BACKING_MODE_REGULAR}')):
+        return set()
+    formats = re.search(r"\bformats\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    sizes = re.search(r"\bsizes\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    if not (formats and sizes):
+        return set()
+    bc_formats = re.findall(r"VK_FORMAT_(BC[A-Z0-9_]+)", formats.group(1))
+    size_names = re.findall(r'\{\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(?:true|false)\s*,\s*"([a-z0-9_]+)"\s*\}',
+                            sizes.group(1))
+    return {f"dEQP-VK.texture.compressed.{fmt.lower()}_2d_{size}"
+            for fmt in bc_formats for size in size_names}
+
+
+@_memoized
+def _bc_image_copy_paths(text: str) -> set[str]:
+    """Compatible BC pairs and four layouts registered by the copy factory."""
+    layout_factory = _source_function_at_line(text, 9506)
+    if not all(part in layout_factory for part in (
+            'getImageLayoutCaseName(params.src.image.operationLayout) + "_" +',
+            'getImageLayoutCaseName(params.dst.image.operationLayout)',
+            'const VkImageLayout copySrcLayouts[] = {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};',
+            'const VkImageLayout copyDstLayouts[] = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};',
+            'group->addChild(new CopyImageToImageTestCase(group->getTestContext(), testName, params));')):
+        return set()
+    if not all(part in text for part in (
+            'getFormatCaseName(dstFormat), addImageToImageAllFormatsColorSrcFormatDstFormatTests',
+            'addTestGroup(group, "all_formats", addImageToImageAllFormatsTests, testGroupParams);',
+            'new tcu::TestCaseGroup(group->getTestContext(), "2d_to_2d")')):
+        return set()
+    tables = re.search(r"\bcolorImageFormatsToTest\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    if not tables:
+        return set()
+    paths = set()
+    for name in re.findall(r"\bcompatibleFormats[A-Za-z0-9]+\b", tables.group(1)):
+        formats = _format_array(text, name)
+        for src in formats:
+            if not src.startswith("bc"):
+                continue
+            for dst in formats:
+                if not dst.startswith("bc"):
+                    continue
+                for src_layout in ("optimal", "general"):
+                    for dst_layout in ("optimal", "general"):
+                        paths.add("dEQP-VK.api.copy_and_blit.core.image_to_image."
+                                  f"all_formats.color.2d_to_2d.{src}.{dst}."
+                                  f"{src_layout}_{dst_layout}")
+    return paths
+
+
+@_memoized
+def _bc_mip_copy_paths(text: str) -> set[str]:
+    """Compressed image-to-buffer mips from the pinned extent/layer loops."""
+    if not all(part in text for part in (
+            '"mip_copies_" + getFormatCaseName(format) + "_" + std::to_string(extent.width)',
+            'caseName.append("_" + std::to_string(numLayers) + "_layers")',
+            'caseName.append("_" + queueName)',
+            'for (const VkFormat *format = compressedFormatsFloats;',
+            'getCaseName(*format, params.src.image.extent, numLayers, "universal")',
+            'new CopyCompressedImageToBufferTestCase(',
+            'addTestGroup(group, "2d_images", add2dImageToBufferTests, testGroupParams)')):
+        return set()
+    extents = re.search(r"\bVkExtent3D extents\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    layers = re.search(r"\buint32_t arrayLayers\[\]\s*=\s*\{(.*?)\};", text, re.DOTALL)
+    if not (extents and layers):
+        return set()
+    sizes = re.findall(r"\{\s*(\d+)\s*,\s*(\d+)\s*,\s*1\s*\}", extents.group(1))
+    layer_counts = [int(value) for value in re.findall(r"\b\d+\b", layers.group(1))]
+    return {"dEQP-VK.api.copy_and_blit.core.image_to_buffer.2d_images."
+            f"mip_copies_{fmt}_{width}x{height}"
+            f"{'_' + str(count) + '_layers' if count > 1 else ''}_universal"
+            for fmt in _format_array(text, "compressedFormatsFloats")
+            if fmt.startswith("bc")
+            for width, height in sizes for count in layer_counts}
+
+
+@_memoized
+def _bc_blit_paths(text: str) -> set[str]:
+    """Compressed-to-colour 2D blits for the source and destination tables."""
+    if not all(part in text for part in (
+            '{compressedFormatsFloats, compatibleFormatsFloats, false}',
+            '{compressedFormatsSrgb, compatibleFormatsSrgb, false}',
+            'addTestGroup(group, getFormatCaseName(testParams.params.dst.image.format),',
+            'addBlittingImageAllFormatsColorSrcFormatDstFormatTests, testParams)',
+            'new tcu::TestCaseGroup(group->getTestContext(), "2d")',
+            'getBlitImageTilingLayoutCaseName(testParams.params.src.image.tiling,',
+            'group->addChild(new BlitImageTestCase(testCtx, testName + "_nearest", testParams.params))',
+            'group->addChild(new BlitImageTestCase(testCtx, testName + "_linear", testParams.params))',
+            'const VkImageLayout blitSrcLayouts[] = {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};',
+            'const VkImageLayout blitDstLayouts[] = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL};')):
+        return set()
+    paths = set()
+    for src_name, dst_name in (("compressedFormatsFloats", "compatibleFormatsFloats"),
+                               ("compressedFormatsSrgb", "compatibleFormatsSrgb")):
+        for src in _format_array(text, src_name):
+            if not src.startswith("bc"):
+                continue
+            for dst in _format_array(text, dst_name):
+                for src_layout in ("optimal", "general"):
+                    for dst_layout in ("optimal", "general"):
+                        for filter_name in ("nearest", "linear"):
+                            paths.add("dEQP-VK.api.copy_and_blit.core.blit_image."
+                                      f"all_formats.color.2d.{src}.{dst}."
+                                      f"{src_layout}_{dst_layout}_{filter_name}")
+    return paths
+
+
 def _duplicate_selection_failures(manifest: dict) -> list[str]:
     """Reject a selection that names the same upstream case more than once.
 
@@ -1703,6 +1944,8 @@ def main() -> int:
             generated_segments.add("uint")
         ubo_generated_paths = (_ubo_generated_paths(text)
                                if source_path.name == "vktUniformBlockTests.cpp" else frozenset())
+        if source_path.as_posix().endswith(GATHER_TEST_SOURCE):
+            generated_segments |= _texture_gather_generated_segments(text)
         for segment in segments[1:-1]:
             if (not _quoted_in(segment, searchable) and
                     segment not in generated_segments and
@@ -1715,6 +1958,49 @@ def main() -> int:
                     f"integration or {module_root}")
 
         function_text = _source_function_at_line(text, source_line)
+
+        if source_path.as_posix().endswith(GATHER_TEST_SOURCE):
+            derived_gather = _texture_gather_leaf_requirements(text).get(path)
+            if derived_gather is None:
+                failures.append(
+                    f"{path}: not produced by the pinned texture-gather factory {source_ref}")
+                continue
+            required = derived_gather
+            declared = case.get("features_required", [])
+            missing_metadata = sorted(set(required) - set(declared))
+            if missing_metadata:
+                failures.append(
+                    f"{path}: features_required omits source-derived "
+                    f"{', '.join(missing_metadata)}")
+            if path in acceptance_paths:
+                missing = _unadvertised(required, capabilities)
+                if missing:
+                    failures.append(
+                        f"{path}: acceptance requires {', '.join(missing)}, which "
+                        "this device does not advertise")
+            continue
+
+        if source_path.as_posix().endswith(OCCLUSION_TEST_SOURCE):
+            derived_query = _precise_occlusion_leaf_requirements(text).get(path)
+            if derived_query is None:
+                failures.append(
+                    f"{path}: not produced by the pinned precise-occlusion factory "
+                    f"{source_ref}")
+                continue
+            required = derived_query
+            declared = case.get("features_required", [])
+            missing_metadata = sorted(set(required) - set(declared))
+            if missing_metadata:
+                failures.append(
+                    f"{path}: features_required omits source-derived "
+                    f"{', '.join(missing_metadata)}")
+            if path in acceptance_paths:
+                missing = _unadvertised(required, capabilities)
+                if missing:
+                    failures.append(
+                        f"{path}: acceptance requires {', '.join(missing)}, which "
+                        "this device does not advertise")
+            continue
 
         # The multiview render factory composes every leaf from the
         # shader-family table, the two query names, the rendering types and the
@@ -1771,6 +2057,24 @@ def main() -> int:
                     if contract_id not in contracts:
                         failures.append(
                             f"{path}: names unknown resource contract {contract_id!r}")
+            continue
+
+        # These four BC factories compose their leaves from pinned format,
+        # extent, layout and filter tables. Compare the whole path so a token
+        # from another group in the same large module cannot pass this check.
+        bc_derived = {
+            "t07-bc-full-sampling": ("vktTextureCompressedFormatTests.cpp",
+                                     _bc_compressed_sampling_paths),
+            "t07-bc-original-image-copies": ("vktApiCopiesAndBlittingTests.cpp",
+                                               _bc_image_copy_paths),
+            "t07-bc-original-mip-copies": ("vktApiCopiesAndBlittingTests.cpp",
+                                             _bc_mip_copy_paths),
+            "t07-bc-original-blit": ("vktApiCopiesAndBlittingTests.cpp",
+                                     _bc_blit_paths),
+        }.get(case.get("category"))
+        if bc_derived and source_path.name == bc_derived[0]:
+            if path not in bc_derived[1](text):
+                failures.append(f"{path}: not produced by pinned BC factory {source_ref}")
             continue
 
         # The leaf must be a literal name in the cited function/file, a bounded

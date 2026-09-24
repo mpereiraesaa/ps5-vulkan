@@ -307,6 +307,17 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * the front end, the pipeline key and the native per-target programming
      * already carry the bound. */
     platform->supported_features |= PS5VK_FEATURE_INDEPENDENT_BLEND;
+    /* Two-cube GPU readback and the applicable upstream case qualify this bit.
+     * Unsupported tiled layer pitches still fail at descriptor creation. */
+    platform->supported_features |= PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
+    /* BC sampling, filtering and transfer roles passed original CTS;
+     * format queries expose only implemented roles. */
+    platform->supported_features |= PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
+    /* Precise occlusion has native counter and original CTS evidence. */
+    platform->supported_features |= PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE;
+    /* Constant, dynamic, four-offset and Dref forms have GPU readback and
+     * original CTS coverage at the required offset limits. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

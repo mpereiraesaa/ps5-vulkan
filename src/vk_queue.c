@@ -2,6 +2,12 @@
 #include "vk_buffer_transfer.h"
 #include "vk_indirect.h"
 #include "vk_query_pool.h"
+#if defined(PS5VK_TARGET_PS5)
+#include "ps5log.h"
+#define QUEUE_DIAG(...) ps5log_printf(PS5LOG_ERR, __VA_ARGS__)
+#else
+#define QUEUE_DIAG(...) ((void)0)
+#endif
 #include "vk_image_transfer.h"
 #include <string.h>
 
@@ -113,8 +119,11 @@ static VkResult start_submission(VkDevice d)
                         d->lost = VK_TRUE;
                         return VK_ERROR_DEVICE_LOST;
                     }
-                    if (ps5vk_query_operation(op->type) &&
+                    if ((op->type == PS5VK_QUERY_RESET || op->type == PS5VK_QUERY_COPY) &&
                         ps5vk_query_operation_execute(d, op) != VK_SUCCESS) {
+                        QUEUE_DIAG("PS5VK_QUEUE_FRONTEND_QUERY_FAILED serial=%llu type=%u first=%u count=%u",
+                            (unsigned long long)s->serial,(unsigned)op->type,
+                            op->query_first,op->query_count);
                         d->lost = VK_TRUE;
                         return VK_ERROR_DEVICE_LOST;
                     }
@@ -138,15 +147,27 @@ static VkResult start_submission(VkDevice d)
             if (!s->backend_job) {
                 if (!s->deferred_prepare || !d->submit_backend.prepare ||
                     !d->submit_backend.launch || !d->submit_backend.poll ||
-                    !d->submit_backend.release ||
-                    d->submit_backend.prepare(d, s, &s->backend_job) != VK_SUCCESS ||
-                    !s->backend_job) {
+                    !d->submit_backend.release) {
+                    QUEUE_DIAG("PS5VK_QUEUE_BACKEND_UNAVAILABLE serial=%llu deferred=%u",
+                        (unsigned long long)s->serial,s->deferred_prepare);
+                    d->lost = VK_TRUE;
+                    return VK_ERROR_DEVICE_LOST;
+                }
+                VkResult prepared=d->submit_backend.prepare(d,s,&s->backend_job);
+                if(prepared!=VK_SUCCESS || !s->backend_job) {
+                    QUEUE_DIAG("PS5VK_QUEUE_BACKEND_PREPARE_FAILED serial=%llu rc=%d job=%u",
+                        (unsigned long long)s->serial,prepared,s->backend_job!=NULL);
                     d->lost = VK_TRUE;
                     return VK_ERROR_DEVICE_LOST;
                 }
             }
             VkResult result = d->submit_backend.launch(d, s->backend_job);
-            if (result != VK_SUCCESS) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
+            if (result != VK_SUCCESS) {
+                QUEUE_DIAG("PS5VK_QUEUE_BACKEND_LAUNCH_FAILED serial=%llu rc=%d",
+                    (unsigned long long)s->serial,result);
+                d->lost = VK_TRUE;
+                return VK_ERROR_DEVICE_LOST;
+            }
             return VK_SUCCESS;
         }
         d->queue.completed_serial = s->serial;
@@ -160,7 +181,10 @@ static VkResult start_submission(VkDevice d)
 VkResult ps5vk_queue_poll(VkDevice d)
 {
     if (!d) return INVALID;
-    if (d->lost) return VK_ERROR_DEVICE_LOST;
+    if (d->lost) {
+        QUEUE_DIAG("PS5VK_QUEUE_POLL_DEVICE_ALREADY_LOST");
+        return VK_ERROR_DEVICE_LOST;
+    }
     struct ps5vk_submission *s = d->submission;
     if (!s) return VK_SUCCESS;
     if (s->frontend_only) return start_submission(d);
@@ -184,7 +208,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue)
 {
     if (!queue || !queue->device) return INVALID;
     VkDevice d = queue->device;
-    if (d->lost) return VK_ERROR_DEVICE_LOST;
+    if (d->lost) {
+        QUEUE_DIAG("PS5VK_QUEUE_WAIT_DEVICE_ALREADY_LOST");
+        return VK_ERROR_DEVICE_LOST;
+    }
     while (d->submission) {
         VkResult result = ps5vk_queue_poll(d);
         if (result != VK_SUCCESS) return result;
@@ -238,8 +265,40 @@ static int draw_operation_valid(VkDevice d, const struct ps5vk_operation *op)
  * that pass: any other command would have no scope to execute in. The
  * framebuffer is optional in the inheritance record, so the null handle is
  * accepted and only a DIFFERENT one is refused. */
-static int continuation_child_valid(VkDevice d, VkCommandBuffer child,
-    VkRenderPass active, VkFramebuffer framebuffer, uint32_t subpass)
+static void apply_query_history(VkBool32 *reset, VkCommandBuffer command,
+    uint32_t end, VkQueryPool pool, uint32_t query)
+{
+    for (uint32_t i = 0; i < end; ++i) {
+        const struct ps5vk_operation *op = &command->operations[i];
+        if (op->query_pool != pool) continue;
+        if (op->type == PS5VK_QUERY_RESET && query >= op->query_first &&
+            query - op->query_first < op->query_count) {
+            *reset = VK_TRUE;
+        } else if ((op->type == PS5VK_QUERY_BEGIN ||
+                    op->type == PS5VK_QUERY_END) && op->query_first == query) {
+            *reset = VK_FALSE;
+        }
+    }
+}
+
+static int query_was_reset_before(VkCommandBuffer primary, uint32_t primary_end,
+    VkCommandBuffer const *siblings, uint32_t sibling_count,
+    VkCommandBuffer child, uint32_t child_end, VkQueryPool pool, uint32_t query)
+{
+    VkBool32 reset = pool->states[query] == PS5VK_QUERY_UNAVAILABLE;
+    apply_query_history(&reset, primary, primary_end, pool, query);
+    for (uint32_t i = 0; i < sibling_count; ++i)
+        if (siblings[i])
+            apply_query_history(&reset, siblings[i], siblings[i]->operation_count,
+                                pool, query);
+    apply_query_history(&reset, child, child_end, pool, query);
+    return reset;
+}
+
+static int continuation_child_valid(VkDevice d, VkCommandBuffer primary,
+    uint32_t primary_end, VkCommandBuffer const *siblings,
+    uint32_t sibling_count, VkCommandBuffer child, VkRenderPass active,
+    VkFramebuffer framebuffer, uint32_t subpass)
 {
     if (!(child->usage & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ||
         !child->inheritance_valid ||
@@ -248,15 +307,38 @@ static int continuation_child_valid(VkDevice d, VkCommandBuffer child,
         child->inheritance.subpass != subpass ||
         (child->inheritance.framebuffer &&
          child->inheritance.framebuffer != framebuffer)) return 0;
+    VkQueryPool query_pool = VK_NULL_HANDLE;
+    uint32_t query_index = 0;
     for (unsigned j = 0; j < child->operation_count; ++j) {
         const struct ps5vk_operation *op = &child->operations[j];
+        if (op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) {
+            if (!ps5vk_render_pass_compatible(op->render_pass, active) ||
+                (op->framebuffer && op->framebuffer != framebuffer) ||
+                op->subpass != subpass ||
+                ps5vk_query_operation_validate(d, op) != VK_SUCCESS)
+                return 0;
+            if (op->type == PS5VK_QUERY_BEGIN) {
+                if (query_pool || !query_was_reset_before(primary, primary_end,
+                        siblings, sibling_count, child, j, op->query_pool,
+                        op->query_first)) return 0;
+                query_pool = op->query_pool;
+                query_index = op->query_first;
+            } else {
+                if (!query_pool || query_pool != op->query_pool ||
+                    query_index != op->query_first) return 0;
+                query_pool = VK_NULL_HANDLE;
+            }
+            continue;
+        }
         if (op->type != PS5VK_DRAW && op->type != PS5VK_DRAW_INDEXED &&
             !ps5vk_indirect_graphics_operation(op->type)) return 0;
         if (!ps5vk_render_pass_compatible(op->render_pass, active) ||
             (op->framebuffer && op->framebuffer != framebuffer) ||
             !draw_operation_valid(d, op)) return 0;
     }
-    return 1;
+    /* inheritedQueries is not advertised. A secondary-local query must be
+     * fully bracketed in this child; it cannot remain active at Execute. */
+    return query_pool == VK_NULL_HANDLE;
 }
 
 static int command_valid(VkDevice d, VkCommandBuffer c)
@@ -268,6 +350,8 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
      * rather than from recording state. */
     VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE;
     uint32_t subpass = 0;
+    VkQueryPool active_query_pool = VK_NULL_HANDLE;
+    uint32_t active_query = 0;
     /* DRAW work seen since the pass began - what will execute, not how many
      * commands were written. A vkCmdExecuteCommands marker naming only empty
      * secondaries executes nothing, so counting markers here would accept the
@@ -377,8 +461,10 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                      !(child->state == PS5VK_PENDING && simultaneous)))
                     return 0;
                 if (active) {
-                    if (!continuation_child_valid(d, child, active, framebuffer,
-                                                 op->subpass)) return 0;
+                    /* The profile does not enable inheritedQueries, so a
+                     * primary query cannot span vkCmdExecuteCommands. */
+                    if (active_query_pool || !continuation_child_valid(d, c, j,
+                            children, n, child, active, framebuffer, op->subpass)) return 0;
                     /* A continuation child carries nothing but draws, so its
                      * operation count is the work it contributes - and an
                      * empty child contributes none. */
@@ -389,6 +475,25 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     if (child->pending_count) return 0;
                     for (uint32_t k = 0; k < n; ++k) if (children[k] == child) return 0;
                 }
+            }
+            continue;
+        }
+        if (op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) {
+            if (!active || contents != VK_SUBPASS_CONTENTS_INLINE ||
+                op->render_pass != active || op->framebuffer != framebuffer ||
+                op->subpass != subpass ||
+                ps5vk_query_operation_validate(d, op) != VK_SUCCESS)
+                return 0;
+            if (op->type == PS5VK_QUERY_BEGIN) {
+                if (active_query_pool ||
+                    !ps5vk_query_reset_before(c, j, op->query_pool, op->query_first))
+                    return 0;
+                active_query_pool = op->query_pool;
+                active_query = op->query_first;
+            } else {
+                if (!active_query_pool || active_query_pool != op->query_pool ||
+                    active_query != op->query_first) return 0;
+                active_query_pool = VK_NULL_HANDLE;
             }
             continue;
         }
@@ -475,7 +580,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             if (!set->defined[index]) return 0;
         }
     }
-    return active == NULL;
+    return active == NULL && active_query_pool == VK_NULL_HANDLE;
 }
 struct semaphore_state { VkSemaphore semaphore; VkBool32 signaled; };
 
@@ -527,7 +632,7 @@ static int frontend_operation(int type)
 {
     return event_operation(type) ||
         ps5vk_buffer_transfer_operation((enum ps5vk_operation_type)type) ||
-        ps5vk_query_operation((enum ps5vk_operation_type)type) ||
+        type == PS5VK_QUERY_RESET || type == PS5VK_QUERY_COPY ||
         ps5vk_image_transfer_operation((enum ps5vk_operation_type)type);
 }
 
@@ -776,7 +881,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
 {
     if (!queue || !queue->device || (count && !infos)) return INVALID;
     VkDevice d = queue->device;
-    if (d->lost) return VK_ERROR_DEVICE_LOST;
+    if (d->lost) {
+        QUEUE_DIAG("PS5VK_QUEUE_SUBMIT_DEVICE_ALREADY_LOST");
+        return VK_ERROR_DEVICE_LOST;
+    }
     if (fence && (fence->device != d || fence->signaled || fence->pending_serial)) return INVALID;
 
     uint32_t records = count ? count : 1, reference_count = 0;

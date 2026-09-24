@@ -50,13 +50,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
     if(!out)return VK_ERROR_UNKNOWN;
     *out=VK_NULL_HANDLE;
     if(!d || !info || info->sType!=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO)return VK_ERROR_UNKNOWN;
+    const VkSamplerCreateFlags unsupported_flags = info->flags;
+    const VkBool32 compare_allowed = info->compareEnable &&
+        info->compareOp >= VK_COMPARE_OP_NEVER &&
+        info->compareOp <= VK_COMPARE_OP_ALWAYS;
     /* Reject rather than clamp unsupported state or silently enable
      * approximate sampling behavior. */
-    if(!d->graphics_enabled || info->pNext || info->flags || info->anisotropyEnable ||
-        info->compareEnable || info->unnormalizedCoordinates ||
+    if(!d->graphics_enabled || info->pNext || unsupported_flags || info->anisotropyEnable ||
+        (info->compareEnable && (!compare_allowed || info->minLod < 0)) ||
+        info->unnormalizedCoordinates ||
         !(info->mipLodBias>=-(float)PS5VK_MAX_SAMPLER_LOD_BIAS &&
           info->mipLodBias<=(float)PS5VK_MAX_SAMPLER_LOD_BIAS) ||
-        !(info->minLod>=0 && info->maxLod>=info->minLod && info->maxLod<=FLT_MAX) ||
+        !(info->minLod>=-FLT_MAX && info->minLod<=FLT_MAX &&
+          info->maxLod>=info->minLod && info->maxLod<=FLT_MAX) ||
         (info->mipmapMode!=VK_SAMPLER_MIPMAP_MODE_NEAREST && info->mipmapMode!=VK_SAMPLER_MIPMAP_MODE_LINEAR) ||
         (info->magFilter!=VK_FILTER_NEAREST && info->magFilter!=VK_FILTER_LINEAR) ||
         (info->minFilter!=VK_FILTER_NEAREST && info->minFilter!=VK_FILTER_LINEAR))return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -70,10 +76,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
     VkSampler s=ps5vk_object_alloc(d->custom_allocator?&d->allocator:NULL,a,sizeof(*s),
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,&saved,&custom);
     if(!s)return VK_ERROR_OUT_OF_HOST_MEMORY;
-    s->device=d;s->custom_allocator=custom;if(custom)s->allocator=saved;
+    s->device=d;s->custom_allocator=custom;s->compare_enable=info->compareEnable;
+    if(custom)s->allocator=saved;
     /* Public GFX10 S#: CLAMP_X/Y/Z and XY_MAG/MIN_FILTER. Same fields as
      * Xash3D's ps5_gfx1013_build_ssharp, with independent axis/filter inputs. */
     s->words[0]=(uint32_t)u|((uint32_t)v<<3)|((uint32_t)w<<6);
+    if(info->compareEnable)
+        s->words[0]|=((uint32_t)info->compareOp&7u)<<12;
     s->words[1]=unsigned_lod(info->minLod)|(unsigned_lod(info->maxLod)<<12);
     s->words[2]=signed_lod_bias(info->mipLodBias)|
         ((info->magFilter==VK_FILTER_LINEAR?1u:0u)<<20)|

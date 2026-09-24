@@ -24,12 +24,15 @@ int ps5vk_texture_mip_layout_for_slices(VkFormat format,uint32_t width,
     struct ps5vk_texture_mip_layout *out)
 {
     struct ps5vk_texture_mip_layout result={0};
-    /* The padded-linear encoding exists for every implemented sampled-image
-     * capability; the published role is a separate, witnessed decision. */
-    if(!ps5vk_texture_format_sampled_encoding(format))
+    /* Sampled texel formats and implemented compressed-block rows share the
+     * same padded-linear storage contract; publication remains separately
+     * gated by witnessed format capabilities. */
+    if(!ps5vk_texture_format_sampled_encoding(format) &&
+       !ps5vk_texture_format_block_compressed(format))
         return -1;
     const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(format);
-    if(!out || !entry || !entry->bytes_per_texel || !width || !height ||
+    if(!out || !entry || !entry->bytes_per_block || !entry->block_width ||
+       !entry->block_height || !width || !height ||
        !storage_layers || !level_count ||
        level_count>PS5VK_MAX_TEXTURE_MIP_LEVELS || width>16384 || height>16384)
         return -1;
@@ -42,12 +45,14 @@ int ps5vk_texture_mip_layout_for_slices(VkFormat format,uint32_t width,
         if(!storage_width)storage_width=1;
         if(!storage_height)storage_height=1;
         uint64_t row_bytes;
+        uint64_t block_width=(storage_width+entry->block_width-1)/entry->block_width;
+        uint64_t block_height=(storage_height+entry->block_height-1)/entry->block_height;
         if(storage_height>UINT32_MAX ||
-           checked_product(storage_width,entry->bytes_per_texel,&row_bytes) ||
+           checked_product(block_width,entry->bytes_per_block,&row_bytes) ||
            row_bytes>UINT32_MAX)return -1;
         uint64_t pitch=(row_bytes+255u)&~UINT64_C(255);
         uint64_t level_bytes;
-        if(pitch>UINT32_MAX || checked_product(pitch,storage_height,&level_bytes) ||
+        if(pitch>UINT32_MAX || checked_product(pitch,block_height,&level_bytes) ||
            level_bytes>UINT64_MAX-result.layer_stride)return -1;
         result.levels[level]=(struct ps5vk_texture_mip_level){
             result.layer_stride,(uint32_t)pitch,(uint32_t)storage_width,
