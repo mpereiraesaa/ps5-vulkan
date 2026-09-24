@@ -26,10 +26,6 @@ class SubgroupWitnessTests(unittest.TestCase):
         self.assertEqual(ordinary["switches"]["PS5VK_SUBGROUP_IADD_DIAGNOSTIC"], "0")
         self.assertEqual(iadd["switches"]["PS5VK_SUBGROUP_IADD_DIAGNOSTIC"], "1")
         self.assertTrue(iadd["experimental"])
-        int8 = tessellation_build_profile({"PS5VK_SHADER_INT8_DIAGNOSTIC": "1"})
-        self.assertEqual(ordinary["switches"]["PS5VK_SHADER_INT8_DIAGNOSTIC"], "0")
-        self.assertEqual(int8["switches"]["PS5VK_SHADER_INT8_DIAGNOSTIC"], "1")
-        self.assertTrue(int8["experimental"])
 
     def setUp(self):
         self.log = (

@@ -110,15 +110,20 @@ def main() -> int:
     result = {}
     launched = False
     try:
-        control("launch", args.host)
+        launch_reply = control("launch", args.host)
+        if "Error spawning payload" in launch_reply:
+            raise RuntimeError("console rejected witness launch: " + launch_reply.strip())
         launched = True
         log_path = wait_for_log(args.runs_dir, known, args.timeout)
         receipt = json.loads(log_path.with_suffix(".json").read_text())
         result = verify(log_path.read_bytes(), receipt, artifact)
         result["source_log"] = str(log_path)
     finally:
-        lifecycle_ok = (close_and_confirm(args.host) if launched else
-                        running(args.host) == "none")
+        try:
+            lifecycle_ok = (close_and_confirm(args.host) if launched else
+                            running(args.host) == "none")
+        except RuntimeError:
+            lifecycle_ok = False
         result["lifecycle_ok"] = lifecycle_ok
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(result, indent=2) + "\n")

@@ -61,6 +61,13 @@ def main() -> None:
     parser.add_argument("--operation", choices=("broadcast", "iadd", "iadd_int8"),
                         default="broadcast")
     operation = parser.parse_args().operation
+    if operation == "iadd_int8" and not (
+            (ROOT / "experiments/compute/t08_subgroup_int8_iadd_runtime.comp").is_file() and
+            "PS5VK_FEATURE_SHADER_INT8_COMPUTE" in
+            (ROOT / "src/vk_internal.h").read_text() and
+            "PS5VK_SHADER_INT8_DIAGNOSTIC" in
+            (ROOT / "tools/build_sdk.py").read_text()):
+        raise SystemExit("Int8 IAdd witness requires the default-off Int8 compiler route")
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
