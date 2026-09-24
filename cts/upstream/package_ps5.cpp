@@ -21,6 +21,7 @@
 #include "vktPipelineCacheTests.hpp"
 #include "vktPipelineBlendTests.hpp"
 #include "vktPipelineMultisampleTests.hpp"
+#include "vktPipelineSamplerTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktSpvAsmIndexingTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
@@ -411,6 +412,10 @@ void FocusedVkTestPackage::init(void)
                  * so registering the false form is what makes the selected
                  * names addressable. */
                 false));
+            // The pinned address-modes factory includes a compact 8x8x8 3D
+            // mirror-clamp case. The case list selects its W sampling leaf.
+            monolithicGroup->addChild(vkt::pipeline::createSamplerTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
             pipelineGroup->addChild(monolithicGroup.release());
         }
         addChild(pipelineGroup.release());
