@@ -18,7 +18,8 @@
 #include <string.h>
 
 /* Structural/entry screening only; PSBC is responsible for shader validity. */
-static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned model)
+static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned model,
+    uint32_t feature_mask)
 {
     if(!m->words || m->word_count<5 || m->word_count>4u*1024u*1024u || !m->entry ||
         !*m->entry || strlen(m->entry)>=64 || m->words[0]!=0x07230203u)return 0;
@@ -27,6 +28,13 @@ static int module_supported(const struct ps5vk_graphics_module_key *m,unsigned m
         unsigned n=m->words[at]>>16,op=m->words[at]&65535u;
         if(!n || n>m->word_count-at)return 0;
         const uint32_t *w=m->words+at;
+        /* Both standard cube-array capabilities require Vulkan's
+         * imageCubeArray feature, including sampled-only cube arrays. */
+        if(op==17) {
+            if(n!=2)return 0;
+            if((w[1]==34u || w[1]==45u) &&
+               !(feature_mask & PS5VK_FEATURE_IMAGE_CUBE_ARRAY))return 0;
+        }
         if(op==15) {
             if(n<4)return 0;
             const char *name=(const char *)(w+3);
@@ -388,6 +396,20 @@ static int color_write_mask_supported(const struct ps5vk_graphics_key *key)
     return 1;
 }
 static int blend_profile_supported_one(const struct ps5vk_graphics_key *);
+static int image_gather_extended_enabled(const struct ps5vk_graphics_key *key)
+{
+    const struct ps5vk_graphics_module_key *modules[]={
+        &key->vertex,&key->geometry,&key->tess_control,&key->tess_eval,&key->fragment};
+    for(unsigned i=0;i<sizeof(modules)/sizeof(modules[0]);++i) {
+        if(!modules[i]->word_count)continue;
+        int uses=ps5vk_spirv_module_uses_extended_gather(modules[i]);
+        if(uses<0)return 0;
+        if(uses && !(key->feature_mask &
+                PS5VK_GRAPHICS_FEATURE_IMAGE_GATHER_EXTENDED))return 0;
+    }
+    return 1;
+}
+
 /* A DEPTH-ONLY pass names no colour attachment, so the pipeline records a
  * colour count of zero with an undefined colour format, writes no channel and
  * cannot blend. The four travel together: any other combination is a colour
@@ -468,12 +490,13 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * negotiation are checked independently. */
     if(ps5vk_graphics_has_tessellation(key)) {
         if(ps5vk_graphics_has_geometry(key) &&
-           (key->geometry.specialization_count>64 || !module_supported(&key->geometry,3)))
+           (key->geometry.specialization_count>64 || !module_supported(&key->geometry,3,key->feature_mask)))
             return ps5vk_reject(key,3);
         if(key->topology!=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)return ps5vk_reject(key,2);
         if(!ps5vk_graphics_tessellation_key_valid(key))return ps5vk_reject(key,3);
-        if(!module_supported(&key->tess_control,1) ||
-           !module_supported(&key->tess_eval,2))return ps5vk_reject(key,4);
+        if(!module_supported(&key->tess_control,1,key->feature_mask) ||
+           !module_supported(&key->tess_eval,2,key->feature_mask))return ps5vk_reject(key,4);
+        if(!image_gather_extended_enabled(key))return ps5vk_reject(key,26);
         if(!ps5vk_spirv_graphics_interface(key))return ps5vk_reject(key,5);
         uint32_t patch_type=0;
         if(!ps5vk_tess_patch_primitive_type(&patch_type))return ps5vk_reject(key,6);
@@ -497,7 +520,7 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * path. What remains before the FEATURE can be advertised is the applicable
      * conformance selection, not this adapter. */
     if(ps5vk_graphics_has_geometry(key)) {
-        if(!module_supported(&key->geometry,3))return ps5vk_reject(key,6);
+        if(!module_supported(&key->geometry,3,key->feature_mask))return ps5vk_reject(key,6);
         /* A geometry stage that writes gl_ViewportIndex selects among the
          * viewport banks the pipeline programs, and this profile programs one
          * bank unless the logical device enabled multiViewport. Accepting the
@@ -535,8 +558,10 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * and that is decided where the metadata exists (see the delivery check in
      * ps5vk_runtime_graphics_compile). The declaration itself is already
      * bounded by the interface chain above. */
-    if(!module_supported(&key->vertex,0) || !module_supported(&key->fragment,4))
+    if(!module_supported(&key->vertex,0,key->feature_mask) ||
+       !module_supported(&key->fragment,4,key->feature_mask))
         return ps5vk_reject(key,20);
+    if(!image_gather_extended_enabled(key))return ps5vk_reject(key,26);
     if(ps5vk_agc_primitive_type(key->topology,&primitive_type))return ps5vk_reject(key,21);
         /* A point or line input primitive is accepted only when there is a
          * geometry stage to feed it: that is the shape the native witness

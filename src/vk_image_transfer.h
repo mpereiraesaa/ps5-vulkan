@@ -37,6 +37,18 @@ enum ps5vk_image_domain {
 };
 enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *operation);
 
+static inline VkBool32 ps5vk_d32_gather_barrier(const VkImageMemoryBarrier *b)
+{
+    if (!b || !ps5vk_d32_gather_image(b->image)) return VK_FALSE;
+    return (b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+            b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+            !b->srcAccessMask && b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT) ||
+        (b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+            b->newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+            b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT &&
+            b->dstAccessMask == VK_ACCESS_SHADER_READ_BIT);
+}
+
 /* Array/input-attachment colour surfaces use the native tiled allocation,
  * never the legacy single-layer padded-linear transfer executor. */
 static inline VkBool32 ps5vk_array_color_image(VkImage image)
@@ -109,14 +121,19 @@ static inline VkBool32 ps5vk_array_color_clear(const struct ps5vk_operation *op)
     return VK_TRUE;
 }
 
+static inline VkBool32 ps5vk_d16_attachment_image(VkImage image);
+
 static inline VkBool32 ps5vk_clear_attachment_valid(const struct ps5vk_operation *op)
 {
     if(!op || op->type!=PS5VK_CLEAR_ATTACHMENT || !op->render_pass || !op->framebuffer ||
        op->subpass>=op->render_pass->subpass_count ||
        op->render_pass_contents!=VK_SUBPASS_CONTENTS_INLINE)return VK_FALSE;
     const struct ps5vk_subpass *s=ps5vk_render_pass_subpass(op->render_pass,op->subpass);
-    if(!s || s->color[0].attachment>=op->framebuffer->attachment_count)return VK_FALSE;
-    VkImageView view=op->framebuffer->attachments[s->color[0].attachment];
+    if(!s)return VK_FALSE;
+    const VkBool32 depth=ps5vk_d16_attachment_image(op->image_destination);
+    const uint32_t attachment=depth?s->depth.attachment:s->color[0].attachment;
+    if(attachment>=op->framebuffer->attachment_count)return VK_FALSE;
+    VkImageView view=op->framebuffer->attachments[attachment];
     if(!view || !view->image || view->image!=op->image_destination ||
        view->range.baseMipLevel || view->range.levelCount!=1 ||
        !view->range.layerCount || view->range.layerCount>32 ||
@@ -124,7 +141,11 @@ static inline VkBool32 ps5vk_clear_attachment_valid(const struct ps5vk_operation
        view->range.layerCount>view->image->info.arrayLayers-view->range.baseArrayLayer)
         return VK_FALSE;
     const VkImageCreateInfo *image=&view->image->info;
-    if((image->format!=VK_FORMAT_R8G8B8A8_UNORM && image->format!=VK_FORMAT_B8G8R8A8_UNORM) ||
+    if(depth) {
+        if(view->range.aspectMask!=VK_IMAGE_ASPECT_DEPTH_BIT ||
+           !ps5vk_d16_attachment_image(view->image))return VK_FALSE;
+    } else if(view->range.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
+       (image->format!=VK_FORMAT_R8G8B8A8_UNORM && image->format!=VK_FORMAT_B8G8R8A8_UNORM) ||
        !ps5vk_sample_count_implemented(image->samples) || image->mipLevels!=1 ||
        image->imageType!=VK_IMAGE_TYPE_2D || image->tiling!=VK_IMAGE_TILING_OPTIMAL ||
        !(image->usage&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))return VK_FALSE;
@@ -137,6 +158,9 @@ static inline VkBool32 ps5vk_clear_attachment_valid(const struct ps5vk_operation
     uint32_t y=(uint32_t)(r->rect.offset.y-area->offset.y);
     if(x>area->extent.width || r->rect.extent.width>area->extent.width-x ||
        y>area->extent.height || r->rect.extent.height>area->extent.height-y)return VK_FALSE;
+    if(depth && (area->offset.x || area->offset.y || r->rect.offset.x || r->rect.offset.y ||
+        area->extent.width!=128u || area->extent.height!=128u ||
+        r->rect.extent.width!=128u || r->rect.extent.height!=128u))return VK_FALSE;
     /* A multisampled attachment is cleared by one whole-surface fill, which
      * covers every sample of every texel whatever order the hardware stores
      * them in. The rect equation addresses a single sample plane, so it is
@@ -171,6 +195,20 @@ static inline VkBool32 ps5vk_depth_clear_image(VkImage image)
         (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) ? VK_TRUE : VK_FALSE;
 }
 
+/* The diagnostic synchronization leaf uses one depth-only D16 attachment.
+ * It has no sampled or transfer role, so its only image barrier is the
+ * transition from undefined contents into attachment writes. */
+static inline VkBool32 ps5vk_d16_attachment_image(VkImage image)
+{
+    return image && image->info.format == VK_FORMAT_D16_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D &&
+        image->info.extent.width == 128u && image->info.extent.height == 128u &&
+        image->info.extent.depth == 1u && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL && image->info.mipLevels == 1u &&
+        image->info.arrayLayers == 1u && !image->info.flags &&
+        image->info.usage == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+}
+
 /* A D32_SFLOAT depth value in [0,1] as the 32-bit word the surface stores.
  * The comparison rejects NaN, and the render pass load-op clear encodes the
  * identical bits, so both clear paths agree byte for byte. */
@@ -178,6 +216,25 @@ static inline VkBool32 ps5vk_depth_clear_word(float depth, uint32_t *out)
 {
     if (!out || !(depth >= 0.0f && depth <= 1.0f)) return VK_FALSE;
     memcpy(out, &depth, sizeof(*out));
+    return VK_TRUE;
+}
+
+/* A render-pass depth clear is expanded over the allocation by the native
+ * queue. D16 stores one normalized 16-bit value per texel; repeating that
+ * halfword in the 32-bit DMA pattern clears both adjacent texels. The D16
+ * format remains restricted to its diagnostic 128x128 attachment shape. */
+static inline VkBool32 ps5vk_depth_attachment_clear_word(VkFormat format,
+    float depth, uint32_t *out)
+{
+    if (!out || !(depth >= 0.0f && depth <= 1.0f)) return VK_FALSE;
+    if (format == VK_FORMAT_D32_SFLOAT) {
+        memcpy(out, &depth, sizeof(*out));
+        return VK_TRUE;
+    }
+    if (format != VK_FORMAT_D16_UNORM) return VK_FALSE;
+    const uint32_t value = (uint32_t)(depth * 65535.0f + 0.5f);
+    const uint32_t half = value & UINT32_C(0xffff);
+    *out = half | (half << 16u);
     return VK_TRUE;
 }
 /* True when this recorded operation is frontend work of the pure transfer

@@ -29,9 +29,9 @@ UNASSIGNED_FORMAT_TABLES = {
     "formats-mandatory-features-astc",
 }
 UNASSIGNED_FORMAT_TABLE_DIGEST = (
-    # The 2026-09-15 direct UTEXEL matrix intentionally qualifies owned rows
-    # across the 2-byte, 4-byte, 16-bit, 32-bit and 64-bit tables.
-    "529b68fbd880f0cf9a4a49cbe3631302790217100c569ee658288fb9864b69a7")
+    # T07 qualifies BC sample/filter/transfer, RGBA8 blit destinations and the
+    # bounded D16/D32 roles across the audited format tables.
+    "fb9bebc979b41d80f0872e8f1eeff71c174422431788d58ad4933b86bc88f7d8")
 
 
 def unassigned_format_table_digest(rows):
@@ -40,6 +40,23 @@ def unassigned_format_table_digest(rows):
 
 
 class TestReportingMatrix(unittest.TestCase):
+    def test_device_scope_uses_public_khr_query_without_core_version_change(self):
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        for profile in ("graphics", "compute"):
+            with self.subTest(profile=profile):
+                reported = data["profiles"][profile]
+                self.assertEqual({"route": "VK_KHR_vulkan_memory_model",
+                                  "vulkanMemoryModel": True,
+                                  "vulkanMemoryModelDeviceScope": True},
+                                 reported["memory_model_query"])
+                self.assertEqual(4194304, reported["apiVersion"])
+                row = next(row for row in data["features"] if
+                           row["profile"] == profile and
+                           row["feature"] == "vulkanMemoryModelDeviceScope")
+                self.assertTrue(row["reported"])
+                self.assertEqual("satisfied", row["verdict"])
+                self.assertEqual([], row["applicable_cts"]["cases"])
+
     def test_multiview_queries_are_graphics_only_and_keep_the_route(self):
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         self.assertEqual(

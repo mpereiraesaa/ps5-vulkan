@@ -110,6 +110,64 @@ int main(void)
         assert(entry->provenance & PS5VK_FORMAT_PROVENANCE_REGISTRY_PACKING);
     }
 
+    /* All Vulkan 1.0 BC variants have their fixed GFX10 image-format enum,
+     * block byte size and internal sampled descriptor encoding. Public format
+     * properties remain zero until upload and mandatory transfer/blit roles
+     * are available through the queue executor. */
+    const VkFormat bc_formats[] = {
+        VK_FORMAT_BC1_RGB_UNORM_BLOCK, VK_FORMAT_BC1_RGB_SRGB_BLOCK,
+        VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_FORMAT_BC1_RGBA_SRGB_BLOCK,
+        VK_FORMAT_BC2_UNORM_BLOCK, VK_FORMAT_BC2_SRGB_BLOCK,
+        VK_FORMAT_BC3_UNORM_BLOCK, VK_FORMAT_BC3_SRGB_BLOCK,
+        VK_FORMAT_BC4_UNORM_BLOCK, VK_FORMAT_BC4_SNORM_BLOCK,
+        VK_FORMAT_BC5_UNORM_BLOCK, VK_FORMAT_BC5_SNORM_BLOCK,
+        VK_FORMAT_BC6H_UFLOAT_BLOCK, VK_FORMAT_BC6H_SFLOAT_BLOCK,
+        VK_FORMAT_BC7_UNORM_BLOCK, VK_FORMAT_BC7_SRGB_BLOCK,
+    };
+    const uint8_t bc_gfx[] = {169,170,169,170,171,172,173,174,175,176,177,178,179,180,181,182};
+    const uint8_t bc_bytes[] = {8,8,8,8,16,16,16,16,8,8,16,16,16,16,16,16};
+    /* Vulkan's absent components are zero, except alpha which is one.
+     * BC1 RGB is opaque even when its block uses the transparent index;
+     * BC4/5 carry R/RG and BC6H carries RGB. */
+    const uint8_t bc_components[] = {3,3,4,4,4,4,4,4,1,1,2,2,3,3,4,4};
+    for (unsigned i = 0; i < sizeof(bc_formats)/sizeof(bc_formats[0]); ++i) {
+        const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(bc_formats[i]);
+        assert(entry && !entry->bytes_per_texel && entry->block_width==4 &&
+            entry->block_height==4 && entry->bytes_per_block==bc_bytes[i]);
+        assert(ps5vk_texture_format_gfx10_format(entry)==bc_gfx[i]);
+        uint32_t completion = 0;
+        for (unsigned channel = 0; channel < 4; ++channel) {
+            const uint8_t selector = channel < bc_components[i] ?
+                (uint8_t)(4 + channel) : (channel == 3 ? 1 : 0);
+            assert(entry->selectors[channel] == selector);
+            completion |= (uint32_t)selector << (3 * channel);
+        }
+        assert(ps5vk_texture_format_dst_sel(entry) == completion);
+        assert(ps5vk_texture_format_block_compressed(bc_formats[i]));
+        assert(ps5vk_texture_format_has(bc_formats[i],
+            PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
+        assert(ps5vk_texture_format_sampled_encoding(bc_formats[i]));
+        assert(ps5vk_texture_format_sampled_image(bc_formats[i]));
+        assert(ps5vk_texture_format_witnessed(bc_formats[i],
+            PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_SRC |
+            PS5VK_FORMAT_CAP_TRANSFER_DST | PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR |
+            PS5VK_FORMAT_CAP_BLIT_SRC));
+        VkFormatProperties properties={0};
+        ps5vk_texture_format_properties(bc_formats[i],&properties);
+        assert((properties.optimalTilingFeatures &
+            (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+             VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+             VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+             VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+             VK_FORMAT_FEATURE_BLIT_SRC_BIT)) ==
+            (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+             VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+             VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+             VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+             VK_FORMAT_FEATURE_BLIT_SRC_BIT));
+        assert(!properties.bufferFeatures && !properties.linearTilingFeatures);
+    }
+
     /* --- packed sampled/filter capabilities ------------------------------- */
     const int packed_linear[] = {1, 1, 1, 0, 0};
     for (unsigned i = 0; i < sizeof(packed) / sizeof(packed[0]); ++i) {
@@ -448,6 +506,7 @@ int main(void)
          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
          VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
          VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+         VK_FORMAT_FEATURE_BLIT_DST_BIT |
          VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
          VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT));
     assert(properties.bufferFeatures ==
@@ -458,20 +517,21 @@ int main(void)
      * single-mip/layer/sample and carries a transfer destination alone. Every
      * other format still reports nothing here. */
     assert(properties.linearTilingFeatures ==
-        (VkFormatFeatureFlags)VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+        (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                               VK_FORMAT_FEATURE_BLIT_DST_BIT));
     ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_UNORM, &properties);
     assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
     assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
     /* The depth target advertises the transfer destination the whole-subresource
      * vkCmdClearDepthStencilImage consumes, and the transfer source its
      * readback consumes now that SW_64K_Z_X pixel addressing exists
-     * (src/depth_detile.c). Still no sampled role and no blit role: neither
-     * has an implemented path. */
+     * (src/depth_detile.c). The bounded Dref gather source adds sampling. */
     ps5vk_texture_format_properties(VK_FORMAT_D32_SFLOAT, &properties);
     assert(properties.optimalTilingFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                                VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
-                               VK_FORMAT_FEATURE_TRANSFER_SRC_BIT));
+                               VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                               VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT));
     /* The usage combinations that follow from it: the attachment alone, the
      * attachment with its readback, and the attachment with both transfer
      * roles. A sampled depth image is still not creatable. */
@@ -571,7 +631,7 @@ int main(void)
             if (!ps5vk_texture_format_image_usage(all_formats[i], usage)) continue;
             for (unsigned r = 0; r < sizeof(roles) / sizeof(roles[0]); ++r)
                 assert(!(usage & roles[r].usage) ||
-                       (entry->witnessed & roles[r].capability));
+                       ps5vk_texture_format_witnessed(all_formats[i], roles[r].capability));
         }
         assert(!(entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR) ||
                (entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE));
@@ -584,8 +644,10 @@ int main(void)
             assert(ps5vk_texture_format_witnessed(all_formats[i],
                 PS5VK_FORMAT_CAP_STORAGE_IMAGE));
         assert(!(properties.bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT));
-        assert(!(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT));
-        assert(!(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT));
+        if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT)
+            assert(ps5vk_texture_format_witnessed(all_formats[i], PS5VK_FORMAT_CAP_BLIT_SRC));
+        if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT)
+            assert(ps5vk_texture_format_witnessed(all_formats[i], PS5VK_FORMAT_CAP_BLIT_DST));
     }
 
     /* --- unknown formats are rejected, not defaulted ---------------------- */
@@ -653,9 +715,9 @@ int main(void)
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
-    /* Sampling a depth image is still not a role this profile has. */
-    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
-        VK_IMAGE_USAGE_SAMPLED_BIT));
+    /* Sampling requires the bounded upload combination. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT));

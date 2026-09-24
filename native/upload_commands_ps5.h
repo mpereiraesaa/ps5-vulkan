@@ -107,6 +107,15 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
                  op->src_stage==VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT &&
                  op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                (ps5vk_d16_attachment_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+                 b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+                 !b->srcAccessMask &&
+                 b->dstAccessMask==VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT &&
+                 (op->src_stage==VK_PIPELINE_STAGE_HOST_BIT ||
+                  op->src_stage==VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT) &&
+                 op->dst_stage==(VkPipelineStageFlags)(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|
+                                                       VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)) ||
                 /* The cleared depth target becoming a depth attachment. This is
                  * the transition that makes an explicit clear controllable by a
                  * later depth test, so it is bounded to exactly that: a D32
@@ -171,6 +180,17 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                    b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
                    b->dstAccessMask==VK_ACCESS_SHADER_WRITE_BIT &&
                    op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                  /* The pinned compressed-texture renderer clears its
+                   * RGBA8 readback target, then hands it to the colour
+                   * attachment stage with the ordinary colour-write access
+                   * and ALL_COMMANDS destination stage
+                   * (vktTextureTestUtil.cpp:1167-1185). */
+                  (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                   b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                   b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+                   b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                   op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                   op->dst_stage==VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) ||
                   /* The pinned render-pass module's own initialization pair:
                    * the acquire that discards each attachment into its
                    * transfer destination and the handover that gives the
@@ -196,6 +216,18 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
                  op->src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
                  op->dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+                ps5vk_precise_query_colour_barrier(b,op->src_stage,op->dst_stage) ||
+                /* The pinned texture renderer restores its colour target
+                 * after copyImageToBuffer. Keep this explicit handback in the
+                 * same graphics serial as the readback and preserve the final
+                 * COLOR_ATTACHMENT_OPTIMAL layout for the following pass. */
+                (ps5vk_colour_readback_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                 b->srcAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
+                 b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                 op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                 op->dst_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) ||
                 ((!color || b->image==color) && ps5vk_color_discard_barrier(b)) ||
                 ((!color || b->image==color) && ps5vk_color_readback_reuse_barrier(b)) ||
                 /* The pinned multisample leaves' own first-use transition: the
@@ -218,7 +250,14 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  (ps5vk_colour_readback_image(b->image) ||
                   (b->image->info.samples!=VK_SAMPLE_COUNT_1_BIT &&
                    ps5vk_multisampled_color_usage(b->image->info.usage)))) ||
-                ps5vk_array_color_barrier(b)))
+                ps5vk_array_color_barrier(b) ||
+                (ps5vk_tiled_cube_sampled_image(b->image) &&
+                 b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                 b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                 b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+                 b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT &&
+                 op->src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+                 op->dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)))
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition(layouts,b->image,b->oldLayout,b->newLayout);
             if(rc!=VK_SUCCESS)return rc;

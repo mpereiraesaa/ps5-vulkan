@@ -92,9 +92,9 @@ class MeasurementManifestTests(unittest.TestCase):
         selected = [c for c in frozen["cases"]
                     if c["category"] == "t08-buffer-device-address-base"]
         self.assertEqual(expected, {c["path"] for c in selected})
-        self.assertEqual(507, len(frozen["cases"]))
+        self.assertEqual(829, len(frozen["cases"]))
         self.assertEqual(66, len(frozen["diagnostics"]))
-        self.assertEqual("d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321",
+        self.assertEqual("81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4",
                          selection_hash(frozen["cases"]))
         self.assertFalse(expected & {d["path"] for d in frozen["diagnostics"]})
 

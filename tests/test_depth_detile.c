@@ -132,9 +132,37 @@ int main(void)
         assert(ps5vk_depth_64k_zx_detile(NULL,(size_t)w*h*4,tiled,surface,w,h));
         free(tiled);free(linear);
     }
+    /* 7. The pinned CTS depth32f size_pot texture is 64x64 with the full
+     *    seven-level pyramid. Mesa AddrLib (Gfx10, 64KB_Z_X, 16 pipes)
+     *    packs every level into one mip-tail block. Pin addresses returned by
+     *    Addr2ComputeSurfaceAddrFromCoord for the level origins and opposite
+     *    corners, then prove the complete mip-tail mapping is collision-free. */
+    {
+        static const size_t origin[7]={33792,18432,2048,1024,8704,768,4864};
+        static const size_t corner[7]={47356,30972,6396,1276,8764,780,4864};
+        static const uint8_t width[7]={64,32,16,8,4,2,1};
+        static const uint8_t height[7]={64,32,16,8,4,2,1};
+        unsigned char *seen=calloc(BLOCK,1);
+        assert(seen);
+        size_t total=0;
+        for(uint32_t mip=0;mip<7;++mip) {
+            assert(ps5vk_depth_64k_zx_gather_mip_offset(mip,0,0)==origin[mip]);
+            assert(ps5vk_depth_64k_zx_gather_mip_offset(mip,width[mip]-1u,
+                height[mip]-1u)==corner[mip]);
+            for(uint32_t y=0;y<height[mip];++y)for(uint32_t x=0;x<width[mip];++x) {
+                size_t off=ps5vk_depth_64k_zx_gather_mip_offset(mip,x,y);
+                assert(off!=SIZE_MAX&&off+4u<=BLOCK&&!(off&3u));
+                assert(!seen[off]);seen[off]=1;++total;
+            }
+        }
+        assert(total==5461u);
+        free(seen);
+    }
     assert(ps5vk_depth_64k_zx_offset(TILE,0,TILE)==SIZE_MAX);   /* x past the width */
     assert(ps5vk_depth_64k_zx_offset(0,0,0)==SIZE_MAX);
     assert(ps5vk_depth_64k_zx_surface_size(0,1)==SIZE_MAX);
+    assert(ps5vk_depth_64k_zx_gather_mip_offset(7,0,0)==SIZE_MAX);
+    assert(ps5vk_depth_64k_zx_gather_mip_offset(0,64,0)==SIZE_MAX);
 
     puts("Depth detile: SW_64K_Z_X is a bijection of the tile, affine, matches the published pattern, and differs from the colour swizzle");
     return 0;

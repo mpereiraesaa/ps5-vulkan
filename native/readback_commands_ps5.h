@@ -26,14 +26,17 @@ struct ps5vk_readback_partition {
     unsigned prefix_count;
     unsigned readback_first;
     unsigned readback_count;
+    unsigned suffix_first;
+    unsigned suffix_count;
 };
 
 /* A render-pass postlude may order unrelated shader writes before the fixed
  * image readback sequence.  Locate that sequence by its single image-to-buffer
  * copy, whose immediately preceding operation must be its image barrier.  The
  * strict readback validator below still owns the complete four-operation
- * suffix; this function only partitions the immutable command record and
- * refuses ambiguous or trailing shapes. */
+ * readback. The texture renderer may append its exact TRANSFER_SRC-to-colour
+ * handback after that readback; return it as a separate suffix so the caller
+ * can run it through the ordinary upload/barrier validator in the same serial. */
 static inline VkResult ps5vk_readback_partition(
     const struct ps5vk_operation *ops,unsigned count,
     struct ps5vk_readback_partition *out)
@@ -42,10 +45,29 @@ static inline VkResult ps5vk_readback_partition(
     unsigned copy=count,copies=0;
     for(unsigned i=0;i<count;++i)
         if(ops[i].type==PS5VK_COPY_IMAGE_BUFFER){copy=i;++copies;}
-    if(copies!=1 || !copy || count-copy!=3)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(copies!=1 || !copy || count-copy<3)return VK_ERROR_FEATURE_NOT_PRESENT;
     const unsigned first=copy-1;
     if(ops[first].type!=PS5VK_IMAGE_BARRIER)return VK_ERROR_FEATURE_NOT_PRESENT;
-    *out=(struct ps5vk_readback_partition){first,first,4};
+    const unsigned readback_end=first+4;
+    if(readback_end>count)return VK_ERROR_FEATURE_NOT_PRESENT;
+    const unsigned suffix_count=count-readback_end;
+    if(suffix_count) {
+        if(suffix_count!=1 || ops[readback_end].type!=PS5VK_IMAGE_BARRIER)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        const struct ps5vk_operation *op=&ops[readback_end];
+        const VkImageMemoryBarrier *b=&op->image_barrier;
+        if(b->image!=ops[first].image_barrier.image ||
+           b->oldLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+           b->newLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
+           b->srcAccessMask!=VK_ACCESS_TRANSFER_READ_BIT ||
+           b->dstAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
+           op->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
+           op->dst_stage!=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    *out=(struct ps5vk_readback_partition){
+        .prefix_count=first,.readback_first=first,.readback_count=4,
+        .suffix_first=readback_end,.suffix_count=suffix_count};
     return VK_SUCCESS;
 }
 
@@ -55,8 +77,10 @@ static inline VkResult ps5vk_readback_partition(
  * publishing host bytes. A plan is not evidence of a completed transfer. */
 static inline VkResult ps5vk_readback_commands(VkDevice d,
     const struct ps5vk_operation *ops,unsigned count,VkImage color,
-    struct ps5vk_layout_state *layouts,struct ps5vk_readback_plan *out)
+    struct ps5vk_layout_state *layouts,struct ps5vk_readback_plan *out,
+    unsigned *failure_site)
 {
+#define READBACK_REFUSE(site) do { if(failure_site)*failure_site=(site); return VK_ERROR_FEATURE_NOT_PRESENT; } while(0)
     /* Two recorded shapes. The colour readback transitions its attachment
      * itself, so it is four operations: the image barrier, the copy, the host
      * barrier and the aggregate. A DEPTH readback is submitted on its own,
@@ -68,14 +92,16 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
      * for a call with no image barrier, so the unstaged shape is three
      * operations, not two. Nothing else about the readback differs, so the two
      * shapes share every check below. */
-    if(!d || !ops || !layouts || !out || (count!=4 && count!=3))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
-    const int staged=count==4;
+    if(!d || !ops || !layouts || !out || (count!=5 && count!=4 && count!=3))
+        READBACK_REFUSE(1);
+    const int staged=count==5 || count==4;
+    const int restore=count==5;
     if(staged ? (ops[0].type!=PS5VK_IMAGE_BARRIER || ops[1].type!=PS5VK_COPY_IMAGE_BUFFER ||
-                 ops[2].type!=PS5VK_BARRIER || ops[3].type!=PS5VK_BARRIER)
+                 ops[2].type!=PS5VK_BARRIER || ops[3].type!=PS5VK_BARRIER ||
+                 (restore && ops[4].type!=PS5VK_IMAGE_BARRIER))
               : (ops[0].type!=PS5VK_COPY_IMAGE_BUFFER || ops[1].type!=PS5VK_BARRIER ||
                  ops[2].type!=PS5VK_BARRIER))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        READBACK_REFUSE(2);
     const VkImageMemoryBarrier *b=staged?&ops[0].image_barrier:NULL;
     const struct ps5vk_operation *copy=staged?&ops[1]:&ops[0];
     const struct ps5vk_operation *host=staged?&ops[2]:&ops[1];
@@ -93,7 +119,7 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
      * a depth attachment, and a colour attachment that also declares a
      * transfer destination and was cleared through it. */
     if(!staged && !depth_source && !ps5vk_colour_transfer_image(image))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        READBACK_REFUSE(3);
     if(!image || image->device!=d || (color && image!=color) ||
        (!staged ? 0 : depth_source ?
         (b->oldLayout!=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
@@ -107,7 +133,8 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
                                                      VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT|
                                                      VK_PIPELINE_STAGE_ALL_COMMANDS_BIT))) :
         ((b->oldLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-          !(ps5vk_array_color_image(image) && b->oldLayout==VK_IMAGE_LAYOUT_GENERAL)) ||
+          !(ps5vk_array_color_image(image) && b->oldLayout==VK_IMAGE_LAYOUT_GENERAL) &&
+          !(ps5vk_basic_colour_readback_image(image) && b->oldLayout==VK_IMAGE_LAYOUT_GENERAL)) ||
          b->srcAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
          (ops[0].src_stage!=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
           ops[0].src_stage!=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT))) ||
@@ -122,14 +149,25 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
         aggregate->dst_access ||
         aggregate->src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
         aggregate->dst_stage!=VK_PIPELINE_STAGE_HOST_BIT))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        READBACK_REFUSE(4);
+    if(restore) {
+        const VkImageMemoryBarrier *restore_barrier=&ops[4].image_barrier;
+        if(restore_barrier->image!=image ||
+           restore_barrier->oldLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+           restore_barrier->newLayout!=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
+           restore_barrier->srcAccessMask!=VK_ACCESS_TRANSFER_READ_BIT ||
+           restore_barrier->dstAccessMask!=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT ||
+           ops[4].src_stage!=VK_PIPELINE_STAGE_TRANSFER_BIT ||
+           ops[4].dst_stage!=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+            READBACK_REFUSE(10);
+    }
     const VkBufferImageCopy *r=&copy->copy_region;
     const VkImageCreateInfo *i=&image->info;
     const VkImageUsageFlags required=(depth_source?
         (VkImageUsageFlags)VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT:
         (VkImageUsageFlags)VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     uint64_t plane=(uint64_t)i->extent.width*i->extent.height;
-    if(!i->arrayLayers || plane>SIZE_MAX/4/i->arrayLayers)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(!i->arrayLayers || plane>SIZE_MAX/4/i->arrayLayers)READBACK_REFUSE(5);
     uint64_t pixels=plane*i->arrayLayers;
     /* A colour readback reads a 32-bit-per-texel surface: the normalized
      * attachment this profile has always read back, and - only in the build
@@ -151,7 +189,7 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
        r->imageExtent.width!=i->extent.width || r->imageExtent.height!=i->extent.height ||
        r->imageExtent.depth!=1 || host->buffer_barrier.offset ||
        (host->buffer_barrier.size!=VK_WHOLE_SIZE && host->buffer_barrier.size<pixels*4))
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        READBACK_REFUSE(6);
     void *source,*destination;VkDeviceSize source_bytes,destination_bytes;
     /* The tiled footprint follows the surface's own addressing: 64KB_Z_X for a
      * depth surface, 64KB_R_X for a colour one. Sizing a depth surface with the
@@ -163,22 +201,31 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
        ps5vk_image_span(d,image,&source,&source_bytes)!=VK_SUCCESS ||
        ps5vk_buffer_span(d,copy->copy_destination,0,VK_WHOLE_SIZE,&destination,&destination_bytes)!=VK_SUCCESS ||
        source_bytes<tiled || destination_bytes<pixels*4)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+        READBACK_REFUSE(7);
     /* Native array allocations consist of equally-sized, 128 KiB-aligned
      * layer footprints. Never infer a tight width*height stride for tiled data. */
     VkDeviceSize stride=source_bytes/i->arrayLayers;
     if(source_bytes%i->arrayLayers || stride<tiled ||
-       (i->arrayLayers>1 && stride%131072u))return VK_ERROR_FEATURE_NOT_PRESENT;
+       (i->arrayLayers>1 && stride%131072u))READBACK_REFUSE(8);
     uintptr_t src=(uintptr_t)source,dst=(uintptr_t)destination;
-    if(src<dst ? source_bytes>dst-src : pixels*4>src-dst)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(src<dst ? source_bytes>dst-src : pixels*4>src-dst)READBACK_REFUSE(9);
     /* The unstaged shape carries no transition of its own: the surface is
      * already where the copy needs it, so there is nothing to stage. */
     if(staged) {
-        VkResult rc=ps5vk_layout_transition(layouts,image,b->oldLayout,b->newLayout);
-        if(rc!=VK_SUCCESS)return rc;
+        struct ps5vk_layout_state updated=*layouts;
+        VkResult rc=ps5vk_layout_transition(&updated,image,b->oldLayout,b->newLayout);
+        if(rc!=VK_SUCCESS){if(failure_site)*failure_site=11;return rc;}
+        if(restore) {
+            const VkImageMemoryBarrier *restore_barrier=&ops[4].image_barrier;
+            rc=ps5vk_layout_transition(&updated,image,restore_barrier->oldLayout,
+                restore_barrier->newLayout);
+            if(rc!=VK_SUCCESS){if(failure_site)*failure_site=11;return rc;}
+        }
+        *layouts=updated;
     }
     *out=(struct ps5vk_readback_plan){image,copy->copy_destination,stride};
     return VK_SUCCESS;
+#undef READBACK_REFUSE
 }
 
 /* The multi-target form: the pinned render-pass module's own readback command

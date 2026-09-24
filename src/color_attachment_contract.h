@@ -87,6 +87,7 @@ static inline int ps5vk_color_target_format_supported(VkFormat format)
          * render into R8G8B8A8_UINT plus R8G8B8A8_UNORM and now pass on
          * hardware (measured 2026-09-22). */
         format == VK_FORMAT_R8G8B8A8_UINT) return 1;
+    if (format == VK_FORMAT_R8G8B8A8_SINT) return 1;
     return 0;
 }
 
@@ -95,7 +96,8 @@ static inline int ps5vk_color_target_format_supported(VkFormat format)
  * fragment interface must see an integer output. */
 static inline int ps5vk_color_target_format_is_integer(VkFormat format)
 {
-    return format == VK_FORMAT_R8G8B8A8_UINT;
+    return format == VK_FORMAT_R8G8B8A8_UINT ||
+        format == VK_FORMAT_R8G8B8A8_SINT;
 }
 
 /* Whether this build actually SERVES an integer colour target. It is a

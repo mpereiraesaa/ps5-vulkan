@@ -58,14 +58,25 @@ int main(void)
     vkDestroySampler(&d,sampler,NULL);info.mipLodBias=0;
 #define BAD(field,value) do { VkSamplerCreateInfo bad=info;bad.field=value;sampler=(VkSampler)(uintptr_t)1; \
     assert(vkCreateSampler(&d,&bad,NULL,&sampler)!=VK_SUCCESS && !sampler && !d.graphics_objects); } while(0)
-    BAD(pNext,&info);BAD(flags,1);BAD(anisotropyEnable,VK_TRUE);BAD(compareEnable,VK_TRUE);
+    BAD(pNext,&info);BAD(flags,1);BAD(anisotropyEnable,VK_TRUE);
+    VkSamplerCreateInfo compare=info;
+    compare.compareEnable=VK_TRUE;
+    compare.compareOp=VK_COMPARE_OP_LESS_OR_EQUAL;
+    assert(vkCreateSampler(&d,&compare,NULL,&sampler)==VK_SUCCESS);
+    vkDestroySampler(&d,sampler,NULL);
+    BAD(flags,VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
     BAD(unnormalizedCoordinates,VK_TRUE);BAD(mipLodBias,NAN);BAD(mipLodBias,2.01f);
     BAD(mipLodBias,-2.01f);BAD(minLod,NAN);BAD(maxLod,INFINITY);
     BAD(magFilter,VK_FILTER_CUBIC_EXT);BAD(minFilter,VK_FILTER_CUBIC_EXT);
     BAD(addressModeW,VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE);
     BAD(borderColor,(VkBorderColor)99);
-    BAD(mipmapMode,(VkSamplerMipmapMode)99);BAD(minLod,-1.0f);BAD(maxLod,-1.0f);
+    BAD(mipmapMode,(VkSamplerMipmapMode)99);BAD(maxLod,-1.0f);
     BAD(minLod,1.0f); /* maxLod remains zero. */
+    info.minLod=-1000.0f;info.maxLod=1000.0f;
+    assert(vkCreateSampler(&d,&info,NULL,&sampler)==VK_SUCCESS);
+    assert(sampler->words[1]==(15u<<20));
+    vkDestroySampler(&d,sampler,NULL);
+    info.minLod=0.0f;info.maxLod=0.0f;
     VkSampler slots[PS5VK_MAX_SAMPLERS];
     for(unsigned i=0;i<PS5VK_MAX_SAMPLERS;++i)
         assert(vkCreateSampler(&d,&info,NULL,&slots[i])==VK_SUCCESS);

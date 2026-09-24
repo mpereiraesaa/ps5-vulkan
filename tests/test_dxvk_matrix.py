@@ -22,6 +22,14 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_device_scope_diagnostic_switch_is_retired(self):
+        retired = "PS5VK_MEMORY_MODEL_" + "DIAGNOSTIC"
+        for relative in ("native/platform_ps5.c", "tools/build_sdk.py",
+                         "tools/build_upstream_cts.py", "tools/check_dxvk_profile.py",
+                         "tools/build_t08_memory_model_witness.py"):
+            with self.subTest(relative=relative):
+                self.assertNotIn(retired, (matrix.ROOT / relative).read_text())
+
     def test_shipping_memory_model_and_address_extensions(self):
         extensions = matrix.implemented_device_extensions()
         self.assertIn("VK_KHR_vulkan_memory_model", extensions)
@@ -70,6 +78,13 @@ class DxvkMatrixTests(unittest.TestCase):
         api, implementation = matrix.memory_model_axes(scope, query, extensions, reports)
         self.assertEqual(("blocker", "missing"),
                          (api["state"], implementation["state"]))
+        reported_scope = {**query, "vulkanMemoryModelDeviceScope": True}
+        scope_reports = {**reports, "vulkanMemoryModelDeviceScope": {
+            "kind": "extension-feature", "reported": True, "verdict": "satisfied"}}
+        api, implementation = matrix.memory_model_axes(
+            scope, reported_scope, extensions, scope_reports)
+        self.assertEqual(("satisfied", "implemented"),
+                         (api["state"], implementation["state"]))
         for bad in ({}, {**query, "route": "VK_VERSION_1_2"},
                     {**query, "vulkanMemoryModel": False,
                      "vulkanMemoryModelDeviceScope": True}):
@@ -87,8 +102,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                     "native-evidence", "satisfied"),
             "vulkanMemoryModel": ("satisfied", "implemented", "cts-pass",
                                   "native-evidence", "satisfied"),
-            "vulkanMemoryModelDeviceScope": ("blocker", "implemented", "not-mapped",
-                                             "native-evidence", "blocker"),
+            "vulkanMemoryModelDeviceScope": ("satisfied", "implemented", "not-mapped",
+                                             "native-evidence", "satisfied"),
         }
         for feature, states in expected.items():
             row = rows[prefix + feature]
@@ -176,10 +191,27 @@ class DxvkMatrixTests(unittest.TestCase):
             rows["property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex"]["native"])
         # Three multiview rows, the three T03 draw rows, the clip/cull pair, the
         # independently witnessed fragment-storage and dual-source features, and
-        # the four T05 rasterization and viewport features advance; API 1.3
-        # remains a separate blocker.
-        self.assertEqual(20, document["summary"]["satisfied"])
-        self.assertEqual(42, document["summary"]["blocker"])
+        # the four T05 rasterization and viewport features, and the four T07
+        # resource/query features advance; API 1.3 remains a separate blocker.
+        self.assertEqual(25, document["summary"]["satisfied"])
+        self.assertEqual(37, document["summary"]["blocker"])
+
+    def test_t07_public_rows_have_all_four_axes_and_original_cts_cases(self):
+        rows = {row["id"]: row for row in matrix.generate()["requirements"]}
+        for feature, count in (
+            ("imageCubeArray", 1),
+            ("textureCompressionBC", 250),
+            ("shaderImageGatherExtended", 70),
+            ("occlusionQueryPrecise", 1),
+        ):
+            with self.subTest(feature=feature):
+                row = rows["feature:VkPhysicalDeviceFeatures:" + feature]
+                self.assertEqual("satisfied", row["verdict"])
+                self.assertEqual("satisfied", row["api"]["state"])
+                self.assertEqual("implemented", row["implementation"]["state"])
+                self.assertEqual("cts-pass", row["cts"]["state"])
+                self.assertEqual(count, len(row["cts"]["cases"]))
+                self.assertEqual("native-evidence", row["native"]["state"])
 
     def test_matrix_is_exhaustive_and_fail_closed(self):
         document = matrix.generate()
@@ -188,8 +220,8 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(20, document["summary"]["satisfied"])
-        self.assertEqual(42, document["summary"]["blocker"])
+        self.assertEqual(25, document["summary"]["satisfied"])
+        self.assertEqual(37, document["summary"]["blocker"])
         self.assertEqual(
             [
                          "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
@@ -199,17 +231,22 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
                          "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
                          "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+                         "feature:VkPhysicalDeviceFeatures:imageCubeArray",
                          "feature:VkPhysicalDeviceFeatures:independentBlend",
                          "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
                          "feature:VkPhysicalDeviceFeatures:multiViewport",
+                         "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
                          "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
                          "feature:VkPhysicalDeviceFeatures:sampleRateShading",
                          "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
                          "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+                         "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+                         "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
                          "feature:VkPhysicalDeviceVulkan11Features:multiview",
                          "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
                          "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
                          "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+                         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
             ],
@@ -255,8 +292,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(20, document["summary"]["satisfied"])
-                self.assertEqual(42, document["summary"]["blocker"])
+                self.assertEqual(25, document["summary"]["satisfied"])
+                self.assertEqual(37, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 
@@ -266,7 +303,8 @@ class DxvkMatrixTests(unittest.TestCase):
                    if item["verdict"] == "satisfied")
         for axis, replacement in (
             ("api", "blocker"), ("implementation", "missing"),
-            ("cts", "mapped-not-run"), ("native", "not-run"),
+            ("cts", "cts-fail"), ("native", "not-run"),
+            ("native", "reported-not-executed"),
         ):
             broken = copy.deepcopy(document)
             candidate = next(item for item in broken["requirements"]
@@ -275,6 +313,132 @@ class DxvkMatrixTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "non-fail-closed"):
                 matrix.validate(broken)
 
+
+    FOCUSED = ["dEQP-VK.synchronization.timeline_semaphore.one_to_n.write_ssbo_compute",
+               "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_device"]
+    SELECTED = {"dEQP-VK.api.smoke.triangle"}
+    DIAGNOSTIC = {"dEQP-VK.api.smoke.diagnostic_only"}
+
+    def focused(self, **changes):
+        return {"state": "cts-focused-pass", "cases": list(self.FOCUSED),
+                "result": {"Pass": len(self.FOCUSED)}, "run_ids": ["run-focused-1"],
+                "artifact_sha256": "a" * 64, "case_list_sha256": "b" * 64,
+                "refs": ["VALIDATION.md#focused"], **changes}
+
+    def test_focused_cts_run_is_green_only_when_every_case_passed(self):
+        cts = matrix.cts_join([], self.focused(), self.SELECTED, self.DIAGNOSTIC)
+        self.assertEqual("cts-focused-pass", cts["state"])
+        self.assertEqual(self.FOCUSED, cts["cases"])
+        self.assertEqual({"Pass": 2}, cts["result"])
+        self.assertEqual(["run-focused-1"], cts["run_ids"])
+        self.assertEqual("a" * 64, cts["artifact_sha256"])
+        self.assertEqual("b" * 64, cts["case_list_sha256"])
+        # A frozen-selection case may accompany focused ones.
+        mixed = self.focused(cases=self.FOCUSED + ["dEQP-VK.api.smoke.triangle"],
+                             result={"Pass": 3})
+        self.assertEqual(3, len(matrix.cts_join([], mixed, self.SELECTED,
+                                                self.DIAGNOSTIC)["cases"]))
+
+    def test_focused_cts_never_counts_not_supported_skip_or_fail(self):
+        for result in ({"Pass": 1, "NotSupported": 1}, {"Pass": 1, "Skip": 1},
+                       {"Pass": 1, "Fail": 1}, {"Pass": 2, "NotSupported": 0},
+                       {"Pass": 1}, {"Pass": 3}, {"NotSupported": 2}, None):
+            with self.subTest(result=result):
+                with self.assertRaisesRegex(ValueError, "exactly Pass"):
+                    matrix.cts_join([], self.focused(result=result),
+                                    self.SELECTED, self.DIAGNOSTIC)
+
+    def test_focused_cts_is_bound_to_an_exact_artifact_and_case_list(self):
+        for changes, message in (
+            ({"run_ids": []}, "run id"), ({"run_ids": [""]}, "run id"),
+            ({"artifact_sha256": "A" * 64}, "artifact_sha256"),
+            ({"artifact_sha256": None}, "artifact_sha256"),
+            ({"case_list_sha256": "c" * 63}, "case_list_sha256"),
+            ({"cases": []}, "leaf names"),
+            ({"cases": ["dEQP-VK.synchronization.*"], "result": {"Pass": 1}}, "leaf names"),
+            ({"cases": ["dEQP-GLES2.info.vendor"], "result": {"Pass": 1}}, "leaf names"),
+            ({"cases": self.FOCUSED[:1] * 2}, "leaf names"),
+            ({"cases": ["dEQP-VK.api.smoke.diagnostic_only"], "result": {"Pass": 1}},
+             "diagnostic"),
+            ({"cases": ["dEQP-VK.api.smoke.triangle"], "result": {"Pass": 1}},
+             "use cts-pass"),
+        ):
+            with self.subTest(changes=changes):
+                with self.assertRaisesRegex(ValueError, message):
+                    matrix.cts_join([], self.focused(**changes),
+                                    self.SELECTED, self.DIAGNOSTIC)
+
+    def test_unknown_cts_states_are_refused(self):
+        for state in ("cts-waived", "cts-not-applicable", None):
+            with self.subTest(state=state):
+                with self.assertRaisesRegex(ValueError, "unsupported CTS evidence state"):
+                    matrix.cts_join([], {"state": state}, self.SELECTED, self.DIAGNOSTIC)
+
+    def test_native_evidence_must_name_run_artifact_and_refs(self):
+        good = {"state": "native-evidence", "run_ids": ["run-1"],
+                "artifact_sha256": "d" * 64, "refs": ["VALIDATION.md#witness"]}
+        matrix.validate_native("x", good)
+        for key, value in (("run_ids", []), ("artifact_sha256", "not-a-hash"),
+                           ("refs", []), ("state", "native-pass")):
+            with self.subTest(key=key):
+                with self.assertRaises(ValueError):
+                    matrix.validate_native("x", {**good, key: value})
+        for state in ("witnessed-blocker", "reported-not-executed", "not-run"):
+            matrix.validate_native("x", {"state": state})
+
+    def test_cts_is_evidence_and_only_an_observed_failure_blocks(self):
+        green = {"api": {"state": "satisfied"}, "implementation": {"state": "implemented"},
+                 "native": {"state": "native-evidence"}}
+        for state in ("cts-pass", "cts-focused-pass", "mapped-not-run", "not-mapped"):
+            with self.subTest(state=state):
+                self.assertTrue(matrix.row_ready({**green, "cts": {"state": state}}))
+                for axis, blocked in (("api", "blocker"), ("implementation", "missing"),
+                                      ("native", "reported-not-executed"),
+                                      ("native", "witnessed-blocker"), ("native", "not-run")):
+                    self.assertFalse(matrix.row_ready(
+                        {**green, "cts": {"state": state}, axis: {"state": blocked}}),
+                        (axis, blocked))
+        self.assertFalse(matrix.row_ready({**green, "cts": {"state": "cts-fail"}}))
+
+    def test_observed_cts_failure_stays_visible_and_blocks(self):
+        document = matrix.generate()
+        broken = copy.deepcopy(document)
+        row = next(item for item in broken["requirements"]
+                   if item["verdict"] == "satisfied")
+        row["cts"]["state"] = "cts-fail"
+        with self.assertRaisesRegex(ValueError, "non-fail-closed"):
+            matrix.validate(broken)
+        self.assertEqual({"pass": 26, "fail": 0, "no-evidence": 36},
+                         document["summary"]["dimensions"]["cts"])
+
+    def test_unmapped_cts_allows_artifact_bound_khr_device_scope(self):
+        """The Vulkan 1.0 KHR DeviceScope route has independent native evidence."""
+        rows = {r["id"]: r for r in matrix.generate()["requirements"]}
+        row = rows[matrix.DEVICE_SCOPE_ID]
+        self.assertEqual(("satisfied", "implemented", "not-mapped", "native-evidence"),
+                         tuple(row[axis]["state"] for axis in
+                               ("api", "implementation", "cts", "native")))
+        self.assertEqual("satisfied", row["verdict"])
+        self.assertFalse(matrix.row_ready({**row, "api": {"state": "blocker"}}))
+        evidence = json.loads(matrix.EVIDENCE.read_text())
+        original = matrix.EVIDENCE
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "evidence.json"
+            matrix.EVIDENCE = path
+            try:
+                stripped = copy.deepcopy(evidence)
+                del stripped["requirements"][matrix.DEVICE_SCOPE_ID]["native"]["artifact_sha256"]
+                path.write_text(json.dumps(stripped))
+                with self.assertRaisesRegex(ValueError, "artifact_sha256"):
+                    matrix.generate()
+            finally:
+                matrix.EVIDENCE = original
+
+    def test_policy_publishes_the_per_capability_cts_scope(self):
+        policy = matrix.generate()["policy"]
+        self.assertEqual(["cts-fail"], policy["cts_blocking_states"])
+        self.assertIn("never blocks", policy["cts_scope"])
+        self.assertIn("never whole-suite CTS or conformance", policy["cts_scope"])
 
 if __name__ == "__main__":
     unittest.main()
