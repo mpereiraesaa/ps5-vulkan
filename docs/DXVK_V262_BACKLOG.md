@@ -31,18 +31,20 @@ original tranche membership.
 Tranche delivery and DXVK profile scoring are different gates. The current
 matrix still leaves `geometryShader` and `tessellationShader` as blockers:
 their native witness receipts have not been admitted to the DXVK evidence
-ledger, and the 99 passing tessellation cases are outside its frozen CTS
-selection. This is **evidence reconciliation**, not unfinished T04 rendering
-work. Promote the exact cases and receipts, then regenerate the matrix and
-rerun its gates before changing its count. T07 may proceed using the merged
+ledger, so their native axis is still `reported-not-executed`. This is
+**evidence reconciliation**, not unfinished T04 rendering work. Admit the exact
+receipts (and, optionally, the 99 passing tessellation cases as a
+`cts-focused-pass` record), then regenerate the matrix and rerun its gates
+before changing its count. T07 may proceed using the merged
 T04 implementation; it need not wait for that accounting change. The current
 score is derived from `conformance_inventory/dxvk_v262_matrix.json`.
 
 The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
-11_0 baseline. Reaching 62/62 means that this profile has complete API,
-implementation, applicable CTS and native evidence. It does **not** by itself
-constitute Vulkan 1.3 conformance: the wider cumulative core contract and the
-official conformance process remain separate obligations.
+11_0 baseline, and the goal is running our DXVK v2.6.2 build on PS5. Reaching
+62/62 means that this profile has complete API, implementation and native
+evidence with no observed applicable CTS failure. It is **not** Vulkan 1.3 conformance: whole-suite CTS
+and the official conformance process are separate goals that no tranche waits
+for and this project does not claim.
 
 ## Ordered tranches
 
@@ -62,7 +64,7 @@ official conformance process remain separate obligations.
 | 12 | T12 — Inline uniform blocks | 7 | Descriptor implementation plus six measured limits. |
 | 13 | T13 — VK_EXT_robustness2 | 3 | Null descriptors and robust resource access. |
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
-| 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
+| 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work, the mandatory 1.0–1.3 core surface and a native run of our DXVK build. |
 
 ### T07 combined diagnostic status before public reporting (2026-09-24)
 
@@ -134,8 +136,9 @@ For Vulkan 1.1–1.3 rows, implementation can be ready before the device is
 allowed to advertise the target API version. The backlog therefore reports two
 different facts:
 
-* **implementation ready** means real implementation, applicable CTS and native
-  evidence are green; it does not assert that the capability is advertised;
+* **implementation ready** means real implementation and native evidence are
+  green and no applicable CTS leaf was observed failing; it does not assert
+  that the capability is advertised;
 * **profile satisfied** additionally requires the public API axis and final
   fail-closed verdict to be green.
 
@@ -144,15 +147,30 @@ final Vulkan 1.3.204 gate or creating a circular dependency.
 
 ## Definition of done for a requirement
 
-A row is counted complete only when all four evidence axes in the live matrix
-are green:
+A row is counted complete only when all three gating axes in the live matrix
+are green and its CTS record shows no observed failure:
 
 1. the public query reports the exact supported value and device creation
    accepts it;
-2. the implementation is real and fail-closed for unsupported combinations;
-3. applicable focused upstream CTS passes without weakening its oracle;
-4. an artifact-bound native PS5 run proves execution, output and clean
-   lifecycle through `ps5log/1`.
+2. the implementation is real and fail-closed for unsupported combinations,
+   with host tests for its contract;
+3. an artifact-bound native PS5 run proves execution, output and clean
+   lifecycle through `ps5log/1`; `native-evidence` must name its run ids,
+   artifact SHA-256 and references.
+
+Upstream CTS is regression evidence, not a readiness gate. The matrix records
+it per capability as `cts-pass` (original leaves in the frozen regression
+selection), `cts-focused-pass` (original leaves outside that selection passing
+in a focused run whose run ids, artifact SHA-256 and case-list SHA-256 are
+recorded, with every named case `Pass`), `mapped-not-run` or `not-mapped`.
+A missing, unmapped or unrun leaf does not block an implemented,
+native-witnessed capability. An observed applicable failure, `cts-fail`, stays
+in the ledger and blocks the row until it is explained or fixed. NotSupported,
+Skip and Fail never count as a pass, and no historical report is rewritten.
+Use focused CTS where it validates a concrete contract or helps debugging;
+whole-suite CTS and general Vulkan conformance are not gates for a row or for
+the final API promotion, which instead requires our DXVK v2.6.2 build to create
+its device and run natively.
 
 Properties require measured, defensible values rather than copied profile
 floors. Extensions are enumerated only after every extension capability used by
