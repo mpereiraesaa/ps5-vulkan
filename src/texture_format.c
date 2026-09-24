@@ -22,6 +22,7 @@
 #define CAP_SRC PS5VK_FORMAT_CAP_TRANSFER_SRC
 #define CAP_SAMP PS5VK_FORMAT_CAP_SAMPLED_IMAGE
 #define CAP_LINEAR PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR
+#define CAP_BLIT_SRC PS5VK_FORMAT_CAP_BLIT_SRC
 #define CAP_COLOR PS5VK_FORMAT_CAP_COLOR_ATTACHMENT
 #define CAP_COLOR_READBACK PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_READBACK
 #define CAP_BLEND PS5VK_FORMAT_CAP_COLOR_ATTACHMENT_BLEND
@@ -41,7 +42,7 @@
 #define SAMPLED(f, bpt, word, s0, s1, s2, s3, EXTRA, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), \
-      CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), GPL }
+      CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), GPL, 1, 1, (bpt) }
 /* Sampled row whose byte layout is the pinned registry's packed-component
  * order rather than one of the reference's explicit rows. WITNESSED lists
  * enabled capabilities, including the independently qualified sampled roles;
@@ -49,10 +50,14 @@
 #define SAMPLED_PACKED(f, bpt, word, s0, s1, s2, s3, WITNESSED, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (WITNESSED) | (ENABLED), \
-      (WITNESSED) | (ENABLED), GPL | PACK }
+      (WITNESSED) | (ENABLED), GPL | PACK, 1, 1, (bpt) }
 /* Row with no sampled-image encoding: a render-target, depth or buffer role. */
 #define BUFFER(f, CAPS) \
-    { (f), 0, 0, {0, 0, 0, 0}, (CAPS), (CAPS), PS5VK_FORMAT_PROVENANCE_NONE }
+    { (f), 0, 0, {0, 0, 0, 0}, (CAPS), (CAPS), PS5VK_FORMAT_PROVENANCE_NONE, 0, 0, 0 }
+#define BC(f, gfxfmt, bytes) \
+    { (f), 0, ((uint32_t)(gfxfmt) << 20), {4, 5, 6, 7}, \
+      CAP_SAMP | CAP_LINEAR | CAP_SRC | CAP_DST | CAP_BLIT_SRC, 0, \
+      PS5VK_FORMAT_PROVENANCE_GFX10_FORMAT_ENUM, 4, 4, (bytes) }
 
 static const struct ps5vk_texture_format formats[] = {
     /* --- 8-bit and packed sampled formats ---------------------------------
@@ -183,6 +188,26 @@ static const struct ps5vk_texture_format formats[] = {
     SAMPLED_PACKED(VK_FORMAT_A8B8G8R8_SINT_PACK32, 4, UINT32_C(0x03d00000), 4, 5, 6, 7,
                    CAP_VERTEX | CAP_SAMP | CAP_DST, CAP_UTEXEL),
     /* --- roles without a sampled-image encoding --------------------------- */
+    /* GFX10's BC image-format field is nine bits wide. The descriptor and
+     * padded block layout are represented for all 16 Vulkan variants;
+     * witnessed stays zero until upload and the CTS-mandated transfer and
+     * blit roles are integrated through the queue executor. */
+    BC(VK_FORMAT_BC1_RGB_UNORM_BLOCK, 169, 8),
+    BC(VK_FORMAT_BC1_RGB_SRGB_BLOCK, 170, 8),
+    BC(VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 169, 8),
+    BC(VK_FORMAT_BC1_RGBA_SRGB_BLOCK, 170, 8),
+    BC(VK_FORMAT_BC2_UNORM_BLOCK, 171, 16),
+    BC(VK_FORMAT_BC2_SRGB_BLOCK, 172, 16),
+    BC(VK_FORMAT_BC3_UNORM_BLOCK, 173, 16),
+    BC(VK_FORMAT_BC3_SRGB_BLOCK, 174, 16),
+    BC(VK_FORMAT_BC4_UNORM_BLOCK, 175, 8),
+    BC(VK_FORMAT_BC4_SNORM_BLOCK, 176, 8),
+    BC(VK_FORMAT_BC5_UNORM_BLOCK, 177, 16),
+    BC(VK_FORMAT_BC5_SNORM_BLOCK, 178, 16),
+    BC(VK_FORMAT_BC6H_UFLOAT_BLOCK, 179, 16),
+    BC(VK_FORMAT_BC6H_SFLOAT_BLOCK, 180, 16),
+    BC(VK_FORMAT_BC7_UNORM_BLOCK, 181, 16),
+    BC(VK_FORMAT_BC7_SRGB_BLOCK, 182, 16),
     /* VideoOut target and vertex input; deliberately not sampled. */
     BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_VERTEX),
     /* 64KB_Z_X depth target. TRANSFER_DST is the whole-subresource clear:
@@ -229,7 +254,7 @@ uint32_t ps5vk_texture_format_dst_sel(const struct ps5vk_texture_format *format)
 
 uint32_t ps5vk_texture_format_gfx10_format(const struct ps5vk_texture_format *format)
 {
-    return format ? ((format->descriptor_format_word >> 20) & 0x7fu) : 0;
+    return format ? ((format->descriptor_format_word >> 20) & 0x1ffu) : 0;
 }
 
 uint32_t ps5vk_texture_format_capabilities(VkFormat format)
@@ -244,16 +269,40 @@ VkBool32 ps5vk_texture_format_has(VkFormat format, uint32_t capability)
         capability != 0;
 }
 
+static uint32_t format_witnessed_capabilities(const struct ps5vk_texture_format *entry)
+{
+    if (!entry) return 0;
+    uint32_t witnessed = entry->witnessed;
+#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && \
+    PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
+    /* This build-only switch serves the original CTS and the public SDK
+     * witness. The shipping build reports only rows whose evidence was
+     * promoted into the table. */
+    if (!entry->bytes_per_texel && entry->block_width == 4 &&
+        entry->block_height == 4 && entry->bytes_per_block &&
+        (entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE))
+        witnessed |= entry->capabilities &
+            (PS5VK_FORMAT_CAP_SAMPLED_IMAGE |
+             PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR |
+             PS5VK_FORMAT_CAP_TRANSFER_SRC |
+             PS5VK_FORMAT_CAP_TRANSFER_DST |
+             PS5VK_FORMAT_CAP_BLIT_SRC);
+#endif
+    return witnessed;
+}
+
 VkBool32 ps5vk_texture_format_witnessed(VkFormat format, uint32_t capability)
 {
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
-    return entry && capability && (entry->witnessed & capability) == capability;
+    const uint32_t witnessed = format_witnessed_capabilities(entry);
+    return entry && capability && (witnessed & capability) == capability;
 }
 
 VkBool32 ps5vk_texture_format_sampled_image(VkFormat format)
 {
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
-    return entry && (entry->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
+    return entry && ps5vk_texture_format_witnessed(format,
+        PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
         entry->descriptor_format_word != 0;
 }
 
@@ -261,7 +310,16 @@ VkBool32 ps5vk_texture_format_sampled_encoding(VkFormat format)
 {
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
     return entry && (entry->capabilities & PS5VK_FORMAT_CAP_SAMPLED_IMAGE) &&
-        entry->descriptor_format_word != 0 && entry->bytes_per_texel != 0;
+        entry->descriptor_format_word != 0 && entry->bytes_per_block != 0 &&
+        entry->block_width != 0 && entry->block_height != 0;
+}
+
+VkBool32 ps5vk_texture_format_block_compressed(VkFormat format)
+{
+    const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
+    return entry && !entry->bytes_per_texel && entry->block_width > 1 &&
+        entry->block_height != 0 &&
+        entry->bytes_per_block != 0;
 }
 
 void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
@@ -270,7 +328,7 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
     VkFormatProperties properties = {0};
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
     if (entry) {
-        const uint32_t w = entry->witnessed;
+        const uint32_t w = format_witnessed_capabilities(entry);
         if (w & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)
             properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
         if (w & PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR)
@@ -324,7 +382,7 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
 {
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
     if (!entry || !usage) return VK_FALSE;
-    const uint32_t w = entry->witnessed;
+    const uint32_t w = format_witnessed_capabilities(entry);
     const VkImageUsageFlags attachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     const VkImageUsageFlags depth = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     /* Validate every requested role independently before testing the exact

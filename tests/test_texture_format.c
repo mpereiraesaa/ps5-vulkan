@@ -110,6 +110,42 @@ int main(void)
         assert(entry->provenance & PS5VK_FORMAT_PROVENANCE_REGISTRY_PACKING);
     }
 
+    /* All Vulkan 1.0 BC variants have their fixed GFX10 image-format enum,
+     * block byte size and internal sampled descriptor encoding. Public format
+     * properties remain zero until upload and mandatory transfer/blit roles
+     * are available through the queue executor. */
+    const VkFormat bc_formats[] = {
+        VK_FORMAT_BC1_RGB_UNORM_BLOCK, VK_FORMAT_BC1_RGB_SRGB_BLOCK,
+        VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_FORMAT_BC1_RGBA_SRGB_BLOCK,
+        VK_FORMAT_BC2_UNORM_BLOCK, VK_FORMAT_BC2_SRGB_BLOCK,
+        VK_FORMAT_BC3_UNORM_BLOCK, VK_FORMAT_BC3_SRGB_BLOCK,
+        VK_FORMAT_BC4_UNORM_BLOCK, VK_FORMAT_BC4_SNORM_BLOCK,
+        VK_FORMAT_BC5_UNORM_BLOCK, VK_FORMAT_BC5_SNORM_BLOCK,
+        VK_FORMAT_BC6H_UFLOAT_BLOCK, VK_FORMAT_BC6H_SFLOAT_BLOCK,
+        VK_FORMAT_BC7_UNORM_BLOCK, VK_FORMAT_BC7_SRGB_BLOCK,
+    };
+    const uint8_t bc_gfx[] = {169,170,169,170,171,172,173,174,175,176,177,178,179,180,181,182};
+    const uint8_t bc_bytes[] = {8,8,8,8,16,16,16,16,8,8,16,16,16,16,16,16};
+    for (unsigned i = 0; i < sizeof(bc_formats)/sizeof(bc_formats[0]); ++i) {
+        const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(bc_formats[i]);
+        assert(entry && !entry->bytes_per_texel && entry->block_width==4 &&
+            entry->block_height==4 && entry->bytes_per_block==bc_bytes[i]);
+        assert(ps5vk_texture_format_gfx10_format(entry)==bc_gfx[i]);
+        assert(ps5vk_texture_format_block_compressed(bc_formats[i]));
+        assert(ps5vk_texture_format_has(bc_formats[i],
+            PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR));
+        assert(ps5vk_texture_format_sampled_encoding(bc_formats[i]));
+        assert(!ps5vk_texture_format_sampled_image(bc_formats[i]));
+        assert(!ps5vk_texture_format_witnessed(bc_formats[i],
+            PS5VK_FORMAT_CAP_SAMPLED_IMAGE | PS5VK_FORMAT_CAP_TRANSFER_SRC |
+            PS5VK_FORMAT_CAP_TRANSFER_DST | PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR |
+            PS5VK_FORMAT_CAP_BLIT_SRC));
+        VkFormatProperties properties={0};
+        ps5vk_texture_format_properties(bc_formats[i],&properties);
+        assert(!properties.optimalTilingFeatures && !properties.bufferFeatures &&
+            !properties.linearTilingFeatures);
+    }
+
     /* --- packed sampled/filter capabilities ------------------------------- */
     const int packed_linear[] = {1, 1, 1, 0, 0};
     for (unsigned i = 0; i < sizeof(packed) / sizeof(packed[0]); ++i) {

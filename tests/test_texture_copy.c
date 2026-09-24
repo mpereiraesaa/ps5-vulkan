@@ -88,6 +88,47 @@ int main(void)
     assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_A8B8G8R8_SRGB_PACK32,65,4,40,
         2048,&sample,&packed)==VK_SUCCESS && !memcmp(&rgba8,&packed,sizeof(rgba8)));
 
+    /* BC copies address complete 4x4 blocks. The final partial block is legal
+     * only because it reaches both image edges; offsets remain block aligned. */
+    VkBufferImageCopy bc_copy={.bufferOffset=8,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .imageExtent={8,8,1}};
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+        8,8,40,512,&bc_copy,&p)==VK_SUCCESS);
+    assert(p.source_offset==8 && p.destination_offset==0 && p.source_pitch==16 &&
+        p.destination_pitch==256 && p.row_bytes==16 && p.rows==2 &&
+        p.source_slice_pitch==32 && p.destination_slice_pitch==512);
+    bc_copy.bufferOffset=0;
+    bc_copy.imageOffset=(VkOffset3D){4,4,0};
+    bc_copy.imageExtent=(VkExtent3D){1,1,1};
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_BC7_UNORM_BLOCK,
+        5,5,16,512,&bc_copy,&p)==VK_SUCCESS);
+    assert(p.destination_offset==272 && p.row_bytes==16 && p.rows==1 &&
+        p.source_pitch==16 && p.destination_pitch==256);
+    bc_copy.imageOffset=(VkOffset3D){0,0,0};
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_BC7_UNORM_BLOCK,
+        5,5,16,512,&bc_copy,&p)!=VK_SUCCESS);
+    bc_copy.imageOffset=(VkOffset3D){1,0,0};
+    bc_copy.imageExtent=(VkExtent3D){4,4,1};
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_BC7_UNORM_BLOCK,
+        5,5,16,512,&bc_copy,&p)!=VK_SUCCESS);
+    bc_copy.imageOffset=(VkOffset3D){0,0,0};
+    bc_copy.imageExtent=(VkExtent3D){4,4,1};
+    bc_copy.bufferRowLength=5;
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_BC7_UNORM_BLOCK,
+        8,8,32,512,&bc_copy,&p)!=VK_SUCCESS);
+
+    VkBufferImageCopy huge_bc={.bufferOffset=UINT64_MAX-15,
+        .bufferRowLength=UINT32_MAX-3,.bufferImageHeight=UINT32_MAX-3,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .imageExtent={4,4,1}};
+    struct ps5vk_texture_copy bc_sentinel;
+    memset(&bc_sentinel,0x6b,sizeof(bc_sentinel));
+    struct ps5vk_texture_copy bc_guard=bc_sentinel;
+    assert(ps5vk_texture_copy_plan_for_format(VK_FORMAT_BC7_UNORM_BLOCK,
+        8,8,UINT64_MAX,512,&huge_bc,&bc_guard)!=VK_SUCCESS &&
+        !memcmp(&bc_guard,&bc_sentinel,sizeof(bc_guard)));
+
     /* An unbounded bufferRowLength/bufferImageHeight pair would overflow the
      * 64-bit source span; it must be refused with the output untouched. */
     VkBufferImageCopy unbounded={.bufferOffset=0,.bufferRowLength=UINT32_MAX,

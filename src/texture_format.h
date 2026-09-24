@@ -72,6 +72,8 @@ enum ps5vk_format_provenance {
      * component order of the Vulkan enum is byte-identical to a row above and
      * no other hardware field changes. */
     PS5VK_FORMAT_PROVENANCE_REGISTRY_PACKING = 1u << 1,
+    /* Numeric GFX10 data-format code from the pinned register enumeration. */
+    PS5VK_FORMAT_PROVENANCE_GFX10_FORMAT_ENUM = 1u << 2,
 };
 
 /* Numeric category of a vertex attribute, as the PSBC/native vertex mapping
@@ -92,8 +94,12 @@ struct ps5vk_texture_format {
     uint32_t capabilities;
     /* Enabled operations; see the two legacy evidence exceptions above. */
     uint32_t witnessed;
-    /* Provenance of the sampled-image encoding, if any (bitmask). */
+    /* Provenance of the format encoding, if any (bitmask). */
     uint8_t provenance;
+    /* Compressed formats are stored and copied in fixed-size blocks. For
+     * ordinary texel formats this is a 1x1 block of bytes_per_texel bytes. */
+    uint8_t block_width, block_height;
+    uint8_t bytes_per_block;
 };
 
 const struct ps5vk_texture_format *ps5vk_texture_format_lookup(VkFormat format);
@@ -106,9 +112,8 @@ const struct ps5vk_texture_format *ps5vk_texture_format_at(unsigned index);
  * so it is derived from the row's selectors instead of being written twice. */
 uint32_t ps5vk_texture_format_dst_sel(const struct ps5vk_texture_format *format);
 
-/* The 7-bit combined GFX10 DATA_FORMAT/NUM_FORMAT value of a row. It sits at
- * bits 20-26 of the sampled-image descriptor word and at bits 12-18 of a
- * buffer descriptor, which is the only difference between the two uses. */
+/* The 8-bit GFX10 DATA_FORMAT value of a row. It sits at bits 20-27 in a
+ * sampled-image descriptor word and at bits 12-19 in a buffer descriptor. */
 uint32_t ps5vk_texture_format_gfx10_format(const struct ps5vk_texture_format *format);
 
 /* Implemented / witnessed capability queries. Unknown formats answer zero. */
@@ -126,6 +131,7 @@ VkBool32 ps5vk_texture_format_sampled_image(VkFormat format);
  * promised bytes-per-texel/stride/overflow contract is host-testable for
  * formats that are still waiting for their physical diagnostic. */
 VkBool32 ps5vk_texture_format_sampled_encoding(VkFormat format);
+VkBool32 ps5vk_texture_format_block_compressed(VkFormat format);
 
 /* The published VkFormatProperties for a format, derived from the witnessed
  * capabilities only. linearTilingFeatures is always zero: this profile has no

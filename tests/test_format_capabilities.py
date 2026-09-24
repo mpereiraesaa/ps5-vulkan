@@ -176,7 +176,10 @@ class TestFormatCapabilities(unittest.TestCase):
             name = self.names[row["format"]]
             if row["capabilities"] & (CAP["SAMPLED_IMAGE"] | CAP["SAMPLED_IMAGE_LINEAR"]):
                 self.assertTrue(row["descriptorFormatWord"], name)
-                self.assertTrue(row["bytesPerTexel"], name)
+                self.assertTrue(
+                    row["bytesPerTexel"] or
+                    (row["blockWidth"] > 1 and row["blockHeight"] > 1 and
+                     row["bytesPerBlock"] > 0), name)
                 self.assertEqual(len(row["selectors"]), 4, name)
 
     def test_linear_filtering_never_applies_to_integer_formats(self):

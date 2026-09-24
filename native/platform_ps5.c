@@ -315,6 +315,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * the dedicated witness explicitly requests it. */
     platform->supported_features |= PS5VK_FEATURE_IMAGE_CUBE_ARRAY;
 #endif
+#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && \
+    PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
+    /* Measurement-only gate for the full Vulkan 1.0 BC format matrix. The
+     * build also exposes all five mandatory CTS format roles; the shipping
+     * feature mask remains false until those paths are measured. */
+    platform->supported_features |= PS5VK_FEATURE_TEXTURE_COMPRESSION_BC;
+#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

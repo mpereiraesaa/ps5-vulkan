@@ -22,16 +22,21 @@ static int add64(uint64_t a, uint64_t b, uint64_t *out)
     return 0;
 }
 
+static uint32_t ceil_div32(uint32_t value, uint32_t divisor)
+{
+    return value / divisor + (value % divisor != 0u);
+}
+
 static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
     uint32_t base_slices,uint32_t mip_levels,VkBool32 is_3d,VkDeviceSize source_bytes,
     VkDeviceSize destination_bytes,const VkBufferImageCopy *r,
     struct ps5vk_texture_copy *out)
 {
     if(!r || !out)return VK_ERROR_UNKNOWN;
-    /* A format without an implemented padded-linear encoding has no copy plan;
-     * this covers formats that exist in the capability table for another role
-     * (colour attachment, depth, vertex) but are not sampleable. */
-    if(!ps5vk_texture_format_sampled_encoding(format))return VK_ERROR_UNKNOWN;
+    /* Formats without an implemented sampled or compressed-block layout have
+     * no transfer-copy plan (colour/depth/vertex-only rows stay rejected). */
+    if(!ps5vk_texture_format_sampled_encoding(format) &&
+       !ps5vk_texture_format_block_compressed(format))return VK_ERROR_UNKNOWN;
     const struct ps5vk_texture_format *entry=ps5vk_texture_format_lookup(format);
     struct ps5vk_texture_mip_layout layout;
     if(!entry || ps5vk_texture_mip_layout_for_slices(format,width,height,base_slices,
@@ -41,7 +46,8 @@ static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
         !r->imageSubresource.layerCount ||
         r->imageOffset.x<0 || r->imageOffset.y<0 || r->imageOffset.z<0 ||
         !r->imageExtent.width || !r->imageExtent.height || !r->imageExtent.depth ||
-        r->bufferOffset%entry->bytes_per_texel)return VK_ERROR_UNKNOWN;
+        !entry->block_width || !entry->block_height || !entry->bytes_per_block ||
+        r->bufferOffset%entry->bytes_per_block)return VK_ERROR_UNKNOWN;
     const uint32_t level=r->imageSubresource.mipLevel;
     const uint32_t mip_width=width>>level?width>>level:1;
     const uint32_t mip_height=height>>level?height>>level:1;
@@ -51,6 +57,18 @@ static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
        r->imageExtent.height>mip_height-y ||
        (r->bufferRowLength && r->bufferRowLength<r->imageExtent.width) ||
        (r->bufferImageHeight && r->bufferImageHeight<r->imageExtent.height))
+        return VK_ERROR_UNKNOWN;
+    const uint32_t bw=entry->block_width,bh=entry->block_height;
+    const uint32_t row_texels=r->bufferRowLength?r->bufferRowLength:r->imageExtent.width;
+    const uint32_t image_texels=r->bufferImageHeight?r->bufferImageHeight:r->imageExtent.height;
+    /* Vulkan compressed copies address whole blocks. An offset is block
+     * aligned; an extent may end in a partial block only at the image edge.
+     * Explicit buffer dimensions still describe whole blocks. */
+    if ((x%bw) || (y%bh) ||
+        (r->imageExtent.width%bw && x+r->imageExtent.width!=mip_width) ||
+        (r->imageExtent.height%bh && y+r->imageExtent.height!=mip_height) ||
+        (r->bufferRowLength && r->bufferRowLength%bw) ||
+        (r->bufferImageHeight && r->bufferImageHeight%bh))
         return VK_ERROR_UNKNOWN;
     uint32_t first_slice=0,slices=0;
     if(is_3d) {
@@ -68,25 +86,27 @@ static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
         first_slice=r->imageSubresource.baseArrayLayer;
         slices=r->imageSubresource.layerCount;
     }
+    const uint32_t copy_block_rows=ceil_div32(r->imageExtent.height,bh);
+    const uint32_t source_block_columns=ceil_div32(row_texels,bw);
+    const uint32_t copy_block_columns=ceil_div32(r->imageExtent.width,bw);
+    const uint32_t source_block_rows=ceil_div32(image_texels,bh);
     uint64_t pitch,row_bytes,source_slice,source_span;
-    if(mul64(entry->bytes_per_texel,
-             r->bufferRowLength?r->bufferRowLength:r->imageExtent.width,&pitch) ||
-       mul64(entry->bytes_per_texel,r->imageExtent.width,&row_bytes) ||
+    if(mul64(entry->bytes_per_block,source_block_columns,&pitch) ||
+       mul64(entry->bytes_per_block,copy_block_columns,&row_bytes) ||
        row_bytes>UINT32_MAX ||
-       mul64(pitch,(r->bufferImageHeight?r->bufferImageHeight:r->imageExtent.height),
-             &source_slice) ||
+       mul64(pitch,source_block_rows,&source_slice) ||
        mul64(slices-1,source_slice,&source_span) ||
-       add64(source_span,(uint64_t)(r->imageExtent.height-1)*pitch,&source_span) ||
+       add64(source_span,(uint64_t)(copy_block_rows-1)*pitch,&source_span) ||
        add64(source_span,row_bytes,&source_span))
         return VK_ERROR_UNKNOWN;
     const struct ps5vk_texture_mip_level *mip=&layout.levels[level];
     uint64_t destination_offset,destination_span;
     if(mul64(first_slice,layout.layer_stride,&destination_offset) ||
        add64(destination_offset,mip->offset,&destination_offset) ||
-       add64(destination_offset,(uint64_t)y*mip->row_pitch,&destination_offset) ||
-       add64(destination_offset,(uint64_t)entry->bytes_per_texel*x,&destination_offset) ||
+       add64(destination_offset,(uint64_t)(y/bh)*mip->row_pitch,&destination_offset) ||
+       add64(destination_offset,(uint64_t)(x/bw)*entry->bytes_per_block,&destination_offset) ||
        mul64(slices-1,layout.layer_stride,&destination_span) ||
-       add64(destination_span,(uint64_t)(r->imageExtent.height-1)*mip->row_pitch,
+       add64(destination_span,(uint64_t)(copy_block_rows-1)*mip->row_pitch,
              &destination_span) ||
        add64(destination_span,row_bytes,&destination_span))
         return VK_ERROR_UNKNOWN;
@@ -95,7 +115,7 @@ static VkResult plan(VkFormat format,uint32_t width,uint32_t height,
        destination_span>destination_bytes-destination_offset)
         return VK_ERROR_UNKNOWN;
     *out=(struct ps5vk_texture_copy){r->bufferOffset,destination_offset,pitch,
-        mip->row_pitch,(uint32_t)row_bytes,r->imageExtent.height,
+        mip->row_pitch,(uint32_t)row_bytes,copy_block_rows,
         source_slice,layout.layer_stride,slices};
     return VK_SUCCESS;
 }

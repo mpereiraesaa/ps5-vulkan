@@ -75,6 +75,21 @@ int main(void)
         65,3,1,3,&srgb_packed));
     assert(srgb_packed.bytes==rgba8.layer_stride);
 
+    /* BC data is stored in 4x4 blocks. Odd extents round up in block space,
+     * then each block row receives the same 256-byte hardware alignment. */
+    struct ps5vk_texture_mip_layout bc={0};
+    assert(!ps5vk_texture_mip_layout_for_slices(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+        5,5,2,1,&bc));
+    assert(bc.level_count==1 && bc.storage_layers==2 && bc.layer_stride==512 &&
+        bc.bytes==1024 && bc.levels[0].row_pitch==256 &&
+        bc.levels[0].storage_width==5 && bc.levels[0].storage_height==5);
+    assert(!ps5vk_texture_mip_layout_for_slices(VK_FORMAT_BC7_UNORM_BLOCK,
+        5,5,1,3,&bc));
+    /* Descending mips 2x2, 3x3, 5x5 use one, one and two 16-byte block rows. */
+    assert(bc.layer_stride==1024 && bc.bytes==1024 && bc.levels[0].offset==512 &&
+        bc.levels[1].offset==256 && bc.levels[2].offset==0 &&
+        bc.levels[0].row_pitch==256 && bc.levels[0].storage_width==5);
+
     /* Overflow and bound rejections must not mutate the caller's structure.
      * 16384x16384 at 16 bytes per texel is 2^32 bytes per level, so two levels
      * plus UINT32_MAX layers cannot be represented and must be refused rather

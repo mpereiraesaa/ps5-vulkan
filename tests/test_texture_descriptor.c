@@ -30,7 +30,7 @@ int main(void)
     assert(words[0]==(uint32_t)((uintptr_t)base>>8));
     assert(words[1]==((uint32_t)((uintptr_t)base>>40)|(56u<<20)));
     assert(words[2]==(16u|(2u<<14)|(1u<<31)) && words[3]==0x90000fac);
-    assert(words[4]==127 && words[5]==0x400000 && !words[6] && !words[7]);
+    assert(!words[4] && words[5]==0x400000 && !words[6] && !words[7]);
     assert(!memcmp(words+8,sampler->words,16));
     /* All accepted axis/filter combinations must survive API creation and
      * descriptor assembly independently. Encoding is not sampling accuracy. */

@@ -66,9 +66,10 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
             return VK_ERROR_UNKNOWN;
         address+=layout.layer_stride*view->range.baseArrayLayer;
         type_word=9u<<28;
-        if(image->info.mipLevels==1 &&
-           layout.levels[0].row_pitch/format->bytes_per_texel!=image->info.extent.width)
-            dimension_word=layout.levels[0].row_pitch/format->bytes_per_texel-1;
+        /* GFX10 sampled-resource word 4 carries DEPTH/BASE_ARRAY state; it
+         * has no MIP0_WIDTH pitch field. The render-target MIP0_WIDTH register
+         * is a different descriptor. A 2D view's depth is one, including when
+         * linear upload rows are padded or stored in compressed blocks. */
         break;
     case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
         if(image->info.imageType!=VK_IMAGE_TYPE_2D)return VK_ERROR_FEATURE_NOT_PRESENT;
