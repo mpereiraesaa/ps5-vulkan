@@ -63,6 +63,14 @@ official conformance process remain separate obligations.
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
 | 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
 
+For T08's extended subgroup Int16 operands, the pinned original Vulkan 1.0
+compute indexing factory is now packaged as an independent `shaderInt16`
+prerequisite. Its `opaccesschain_u16` leaf reaches the original CTS support
+check, which reports `NotSupported` because the shipping core bit is false.
+The one-leaf diagnostic receipt and artifact identity are in `VALIDATION.md`.
+The frozen acceptance selection remains 507 cases; Int16 execution, original
+CTS Pass and subgroup promotion still require separate evidence.
+
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
 is stable while readiness and completion are derived from the live matrix, so implemented

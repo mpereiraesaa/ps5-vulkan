@@ -18,6 +18,7 @@
 #include "vktPipelineBlendTests.hpp"
 #include "vktPipelineMultisampleTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
+#include "vktSpvAsmIndexingTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
 #include "vktDrawShaderDrawParametersTests.hpp"
@@ -385,6 +386,9 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createWorkgroupMemoryComputeGroup(m_testCtx));
+        // Original Vulkan 1.0 Int16 indexing leaves give the dormant core
+        // shaderInt16 route an applicable CTS oracle once it is measured.
+        computeGroup->addChild(vkt::SpirVAssembly::createIndexingComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocusedVolatileAtomicComputeGroup(m_testCtx));
         instructionGroup->addChild(computeGroup.release());
         spirvGroup->addChild(instructionGroup.release());

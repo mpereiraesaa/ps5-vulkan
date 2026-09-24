@@ -1058,6 +1058,7 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmGraphicsShaderTestUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmUtils.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIndexingTests.cpp",
         ROOT / "cts/upstream/volatile_atomic_focus.cpp",
     ]
     for src in test_cpp:
