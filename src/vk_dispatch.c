@@ -107,6 +107,9 @@ static const struct entry entries[] = {
     ENTRY(vkCmdBeginRenderPass, DEVICE),
     ENTRY(vkCmdNextSubpass, DEVICE),
     ENTRY(vkCmdEndRenderPass, DEVICE),
+    ENTRY(vkCmdBeginRenderPass2KHR, DEVICE),
+    ENTRY(vkCmdNextSubpass2KHR, DEVICE),
+    ENTRY(vkCmdEndRenderPass2KHR, DEVICE),
     ENTRY(vkCmdExecuteCommands, DEVICE),
     ENTRY(vkCmdBindVertexBuffers, DEVICE),
     ENTRY(vkCmdBindIndexBuffer, DEVICE),
@@ -196,7 +199,10 @@ static int device_group_command(const char *name)
  * entries at all. */
 static int create_renderpass2_command(const char *name)
 {
-    return !strcmp(name, "vkCreateRenderPass2KHR");
+    return !strcmp(name, "vkCreateRenderPass2KHR") ||
+           !strcmp(name, "vkCmdBeginRenderPass2KHR") ||
+           !strcmp(name, "vkCmdNextSubpass2KHR") ||
+           !strcmp(name, "vkCmdEndRenderPass2KHR");
 }
 static int buffer_device_address_command(const char *name)
 {
