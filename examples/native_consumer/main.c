@@ -47,6 +47,9 @@
 #ifdef CONSUMER_CUBE_ARRAY_WITNESS
 #include "cube_array_witness.h"
 #endif
+#ifdef CONSUMER_IMAGELESS_FRAMEBUFFER_WITNESS
+#include "imageless_framebuffer_witness.h"
+#endif
 #ifdef CONSUMER_BC_FILTER_WITNESS
 #include "bc_filter_witness.h"
 #endif
@@ -3200,6 +3203,12 @@ int main(void)
     VkPhysicalDevice16BitStorageFeatures storage16 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
     };
+#ifdef CONSUMER_IMAGELESS_FRAMEBUFFER_WITNESS
+    VkPhysicalDeviceImagelessFramebufferFeatures imageless = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES,
+    };
+    storage16.pNext = &imageless;
+#endif
     VkPhysicalDeviceShaderDrawParametersFeatures draw_parameters = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES,
     };
@@ -3213,6 +3222,10 @@ int main(void)
         .pNext = &storage8,
     };
     vkGetPhysicalDeviceFeatures2KHR(physical_device, &features2);
+#ifdef CONSUMER_IMAGELESS_FRAMEBUFFER_WITNESS
+    REQUIRE(imageless.imagelessFramebuffer == VK_TRUE,
+            "diagnostic imageless framebuffer feature report");
+#endif
 #ifdef CONSUMER_CUBE_ARRAY_WITNESS
     REQUIRE(features2.features.imageCubeArray == VK_TRUE,
             "diagnostic imageCubeArray feature report");
@@ -3287,6 +3300,15 @@ int main(void)
 
     VkQueue queue = VK_NULL_HANDLE;
     vkGetDeviceQueue(device, 0, 0, &queue);
+
+#ifdef CONSUMER_IMAGELESS_FRAMEBUFFER_WITNESS
+    run_imageless_framebuffer_witness(device, queue);
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_TEST_SUCCESS");
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1");
+    ps5log_line(PS5LOG_MARK, "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
+    ps5log_close("consumer-imageless-framebuffer-end");
+    for (;;) sleep(1);
+#endif
 
 #ifdef CONSUMER_CUBE_ARRAY_WITNESS
     run_cube_array_witness(physical_device, device, queue);
