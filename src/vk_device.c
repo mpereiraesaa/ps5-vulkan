@@ -295,6 +295,14 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES) {
             ((VkPhysicalDeviceUniformBufferStandardLayoutFeatures *)next)->uniformBufferStandardLayout =
                 !!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES) {
+            ((VkPhysicalDeviceHostQueryResetFeatures *)next)->hostQueryReset =
+                !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES) {
+            ((VkPhysicalDeviceImagelessFramebufferFeatures *)next)->imagelessFramebuffer =
+                !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER);
         }
     }
 }
@@ -425,7 +433,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkExtensionProperties properties[9];
+    VkExtensionProperties properties[11];
     uint32_t total = 0;
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
@@ -470,6 +478,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME,
             VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_SPEC_VERSION};
     }
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET) {
+        properties[total++] = (VkExtensionProperties){
+            VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME, VK_EXT_HOST_QUERY_RESET_SPEC_VERSION};
+    }
+    if (p->platform.supported_features_t09 &
+        PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME,
+            VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -498,6 +516,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 memory_model_extension = VK_FALSE;
     VkBool32 group_extension = VK_FALSE, buffer_address_extension = VK_FALSE;
     VkBool32 uniform_buffer_standard_layout_extension = VK_FALSE;
+    VkBool32 host_query_reset_extension = VK_FALSE;
+    VkBool32 sampler_mirror_clamp_extension = VK_FALSE;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -520,6 +540,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &buffer_address_extension;
         else if (!strcmp(name, VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME))
             seen = &uniform_buffer_standard_layout_extension;
+        else if (!strcmp(name, VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME))
+            seen = &host_query_reset_extension;
+        else if (!strcmp(name, VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME))
+            seen = &sampler_mirror_clamp_extension;
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -556,14 +580,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT) ||
          !p->instance->features2_extension_enabled))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (host_query_reset_extension &&
+        (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (sampler_mirror_clamp_extension &&
+        !(p->platform.supported_features_t09 &
+          PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
+    uint32_t enabled_features_t09 = sampler_mirror_clamp_extension ?
+        PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE : 0;
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
     VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
     VkBool32 saw_memory_model = VK_FALSE;
     VkBool32 saw_buffer_address = VK_FALSE;
     VkBool32 saw_device_group = VK_FALSE;
     VkBool32 saw_uniform_buffer_standard_layout = VK_FALSE;
+    VkBool32 saw_host_query_reset = VK_FALSE, saw_imageless_framebuffer = VK_FALSE;
     VkBool32 saw_dynamic_rendering = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
@@ -671,6 +706,35 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 enabled_features |= PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT;
             }
         } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES) {
+            if (saw_host_query_reset) return INVALID;
+            saw_host_query_reset = VK_TRUE;
+            const VkPhysicalDeviceHostQueryResetFeatures *features =
+                (const VkPhysicalDeviceHostQueryResetFeatures *)next;
+            if (!valid_bool(features->hostQueryReset)) return INVALID;
+            if (features->hostQueryReset) {
+                if (!host_query_reset_extension ||
+                    !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES) {
+            if (saw_imageless_framebuffer) return INVALID;
+            saw_imageless_framebuffer = VK_TRUE;
+            const VkPhysicalDeviceImagelessFramebufferFeatures *features =
+                (const VkPhysicalDeviceImagelessFramebufferFeatures *)next;
+            if (!valid_bool(features->imagelessFramebuffer)) return INVALID;
+            if (features->imagelessFramebuffer) {
+                /* Diagnostic execution only. The Vulkan 1.0 KHR extension is
+                 * not enumerated until maintenance2 and image_format_list are
+                 * implemented as public dependencies. */
+                if (!(p->platform.supported_features_t09 &
+                      PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
+            }
+        } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES) {
             const VkPhysicalDeviceShaderDrawParametersFeatures *features =
                 (const VkPhysicalDeviceShaderDrawParametersFeatures *)next;
@@ -764,6 +828,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->physical = p; d->queue.device = d; d->queue.next_serial = 1;
     d->queue.priority_class = q->pQueuePriorities[0] >= 0.5f ? 1u : 0u;
     d->enabled_features = enabled_features;
+    d->enabled_features_t09 = enabled_features_t09;
     d->device_group_extension_enabled = group_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;

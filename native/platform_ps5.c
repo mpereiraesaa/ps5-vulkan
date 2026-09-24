@@ -318,6 +318,15 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     /* Constant, dynamic, four-offset and Dref forms have GPU readback and
      * original CTS coverage at the required offset limits. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
+#if defined(PS5VK_HOST_QUERY_RESET_DIAGNOSTIC) && PS5VK_HOST_QUERY_RESET_DIAGNOSTIC
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
+#endif
+#if defined(PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC) && PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
+#endif
+#if defined(PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC) && PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE;
+#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
