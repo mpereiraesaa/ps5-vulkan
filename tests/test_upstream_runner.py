@@ -872,6 +872,27 @@ void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
         self.assertIn("CopyBufferToBuffer::iterate", generated)
         self.assertIn("deMemCmp(referenceData, resultData, bufferSize)", generated)
 
+    def test_bc_blit_registration_preserves_original_implementations(self):
+        upstream = (REPO_ROOT / "third_party/vk-gl-cts/external/vulkancts/"
+                    "modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp")
+        if not upstream.is_file():
+            self.skipTest("pinned CTS checkout unavailable")
+        original = upstream.read_text()
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "focused.cpp"
+            write_focused_buffer_copy_source(upstream, destination, include_bc_blits=True)
+            generated = destination.read_text()
+        marker = "void addBlittingImageAllFormatsColorSrcFormatTests("
+        self.assertEqual(original[:original.index(marker)], generated[:generated.index(marker)])
+        self.assertIn('addTestGroup(group, "blit_image", addBlittingImageTests,', generated)
+        self.assertIn("srcFormat < VK_FORMAT_BC1_RGB_UNORM_BLOCK", generated)
+        self.assertIn("srcFormat > VK_FORMAT_BC7_SRGB_BLOCK", generated)
+        color = generated.split("void addBlittingImageAllFormatsColorTests(", 1)[1]
+        color = color.split("void addBlittingImageAllFormatsDepthStencilFormatsTests(", 1)[0]
+        self.assertIn("create2DCopyRegions(64, 64, 64, 64)", color)
+        self.assertNotIn("// 1D tests.", color)
+        self.assertNotIn("// 3D tests.", color)
+
     def test_robust_buffer_selection_and_upstream_factory_are_exact(self):
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
         selected = {case["path"] for case in manifest["cases"]

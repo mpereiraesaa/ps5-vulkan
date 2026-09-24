@@ -1283,7 +1283,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
     VkImage image=b->image;
     const VkImageUsageFlags usage=image->info.usage;
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
-    if(ps5vk_bc_linear_image(image))return
+    if(ps5vk_bc_linear_image(image) && (usage&VK_IMAGE_USAGE_SAMPLED_BIT))return
         ((usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
          b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
          b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
@@ -1442,7 +1442,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
     /* Pure transfer role: host-visible memory that no GPU stage samples or
      * renders into, so every transition among the transfer layouts is honest
      * bookkeeping. Only transfer dependencies can order such an image. */
-    if(ps5vk_pure_transfer_image(image))
+    if(ps5vk_pure_transfer_image(image) || ps5vk_bc_linear_image(image))
         return !((b->srcAccessMask|b->dstAccessMask) &
                  ~(VkAccessFlags)(VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
             (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED ||

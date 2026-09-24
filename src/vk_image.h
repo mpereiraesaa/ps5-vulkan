@@ -58,7 +58,8 @@ static inline int ps5vk_linear_staging_descriptor(const VkImageCreateInfo *info)
 static inline VkBool32 ps5vk_pure_transfer_image(VkImage image)
 {
     if (!image) return VK_FALSE;
-    return image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+    return (image->info.format == VK_FORMAT_R8G8B8A8_UNORM ||
+            image->info.format == VK_FORMAT_R8G8B8A8_SRGB) &&
         image->info.imageType == VK_IMAGE_TYPE_2D &&
         image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
         image->info.extent.depth == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
@@ -66,7 +67,7 @@ static inline VkBool32 ps5vk_pure_transfer_image(VkImage image)
         !(image->info.usage &
           ~(VkImageUsageFlags)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
 }
-/* Bounded host-linear executor role for block-compressed sampled images.
+/* Bounded host-linear executor role for block-compressed transfer images.
  * These images use block-padded mip storage and must never enter the RGBA8
  * byte-per-texel row copier. */
 static inline VkBool32 ps5vk_bc_linear_image(VkImage image)
@@ -79,7 +80,6 @@ static inline VkBool32 ps5vk_bc_linear_image(VkImage image)
         i->imageType == VK_IMAGE_TYPE_2D && i->tiling == VK_IMAGE_TILING_OPTIMAL &&
         i->extent.depth == 1 && i->mipLevels == 1 && i->arrayLayers == 1 &&
         i->samples == VK_SAMPLE_COUNT_1_BIT &&
-        (i->usage & VK_IMAGE_USAGE_SAMPLED_BIT) &&
         (i->usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
         !(i->usage & ~allowed);
 }

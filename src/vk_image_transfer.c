@@ -109,6 +109,13 @@ static int transfer_role_destination(VkImage image)
         (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 }
 
+static int bc_blit_destination(VkImage image)
+{
+    return ps5vk_linear_staging_image(image) ||
+        (ps5vk_pure_transfer_image(image) &&
+         (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+}
+
 /* Which executor owns a recorded image operation. Exactly one domain owns an
  * operation, so the pure transfer role's row memcpy and the linear frontend's
  * colour readback can never both act on the same recording. */
@@ -144,7 +151,7 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_BLIT_BC_TO_RGBA8:
         return ps5vk_bc_linear_image(op->image_source) &&
-            ps5vk_linear_staging_image(op->image_destination) ?
+            bc_blit_destination(op->image_destination) ?
             PS5VK_IMAGE_DOMAIN_LINEAR : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_IMAGE_BARRIER:
         return (ps5vk_bc_linear_image(op->image_barrier.image) ||
@@ -309,6 +316,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
         ps5vk_command_invalidate(c);
         return;
     }
+    if (image->info.format == VK_FORMAT_R8G8B8A8_SRGB) {
+        uint8_t rgba[4];
+        for (unsigned c = 0; c < 3; ++c)
+            rgba[c] = ps5vk_bc_blit_linear_to_srgb8(color->float32[c]);
+        rgba[3] = ps5vk_bc_blit_unorm8(color->float32[3]);
+        memcpy(&word, rgba, sizeof(word));
+    }
     for (uint32_t i = 0; i < range_count; ++i) {
         const VkImageSubresourceRange *r = &ranges[i];
         if (r->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT || r->baseMipLevel ||
@@ -354,7 +368,7 @@ static int bc_blit_decode_format(VkFormat format, enum ps5vk_bc_blit_format *out
 }
 
 /* BC source regions are decoded before filtering and destination conversion.
- * The current destination role is a single-level RGBA8 linear staging image. */
+ * Destinations are single-level RGBA8 staging or optimal transfer-only images. */
 static int bc_blit_offsets_valid(const VkOffset3D offsets[2], VkExtent3D extent)
 {
     return offsets[0].x >= 0 && offsets[1].x >= 0 &&
@@ -372,11 +386,11 @@ static VkResult bc_blit_operation_validate(VkDevice d, const struct ps5vk_operat
         op->image_source == op->image_destination ||
         !ps5vk_bc_linear_image(op->image_source) ||
         (op->image_source->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) == 0 ||
-        !ps5vk_linear_staging_image(op->image_destination) ||
+        !bc_blit_destination(op->image_destination) ||
         (op->image_blit_filter != VK_FILTER_NEAREST &&
          op->image_blit_filter != VK_FILTER_LINEAR) ||
-        op->image_source_layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
-        op->image_destination_layout != VK_IMAGE_LAYOUT_GENERAL ||
+        !layout_is_transfer_source(op->image_source_layout) ||
+        !layout_is_transfer_destination(op->image_destination_layout) ||
         !op->image_region_count || !op->owned_payload ||
         op->owned_payload_size != (size_t)op->image_region_count * sizeof(VkImageBlit))
         return INVALID;
@@ -386,10 +400,13 @@ static VkResult bc_blit_operation_validate(VkDevice d, const struct ps5vk_operat
     VkFormatProperties source_properties = {0}, destination_properties = {0};
     ps5vk_texture_format_properties(op->image_source->info.format, &source_properties);
     ps5vk_texture_format_properties(op->image_destination->info.format, &destination_properties);
+    const VkFormatFeatureFlags destination_features =
+        op->image_destination->info.tiling == VK_IMAGE_TILING_LINEAR ?
+            destination_properties.linearTilingFeatures : destination_properties.optimalTilingFeatures;
     if (!(source_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) ||
         !(source_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
-        !(destination_properties.linearTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) ||
-        !(destination_properties.linearTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
+        !(destination_features & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) ||
+        !(destination_features & VK_FORMAT_FEATURE_BLIT_DST_BIT))
         return INVALID;
 
     const VkImageBlit *regions = (const VkImageBlit *)op->owned_payload;
@@ -703,7 +720,8 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
     VkDeviceSize bytes = 0;
     if (op->type == PS5VK_IMAGE_BARRIER) {
         const VkImageMemoryBarrier *b = &op->image_barrier;
-        if (ps5vk_bc_linear_image(b->image)) {
+        if (ps5vk_bc_linear_image(b->image) &&
+            (b->image->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT)) {
             const VkImageUsageFlags usage = b->image->info.usage;
             const int upload = (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
                 b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
@@ -986,7 +1004,9 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
                     }
                     uint8_t *pixel = (uint8_t *)destination_address +
                         (size_t)y * destination_pitch + (size_t)x * 4;
-                    for (unsigned c = 0; c < 4; ++c) pixel[c] = ps5vk_bc_blit_unorm8(rgba[c]);
+                    for (unsigned c = 0; c < 4; ++c)
+                        pixel[c] = c < 3 && op->image_destination->info.format == VK_FORMAT_R8G8B8A8_SRGB ?
+                            ps5vk_bc_blit_linear_to_srgb8(rgba[c]) : ps5vk_bc_blit_unorm8(rgba[c]);
                 }
             }
         }

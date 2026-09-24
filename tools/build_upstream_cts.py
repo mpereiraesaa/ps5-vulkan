@@ -205,7 +205,8 @@ def write_focused_storage_source(source: Path, destination: Path,
     destination.write_text(text.replace(needle, replacement), encoding="utf-8")
 
 
-def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
+def write_focused_buffer_copy_source(source: Path, destination: Path,
+                                     include_bc_blits: bool = False) -> None:
     """Keep the original buffer-copy bodies/oracles but prune registration.
 
     The complete copies/blits module builds a very large test tree before the
@@ -261,9 +262,48 @@ def write_focused_buffer_copy_source(source: Path, destination: Path) -> None:
         raise SystemExit(
             f"focused image-to-image factory drift in {source}: "
             f"expected one addImageToImageTestsSimpleOnly definition")
+    text = text.replace(old_core, new_core).replace(old_factory, new_factory)
+    if include_bc_blits:
+        # Only registration changes: preserve original resources, regions,
+        # shader code, support checks and comparison oracles byte-for-byte.
+        def registration(name, replacement):
+            nonlocal text
+            start = text.index("void " + name + "(")
+            opening = text.index("{", start)
+            depth = 1
+            end = opening + 1
+            while depth:
+                depth += (text[end] == "{") - (text[end] == "}")
+                end += 1
+            old = text[start:end]
+            text = text[:start] + replacement(old) + text[end:]
+
+        text = text.replace(new_core, new_core[:-2] +
+            '\n    addTestGroup(group, "blit_image", addBlittingImageTests, '            'ALLOCATION_KIND_SUBALLOCATED, extensionFlags);\n}')
+        registration("addBlittingImageTests", lambda body: body.replace(
+            '    addTestGroup(group, "simple_tests", addBlittingImageSimpleTests, allocationKind, extensionFlags);\n', ""))
+        registration("addBlittingImageAllFormatsTests", lambda body: body.replace(
+            '    addTestGroup(group, "depth_stencil", addBlittingImageAllFormatsDepthStencilTests, allocationKind, extensionFlags);\n', "").replace(
+            '    addTestGroup(group, "generate_mipmaps", addBlittingImageAllFormatsMipmapTests, allocationKind, extensionFlags);\n', ""))
+        def color_2d(body):
+            body = body[:body.index("    // 1D tests.")] + "}"
+            needle = "                VkFormat srcFormat      = sourceFormats[srcFormatIndex];"
+            if body.count(needle) != 1:
+                raise SystemExit("BC blit source registration drift")
+            return body.replace(needle, needle + "\n" +
+                "                if (srcFormat < VK_FORMAT_BC1_RGB_UNORM_BLOCK || "
+                "srcFormat > VK_FORMAT_BC7_SRGB_BLOCK) continue;")
+        registration("addBlittingImageAllFormatsColorTests", color_2d)
+        def rgba_destinations(body):
+            needle = "            testParams.params.dst.image.format = testParams.compatibleFormats[dstFormatIndex];"
+            if body.count(needle) != 1:
+                raise SystemExit("BC blit destination registration drift")
+            return body.replace(needle, needle + "\n" +
+                "            if (testParams.params.dst.image.format != VK_FORMAT_R8G8B8A8_UNORM && "
+                "testParams.params.dst.image.format != VK_FORMAT_R8G8B8A8_SRGB) continue;")
+        registration("addBlittingImageAllFormatsColorSrcFormatTests", rgba_destinations)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(text.replace(old_core, new_core).replace(
-        old_factory, new_factory), encoding="utf-8")
+    destination.write_text(text, encoding="utf-8")
 
 
 def write_focused_robust_buffer_source(source: Path, destination: Path) -> None:
@@ -478,7 +518,9 @@ def main(argv=None):
         12)
     write_focused_buffer_copy_source(
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp",
-        focused_sources / "vktApiCopiesAndBlittingTests.cpp")
+        focused_sources / "vktApiCopiesAndBlittingTests.cpp",
+        include_bc_blits=any(".copy_and_blit.core.blit_image." in case["path"]
+                            for case in selection_manifest["cases"]))
     write_focused_robust_buffer_source(
         cts_root / "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp",
         focused_sources / "vktRobustnessBufferAccessTests.cpp")

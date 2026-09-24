@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * CPU BC block decoder for the bounded BC nearest-blit transfer path.
+ * CPU BC block decoder for BC nearest and linear blit transfers.
  */
 #ifndef PS5VK_BC_BLIT_DECODE_H
 #define PS5VK_BC_BLIT_DECODE_H

@@ -261,10 +261,21 @@ uint32_t ps5vk_texture_format_gfx10_format(const struct ps5vk_texture_format *fo
     return format ? ((format->descriptor_format_word >> 20) & 0x1ffu) : 0;
 }
 
+static uint32_t bc_destination_capabilities(VkFormat format)
+{
+#if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
+    if (format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB)
+        return PS5VK_FORMAT_CAP_TRANSFER_SRC | PS5VK_FORMAT_CAP_BLIT_DST;
+#else
+    (void)format;
+#endif
+    return 0;
+}
+
 uint32_t ps5vk_texture_format_capabilities(VkFormat format)
 {
     const struct ps5vk_texture_format *entry = ps5vk_texture_format_lookup(format);
-    return entry ? entry->capabilities : 0;
+    return entry ? entry->capabilities | bc_destination_capabilities(format) : 0;
 }
 
 VkBool32 ps5vk_texture_format_has(VkFormat format, uint32_t capability)
@@ -276,7 +287,7 @@ VkBool32 ps5vk_texture_format_has(VkFormat format, uint32_t capability)
 static uint32_t format_witnessed_capabilities(const struct ps5vk_texture_format *entry)
 {
     if (!entry) return 0;
-    uint32_t witnessed = entry->witnessed;
+    uint32_t witnessed = entry->witnessed | bc_destination_capabilities(entry->format);
 #if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && \
     PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
     /* This build-only switch serves the original CTS and the public SDK
@@ -381,10 +392,12 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out)
         properties.linearTilingFeatures |= VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
 #if defined(PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC) && \
     PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC
-    /* The bounded BC1/BC3 CPU decode path writes a LINEAR RGBA8 transfer
-     * destination. Publish the blit role only in its build-only profile. */
-    if (format == VK_FORMAT_R8G8B8A8_UNORM)
+    /* The BC region executor writes RGBA8 staging and optimal transfer-only
+     * images. Keep these measurement roles in the build-only BC profile. */
+    if (format == VK_FORMAT_R8G8B8A8_UNORM) {
         properties.linearTilingFeatures |= VK_FORMAT_FEATURE_BLIT_DST_BIT;
+        properties.optimalTilingFeatures |= VK_FORMAT_FEATURE_BLIT_DST_BIT;
+    }
 #endif
     *out = properties;
 }

@@ -383,6 +383,67 @@ static void bc_scaled_blit(VkFilter filter, int variant, int signed_source)
     vkDestroyImage(device,source,NULL);
 }
 
+/* Original CTS blits use optimal images with transfer-only usage. Exercise
+ * all GENERAL/TRANSFER operation layout pairs and actual buffer readback. */
+static void bc_optimal_transfer_blit(VkImageLayout source_layout, VkImageLayout destination_layout, int srgb)
+{
+    const VkImageUsageFlags usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    void *src_map=NULL,*dst_map=NULL,*upload_map=NULL,*readback_map=NULL;
+    VkImage source=make_image_extent(srgb ? VK_FORMAT_BC1_RGBA_SRGB_BLOCK : VK_FORMAT_BC1_RGBA_UNORM_BLOCK,usage,4,4,&src_map);
+    VkImage destination=make_image_extent(srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM,usage,4,4,&dst_map);
+    if (srgb) {
+        destination->layout=VK_IMAGE_LAYOUT_GENERAL;
+        memset(dst_map,0xa5,1024);
+        VkCommandBuffer clear=begin();
+        const VkClearColorValue value={.float32={0.5f,0.25f,0.0f,0.25f}};
+        const VkImageSubresourceRange range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+        vkCmdClearColorImage(clear,destination,VK_IMAGE_LAYOUT_GENERAL,&value,1,&range);
+        submit_and_wait(clear);
+        for(unsigned y=0;y<4;++y) {
+            const uint8_t *row=(const uint8_t *)dst_map+y*256;
+            for(unsigned x=0;x<4;++x)
+                assert(row[x*4]==188 && row[x*4+1]==137 && !row[x*4+2] && row[x*4+3]==64);
+            for(unsigned x=16;x<256;++x) assert(row[x]==0xa5);
+        }
+    }
+    VkBuffer upload=make_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,8,&upload_map);
+    VkBuffer readback=make_buffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT,64,&readback_map);
+    const uint8_t red_block[8]={0,srgb ? 0x80 : 0xf8,0,0,0,0,0,0};
+    memcpy(upload_map,red_block,8); memset(readback_map,0xa5,64);
+    const VkBufferImageCopy copy={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .imageExtent={4,4,1}};
+    const VkImageBlit blit={.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .srcOffsets={{0,0,0},{4,4,1}},.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .dstOffsets={{0,0,0},{4,4,1}}};
+    VkCommandBuffer command=begin();
+    VkImageMemoryBarrier b=transfer_barrier(source,VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,0,VK_ACCESS_TRANSFER_WRITE_BIT);
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    vkCmdCopyBufferToImage(command,upload,source,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
+    b=transfer_barrier(source,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,source_layout,
+        VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT);
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    b=transfer_barrier(destination,VK_IMAGE_LAYOUT_UNDEFINED,destination_layout,0,VK_ACCESS_TRANSFER_WRITE_BIT);
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    vkCmdBlitImage(command,source,source_layout,destination,destination_layout,1,&blit,VK_FILTER_LINEAR);
+    assert(command->state==PS5VK_RECORDING);
+    b=transfer_barrier(destination,destination_layout,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT);
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,0,NULL,0,NULL,1,&b);
+    vkCmdCopyImageToBuffer(command,destination,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,readback,1,&copy);
+    submit_and_wait(command);
+    for(unsigned i=0;i<16;++i) {
+        const uint8_t *p=(const uint8_t *)readback_map+i*4;
+        assert(p[0]==(srgb ? 132 : 255) && !p[1] && !p[2] && p[3]==255);
+    }
+    vkDestroyBuffer(device,readback,NULL);vkDestroyBuffer(device,upload,NULL);
+    vkDestroyImage(device,destination,NULL);vkDestroyImage(device,source,NULL);
+}
+
 static void bc_all_formats_blit(void)
 {
     const uint8_t zero[16]={0};
@@ -673,6 +734,11 @@ int main(void)
     VkCommandPoolCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                    .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
     assert(vkCreateCommandPool(device, &pci, NULL, &pool) == VK_SUCCESS);
+    for(int srgb=0;srgb<2;++srgb)
+    for(unsigned general_source=0;general_source<2;++general_source)
+        for(unsigned general_destination=0;general_destination<2;++general_destination)
+            bc_optimal_transfer_blit(general_source ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                general_destination ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, srgb);
     bc_all_formats_blit();
     for (int variant=0;variant<6;++variant) {
         bc_scaled_blit(VK_FILTER_NEAREST,variant,0);
