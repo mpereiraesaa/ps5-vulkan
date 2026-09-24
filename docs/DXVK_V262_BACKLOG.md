@@ -63,6 +63,24 @@ official conformance process remain separate obligations.
 | 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
 | 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work and wider core validation. |
 
+### T07 combined diagnostic status (2026-09-24)
+
+The integrated BC transfer route passed 74/74 original pinned copy leaves,
+including mip and array-layer readback, and separate SDK witnesses checked
+interior multi-layer copies and sampled output. The cube-array image-view CTS
+case passed twice; a SDK witness sampled two cubes, all six faces and a
+nonzero view base twice each. The original precise-occlusion CTS case passed
+twice and in a 508/508 combined selection, and a native API witness checked
+zero, one and three covered samples with result retrieval and reset. The D32
+comparison-gather leaf passed twice. Exact receipts and artifact hashes are
+recorded in [VALIDATION.md](../VALIDATION.md).
+
+These are bounded diagnostic results. All four T07 feature bits remain off in
+the shipping profile. The cube-compatible sampled colour-attachment role has
+a host-tested tiled descriptor and a packaged render-to-sample witness, but
+that witness has not run on hardware. Typed gather coverage and the complete
+public feature, frozen CTS and combined acceptance audit are also pending.
+
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership
 is stable while readiness and completion are derived from the live matrix, so implemented

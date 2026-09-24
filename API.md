@@ -306,7 +306,12 @@ array layers, 4096 cube dimension and 512 3D dimension are frontend floors
 backed by descriptor/layout arithmetic and allocation bounds; the hardware
 witnesses use small resources and are not exhaustive tests at those maximum
 dimensions. The multi-level hardware witness is 2D RGBA8; it does not establish
-layered mip selection, anisotropy, cube arrays or general descriptor arrays.
+layered mip selection, anisotropy or general descriptor arrays. A separate
+default-off T07 diagnostic sampled both cubes and all twelve cube-array faces,
+including a view starting at layer one, with exact GPU readback. The advertised
+cube-compatible `SAMPLED | COLOR_ATTACHMENT` role now has a host-tested tiled
+descriptor candidate; rendering into that attachment and sampling it remains
+pending native validation, so `imageCubeArray` is still reported false.
 
 ## Compute
 
@@ -683,16 +688,20 @@ profile can honestly create:
   pool are rejected.
 - `vkDestroyQueryPool` follows the standard parentage rules, and the device
   cannot be destroyed while a query pool child remains.
-- `vkCmdResetQueryPool` records an ordered frontend operation. Query slots stay
-  uninitialized until that operation executes, then become unavailable.
-- `vkGetQueryPoolResults` implements only that observable unavailable state:
-  it preserves result words, writes zero availability when requested and
-  returns `VK_NOT_READY`. `WAIT_BIT` and `PARTIAL_BIT` fail closed because no
-  native query can publish a real result yet.
-- `vkCmdBeginQuery`, `vkCmdEndQuery`, `vkCmdCopyQueryPoolResults` and
-  `vkCmdWriteTimestamp` are structurally exported but invalidate recording.
-  No draw-derived fake counter or CPU-derived timestamp is substituted for a
-  native GFX1013 result.
+- `vkCmdResetQueryPool`, `vkCmdBeginQuery`, `vkCmdEndQuery` and
+  `vkCmdCopyQueryPoolResults` record bounded ordered operations. The native
+  graphics path publishes real occlusion counts; its default-off precise
+  diagnostic passed an original upstream query oracle twice and a separate
+  SDK-linked witness for zero, one and three covered samples, both result
+  widths, availability, wait/partial and reset/reuse.
+- `vkGetQueryPoolResults` preserves unavailable result words, reports
+  availability separately, and reads published counts after completion.
+  The bounded `WAIT_BIT` and `PARTIAL_BIT` paths are exercised by the witness.
+  `VK_QUERY_CONTROL_PRECISE_BIT` requires the logical device to enable
+  `occlusionQueryPrecise`, which the shipping platform still reports false.
+- `vkCmdWriteTimestamp` remains fail closed; no CPU-derived timestamp is
+  substituted for a native result. Secondary command-buffer inheritance of
+  occlusion query state remains refused by this profile.
 
 Sparse binding is not advertised and images cannot be created with sparse flags,
 so the two mandatory sparse queries report an empty list rather than inventing

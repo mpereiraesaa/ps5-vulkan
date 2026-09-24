@@ -330,6 +330,13 @@ closed; `vkQueueBindSparse`, `vkCmdNextSubpass` and `vkCmdExecuteCommands`
 likewise have no valid invocation in the reported profile. No CTS case or
 hardware result is claimed for this slice.
 
+Later T07 diagnostics add a bounded native occlusion counter and two passing
+original `basic_precise` runs; the combined 508-case measurement also passed.
+The shipping `occlusionQueryPrecise` bit and frozen selection remain unchanged.
+See [VALIDATION.md](VALIDATION.md#t07-precise-occlusion-original-cts-measurement-2026-09-24)
+for the exact artifact and run identities. The paragraph above remains the
+record of the 2026-09-13 object-only slice.
+
 ### Pipeline cache (2026-09-13)
 
 One additional original upstream case joins the selection:
