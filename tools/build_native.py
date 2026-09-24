@@ -70,6 +70,11 @@ def main():
             (scissor_probe != "15" or occlusion_depth_probe != "1" or
              os.environ.get("PS5VK_RUNTIME_GRAPHICS") != "1")):
         raise SystemExit("PS5VK_OCCLUSION_QUERY_API_PROBE requires runtime graphics, depth-enabled probe 15")
+    host_query_reset_probe = os.environ.get("PS5VK_HOST_QUERY_RESET_PROBE", "0")
+    if host_query_reset_probe not in ("0", "1") or (host_query_reset_probe == "1" and
+            (occlusion_query_api_probe != "1" or os.environ.get("PS5VK_USE_SDK") != "1" or
+             os.environ.get("PS5VK_HOST_QUERY_RESET_DIAGNOSTIC") != "1")):
+        raise SystemExit("PS5VK_HOST_QUERY_RESET_PROBE requires SDK-linked occlusion query API probe and host-reset diagnostic")
     gather_form = os.environ.get("PS5VK_GATHER_FORM", "0")
     if gather_form not in ("0", "1", "2", "3", "4", "5", "6", "7", "8"):
         raise SystemExit("PS5VK_GATHER_FORM must be 0 through 8")
@@ -505,6 +510,7 @@ def main():
             common += ["-DPS5VK_OCCLUSION_PRECISE_PROBE=" + occlusion_precise_probe]
             common += ["-DPS5VK_OCCLUSION_DEPTH_PROBE=" + occlusion_depth_probe]
             common += ["-DPS5VK_OCCLUSION_QUERY_API_PROBE=" + occlusion_query_api_probe]
+            common += ["-DPS5VK_HOST_QUERY_RESET_PROBE=" + host_query_reset_probe]
             common += ["-DPS5VK_GATHER_FORM=" + gather_form]
             common += ["-DPS5VK_D16_DEPTH_WITNESS=" + d16_depth_witness]
             common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
@@ -982,6 +988,7 @@ def main():
                             occlusion_precise_probe=int(occlusion_precise_probe),
                             occlusion_depth_probe=int(occlusion_depth_probe),
                             occlusion_query_api_probe=int(occlusion_query_api_probe),
+                            host_query_reset_probe=int(host_query_reset_probe),
                             d16_depth_witness=int(d16_depth_witness),
                             d16_depth_attachment_supported=1,
                             scissor_register_load="indirect-plus-direct-replay" if int(scissor_probe) else "indirect",
@@ -1062,6 +1069,7 @@ def main():
                                 occlusion_precise_probe=int(occlusion_precise_probe),
                                 occlusion_depth_probe=int(occlusion_depth_probe),
                                 occlusion_query_api_probe=int(occlusion_query_api_probe),
+                                host_query_reset_probe=int(host_query_reset_probe),
                                 occlusion_query_secondary=int(occlusion_query_api_probe))
                 if os.environ.get("PS5VK_GRAPHICS_PRESENT") == "1":
                     manifest.update(stage="graphics-api-native-presentation-reuse")

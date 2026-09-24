@@ -210,6 +210,12 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertNotIn("PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC", sdk_build)
         self.assertIn('scissor_probe in ("8", "13", "15") and use_runtime_graphics', build)
 
+    def test_host_query_reset_probe_requires_sdk_query_witness(self):
+        self.rejected({"PS5VK_HOST_QUERY_RESET_PROBE": "2"},
+                      "requires SDK-linked occlusion query API probe and host-reset diagnostic")
+        self.rejected({"PS5VK_HOST_QUERY_RESET_PROBE": "1"},
+                      "requires SDK-linked occlusion query API probe and host-reset diagnostic")
+
     def test_gather_probe_is_sdk_linked(self):
         self.rejected({"PS5VK_GRAPHICS_API": "build/graphics/control-gxn440da",
                        "PS5VK_RUNTIME_GRAPHICS": "1",
