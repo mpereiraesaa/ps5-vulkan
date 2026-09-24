@@ -13,8 +13,13 @@ struct VkImage_T {
     VkDeviceMemory memory;
     VkDeviceSize offset;
     unsigned pending, views;
-    /* Committed only after confirmed completion; calloc initializes UNDEFINED. */
+    /* Committed only after confirmed completion; calloc initializes UNDEFINED.
+     * For a combined depth/stencil format this is the DEPTH aspect's layout
+     * and stencil_layout carries the STENCIL aspect's, so a barrier naming one
+     * aspect never moves the other (src/depth_stencil_layout.h). Every other
+     * format has one aspect and leaves stencil_layout UNDEFINED. */
     VkImageLayout layout;
+    VkImageLayout stencil_layout;
     /* Optional mip-major committed layouts. MAX_ENUM marks a mixed image. */
     VkImageLayout *subresource_layouts;
     /* Native display ownership is independent of queued rendering references. */
