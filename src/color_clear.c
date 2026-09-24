@@ -24,8 +24,22 @@ int ps5vk_color_clear_rgba8(const float rgba[4], uint32_t *out)
 int ps5vk_color_clear_rgba8_uint(const uint32_t rgba[4], uint32_t *out)
 {
     if (!rgba || !out) return 0;
-    for (unsigned i=0;i<4;++i)
-        if (rgba[i] > 0xffu) return 0;
-    *out=rgba[0]|(rgba[1]<<8)|(rgba[2]<<16)|(rgba[3]<<24);
+    /* VkClearColorValue converts UINT components by keeping the low bits. */
+    *out=(rgba[0]&255u)|((rgba[1]&255u)<<8)|
+         ((rgba[2]&255u)<<16)|((rgba[3]&255u)<<24);
+    return 1;
+}
+
+int ps5vk_color_clear_rgba8_sint(const int32_t rgba[4], uint32_t *out)
+{
+    if (!rgba || !out) return 0;
+    uint32_t c[4];
+    for (unsigned i=0;i<4;++i) {
+        /* Out-of-range SINT clear values are undefined by Vulkan; keep this
+         * bounded profile deterministic by rejecting them before recording. */
+        if(rgba[i]<-128 || rgba[i]>127)return 0;
+        c[i]=(uint8_t)rgba[i];
+    }
+    *out=c[0]|(c[1]<<8)|(c[2]<<16)|(c[3]<<24);
     return 1;
 }

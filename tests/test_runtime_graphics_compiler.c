@@ -3,6 +3,7 @@
 #include "spirv_graphics_interface.h"
 #include "resolve_program.h"
 #include "vertex_format_probe.h"
+#include "texture_format.h"
 #include "descriptor_table_layout.h"
 #include "vk_descriptor.h"
 #include <assert.h>
@@ -740,6 +741,44 @@ static void check_gather_compiler_forms(void)
         ps5vk_runtime_graphics_free(NULL,out);
         free((void *)key.vertex.words);free((void *)key.fragment.words);
     }
+#if defined(PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC) && PS5VK_RGBA8_INTEGER_ATTACHMENT_DIAGNOSTIC
+    const struct {
+        const char *shader;
+        VkFormat color_format;
+        unsigned numeric;
+    } integer_outputs[]={
+        {"build/runtime-graphics/gather_uint.frag.spv",VK_FORMAT_R8G8B8A8_UINT,
+         PS5VK_VERTEX_NUMERIC_UINT},
+        {"build/runtime-graphics/gather_sint.frag.spv",VK_FORMAT_R8G8B8A8_SINT,
+         PS5VK_VERTEX_NUMERIC_SINT},
+    };
+    for(unsigned i=0;i<sizeof(integer_outputs)/sizeof(integer_outputs[0]);++i) {
+        struct ps5vk_graphics_key key={
+            .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+            .fragment=read_module(integer_outputs[i].shader),
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .color_attachment_count=1,
+            .color_format={integer_outputs[i].color_format},
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
+            .descriptor_set_count=1,.descriptor_sets=&set,
+            .feature_mask=PS5VK_GRAPHICS_FEATURE_IMAGE_GATHER_EXTENDED};
+        assert(ps5vk_spirv_graphics_interface(&key));
+        assert(ps5vk_runtime_graphics_supported(&key));
+        const void *out=NULL;
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+        const struct ps5vk_runtime_graphics_program *program=out;
+        assert(program->fragment.machine_code && program->fragment.machine_code_size);
+        assert(program->fragment.metadata.descriptor_used_binding_mask[0]==1u);
+        const PsbcRegisterWrite *spi=context_register(
+            (PsbcShaderMetadata *)&program->fragment.metadata,0x1c5u);
+        assert(spi);
+        printf("integer gather host compiler: format=%u output_numeric=%u SPI_SHADER_COL_FORMAT=%u\n",
+            (unsigned)integer_outputs[i].color_format,integer_outputs[i].numeric,
+            spi->value & 0xfu);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)key.vertex.words);free((void *)key.fragment.words);
+    }
+#endif
     puts("Image gather compiler forms: core selectors are baseline; gather offsets including depth-reference gather require the gated feature");
 }
 

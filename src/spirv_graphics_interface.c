@@ -819,16 +819,20 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
      * and its program exports nothing (SPI_SHADER_COL_FORMAT zero). Requiring
      * an export that has nowhere to go, or accepting one that does, would both
      * be wrong, so the two cases are exclusive. */
-    /* The export's numeric type follows the attachment it writes into: a
-     * normalized colour target takes the float32 vec4 the profile has always
-     * required, and an integer one - served only by the build whose
-     * independentBlend oracle needs it - takes the same four-lane unsigned
-     * vector (the pinned compiler publishes 32_ABGR for it either way). */
+    /* Match the fragment output's numeric class to its attachment: UNORM
+     * uses float, UINT uses unsigned, and the diagnostic SINT target uses
+     * signed lanes. Both attachment locations obey the same rule. */
     const unsigned colour_numeric[PS5VK_MAX_COLOR_ATTACHMENTS] = {
-        (unsigned)(ps5vk_color_target_integer_served(key->color_format[0]) ?
-            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT),
-        (unsigned)(ps5vk_color_target_integer_served(key->color_format[1]) ?
-            PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT)};
+        (unsigned)(key->color_format[0]==VK_FORMAT_R8G8B8A8_SINT &&
+            ps5vk_color_target_integer_served(key->color_format[0]) ?
+            PS5VK_VERTEX_NUMERIC_SINT :
+            (ps5vk_color_target_integer_served(key->color_format[0]) ?
+             PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT)),
+        (unsigned)(key->color_format[1]==VK_FORMAT_R8G8B8A8_SINT &&
+            ps5vk_color_target_integer_served(key->color_format[1]) ?
+            PS5VK_VERTEX_NUMERIC_SINT :
+            (ps5vk_color_target_integer_served(key->color_format[1]) ?
+             PS5VK_VERTEX_NUMERIC_UINT : PS5VK_VERTEX_NUMERIC_FLOAT))};
     /* A colour subpass wants the export that belongs to the attachment it
      * writes: the four-component value whose numeric class follows that
      * attachment's format. An attachment the pipeline does not write - its
