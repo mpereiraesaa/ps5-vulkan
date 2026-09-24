@@ -4668,6 +4668,19 @@ query; it does not measure subgroup size, stages or operations on hardware.
 Those values, a legal Vulkan 1.1 or 1.2 route, the feature bits and original
 applicable CTS remain prerequisites to subgroup promotion.
 
+The unchanged frozen upstream acceptance selection on this query-only change
+passed 507/507 original cases with zero Fail, NotSupported, missing, unexpected
+or duplicate results. The strict receipt verified the signed eboot SHA-256
+`c88bb1a66b8f8690b833fd74e9a3ed99a8769dc576731265042014d48a516f01`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`a09dfd8ba9483c26cb388f99196bab6c69b552fee42c3ad40110e4bb3af14536`
+for run `run-623240048430401`. The title closed, and the previously accepted
+payload was restored. This proves neutrality for the selected Vulkan 1.0 CTS
+suite; it includes no applicable original subgroup leaf. The receipt does not
+record firmware, so this run makes no new firmware claim.
+
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
 nested struct. Two workgroups produced 64 exact values with zero mismatches and
