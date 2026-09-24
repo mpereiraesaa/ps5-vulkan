@@ -90,6 +90,17 @@ int main(void)
     for (uint32_t j = 0; j < pool->query_count; ++j)
         assert(pool->states[j] == PS5VK_QUERY_UNINITIALIZED);
 
+    /* The extension entry point and direct call both require logical-device
+     * enablement. The host fixture opts in after checking the closed path. */
+    assert(!vkGetDeviceProcAddr(device, "vkResetQueryPoolEXT"));
+    unsigned host_errors = device->lifetime_errors;
+    vkResetQueryPoolEXT(device, pool, 5, 1);
+    assert(device->lifetime_errors == host_errors + 1 &&
+        pool->states[5] == PS5VK_QUERY_UNINITIALIZED);
+    device->enabled_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
+    assert(vkGetDeviceProcAddr(device, "vkResetQueryPool") &&
+        vkGetDeviceProcAddr(device, "vkResetQueryPoolEXT"));
+
     VkQueryPool out = (VkQueryPool)(uintptr_t)0x1;
     VkQueryPoolCreateInfo bad_flags = info;
     bad_flags.flags = 1u;
@@ -176,6 +187,41 @@ int main(void)
         published32, 0, VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS);
     assert(published32[0] == UINT32_C(0xabcdef01) && published32[1] == 1);
     assert(ps5vk_query_publish(device, pool, 0, 1) != VK_SUCCESS);
+
+    /* A partial host reset invalidates only its range. Old result words are
+     * preserved in the caller's buffer while availability becomes zero. */
+    vkResetQueryPool(device, pool, 5, 1);
+    assert(ps5vk_query_publish(device, pool, 5, 17) == VK_SUCCESS);
+    uint64_t stale[2] = {17, 1};
+    vkResetQueryPoolEXT(device, pool, 5, 1);
+    assert(pool->states[2] == PS5VK_QUERY_AVAILABLE &&
+        pool->states[5] == PS5VK_QUERY_UNAVAILABLE && pool->values[5] == 0);
+    assert(vkGetQueryPoolResults(device, pool, 5, 1, sizeof(stale), stale,
+        0, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+        == VK_NOT_READY);
+    assert(stale[0] == 17 && stale[1] == 0 &&
+        pool->values[2] == UINT64_C(0x12345678abcdef01));
+    assert(ps5vk_query_publish(device, pool, 5, UINT64_C(0x0123456789abcdef))
+        == VK_SUCCESS);
+
+    /* Wrong owner, out-of-range and currently active queries are refused
+     * without altering a published result. */
+    struct VkDevice_T foreign = {0};
+    host_errors = device->lifetime_errors;
+    vkResetQueryPool(device, pool, 7, 2);
+    vkResetQueryPool(&foreign, pool, 2, 1);
+    assert(device->lifetime_errors == host_errors + 1 &&
+        foreign.lifetime_errors == 1 &&
+        pool->states[2] == PS5VK_QUERY_AVAILABLE);
+    command->state = PS5VK_RECORDING;
+    command->active_occlusion_query_pool = pool;
+    command->active_occlusion_query = 2;
+    host_errors = device->lifetime_errors;
+    vkResetQueryPool(device, pool, 2, 1);
+    assert(device->lifetime_errors == host_errors + 1 &&
+        pool->states[2] == PS5VK_QUERY_AVAILABLE);
+    command->state = PS5VK_EXECUTABLE;
+    command->active_occlusion_query_pool = VK_NULL_HANDLE;
 
     VkBufferCreateInfo copy_buffer_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -332,6 +378,27 @@ int main(void)
         command->operations[2].type == PS5VK_QUERY_END);
     command->render_pass = VK_NULL_HANDLE;
     assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
+
+    /* Pending command references block only their overlapping host range.
+     * This models a backend write still owned by a submitted command buffer. */
+    vkResetQueryPool(device, pool, 5, 2);
+    assert(ps5vk_query_publish(device, pool, 5, 55) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
+    vkCmdResetQueryPool(command, pool, 5, 1);
+    assert(vkEndCommandBuffer(command) == VK_SUCCESS);
+    command->pending_count = 1;
+    command->state = PS5VK_PENDING;
+    host_errors = device->lifetime_errors;
+    vkResetQueryPool(device, pool, 5, 1);
+    assert(device->lifetime_errors == host_errors + 1 &&
+        pool->states[5] == PS5VK_QUERY_AVAILABLE && pool->values[5] == 55);
+    vkResetQueryPool(device, pool, 6, 1);
+    assert(pool->states[6] == PS5VK_QUERY_UNAVAILABLE);
+    command->pending_count = 0;
+    command->state = PS5VK_EXECUTABLE;
+    vkResetQueryPool(device, pool, 5, 1);
+    assert(pool->states[5] == PS5VK_QUERY_UNAVAILABLE && pool->values[5] == 0);
     assert(vkResetCommandBuffer(command, 0) == VK_SUCCESS);
 
     /* the device cannot be destroyed while the pool child lives */

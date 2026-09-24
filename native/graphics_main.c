@@ -88,6 +88,9 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #ifndef PS5VK_OCCLUSION_QUERY_API_PROBE
 #define PS5VK_OCCLUSION_QUERY_API_PROBE 0
 #endif
+#ifndef PS5VK_HOST_QUERY_RESET_PROBE
+#define PS5VK_HOST_QUERY_RESET_PROBE 0
+#endif
 #ifndef PS5VK_GATHER_FORM
 #define PS5VK_GATHER_FORM 0
 #endif
@@ -810,6 +813,12 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     VkQueryPoolCreateInfo query_pool_info={.sType=VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
         .queryType=VK_QUERY_TYPE_OCCLUSION,.queryCount=3};
     CHECK(vkCreateQueryPool(d,&query_pool_info,NULL,&api_query_pool));
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    PFN_vkResetQueryPoolEXT host_reset=(PFN_vkResetQueryPoolEXT)
+        vkGetDeviceProcAddr(d,"vkResetQueryPoolEXT");
+    if(!host_reset)fail("host-query-reset-dispatch",-1);
+    host_reset(d,api_query_pool,0,3);
+#endif
     VkBufferCreateInfo query_buffer_info={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size=72,.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         .sharingMode=VK_SHARING_MODE_EXCLUSIVE};
@@ -825,7 +834,9 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     api_query_range=(VkMappedMemoryRange){.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
         .memory=api_query_memory,.size=VK_WHOLE_SIZE};
     CHECK(vkFlushMappedMemoryRanges(d,1,&api_query_range));
+#if !PS5VK_HOST_QUERY_RESET_PROBE
     vkCmdResetQueryPool(cb,api_query_pool,0,3);
+#endif
     VkCommandBufferAllocateInfo query_ai=ai;
     query_ai.level=VK_COMMAND_BUFFER_LEVEL_SECONDARY;
     CHECK(vkAllocateCommandBuffers(d,&query_ai,&query_cb));
@@ -1018,9 +1029,30 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
     CHECK(vkQueueWaitIdle(queue));
 #if PS5VK_OCCLUSION_QUERY_API_PROBE
-    /* Re-submit this exact command buffer after completion. Its recorded
-     * vkCmdResetQueryPool must make these same three query slots writable
-     * again before the second begin/end sequence. */
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    uint64_t host_before[6]={0};
+    CHECK(vkGetQueryPoolResults(d,api_query_pool,0,3,sizeof(host_before),
+        host_before,16,VK_QUERY_RESULT_64_BIT|
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT));
+    if(host_before[0]!=1 || host_before[1]!=1 || host_before[2]!=0 ||
+       host_before[3]!=1 || host_before[4]!=3 || host_before[5]!=1)
+        fail("host-query-reset-before",-1);
+    host_reset(d,api_query_pool,0,3);
+    uint64_t host_after[6]={1,UINT64_MAX,0,UINT64_MAX,3,UINT64_MAX};
+    VkResult host_status=vkGetQueryPoolResults(d,api_query_pool,0,3,
+        sizeof(host_after),host_after,16,VK_QUERY_RESULT_64_BIT|
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+    if(host_status!=VK_NOT_READY || host_after[0]!=1 || host_after[1]!=0 ||
+       host_after[2]!=0 || host_after[3]!=0 || host_after[4]!=3 ||
+       host_after[5]!=0)
+        fail("host-query-reset-unavailable",host_status);
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_HOST_QUERY_RESET phase=after_reset old=1,0,3 availability=0,0,0 status=not_ready");
+#endif
+    /* Re-submit this exact command buffer after completion. In the host
+     * variant it contains no reset command, so only vkResetQueryPoolEXT made
+     * these three slots available for the second begin/end sequence. The
+     * original variant retains its ordered command-buffer reset. */
     CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
     CHECK(vkQueueWaitIdle(queue));
     CHECK(vkInvalidateMappedMemoryRanges(d,1,&api_query_range));
@@ -1045,6 +1077,10 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     if(copied32[0]!=1 || copied32[1]!=1 || copied32[2]!=0 || copied32[3]!=1 ||
        copied32[4]!=3 || copied32[5]!=1)
         fail("occlusion-query-api-copy32",-1);
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_HOST_QUERY_RESET phase=after_reuse values=1,0,3 availability=1,1,1 completed=1");
+#endif
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_OCCLUSION_QUERY_API_RESULT passed_samples=%llu availability=%llu copied_samples=%llu copied_availability=%llu zero_samples=%llu zero_availability=%llu zero_copied_samples=%llu zero_copied_availability=%llu three_samples=%llu three_availability=%llu three_copied_samples=%llu three_copied_availability=%llu samples32=%u availability32=%u copied_samples32=%u copied_availability32=%u zero_samples32=%u zero_availability32=%u zero_copied_samples32=%u zero_copied_availability32=%u three_samples32=%u three_availability32=%u three_copied_samples32=%u three_copied_availability32=%u precise_enabled=1 secondary=1 get_wait=1 copy_wait=1 partial=1 same_pool_reset_repeat=1 valid=1",
         (unsigned long long)query_values[0],(unsigned long long)query_values[1],
@@ -4568,6 +4604,12 @@ int main(void)
         !PS5VK_EXIT_CONTROL && PS5VK_GRAPHICS_DRAW);
     VkInstance instance;
     VkInstanceCreateInfo ici = {.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    const char *host_query_instance_extensions[]={
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME};
+    ici.enabledExtensionCount=1;
+    ici.ppEnabledExtensionNames=host_query_instance_extensions;
+#endif
     CHECK(vkCreateInstance(&ici,NULL,&instance));
     uint32_t count=1; VkPhysicalDevice physical;
     CHECK(vkEnumeratePhysicalDevices(instance,&count,&physical));
@@ -4706,6 +4748,20 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    VkPhysicalDeviceHostQueryResetFeaturesEXT host_query_features={
+        .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT};
+    VkPhysicalDeviceFeatures2KHR host_query_features2={
+        .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
+        .pNext=&host_query_features};
+    vkGetPhysicalDeviceFeatures2KHR(physical,&host_query_features2);
+    if(host_query_features.hostQueryReset!=VK_TRUE)
+        fail("host-query-reset-feature-query",-1);
+    const char *host_query_device_extensions[]={VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME};
+    di.enabledExtensionCount=1;
+    di.ppEnabledExtensionNames=host_query_device_extensions;
+    di.pNext=&host_query_features;
+#endif
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE || PS5VK_SAMPLE_RATE_PROBE || PS5VK_OCCLUSION_QUERY_API_PROBE || (PS5VK_GATHER_FORM>=2 && PS5VK_GATHER_FORM<=4)
     VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
