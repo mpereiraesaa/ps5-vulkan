@@ -207,7 +207,8 @@ def write_focused_storage_source(source: Path, destination: Path,
 
 def write_focused_buffer_copy_source(source: Path, destination: Path,
                                      include_bc_blits: bool = False,
-                                     include_bc_mip_copies: bool = False) -> None:
+                                     include_bc_mip_copies: bool = False,
+                                     include_bc_image_copies: bool = False) -> None:
     """Keep the original buffer-copy bodies/oracles but prune registration.
 
     The complete copies/blits module builds a very large test tree before the
@@ -218,7 +219,8 @@ def write_focused_buffer_copy_source(source: Path, destination: Path,
     registered through upstream's own simple-only factory so the audited RGBA8
     transfer leaves exist in the packaged tree without the all-formats, 3D,
     cube, array or blit/resolve families. Optional BC registration retains
-    the original compressed blit or mip-copy constructors and comparisons.
+    the original compressed blit, mip-copy or partial image-copy constructors
+    and comparisons.
     """
     text = source.read_text(encoding="utf-8")
     old_core = """void addCoreCopiesAndBlittingTests(tcu::TestCaseGroup *group)
@@ -309,6 +311,41 @@ def write_focused_buffer_copy_source(source: Path, destination: Path,
                 "            if (testParams.params.dst.image.format != VK_FORMAT_R8G8B8A8_UNORM && "
                 "testParams.params.dst.image.format != VK_FORMAT_R8G8B8A8_SRGB) continue;")
         registration("addBlittingImageAllFormatsColorSrcFormatTests", rgba_destinations)
+    if include_bc_image_copies:
+        def replace_once(body, needle, replacement):
+            if body.count(needle) != 1:
+                raise SystemExit("BC image copy registration drift")
+            return body.replace(needle, replacement)
+
+        registration("addImageToImageTestsSimpleOnly", lambda body: replace_once(
+            body,
+            '    addTestGroup(group, "simple_tests", addImageToImageSimpleTests, testGroupParams);',
+            '    addTestGroup(group, "simple_tests", addImageToImageSimpleTests, testGroupParams);\n'
+            '    addTestGroup(group, "all_formats", addImageToImageAllFormatsTests, testGroupParams);'))
+        registration("addImageToImageAllFormatsTests", lambda body: replace_once(
+            body,
+            '    if (testGroupParams->queueSelection == QueueSelectionOptions::Universal)\n'
+            '        addTestGroup(group, "depth_stencil", addImageToImageAllFormatsDepthStencilTests, testGroupParams);\n',
+            ""))
+
+        def copy_color_2d(body):
+            markers = ("    // 1D to 1D tests.", "    // 2D to 2D tests.",
+                       "    // 2D to 3D tests.")
+            if any(body.count(marker) != 1 for marker in markers):
+                raise SystemExit("BC image copy dimension registration drift")
+            body = (body[:body.index(markers[0])] +
+                    body[body.index(markers[1]):body.index(markers[2])] + "}")
+            needle = "                params.src.image.format = compatibleFormats[srcFormatIndex];"
+            return replace_once(body, needle, needle + "\n"
+                "                if (params.src.image.format != VK_FORMAT_BC1_RGBA_UNORM_BLOCK && "
+                "params.src.image.format != VK_FORMAT_BC3_UNORM_BLOCK) continue;")
+
+        registration("addImageToImageAllFormatsColorTests", copy_color_2d)
+        registration("addImageToImageAllFormatsColorSrcFormatTests", lambda body: replace_once(
+            body, "        const VkFormat dstFormat = testParams.params.dst.image.format;",
+            "        const VkFormat dstFormat = testParams.params.dst.image.format;\n"
+            "        if (!((srcFormat == VK_FORMAT_BC1_RGBA_UNORM_BLOCK && dstFormat == VK_FORMAT_BC4_SNORM_BLOCK) ||\n"
+            "              (srcFormat == VK_FORMAT_BC3_UNORM_BLOCK && dstFormat == VK_FORMAT_BC7_SRGB_BLOCK))) continue;"))
     if include_bc_mip_copies:
         registration("addImageToBufferTests", lambda body: body.replace(
             '    addTestGroup(group, "1d_images", add1dImageToBufferTests, testGroupParams);\n', ""))
@@ -559,6 +596,9 @@ def main(argv=None):
                             for case in selection_manifest["cases"]),
         include_bc_mip_copies=any(
             ".copy_and_blit.core.image_to_buffer.2d_images.mip_copies_bc" in case["path"]
+            for case in selection_manifest["cases"]),
+        include_bc_image_copies=any(
+            ".copy_and_blit.core.image_to_image.all_formats.color.2d_to_2d.bc" in case["path"]
             for case in selection_manifest["cases"]))
     write_focused_robust_buffer_source(
         cts_root / "external/vulkancts/modules/vulkan/robustness/vktRobustnessBufferAccessTests.cpp",
