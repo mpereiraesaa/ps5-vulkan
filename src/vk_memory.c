@@ -507,13 +507,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
         (info->imageType==VK_IMAGE_TYPE_2D && info->extent.depth!=1) ||
         (info->imageType==VK_IMAGE_TYPE_3D && info->arrayLayers!=1) ||
         (info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
-         (info->imageType!=VK_IMAGE_TYPE_2D || info->arrayLayers!=6 ||
-          info->extent.width!=info->extent.height))) return INVALID;
+         (info->imageType!=VK_IMAGE_TYPE_2D || info->arrayLayers<6 ||
+          info->extent.width!=info->extent.height ||
+          info->samples!=VK_SAMPLE_COUNT_1_BIT))) return INVALID;
     uint32_t dim = info->extent.width > info->extent.height ? info->extent.width : info->extent.height;
     if(info->extent.depth>dim)dim=info->extent.depth;
     uint32_t levels = 0; for (; dim; dim >>= 1) ++levels;
     if (info->mipLevels > levels ||
-        (info->format == VK_FORMAT_D32_SFLOAT ? (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
+        ((info->format == VK_FORMAT_D32_SFLOAT || info->format == VK_FORMAT_D16_UNORM) ?
+         (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
          (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) return INVALID;
     if ((info->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
         (info->format != VK_FORMAT_R32_UINT || info->imageType != VK_IMAGE_TYPE_2D ||
@@ -532,11 +534,24 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
         !power_two(requirements.alignment) || requirements.memoryTypeBits != 1 ||
         requirements.size % requirements.alignment) return VK_ERROR_INITIALIZATION_FAILED;
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
-    VkImage image = object_alloc(d, allocator, sizeof(*image), &saved, &custom);
+    struct VkImage_T shape = {.info = *info};
+    size_t layout_count = 0;
+    if ((info->mipLevels > 1 || info->arrayLayers > 1) &&
+        (ps5vk_bc_linear_image(&shape) || ps5vk_rgba_linear_image(&shape))) {
+        if ((size_t)info->mipLevels > (SIZE_MAX - sizeof(shape)) /
+            sizeof(VkImageLayout) / info->arrayLayers) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        layout_count = (size_t)info->mipLevels * info->arrayLayers;
+    }
+    VkImage image = object_alloc(d, allocator,
+        sizeof(*image) + layout_count * sizeof(VkImageLayout), &saved, &custom);
     if (!image) return VK_ERROR_OUT_OF_HOST_MEMORY;
     memset(image, 0, sizeof(*image));
     image->device = d; image->allocator = saved; image->custom_allocator = custom;
     image->info = *info;
+    if (layout_count) {
+        image->subresource_layouts = (VkImageLayout *)(image + 1);
+        memset(image->subresource_layouts, 0, layout_count * sizeof(VkImageLayout));
+    }
     /* Queue family indices are ignored for exclusive sharing; do not retain a
      * caller-owned pointer even when a caller supplies an ignored array. */
     image->info.pQueueFamilyIndices = NULL; image->info.queueFamilyIndexCount = 0;

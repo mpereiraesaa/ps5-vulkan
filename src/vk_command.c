@@ -71,6 +71,8 @@ static void clear(VkCommandBuffer c)
     c->inheritance_valid = VK_FALSE;
     memset(&c->inheritance, 0, sizeof(c->inheritance));
     c->graphics_pipeline = NULL; c->render_pass = NULL; c->framebuffer = NULL;
+    c->active_occlusion_query_pool = VK_NULL_HANDLE;
+    c->active_occlusion_query = 0;
     c->render_pass_inherited = VK_FALSE;
     c->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
     c->subpass = 0;
@@ -408,10 +410,10 @@ static VkResult inheritance_valid(VkDevice d, const VkCommandBufferInheritanceIn
               !ps5vk_framebuffer_compatible(i->framebuffer, i->renderPass))))
             return INVALID;
     }
-    /* occlusionQueryEnable, queryFlags and pipelineStatistics describe queries
-     * this device does not execute: it reports occlusionQueryPrecise and
-     * pipelineStatisticsQuery false and no query command is implemented, so a
-     * secondary that claims to inherit one is refused instead of recorded. */
+    /* This implementation executes occlusion queries in primary command
+     * buffers, but does not expose inherited occlusion queries or pipeline
+     * statistics queries. Meaningful inheritance fields stay refused until
+     * those separate device capabilities and execution paths are supported. */
     if (i->occlusionQueryEnable || i->queryFlags || i->pipelineStatistics)
         return INVALID;
     (void)d;
@@ -475,7 +477,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer c)
     /* A pass this buffer BEGAN must be ended before recording stops; an
      * INHERITED one must not, because the primary owns it and the secondary
      * has no vkCmdEndRenderPass to give. */
-    if (!c || c->state != PS5VK_RECORDING ||
+    if (!c || c->state != PS5VK_RECORDING || c->active_occlusion_query_pool ||
         (c->render_pass && !c->render_pass_inherited)) return INVALID;
     c->state = PS5VK_EXECUTABLE;
     return VK_SUCCESS;
@@ -848,6 +850,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
     if (!c || c->state != PS5VK_RECORDING ||
         c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY || !c->render_pass ||
         c->render_pass_inherited ||
+        c->active_occlusion_query_pool ||
         (contents != VK_SUBPASS_CONTENTS_INLINE &&
          contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
         c->subpass + 1 >= c->render_pass->subpass_count) { invalid(c); return; }
@@ -878,6 +881,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
      * work: ending early would silently drop the subpasses never entered. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         !c->render_pass || c->subpass + 1 != c->render_pass->subpass_count ||
+        c->active_occlusion_query_pool ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
@@ -1278,11 +1282,22 @@ static int compute_scope(VkPipelineStageFlags stages, VkAccessFlags access)
 }
 static int command_scope(VkPipelineStageFlags stages,VkAccessFlags access)
 { return texture_scope(stages,access) || compute_scope(stages,access); }
-static int image_barrier_profile(const VkImageMemoryBarrier *b)
+static int image_barrier_profile(const VkImageMemoryBarrier *b,
+    VkPipelineStageFlags src_stage,VkPipelineStageFlags dst_stage)
 {
     VkImage image=b->image;
     const VkImageUsageFlags usage=image->info.usage;
+    if(ps5vk_tiled_cube_sampled_image(image))return
+        b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+        b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+        b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+        b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT &&
+        src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+        dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    if(ps5vk_d32_gather_image(image))return ps5vk_d32_gather_barrier(b);
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
+    if(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image))
+        return ps5vk_linear_image_barrier(b);
     const int upload=(usage&(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT))==
         (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
         !(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|
@@ -1341,7 +1356,13 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
          (b->dstAccessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
          !(b->dstAccessMask & ~(VkAccessFlags)(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|
                                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)));
+    if(ps5vk_d16_attachment_image(image))return
+        b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED &&
+        b->newLayout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+        !b->srcAccessMask &&
+        b->dstAccessMask==VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     if(readback)return
+        ps5vk_precise_query_colour_barrier(b,src_stage,dst_stage) ||
         ps5vk_color_discard_barrier(b) ||
         ps5vk_color_readback_reuse_barrier(b) ||
         (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
@@ -1427,7 +1448,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b)
     /* Pure transfer role: host-visible memory that no GPU stage samples or
      * renders into, so every transition among the transfer layouts is honest
      * bookkeeping. Only transfer dependencies can order such an image. */
-    if(ps5vk_pure_transfer_image(image))
+    if(ps5vk_pure_transfer_image(image) || ps5vk_bc_linear_image(image))
         return !((b->srcAccessMask|b->dstAccessMask) &
                  ~(VkAccessFlags)(VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT)) &&
             (b->oldLayout==VK_IMAGE_LAYOUT_UNDEFINED ||
@@ -1477,6 +1498,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
     for(uint32_t j=0;j<image_count;++j) {
         const VkImageMemoryBarrier *b=&images[j];
         VkImage image=b->image;void *address;VkDeviceSize bytes;
+        VkImageSubresourceRange resolved;
         if(!c->pool->device->graphics_enabled ||
             b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
             !command_scope(src,b->srcAccessMask) || !command_scope(dst,b->dstAccessMask) ||
@@ -1485,17 +1507,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
             !image || image->device!=c->pool->device ||
-            !image_barrier_profile(b) ||
+            !image_barrier_profile(b,src,dst) ||
             /* A depth target is ordered through its depth aspect; every other
              * role in this profile is colour. */
-            b->subresourceRange.aspectMask!=(ps5vk_depth_clear_image(image)?
+            b->subresourceRange.aspectMask!=((ps5vk_depth_clear_image(image) ||
+                ps5vk_d32_gather_image(image) || ps5vk_d16_attachment_image(image))?
                 (VkImageAspectFlags)VK_IMAGE_ASPECT_DEPTH_BIT:
                 (VkImageAspectFlags)VK_IMAGE_ASPECT_COLOR_BIT) ||
-            b->subresourceRange.baseMipLevel || b->subresourceRange.baseArrayLayer ||
-            (b->subresourceRange.levelCount!=image->info.mipLevels &&
-             b->subresourceRange.levelCount!=VK_REMAINING_MIP_LEVELS) ||
-            (b->subresourceRange.layerCount!=VK_REMAINING_ARRAY_LAYERS &&
-             b->subresourceRange.layerCount!=image->info.arrayLayers) ||
+            !ps5vk_image_range_resolve(image, &b->subresourceRange, &resolved) ||
+            (!(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image)) &&
+             (resolved.baseMipLevel || resolved.baseArrayLayer ||
+              resolved.levelCount != image->info.mipLevels ||
+              resolved.layerCount != image->info.arrayLayers)) ||
             ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS) {invalid(c);return;}
     }
     /* Append only after every member validates: a rejected mixed dependency

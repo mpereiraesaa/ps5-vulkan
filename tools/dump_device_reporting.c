@@ -69,6 +69,7 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features = PS5VK_FEATURE_ROBUST_BUFFER_ACCESS |
                                    PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT |
                                    PS5VK_FEATURE_VULKAN_MEMORY_MODEL |
+                                   PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE |
                                    PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
     if (!graphics_objects)
         platform->supported_features |= PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
@@ -133,7 +134,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                          * passes at both served counts. This dump
                                          * mirrors the console initializer, so the
                                          * published matrix is the console's. */
-                                        PS5VK_FEATURE_SAMPLE_RATE_SHADING;
+                                        PS5VK_FEATURE_SAMPLE_RATE_SHADING |
+                                        PS5VK_FEATURE_IMAGE_CUBE_ARRAY |
+                                        PS5VK_FEATURE_TEXTURE_COMPRESSION_BC |
+                                        PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
+                                        PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
@@ -469,6 +474,14 @@ static const VkFormat dump_formats[] = {
     VK_FORMAT_D16_UNORM, VK_FORMAT_X8_D24_UNORM_PACK32, VK_FORMAT_D32_SFLOAT,
     VK_FORMAT_S8_UINT, VK_FORMAT_D16_UNORM_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT,
     VK_FORMAT_D32_SFLOAT_S8_UINT,
+    VK_FORMAT_BC1_RGB_UNORM_BLOCK, VK_FORMAT_BC1_RGB_SRGB_BLOCK,
+    VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_FORMAT_BC1_RGBA_SRGB_BLOCK,
+    VK_FORMAT_BC2_UNORM_BLOCK, VK_FORMAT_BC2_SRGB_BLOCK,
+    VK_FORMAT_BC3_UNORM_BLOCK, VK_FORMAT_BC3_SRGB_BLOCK,
+    VK_FORMAT_BC4_UNORM_BLOCK, VK_FORMAT_BC4_SNORM_BLOCK,
+    VK_FORMAT_BC5_UNORM_BLOCK, VK_FORMAT_BC5_SNORM_BLOCK,
+    VK_FORMAT_BC6H_UFLOAT_BLOCK, VK_FORMAT_BC6H_SFLOAT_BLOCK,
+    VK_FORMAT_BC7_UNORM_BLOCK, VK_FORMAT_BC7_SRGB_BLOCK,
 };
 
 static void print_format_properties(FILE *out)
@@ -501,10 +514,12 @@ static void print_format_capabilities(FILE *out)
         VkFormatProperties properties;
         ps5vk_texture_format_properties(entry->format, &properties);
         fprintf(out,
-            "    {\"format\": %u, \"bytesPerTexel\": %u, \"descriptorFormatWord\": %u, "
+            "    {\"format\": %u, \"bytesPerTexel\": %u, \"blockWidth\": %u, "
+            "\"blockHeight\": %u, \"bytesPerBlock\": %u, \"descriptorFormatWord\": %u, "
             "\"selectors\": [%u, %u, %u, %u], \"capabilities\": %u, \"witnessed\": %u, "
             "\"provenance\": %u, \"optimalTilingFeatures\": %u, \"bufferFeatures\": %u}%s\n",
-            (unsigned)entry->format, entry->bytes_per_texel, entry->descriptor_format_word,
+            (unsigned)entry->format, entry->bytes_per_texel, entry->block_width,
+            entry->block_height, entry->bytes_per_block, entry->descriptor_format_word,
             entry->selectors[0], entry->selectors[1], entry->selectors[2],
             entry->selectors[3], entry->capabilities, entry->witnessed,
             (unsigned)entry->provenance, properties.optimalTilingFeatures,

@@ -3,6 +3,17 @@
 #include "color_attachment_contract.h"
 #include <string.h>
 
+static int configure_integer_color_target(VkFormat format, ps5_agc_register *registers)
+{
+    if (!ps5vk_color_target_format_is_integer(format)) return 0;
+    const uint32_t number_type = format == VK_FORMAT_R8G8B8A8_SINT ? 5u : 4u;
+    const uint32_t clear_mask = (7u << 8) | (1u << 15) | (1u << 16) |
+        (1u << 17) | (1u << 18);
+    registers[2].value = (registers[2].value & ~clear_mask) |
+        (number_type << 8) | (1u << 16) | (1u << 17) | (1u << 18);
+    return 0;
+}
+
 /* The colour target's sample geometry lives in CB_COLOR0_ATTRIB (context
  * offset 0x31d), whose NUM_SAMPLES/NUM_FRAGMENTS fields the shared builder
  * clears. A single-sample target keeps those zeroes - byte for byte what this
@@ -45,19 +56,26 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
         base >= (UINT64_C(1) << 48) || bytes > (UINT64_C(1) << 48) - base) return VK_ERROR_UNKNOWN;
     struct ps5vk_target_registers result = {0};
     uint32_t width = image->info.extent.width, height = image->info.extent.height;
-    if (view->format == VK_FORMAT_D32_SFLOAT) {
+    if (view->format == VK_FORMAT_D32_SFLOAT || view->format == VK_FORMAT_D16_UNORM) {
         if (!(image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         /* No multisampled depth target exists on this path yet, so a depth
          * surface this profile creates is single-sample; the colour role is
          * the only one that carries a count (DXVK262-T06). */
         if (image->info.samples != VK_SAMPLE_COUNT_1_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
         if (ps5_depth_build_d32_no_htile(result.registers, base, width, height)) return VK_ERROR_UNKNOWN;
+        /* Public GFX10 DB_Z_INFO.FORMAT: Z_16=1, Z_32_FLOAT=3. Keep the
+         * measured no-HTILE target plan and alter only its documented format
+         * field for the single 128x128 diagnostic shape. */
+        if (view->format == VK_FORMAT_D16_UNORM)
+            result.registers[20].value = (result.registers[20].value & ~UINT32_C(3)) | UINT32_C(1);
         result.count = PS5_DEPTH_REGISTER_COUNT;
     } else if (view->format == VK_FORMAT_B8G8R8A8_UNORM ||
                view->format == VK_FORMAT_R8G8B8A8_UNORM ||
                ps5vk_color_target_integer_served(view->format)) {
         if (!(image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         if (ps5_color_build_target(result.registers, color_defaults, base, width, height)) return VK_ERROR_UNKNOWN;
+        if (configure_integer_color_target(view->format, result.registers))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
         /* Gears' generic builder selects COMP_SWAP=STD (RGBA byte order).
          * Vulkan BGRA requires ZYXW / SWAP_ALT=1 in CB_COLOR0_INFO[12:11].
          * Public Mesa ac_translate_colorswap + gfx10.json; do not change the
@@ -66,12 +84,9 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
             result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x1800)) | UINT32_C(0x0800);
         /* CB_COLOR0_INFO.NUMBER_TYPE (bits [10:8]) names how the hardware
          * interprets the 8_8_8_8 lanes the builder selected: UNORM for the
-         * normalized targets, UINT for the integer one. Pinned gfx103 table:
-         * NUMBER_UNORM = 0, NUMBER_UINT = 4; tests/test_color_attachment_
+         * normalized targets, UINT or SINT for integer targets. Pinned gfx103 table:
+         * NUMBER_UNORM = 0, NUMBER_UINT = 4, NUMBER_SINT = 5; tests/test_color_attachment_
          * offsets.py recomputes the field and the values from that table. */
-        if (ps5vk_color_target_format_is_integer(view->format))
-            result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x700)) |
-                                      (UINT32_C(4) << 8u);
         /* The target's sample geometry, in the word the shared builder clears
          * (DXVK262-T06). */
         rc = color_target_samples(result.registers, image->info.samples);
@@ -133,11 +148,13 @@ VkResult ps5vk_native_layer_target(VkDevice d, VkImageView view, uint32_t layer,
         return VK_ERROR_UNKNOWN;
     struct ps5vk_target_registers result = {0};
     const uint32_t width = image->info.extent.width, height = image->info.extent.height;
-    if (view->format == VK_FORMAT_D32_SFLOAT) {
+    if (view->format == VK_FORMAT_D32_SFLOAT || view->format == VK_FORMAT_D16_UNORM) {
         if (!(image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         /* No multisampled depth target exists on this path yet. */
         if (image->info.samples != VK_SAMPLE_COUNT_1_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
         if (ps5_depth_build_d32_no_htile(result.registers, base, width, height)) return VK_ERROR_UNKNOWN;
+        if (view->format == VK_FORMAT_D16_UNORM)
+            result.registers[20].value = (result.registers[20].value & ~UINT32_C(3)) | UINT32_C(1);
         result.count = PS5_DEPTH_REGISTER_COUNT;
     } else if (view->format == VK_FORMAT_B8G8R8A8_UNORM ||
                view->format == VK_FORMAT_R8G8B8A8_UNORM ||
@@ -145,11 +162,10 @@ VkResult ps5vk_native_layer_target(VkDevice d, VkImageView view, uint32_t layer,
         if (!(image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         if (ps5_color_build_target(result.registers, color_defaults, base, width, height))
             return VK_ERROR_UNKNOWN;
+        if (configure_integer_color_target(view->format, result.registers))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
         if (view->format == VK_FORMAT_B8G8R8A8_UNORM)
             result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x1800)) | UINT32_C(0x0800);
-        if (ps5vk_color_target_format_is_integer(view->format))
-            result.registers[2].value=(result.registers[2].value & ~UINT32_C(0x700)) |
-                                      (UINT32_C(4) << 8u);
         rc = color_target_samples(result.registers, image->info.samples);
         if (rc != VK_SUCCESS) return rc;
         result.count = PS5_COLOR_REGISTER_COUNT;
