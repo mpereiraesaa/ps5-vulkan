@@ -37,6 +37,7 @@
 #include "vktFragmentOperationsTests.hpp"
 #include "vktRenderPassTests.hpp"
 #include "vktUniformBlockTests.hpp"
+#include "subgroups/vktSubgroupsBallotBroadcastTests.hpp"
 #include "vktTestGroupUtil.hpp"
 #include "storage_width_focus.hpp"
 #include "tcuTestPackage.hpp"
@@ -92,6 +93,16 @@ FocusedVkTestPackage::~FocusedVkTestPackage(void)
 
 void FocusedVkTestPackage::init(void)
 {
+    // Original subgroup Broadcast factory and support checks. No subgroup
+    // leaves enter the frozen selection until the public API/profile gate is
+    // satisfied and their unchanged oracles pass on hardware.
+    {
+        de::MovePtr<tcu::TestCaseGroup> subgroupGroup(
+            new tcu::TestCaseGroup(m_testCtx, "subgroups"));
+        subgroupGroup->addChild(vkt::subgroups::createSubgroupsBallotBroadcastTests(m_testCtx));
+        addChild(subgroupGroup.release());
+    }
+
     // ubo: unchanged upstream standard-layout cases and their buffer oracle.
     // The case list selects a bounded subset; registration alone changes no
     // public feature report or frozen acceptance selection.
