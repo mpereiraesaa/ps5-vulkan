@@ -4661,6 +4661,19 @@ Int16 CTS leaf plus a native GPU result for the narrow operation, followed by
 the combined subgroup profile checks; host contracts alone cannot establish
 shader arithmetic or subgroup correctness.
 
+The unchanged frozen upstream acceptance selection on this default-off route
+passed 507/507 original cases, with zero Fail, NotSupported, missing,
+unexpected or duplicate results. The strict receipt verified signed eboot
+SHA-256 `a52ae2b604e722ad793bb54aa06a0b9cd5d24875c09d72a4d717ca26e6965380`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+and QPA SHA-256
+`9302316ca811d8359e5077f132d45ad93f7e8f0fe55551cfd24d5b9d64fb3b2d`
+for run `run-624227907988111`. The title closed, and the previously accepted
+payload was restored. This is Vulkan 1.0 selection neutrality, not an
+applicable original Int16 or subgroup CTS pass. The receipt does not record
+firmware, so this run makes no new firmware claim.
+
 The original nonconstant Broadcast factory separately requires Vulkan 1.2 and
 `subgroupBroadcastDynamicId`. Arithmetic GPU operations beyond the bounded
 Add and Min cases and graphics-stage subgroup operations beyond the bounded
