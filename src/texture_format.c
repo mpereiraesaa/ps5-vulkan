@@ -289,12 +289,8 @@ static uint32_t format_witnessed_capabilities(const struct ps5vk_texture_format 
             (PS5VK_FORMAT_CAP_SAMPLED_IMAGE |
              PS5VK_FORMAT_CAP_SAMPLED_IMAGE_LINEAR |
              PS5VK_FORMAT_CAP_TRANSFER_SRC |
-             PS5VK_FORMAT_CAP_TRANSFER_DST);
-    /* vkCmdBlitImage currently decodes only these two BC encodings. Keep the
-     * advertised source role aligned with that executable contract. */
-    if (entry->format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK ||
-        entry->format == VK_FORMAT_BC3_UNORM_BLOCK)
-        witnessed |= entry->capabilities & PS5VK_FORMAT_CAP_BLIT_SRC;
+             PS5VK_FORMAT_CAP_TRANSFER_DST |
+             PS5VK_FORMAT_CAP_BLIT_SRC);
 #endif
     return witnessed;
 }

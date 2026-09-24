@@ -311,6 +311,96 @@ static void bc_nearest_blit_round_trip(VkFormat format, const uint8_t *block,
     vkDestroyImage(device, source, NULL);
 }
 
+/* Analytic two-block step: nearest preserves black/white; linear produces
+ * 1/4 and 3/4 at the boundary when magnified two times. Padding is untouched. */
+static void bc_scaled_blit(VkFilter filter, int variant, int signed_source)
+{
+    void *source_map = NULL, *destination_map = NULL;
+    VkImage source = make_image_extent(signed_source ? VK_FORMAT_BC4_SNORM_BLOCK :
+        VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT, 8, 4, &source_map);
+    VkImage destination = make_image_tiled_extent(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT, 16, 4, VK_IMAGE_TILING_LINEAR, &destination_map);
+    const uint8_t blocks[16] = {0,0,0,0,0,0,0,0, 255,255,0,0,0,0,0,0};
+    const uint8_t signed_blocks[16]={0x81,0x81,0,0,0,0,0,0, 0x7f,0x7f,0,0,0,0,0,0};
+    memcpy(source_map, signed_source ? signed_blocks : blocks, sizeof(blocks));
+    memset(destination_map, 0xa5, 4 * 256);
+    source->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    destination->layout = VK_IMAGE_LAYOUT_GENERAL;
+    const int mirror=variant & 1, destination_mirror=(variant >> 1) & 1;
+    VkImageBlit region = {
+        .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .srcOffsets = {{mirror ? 8 : 0,0,0},{mirror ? 0 : 8,4,1}},
+        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
+        .dstOffsets = {{destination_mirror ? 16 : 0,0,0},{destination_mirror ? 0 : 16,4,1}},
+    };
+    VkImageBlit regions[2]={region,region};
+    unsigned count=1;
+    if (variant==4) {
+        count=2;
+        regions[0].srcOffsets[1].y=regions[0].dstOffsets[1].y=2;
+        regions[1].srcOffsets[0].y=regions[1].dstOffsets[0].y=2;
+    } else if (variant==5) {
+        regions[0].dstOffsets[0].y=1;
+        regions[0].dstOffsets[1].y=3;
+    }
+    VkCommandBuffer command = begin();
+    vkCmdBlitImage(command,source,source->layout,destination,destination->layout,
+        count,regions,filter);
+    assert(command->state == PS5VK_RECORDING);
+    struct ps5vk_operation invalid=command->operations[0];
+    VkImageBlit bad=region;
+    invalid.owned_payload=&bad;
+    invalid.owned_payload_size=sizeof(bad);
+    invalid.image_region_count=1;
+    bad.srcOffsets[1].x=9;
+    assert(ps5vk_image_linear_validate(device,&invalid)!=VK_SUCCESS);
+    bad=region; bad.dstOffsets[1].y=5;
+    assert(ps5vk_image_linear_validate(device,&invalid)!=VK_SUCCESS);
+    bad=region; bad.srcOffsets[0].x=-1;
+    assert(ps5vk_image_linear_validate(device,&invalid)!=VK_SUCCESS);
+    bad=region; bad.dstOffsets[1].x=bad.dstOffsets[0].x;
+    assert(ps5vk_image_linear_validate(device,&invalid)!=VK_SUCCESS);
+    submit_and_wait(command);
+    for (unsigned y=0;y<4;++y) {
+        const uint8_t *row=(const uint8_t *)destination_map+y*256;
+        for (unsigned x=0;x<16;++x) {
+            if (variant==5 && (y==0 || y==3)) {
+                for (unsigned c=0;c<4;++c) assert(row[x*4+c]==0xa5);
+                continue;
+            }
+            unsigned at=(mirror != destination_mirror) ? 15-x : x;
+            unsigned expected=at<8 ? 0 : 255;
+            if (filter==VK_FILTER_LINEAR && at==7) expected=signed_source ? 0 : 64;
+            if (filter==VK_FILTER_LINEAR && at==8) expected=signed_source ? 128 : 191;
+            assert(row[x*4]==expected && row[x*4+1]==(signed_source ? 0 : expected) &&
+                   row[x*4+2]==(signed_source ? 0 : expected) && row[x*4+3]==255);
+        }
+        for (unsigned x=64;x<256;++x) assert(row[x]==0xa5);
+    }
+    vkDestroyImage(device,destination,NULL);
+    vkDestroyImage(device,source,NULL);
+}
+
+static void bc_all_formats_blit(void)
+{
+    const uint8_t zero[16]={0};
+    const uint8_t bc7_zero[16]={0x40}; /* mode 6, zero endpoints and indices */
+    const uint8_t opaque[4]={0,0,0,255}, transparent[4]={0,0,0,0};
+    for (VkFormat format=VK_FORMAT_BC1_RGB_UNORM_BLOCK;
+         format<=VK_FORMAT_BC7_SRGB_BLOCK; ++format) {
+        int alpha=(format==VK_FORMAT_BC2_UNORM_BLOCK || format==VK_FORMAT_BC2_SRGB_BLOCK ||
+                   format==VK_FORMAT_BC3_UNORM_BLOCK || format==VK_FORMAT_BC3_SRGB_BLOCK ||
+                   format==VK_FORMAT_BC7_UNORM_BLOCK || format==VK_FORMAT_BC7_SRGB_BLOCK);
+        int short_block=(format<=VK_FORMAT_BC1_RGBA_SRGB_BLOCK ||
+                         format==VK_FORMAT_BC4_UNORM_BLOCK || format==VK_FORMAT_BC4_SNORM_BLOCK);
+        bc_nearest_blit_round_trip(format,
+            format>=VK_FORMAT_BC7_UNORM_BLOCK ? bc7_zero : zero,
+            short_block ? 8 : 16, alpha ? transparent : opaque);
+    }
+}
+
 static void bda_storage_image_trace(void)
 {
     enum { DIM=8 };
@@ -583,6 +673,14 @@ int main(void)
     VkCommandPoolCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                    .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
     assert(vkCreateCommandPool(device, &pci, NULL, &pool) == VK_SUCCESS);
+    bc_all_formats_blit();
+    for (int variant=0;variant<6;++variant) {
+        bc_scaled_blit(VK_FILTER_NEAREST,variant,0);
+        bc_scaled_blit(VK_FILTER_LINEAR,variant,0);
+        bc_scaled_blit(VK_FILTER_LINEAR,variant,1);
+    }
+    /* Mid-gray sRGB must retain precision before filtering (132/255). */
+    assert(fabsf(ps5vk_bc_blit_srgb_to_linear(132)-0.23074005f)<0.000001f);
     bda_storage_image_trace();
     readback_return_recording();
     bc_block_transfer_round_trip();
