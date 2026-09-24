@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 #define PS5VK_SAMPLER_MIRROR_FIRST_CASE 8
-enum { PS5VK_SAMPLER_CORE_CASES = 20 };
+enum { PS5VK_SAMPLER_CORE_CASES = 26 };
 struct ps5vk_sampler_core_case {
     const char *name;
     VkSamplerAddressMode address_mode;
@@ -14,7 +14,7 @@ struct ps5vk_sampler_core_case {
     uint32_t expected_bgra;
     unsigned checkerboard;
     unsigned minification;
-    /* Zero keeps the older both-axis cases; 1 and 2 select U and V. */
+    /* Zero keeps the older both-axis cases; 1, 2 and 3 select U, V and W. */
     float uv_v;
     unsigned mirror_axis;
 };

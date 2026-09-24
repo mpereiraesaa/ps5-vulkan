@@ -14,6 +14,18 @@ static float texel_weight(float coord,VkFilter filter)
 }
 static uint32_t mirror_reference(const struct ps5vk_sampler_core_case *c)
 {
+    if(c->mirror_axis==3) {
+        const float w=texel_weight(mirror_once(c->uv),c->mag_filter);
+        const uint32_t slices[2]={UINT32_C(0xffff0000),UINT32_C(0xff00ff00)};
+        uint32_t result=0;
+        for(unsigned channel=0;channel<4;++channel) {
+            unsigned shift=8u*channel;
+            float value=(float)((slices[0]>>shift)&255u)*(1-w)+
+                        (float)((slices[1]>>shift)&255u)*w;
+            result|=(uint32_t)(value+0.5f)<<shift;
+        }
+        return result;
+    }
     /* The source texture is RGBA8; the readback target packs BGRA8 bytes. */
     const uint32_t source[4]={UINT32_C(0xffff0000),UINT32_C(0xff00ff00),
                               UINT32_C(0xff0000ff),UINT32_C(0xffff0000)};
@@ -55,7 +67,7 @@ int main(void)
     for(unsigned i=PS5VK_SAMPLER_MIRROR_FIRST_CASE;i<PS5VK_SAMPLER_CORE_CASES;++i) {
         assert(!ps5vk_sampler_core_case(i,&c));
         assert(c.address_mode==VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE);
-        assert(c.mirror_axis==(i<14?1u:2u));
+        assert(c.mirror_axis==(i<14?1u:(i<20?2u:3u)));
         assert(c.mag_filter==((i-PS5VK_SAMPLER_MIRROR_FIRST_CASE)%6<3?
             VK_FILTER_NEAREST:VK_FILTER_LINEAR));
         assert(c.min_filter==c.mag_filter && !c.checkerboard && !c.minification);
