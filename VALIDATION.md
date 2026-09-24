@@ -4661,6 +4661,25 @@ vertex and fragment Broadcast draws remain unproven on hardware. These
 diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
 
+The focused CTS package now links and registers the unchanged original
+`subgroups.ballot_broadcast` factory, but the frozen 507-case acceptance
+selection still contains no subgroup leaf. A separate diagnostic selection
+added the pinned mustpass cases `compute.subgroupbroadcast_i8vec4` and
+`compute.subgroupbroadcast_nonconst_uint` to the 507 controls. Run
+`run-619192142197878` reported 507 Pass and both subgroup leaves
+`NotSupported`, each at `vktSubgroupsBallotBroadcastTests.cpp:265` with
+"Subgroup operations are not supported"; there were no missing or unexpected
+cases. The verified QPA SHA-256 was
+`91a93da09d6e82d4ec2d870ce896e87f85ad1bcda8c33213a2e340fafc206cc7`,
+the signed eboot SHA-256 was
+`5c252dd90d2ef8e29cf6dfc15bd51f779949159173c6d983006b2e531763ef89`,
+and the diagnostic selection hash was
+`d5694f3de21a6d00086566d56f58bda26106cf02c7b7b74a4292736838b124c4`.
+The title closed and the accepted payload was restored. Firmware was not
+recorded in this receipt. This run verifies runtime registration and the
+current first support gate; it supplies no subgroup CTS pass or feature
+promotion evidence.
+
 On firmware 12.02, the public SDK shipping witness compiled a Vulkan 1.0 SPIR-V
 compute shader that reads compact scalar arrays, a row-major matrix and a
 nested struct. Two workgroups produced 64 exact values with zero mismatches and
