@@ -50,6 +50,9 @@
 #ifdef CONSUMER_BC_FILTER_WITNESS
 #include "bc_filter_witness.h"
 #endif
+#ifdef CONSUMER_BC_SUBRESOURCE_WITNESS
+#include "bc_subresource_witness.h"
+#endif
 
 static int parse_is_continuous(void)
 {
@@ -3221,6 +3224,11 @@ int main(void)
     ps5log_line(PS5LOG_MARK,
         "PS5VK_CONSUMER_BC_FILTER_FEATURE textureCompressionBC=1 enabled_by_features2=1");
 #endif
+#ifdef CONSUMER_BC_SUBRESOURCE_WITNESS
+    REQUIRE(features2.features.textureCompressionBC == VK_TRUE, "diagnostic BC feature report");
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_CONSUMER_BC_SUBRESOURCE_FEATURE textureCompressionBC=1 enabled_by_features2=1");
+#endif
     REQUIRE(features2.features.robustBufferAccess == VK_TRUE,
             "mandatory Vulkan 1.0 robustBufferAccess feature report");
     REQUIRE(storage8.storageBuffer8BitAccess == VK_TRUE &&
@@ -3296,6 +3304,14 @@ int main(void)
     ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1");
     ps5log_line(PS5LOG_MARK, "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
     ps5log_close("consumer-bc-filter-end");
+    for (;;) sleep(1);
+#endif
+#ifdef CONSUMER_BC_SUBRESOURCE_WITNESS
+    run_bc_subresource_witness(physical_device, device, queue);
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_TEST_SUCCESS");
+    ps5log_line(PS5LOG_MARK, "PS5VK_CONSUMER_RESOURCES_RETIRED zero_tracked_allocations=1");
+    ps5log_line(PS5LOG_MARK, "PS5VK_READY_FOR_SHELL_CLOSE resources_retired=1");
+    ps5log_close("consumer-bc-subresource-end");
     for (;;) sleep(1);
 #endif
 

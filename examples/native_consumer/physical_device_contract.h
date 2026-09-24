@@ -93,10 +93,11 @@ static void report_physical_device_contract(VkInstance instance,
         VK_FORMAT_R32_UINT, &texel);
     vkGetPhysicalDeviceFormatProperties(physical_device,
         VK_FORMAT_UNDEFINED, &unsupported);
-    /* The BC sampling witness uses the diagnostic SDK that also exposes
+    /* The BC witnesses use the diagnostic SDK that also exposes
      * RGBA8 destinations for BC blits. Keep the exact shipping query intact. */
     VkFormatFeatureFlags bc_blit_dst = 0;
-#if defined(CONSUMER_BC_FILTER_WITNESS) && CONSUMER_BC_FILTER_WITNESS
+#if (defined(CONSUMER_BC_FILTER_WITNESS) && CONSUMER_BC_FILTER_WITNESS) || \
+    (defined(CONSUMER_BC_SUBRESOURCE_WITNESS) && CONSUMER_BC_SUBRESOURCE_WITNESS)
     bc_blit_dst = VK_FORMAT_FEATURE_BLIT_DST_BIT;
 #endif
     REQUIRE(!bgra.linearTilingFeatures &&

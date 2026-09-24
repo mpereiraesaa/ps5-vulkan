@@ -146,7 +146,14 @@ def main():
     parser.add_argument("--cube-array-base-layer", type=int, choices=(0, 1), default=0,
                         help="Cube witness view base; 1 also tests 13-layer storage")
     parser.add_argument("--bc-filter-format", choices=__import__("prepare_consumer_bc_filter").FORMATS)
+    parser.add_argument("--bc-subresource-profile", choices=__import__("prepare_consumer_bc_subresource").PROFILES)
     args = parser.parse_args()
+    if args.bc_subresource_profile and any((args.bc_filter_format, args.cube_array_witness,
+                                           args.continuous, args.shared_stage_samplers,
+                                           args.single_set_samplers, args.mixed_resources,
+                                           args.texel_rgba8, args.texel_formats,
+                                           args.dxvk_v262_probe, args.ubo_standard_layout)):
+        parser.error("BC subresource witness is an independent finite profile")
     if args.bc_filter_format and any((args.cube_array_witness, args.continuous, args.shared_stage_samplers,
                                       args.single_set_samplers, args.mixed_resources, args.texel_rgba8,
                                       args.texel_formats, args.dxvk_v262_probe, args.ubo_standard_layout)):
@@ -190,7 +197,7 @@ def main():
     if not args.use_staged_sdk or not (DIST_SDK / "lib/libps5vk.a").is_file():
         print("Staging current SDK with tools/build_sdk.py...")
         build_env = dict(os.environ)
-        if args.bc_filter_format:
+        if args.bc_filter_format or args.bc_subresource_profile:
             build_env["PS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC"] = "1"
         if args.cube_array_witness:
             build_env["PS5VK_IMAGE_CUBE_ARRAY_DIAGNOSTIC"] = "1"
@@ -298,6 +305,10 @@ def main():
         subprocess.run([sys.executable, str(ROOT / "tools/prepare_consumer_bc_filter.py"),
                         "--format", args.bc_filter_format, "--out", str(BUILD_DIR)], check=True)
         cflags.append("-DCONSUMER_BC_FILTER_WITNESS=1")
+    if args.bc_subresource_profile:
+        subprocess.run([sys.executable, str(ROOT / "tools/prepare_consumer_bc_subresource.py"),
+                        "--profile", args.bc_subresource_profile, "--out", str(BUILD_DIR)], check=True)
+        cflags.append("-DCONSUMER_BC_SUBRESOURCE_WITNESS=1")
     consumer_source = (CONSUMER_DIR / "ubo_layout_main.c" if args.ubo_standard_layout
                        else CONSUMER_DIR / "main.c")
 
@@ -594,6 +605,10 @@ def main():
         artifact = {"title": "PPSA99994", "profile": "bc-linear-filter-witness",
                     "submit_enabled": True, "files": files,
                     "bc_filter": json.loads((BUILD_DIR / "bc_filter_contract.json").read_text())}
+    if args.bc_subresource_profile:
+        artifact = {"title": "PPSA99994", "profile": "bc-subresource-witness",
+                    "submit_enabled": True, "files": files,
+                    "bc_subresource": json.loads((BUILD_DIR / "bc_subresource_contract.json").read_text())}
     if args.single_set_samplers:
         artifact["sampled_graphics"]["sets"] = 1
         artifact["sampled_graphics"]["elements_per_set"] = 96
