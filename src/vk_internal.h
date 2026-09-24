@@ -139,6 +139,25 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_TEXTURE_COMPRESSION_BC = 1u << 24,
 };
 
+/* The original 32-bit feature mask is full once the T08 shader gates land.
+ * Keep the independent T09 extension capabilities in a separate mask. */
+enum ps5vk_t09_feature_bits {
+    PS5VK_T09_FEATURE_HOST_QUERY_RESET = 1u << 0,
+    PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER = 1u << 1,
+    PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE = 1u << 2,
+    PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE = 1u << 3,
+    PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS = 1u << 4,
+};
+
+/* maxTimelineSemaphoreValueDifference, derived from the payload algorithm
+ * rather than copied from a profile floor: every payload, wait value and
+ * signal value is a full uint64_t, and the frontend only ever orders them with
+ * full-width comparisons (value >= wait, signal > current, max() on
+ * retirement). No difference, modular window or narrower hardware label is
+ * computed from them, so any two representable values stay correctly ordered
+ * and the largest representable difference is supported. */
+#define PS5VK_TIMELINE_MAX_VALUE_DIFFERENCE UINT64_MAX
+
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table
  * requires 2^16-1 once multiDrawIndirect is supported and exactly 1 otherwise.
  * One helper decides it so the physical limit, the recording bound and the
@@ -230,6 +249,7 @@ struct ps5vk_platform {
     /* Platform opt-in only. A frontend symbol or compiler path is not enough
      * to advertise a Vulkan feature without a native backend contract. */
     uint32_t supported_features;
+    uint32_t supported_features_t09;
     void *context;
     VkResult (*open)(void *, struct ps5vk_memory_backend *);
     void (*close)(struct ps5vk_memory_backend *);
@@ -268,6 +288,7 @@ struct VkDevice_T {
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
+    uint32_t enabled_features_t09;
     VkBool32 device_group_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
@@ -320,9 +341,26 @@ struct VkDevice_T {
     struct ps5vk_queue_backend compute_backend, graphics_backend;
     struct ps5vk_submission *submission;
     VkBool32 lost;
+    /* VK_KHR_timeline_semaphore was enabled on this device. */
+    VkBool32 timeline_extension_enabled;
+    /* Serializes queue progression, submission and timeline payloads between
+     * threads: vkSignalSemaphoreKHR, vkWaitSemaphoresKHR and
+     * vkGetSemaphoreCounterValueKHR may run concurrently with the queue.
+     * Zero is unlocked, so hand-built devices need no initialization. */
+    uint32_t queue_lock;
 };
 
 void ps5vk_device_enable_runtime_compiler(VkDevice device);
+
+/* A short spin lock: the protected regions poll or launch backend work but
+ * never pause, so waiters release it around every progress pause. */
+static inline void ps5vk_device_lock(VkDevice device)
+{
+    while (__atomic_exchange_n(&device->queue_lock, 1u, __ATOMIC_ACQUIRE))
+        while (__atomic_load_n(&device->queue_lock, __ATOMIC_RELAXED)) {}
+}
+static inline void ps5vk_device_unlock(VkDevice device)
+{ __atomic_store_n(&device->queue_lock, 0u, __ATOMIC_RELEASE); }
 
 void *ps5vk_object_alloc(const VkAllocationCallbacks *fallback,
     const VkAllocationCallbacks *given, size_t size, VkSystemAllocationScope scope,

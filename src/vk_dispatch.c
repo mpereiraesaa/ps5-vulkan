@@ -132,6 +132,9 @@ static const struct entry entries[] = {
     ENTRY(vkWaitForFences, DEVICE),
     ENTRY(vkCreateSemaphore, DEVICE),
     ENTRY(vkDestroySemaphore, DEVICE),
+    ENTRY(vkGetSemaphoreCounterValueKHR, DEVICE),
+    ENTRY(vkWaitSemaphoresKHR, DEVICE),
+    ENTRY(vkSignalSemaphoreKHR, DEVICE),
     ENTRY(vkCreateEvent, DEVICE),
     ENTRY(vkDestroyEvent, DEVICE),
     ENTRY(vkGetEventStatus, DEVICE),
@@ -194,6 +197,15 @@ static int buffer_device_address_command(const char *name)
            !strcmp(name, "vkGetDeviceMemoryOpaqueCaptureAddressKHR");
 }
 
+/* VK_KHR_timeline_semaphore host commands, reachable only on a device that
+ * enabled the extension. Vulkan 1.0 has no core names for them. */
+static int timeline_semaphore_command(const char *name)
+{
+    return !strcmp(name, "vkGetSemaphoreCounterValueKHR") ||
+           !strcmp(name, "vkWaitSemaphoresKHR") ||
+           !strcmp(name, "vkSignalSemaphoreKHR");
+}
+
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
                                                               const char *name)
 {
@@ -216,6 +228,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
         !(device->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
         return NULL;
     if (device_group_command(name) && !device->device_group_extension_enabled)
+        return NULL;
+    if (timeline_semaphore_command(name) && !device->timeline_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;

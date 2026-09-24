@@ -37,23 +37,37 @@ VKAPI_ATTR VkResult VKAPI_CALL vkResetFences(VkDevice d, uint32_t count, const V
     for (uint32_t j = 0; j < count; ++j) fences[j]->signaled = VK_FALSE;
     return VK_SUCCESS;
 }
+/* Fence state is retired by queue progress, which another thread may run
+ * (a timeline wait or counter query), so it is read under the device lock. */
+static uint64_t pending_serial(VkDevice d, VkFence f)
+{
+    ps5vk_device_lock(d);
+    uint64_t serial = f->pending_serial;
+    ps5vk_device_unlock(d);
+    return serial;
+}
 VKAPI_ATTR VkResult VKAPI_CALL vkGetFenceStatus(VkDevice d, VkFence f)
 {
     if (!d || !f || f->device != d) return INVALID;
     if (d->lost) return VK_ERROR_DEVICE_LOST;
-    if (f->pending_serial) {
+    if (pending_serial(d, f)) {
         if (!d->progress.poll) return INVALID;
         VkResult result = d->progress.poll(d);
         if (result != VK_SUCCESS) return result;
     }
     /* Poll success means only the poll ran. It must separately retire this
      * exact submission/fence after GPU completion and cache visibility. */
-    return f->signaled && !f->pending_serial ? VK_SUCCESS : VK_NOT_READY;
+    ps5vk_device_lock(d);
+    VkBool32 ready = f->signaled && !f->pending_serial;
+    ps5vk_device_unlock(d);
+    return ready ? VK_SUCCESS : VK_NOT_READY;
 }
-static int satisfied(uint32_t count, const VkFence *fences, VkBool32 all)
+static int satisfied(VkDevice d, uint32_t count, const VkFence *fences, VkBool32 all)
 {
     unsigned ready = 0;
+    ps5vk_device_lock(d);
     for (uint32_t j = 0; j < count; ++j) ready += fences[j]->signaled && !fences[j]->pending_serial;
+    ps5vk_device_unlock(d);
     return all ? ready == count : ready != 0;
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkWaitForFences(VkDevice d, uint32_t count, const VkFence *fences,
@@ -62,19 +76,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkWaitForFences(VkDevice d, uint32_t count, const
     if (!d || !count || !fences) return INVALID;
     if (d->lost) return VK_ERROR_DEVICE_LOST;
     for (uint32_t j = 0; j < count; ++j) if (!fences[j] || fences[j]->device != d) return INVALID;
-    if (satisfied(count, fences, all)) return VK_SUCCESS;
+    if (satisfied(d, count, fences, all)) return VK_SUCCESS;
     /* Timeout-zero remains a nonblocking poll and does not require a clock. */
     if (timeout && (!d->progress.clock_ns || !d->progress.pause)) return INVALID;
     uint64_t start = timeout ? d->progress.clock_ns(d->progress.context) : 0;
     for (;;) {
         VkBool32 pending = VK_FALSE;
-        for (uint32_t j = 0; j < count; ++j) pending |= fences[j]->pending_serial != 0;
+        for (uint32_t j = 0; j < count; ++j) pending |= pending_serial(d, fences[j]) != 0;
         if (pending) {
             if (!d->progress.poll) return INVALID;
             VkResult result = d->progress.poll(d);
             if (result != VK_SUCCESS) return result;
         }
-        if (satisfied(count, fences, all)) return VK_SUCCESS;
+        if (satisfied(d, count, fences, all)) return VK_SUCCESS;
         if (!timeout) return VK_TIMEOUT;
         uint64_t elapsed = d->progress.clock_ns(d->progress.context) - start;
         if (timeout != UINT64_MAX && elapsed >= timeout) return VK_TIMEOUT;
