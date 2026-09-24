@@ -704,13 +704,15 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     if(depth) {
         const uint32_t a=depth_attachment;
         VkImage image=begin->framebuffer->attachments[a]->image;
-        if(ps5vk_attachment_plan(&pass->attachments[a],VK_FORMAT_D32_SFLOAT,depth_layout,
+        if(ps5vk_attachment_plan(&pass->attachments[a],image->info.format,depth_layout,
             VK_TRUE,VK_FALSE,served_samples,&depth_plan)!=VK_SUCCESS ||
             image->info.extent.width!=begin->framebuffer->width ||
             image->info.extent.height!=begin->framebuffer->height){rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
         if(depth_plan.clear) {
             float clear=begin->clears[a].depthStencil.depth;
-            if(begin->clear_count<=a || !(clear>=0 && clear<=1) ||
+            uint32_t ignored;
+            if(begin->clear_count<=a ||
+                !ps5vk_depth_attachment_clear_word(image->info.format,clear,&ignored) ||
                 begin->render_area.offset.x || begin->render_area.offset.y ||
                 begin->render_area.extent.width!=begin->framebuffer->width ||
                 begin->render_area.extent.height!=begin->framebuffer->height)
@@ -906,7 +908,10 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         rc=ps5vk_image_span(d,begin->framebuffer->attachments[depth_attachment]->image,&address,&bytes);
         if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
         uint32_t value;
-        memcpy(&value,&begin->clears[depth_attachment].depthStencil.depth,sizeof(value));
+        VkImage depth_image=begin->framebuffer->attachments[depth_attachment]->image;
+        if(!ps5vk_depth_attachment_clear_word(depth_image->info.format,
+            begin->clears[depth_attachment].depthStencil.depth,&value))
+            {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=__LINE__;goto fail;}
         cache(address,(size_t)bytes);
         size_t n=ps5vk_dma_fill(cursor,(size_t)(end-cursor),(uintptr_t)address,bytes,value);
         if(!n){rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}cursor+=n;

@@ -253,6 +253,8 @@ check:
 	./build/tests/test_texture_format
 	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_TEXTURE_COMPRESSION_BC_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc src/texture_format.c tests/test_bc_diagnostic_profile.c -o build/tests/test_bc_diagnostic_profile
 	./build/tests/test_bc_diagnostic_profile
+	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/ps5-agc-gears/src src/texture_format.c src/depth_layout.c src/texture_layout.c src/color_attachment_contract.c native/image_ps5.c native/targets_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_depth_target.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_color_target.c tests/test_d16_diagnostic_profile.c -o build/tests/test_d16_diagnostic_profile
+	./build/tests/test_d16_diagnostic_profile
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_COMMAND_SOURCES) src/vk_transfer.c src/texture_copy.c src/vk_image_view.c src/vk_sampler.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_descriptor.c -o build/tests/test_texture_descriptor
 	./build/tests/test_texture_descriptor
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/texture_format.c src/texture_layout.c src/depth_layout.c native/image_ps5.c tests/test_texture_layout.c -o build/tests/test_texture_layout

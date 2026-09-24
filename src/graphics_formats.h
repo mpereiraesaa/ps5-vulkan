@@ -183,6 +183,17 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
             .maxResourceSize=budget};
         return VK_SUCCESS;
     }
+    /* The measurement-only D16 profile serves one physical 128x128 64KB_Z_X
+     * depth attachment. Keep the queried extent identical to the creation
+     * gate; reporting the generic 2D ceiling here would promise unsupported
+     * D16 sizes to Vulkan callers. */
+    if (format == VK_FORMAT_D16_UNORM && type == VK_IMAGE_TYPE_2D && !flags &&
+        usage == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+        *out = (VkImageFormatProperties){.maxExtent={128,128,1},.maxMipLevels=1,
+            .maxArrayLayers=1,.sampleCounts=VK_SAMPLE_COUNT_1_BIT,
+            .maxResourceSize=budget};
+        return VK_SUCCESS;
+    }
     const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0;
     const VkBool32 cube_sampled_attachment =

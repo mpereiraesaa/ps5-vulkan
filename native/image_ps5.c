@@ -35,7 +35,7 @@ VkResult ps5vk_native_layered_storage_samples(VkFormat format, uint32_t width, u
      * renders into, including the integer target the independentBlend
      * measurement serves. */
     const int color = ps5vk_color_target_format_supported(format);
-    const int depth = format == VK_FORMAT_D32_SFLOAT;
+    const int depth = format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D16_UNORM;
     if ((!color && !depth) || !width || !height) return VK_ERROR_FORMAT_NOT_SUPPORTED;
     /* A multisampled surface stores one plane per sample, so the layer's bytes
      * scale with the count (pinned: ac_estimate_size multiplies each level's
@@ -47,7 +47,10 @@ VkResult ps5vk_native_layered_storage_samples(VkFormat format, uint32_t width, u
     if (color && (width > PS5VK_MAX_COLOR_DIMENSION || height > PS5VK_MAX_COLOR_DIMENSION))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     struct ps5vk_depth_layout layout;
-    if (ps5vk_depth_layout(width, height, &layout)) return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    const int layout_rc = format == VK_FORMAT_D16_UNORM ?
+        ps5vk_depth16_layout(width, height, &layout) :
+        ps5vk_depth_layout(width, height, &layout);
+    if (layout_rc) return VK_ERROR_FORMAT_NOT_SUPPORTED;
     /* One-sample 32-bit 64KB_R_X and 64KB_Z_X share footprint arithmetic but
      * not pixel equations; the existing color-target builder requires a 128 KiB
      * base, the depth builder its layout alignment. */
@@ -90,7 +93,11 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         *out = (VkMemoryRequirements){layout.bytes, layout.alignment, 1};
         return VK_SUCCESS;
     }
-    int depth = info->format == VK_FORMAT_D32_SFLOAT;
+    int depth = info->format == VK_FORMAT_D32_SFLOAT || info->format == VK_FORMAT_D16_UNORM;
+    if (info->format == VK_FORMAT_D16_UNORM &&
+        !ps5vk_texture_format_witnessed(info->format,
+            PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     int sampled = ps5vk_texture_format_sampled_image(info->format);
     if ((info->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
         (info->format != VK_FORMAT_R32_UINT || info->imageType != VK_IMAGE_TYPE_2D ||
@@ -131,9 +138,16 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         info->mipLevels > PS5VK_MAX_TEXTURE_MIP_LEVELS ||
         info->tiling != VK_IMAGE_TILING_OPTIMAL)
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
-    /* A D32 image is the tiled depth surface whether it is used as an
+    /* A supported depth image is the tiled depth surface whether it is used as an
      * attachment, as the destination of a whole-subresource depth clear, or
      * both: there is no linear depth layout for it to fall back to. */
+    if (info->format == VK_FORMAT_D16_UNORM &&
+        (info->imageType != VK_IMAGE_TYPE_2D || info->extent.width != 128u ||
+         info->extent.height != 128u || info->extent.depth != 1u ||
+         info->mipLevels != 1u || info->arrayLayers != 1u || info->flags ||
+         info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
+         info->usage != VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     const int attachment=(info->usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 || depth;
     const int cube=info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;

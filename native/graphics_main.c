@@ -91,6 +91,9 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #ifndef PS5VK_GATHER_FORM
 #define PS5VK_GATHER_FORM 0
 #endif
+#ifndef PS5VK_D16_DEPTH_WITNESS
+#define PS5VK_D16_DEPTH_WITNESS 0
+#endif
 #ifndef PS5VK_INPUT_ATTACHMENT_PROBE
 #define PS5VK_INPUT_ATTACHMENT_PROBE 0
 #endif
@@ -539,8 +542,9 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
 #if !PS5VK_OCCLUSION_QUERY_API_PROBE
     (void)precise_count_pipeline;
 #endif
+    const uint32_t target_extent=PS5VK_D16_DEPTH_WITNESS?128u:1920u;
     VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.imageType=VK_IMAGE_TYPE_2D,
-        .format=VK_FORMAT_B8G8R8A8_UNORM,.extent={1920,1080,1},.mipLevels=1,.arrayLayers=1,
+        .format=VK_FORMAT_B8G8R8A8_UNORM,.extent={target_extent,PS5VK_D16_DEPTH_WITNESS?128u:1080u,1},.mipLevels=1,.arrayLayers=1,
         .samples=VK_SAMPLE_COUNT_1_BIT,.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
     VkImage image; CHECK(vkCreateImage(d,&ii,NULL,&image));
     VkMemoryRequirements req; vkGetImageMemoryRequirements(d,image,&req);
@@ -570,11 +574,13 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     VkImage first=image;
     VkImage depth_image=VK_NULL_HANDLE;VkImageView depth_view=VK_NULL_HANDLE;VkDeviceMemory depth_memory=VK_NULL_HANDLE;
     if(pipeline->depth_format!=VK_FORMAT_UNDEFINED) {
-        VkImageCreateInfo di=ii;di.format=VK_FORMAT_D32_SFLOAT;di.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        VkImageCreateInfo di=ii;di.format=PS5VK_D16_DEPTH_WITNESS?VK_FORMAT_D16_UNORM:VK_FORMAT_D32_SFLOAT;
+        di.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         /* The explicit-clear witness owns the depth buffer through
          * vkCmdClearDepthStencilImage instead of a render-pass load op, which
          * Vulkan requires transfer-destination usage for. */
-        if(PS5VK_GRAPHICS_SCISSOR_PROBE==14)di.usage|=VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        if(PS5VK_GRAPHICS_SCISSOR_PROBE==14 && !PS5VK_D16_DEPTH_WITNESS)
+            di.usage|=VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         CHECK(vkCreateImage(d,&di,NULL,&depth_image));
         VkMemoryRequirements dr;vkGetImageMemoryRequirements(d,depth_image,&dr);
         VkMemoryAllocateInfo da={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=dr.size};
@@ -779,7 +785,8 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     VkImageView view; CHECK(vkCreateImageView(d,&vi,NULL,&view));
     VkImageView attachments[2]={view,depth_view};
     VkFramebufferCreateInfo fi={.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,.renderPass=pass,
-        .attachmentCount=depth_image?2:1,.pAttachments=attachments,.width=1920,.height=1080,.layers=1};
+        .attachmentCount=depth_image?2:1,.pAttachments=attachments,.width=target_extent,
+        .height=PS5VK_D16_DEPTH_WITNESS?128u:1080u,.layers=1};
     VkFramebuffer fb; CHECK(vkCreateFramebuffer(d,&fi,NULL,&fb));
     VkCommandPoolCreateInfo pci={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     VkCommandPool pool; CHECK(vkCreateCommandPool(d,&pci,NULL,&pool));
@@ -842,7 +849,7 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
      * VK_COMPARE_OP_LESS, so clearing to 1.0 lets the draw through and clearing
      * to 0.0 stops it, and the colour readback reports which happened. */
     const float witness_depth=(PS5VK_GRAPHICS_SCISSOR_PROBE==14 && (frame&1))?0.0f:1.0f;
-    if(PS5VK_GRAPHICS_SCISSOR_PROBE==14) {
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE==14 && !PS5VK_D16_DEPTH_WITNESS) {
         if(!depth_image)fail("depth-clear-witness-target",-1);
         const VkImageSubresourceRange depth_range={VK_IMAGE_ASPECT_DEPTH_BIT,0,
             VK_REMAINING_MIP_LEVELS,0,VK_REMAINING_ARRAY_LAYERS};
@@ -893,8 +900,16 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
             frame,witness_word,clear_cb->operation_count,(int)depth_image->layout);
     }
     VkRenderPassBeginInfo ri={.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,.renderPass=pass,
-        .framebuffer=fb,.renderArea={{0,0},{1920,1080}}};
-    VkClearValue clears[2]={0};clears[1].depthStencil.depth=1.0f;
+        .framebuffer=fb,.renderArea={{0,0},{target_extent,PS5VK_D16_DEPTH_WITNESS?128u:1080u}}};
+    VkClearValue clears[2]={0};clears[1].depthStencil.depth=PS5VK_D16_DEPTH_WITNESS?witness_depth:1.0f;
+    if(PS5VK_D16_DEPTH_WITNESS) {
+        uint32_t clear_word=0;
+        if(!ps5vk_depth_attachment_clear_word(VK_FORMAT_D16_UNORM,witness_depth,&clear_word))
+            fail("d16-depth-load-clear-word",-1);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_D16_DEPTH_LOAD_CLEAR frame=%u extent=128x128 usage=depth-attachment clear_word=%08x depth=%.1f",
+            frame,clear_word,witness_depth);
+    }
     if(PS5VK_GRAPHICS_SCISSOR_PROBE==6 || PS5VK_GRAPHICS_SCISSOR_PROBE==9 ||
        PS5VK_GRAPHICS_SCISSOR_PROBE==10)
         clears[0].color.float32[0]=clears[0].color.float32[1]=clears[0].color.float32[2]=0.25f;
@@ -1141,9 +1156,13 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
         const int expect_visible=witness_depth>0.5f;
         valid=expect_visible?(stats.changed>1000 && stats.changed<words):
                              (stats.changed==0);
+        uint32_t clear_word=0;
+        const VkFormat depth_format=PS5VK_D16_DEPTH_WITNESS?VK_FORMAT_D16_UNORM:VK_FORMAT_D32_SFLOAT;
+        if(!ps5vk_depth_attachment_clear_word(depth_format,witness_depth,&clear_word))
+            fail("depth-clear-witness-oracle-word",-1);
         ps5log_printf(PS5LOG_MARK,
-            "PS5VK_DEPTH_CLEAR_WITNESS frame=%u clear_depth_word=%08x expect_visible=%d changed=%llu total=%zu bad_alpha=%llu valid=%d",
-            frame,expect_visible?0x3f800000u:0u,expect_visible,
+            "PS5VK_DEPTH_CLEAR_WITNESS frame=%u format=%u clear_depth_word=%08x expect_visible=%d changed=%llu total=%zu bad_alpha=%llu valid=%d",
+            frame,depth_format,clear_word,expect_visible,
             (unsigned long long)stats.changed,words,(unsigned long long)stats.bad_alpha,valid);
     }
     if(PS5VK_GRAPHICS_WITNESSES) {
@@ -4564,6 +4583,18 @@ int main(void)
             query_formats[q],query_usages[q],props.maxExtent.width,props.maxExtent.height,
             (unsigned long long)props.maxResourceSize);
     }
+    if(PS5VK_D16_DEPTH_WITNESS) {
+        VkImageFormatProperties props;
+        CHECK(vkGetPhysicalDeviceImageFormatProperties(physical,VK_FORMAT_D16_UNORM,
+            VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,0,&props));
+        if(props.maxExtent.width!=128 || props.maxExtent.height!=128 ||
+           props.maxExtent.depth!=1 || props.maxMipLevels!=1 ||
+           props.maxArrayLayers!=1 || props.sampleCounts!=VK_SAMPLE_COUNT_1_BIT)
+            fail("d16-depth-attachment-query",-1);
+        ps5log_printf(PS5LOG_MARK,
+            "PS5VK_D16_IMAGE_QUERY usage=depth-attachment max_extent=128x128 mip_levels=1 layers=1 samples=1");
+    }
 #if PS5VK_INPUT_ATTACHMENT_PROBE
     {
         const VkImageUsageFlags usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
@@ -5044,12 +5075,13 @@ int main(void)
         .loadOp=PS5VK_GRAPHICS_SCENE?VK_ATTACHMENT_LOAD_OP_CLEAR:VK_ATTACHMENT_LOAD_OP_DONT_CARE,.storeOp=VK_ATTACHMENT_STORE_OP_STORE,
         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
     VkAttachmentReference colorref={0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    /* The witness LOADS depth so the render pass contributes nothing to its
-     * contents; whatever the depth test reads came from the explicit clear. */
-    VkAttachmentDescription attachments[2]={attachment,{.format=VK_FORMAT_D32_SFLOAT,.samples=VK_SAMPLE_COUNT_1_BIT,
-        .loadOp=PS5VK_GRAPHICS_SCISSOR_PROBE==14?VK_ATTACHMENT_LOAD_OP_LOAD:VK_ATTACHMENT_LOAD_OP_CLEAR,
+    /* Probe 14 tests explicit depth clear. Its original D32 variant submits a
+     * transfer clear first; the D16 variant uses the render-pass loadOp path. */
+    VkAttachmentDescription attachments[2]={attachment,{.format=PS5VK_D16_DEPTH_WITNESS?VK_FORMAT_D16_UNORM:VK_FORMAT_D32_SFLOAT,.samples=VK_SAMPLE_COUNT_1_BIT,
+        .loadOp=PS5VK_D16_DEPTH_WITNESS?VK_ATTACHMENT_LOAD_OP_CLEAR:
+            (PS5VK_GRAPHICS_SCISSOR_PROBE==14?VK_ATTACHMENT_LOAD_OP_LOAD:VK_ATTACHMENT_LOAD_OP_CLEAR),
         .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout=PS5VK_GRAPHICS_SCISSOR_PROBE==14?
+        .initialLayout=PS5VK_GRAPHICS_SCISSOR_PROBE==14 && !PS5VK_D16_DEPTH_WITNESS?
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
     VkAttachmentReference depthref={1,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
@@ -5189,8 +5221,12 @@ int main(void)
     VkPipelineInputAssemblyStateCreateInfo ia={.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
     VkPipelineRasterizationStateCreateInfo raster={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,.lineWidth=1};
     VkPipelineMultisampleStateCreateInfo ms={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,.rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
-    VkViewport viewport={0,0,1920,1080,0,1}; VkRect2D scissor={{0,0},{1920,1080}};
-    if(PS5VK_GRAPHICS_SCISSOR_PROBE)scissor=(VkRect2D){{768,384},{128,128}};
+    VkViewport viewport={0,0,PS5VK_D16_DEPTH_WITNESS?128.0f:1920.0f,
+        PS5VK_D16_DEPTH_WITNESS?128.0f:1080.0f,0,1};
+    VkRect2D scissor={{0,0},{PS5VK_D16_DEPTH_WITNESS?128u:1920u,
+        PS5VK_D16_DEPTH_WITNESS?128u:1080u}};
+    if(PS5VK_GRAPHICS_SCISSOR_PROBE && !PS5VK_D16_DEPTH_WITNESS)
+        scissor=(VkRect2D){{768,384},{128,128}};
     VkPipelineViewportStateCreateInfo vp={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .viewportCount=1,.pViewports=&viewport,.scissorCount=1,.pScissors=&scissor};
     VkPipelineColorBlendAttachmentState color={.colorWriteMask=15};
@@ -5236,7 +5272,11 @@ int main(void)
         ps5log_printf(PS5LOG_MARK,"PS5VK_GRAPHICS_COMPUTE_CONTROL phase=before-graphics iteration=%u",iteration);
         ps5vk_compute_regression(device);
 #endif
-        if(PS5VK_GATHER_FORM) {
+        if(PS5VK_D16_DEPTH_WITNESS) {
+            depth.depthTestEnable=VK_TRUE;
+            viewport.width=128;viewport.height=128;
+            scissor=(VkRect2D){{0,0},{128,128}};
+        } else if(PS5VK_GATHER_FORM) {
             depth.depthTestEnable=VK_FALSE;
             viewport.width=1920;viewport.height=1080;
             scissor=(VkRect2D){{960,540},{1,1}};

@@ -221,6 +221,11 @@ static const struct ps5vk_texture_format formats[] = {
      * src/depth_detile.c carries the SW_64K_Z_X equation. No sampled role and
      * no blit role is claimed: neither has an implemented path. */
     BUFFER(VK_FORMAT_D32_SFLOAT, CAP_DEPTH | CAP_DST | CAP_SRC),
+    /* Narrow diagnostic depth-attachment profile: exactly one 128x128 D16
+     * surface. It has no transfer, sampled-image or stencil role. Its
+     * capability is exposed only by the default-off native diagnostic. */
+    {VK_FORMAT_D16_UNORM, 0, 0, {0, 0, 0, 0}, CAP_DEPTH, 0,
+     PS5VK_FORMAT_PROVENANCE_NONE, 0, 0, 0},
     /* Three-component rows are vertex-only: GFX1013 has no 96-bit image
      * data format, so no sampled encoding is claimed for them. */
     BUFFER(VK_FORMAT_R32G32B32_SFLOAT, CAP_VERTEX),
@@ -302,6 +307,11 @@ static uint32_t format_witnessed_capabilities(const struct ps5vk_texture_format 
              PS5VK_FORMAT_CAP_TRANSFER_SRC |
              PS5VK_FORMAT_CAP_TRANSFER_DST |
              PS5VK_FORMAT_CAP_BLIT_SRC);
+#endif
+#if defined(PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC) && \
+    PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC
+    if (entry->format == VK_FORMAT_D16_UNORM)
+        witnessed |= PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT;
 #endif
     return witnessed;
 }

@@ -514,7 +514,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     if(info->extent.depth>dim)dim=info->extent.depth;
     uint32_t levels = 0; for (; dim; dim >>= 1) ++levels;
     if (info->mipLevels > levels ||
-        (info->format == VK_FORMAT_D32_SFLOAT ? (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
+        ((info->format == VK_FORMAT_D32_SFLOAT || info->format == VK_FORMAT_D16_UNORM) ?
+         (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) :
          (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) return INVALID;
     if ((info->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
         (info->format != VK_FORMAT_R32_UINT || info->imageType != VK_IMAGE_TYPE_2D ||

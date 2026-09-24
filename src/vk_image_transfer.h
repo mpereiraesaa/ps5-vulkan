@@ -180,6 +180,25 @@ static inline VkBool32 ps5vk_depth_clear_word(float depth, uint32_t *out)
     memcpy(out, &depth, sizeof(*out));
     return VK_TRUE;
 }
+
+/* A render-pass depth clear is expanded over the allocation by the native
+ * queue. D16 stores one normalized 16-bit value per texel; repeating that
+ * halfword in the 32-bit DMA pattern clears both adjacent texels. The D16
+ * format remains restricted to its diagnostic 128x128 attachment shape. */
+static inline VkBool32 ps5vk_depth_attachment_clear_word(VkFormat format,
+    float depth, uint32_t *out)
+{
+    if (!out || !(depth >= 0.0f && depth <= 1.0f)) return VK_FALSE;
+    if (format == VK_FORMAT_D32_SFLOAT) {
+        memcpy(out, &depth, sizeof(*out));
+        return VK_TRUE;
+    }
+    if (format != VK_FORMAT_D16_UNORM) return VK_FALSE;
+    const uint32_t value = (uint32_t)(depth * 65535.0f + 0.5f);
+    const uint32_t half = value & UINT32_C(0xffff);
+    *out = half | (half << 16u);
+    return VK_TRUE;
+}
 /* True when this recorded operation is frontend work of the pure transfer
  * role. The render-target readback prelude/postlude keeps its GPU path. */
 VkBool32 ps5vk_image_linear_operation(const struct ps5vk_operation *operation);

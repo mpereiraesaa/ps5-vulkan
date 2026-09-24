@@ -222,6 +222,26 @@ class NativeDiagnosticOptions(unittest.TestCase):
         compiler = (ROOT / "src/ps5vk_compiler.c").read_text()
         self.assertIn("PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED", compiler)
 
+    def test_d16_depth_witness_is_bounded_to_probe_14_draw(self):
+        self.rejected({"PS5VK_D16_DEPTH_WITNESS": "2"}, "must be 0 or 1")
+        self.rejected({"PS5VK_D16_DEPTH_WITNESS": "1"},
+                      "requires graphics API, draw and PS5VK_GRAPHICS_SCISSOR_PROBE=14")
+        self.rejected({"PS5VK_D16_DEPTH_WITNESS": "1",
+                       "PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_GRAPHICS_SCISSOR_PROBE": "14"},
+                      "requires graphics API, draw and PS5VK_GRAPHICS_SCISSOR_PROBE=14")
+        source = (ROOT / "native/graphics_main.c").read_text()
+        builder = (ROOT / "tools/build_native.py").read_text()
+        self.assertIn("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 for its SDK", builder)
+        self.assertIn('use_runtime_sdk and d16_depth_witness == "1"', builder)
+        self.assertIn("PS5VK_USE_SDK=1", builder)
+        self.assertIn("use_runtime_graphics or continuous == \"1\"", builder)
+        self.assertIn("D16 depth witness requires the bounded non-runtime, non-presented probe-14 draw", builder)
+        self.assertIn("di.format=PS5VK_D16_DEPTH_WITNESS?VK_FORMAT_D16_UNORM", source)
+        self.assertIn(".usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT", source)
+        self.assertIn(".loadOp=PS5VK_D16_DEPTH_WITNESS?VK_ATTACHMENT_LOAD_OP_CLEAR", source)
+        self.assertIn("max_extent=128x128 mip_levels=1 layers=1 samples=1", source)
+
     def test_stale_graphics_library_signature_is_rejected(self):
         parent = ROOT / "build/graphics"
         parent.mkdir(parents=True, exist_ok=True)

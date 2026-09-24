@@ -81,6 +81,16 @@ def main():
             occlusion_precise_probe != "0" or occlusion_depth_probe != "0" or
             occlusion_query_api_probe != "0"):
         raise SystemExit("PS5VK_GATHER_FORM requires a single runtime-graphics draw on probe 15 (1 implicit core, 2 const offset, 3 dynamic offset, 4 four offsets, 5-8 explicit components 0-3)")
+    d16_depth_witness = os.environ.get("PS5VK_D16_DEPTH_WITNESS", "0")
+    if d16_depth_witness not in ("0", "1"):
+        raise SystemExit("PS5VK_D16_DEPTH_WITNESS must be 0 or 1")
+    if d16_depth_witness == "1" and (not graphics_api or scissor_probe != "14" or
+            os.environ.get("PS5VK_GRAPHICS_DRAW") != "1"):
+        raise SystemExit("PS5VK_D16_DEPTH_WITNESS requires graphics API, draw and PS5VK_GRAPHICS_SCISSOR_PROBE=14")
+    if d16_depth_witness == "1" and os.environ.get("PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC") != "1":
+        raise SystemExit("D16 depth witness requires PS5VK_D16_DEPTH_ATTACHMENT_DIAGNOSTIC=1 for its SDK")
+    if d16_depth_witness == "1" and os.environ.get("PS5VK_USE_SDK") != "1":
+        raise SystemExit("D16 depth witness must be SDK-linked with PS5VK_USE_SDK=1")
     mip_view_base=os.environ.get("PS5VK_MIP_VIEW_BASE","0")
     if mip_view_base not in ("0","1") or (mip_view_base!="0" and scissor_probe!="12"):
         raise SystemExit("PS5VK_MIP_VIEW_BASE must be 0, or 1 only for mipmap diagnostic")
@@ -354,7 +364,8 @@ def main():
     cc = ["sh", foundation / "tooling/prospero-clang18"]
     common = ["-O2", "-Wall", "-Wextra", "-Werror", "-ffunction-sections",
               "-fdata-sections", "-I" + str(gears / "include"),
-              "-I" + str(logger), "-I" + str(ROOT / "src"), "-I" + str(out),
+              "-I" + str(logger), "-I" + str(ROOT / "src"),
+              "-I" + str(ROOT / "third_party/psbc-reference"), "-I" + str(out),
               "-DPS5VK_SUBMIT=" + ("1" if os.environ.get("PS5VK_SUBMIT") == "1" else "0"),
               "-DPS5VK_DMA_ONLY=" + ("1" if os.environ.get("PS5VK_DMA_ONLY") == "1" else "0"),
               "-DPS5VK_INSPECT=" + ("1" if os.environ.get("PS5VK_INSPECT") == "1" else "0")]
@@ -373,10 +384,15 @@ def main():
     use_runtime_compiler = compute and os.environ.get("PS5VK_RUNTIME_COMPILER") != "0"
     use_runtime_graphics = os.environ.get("PS5VK_RUNTIME_GRAPHICS") == "1"
     use_runtime_sdk = os.environ.get("PS5VK_USE_SDK") == "1"
-    if use_runtime_sdk and not use_runtime_graphics:
+    if use_runtime_sdk and not use_runtime_graphics and d16_depth_witness != "1":
         raise SystemExit("SDK-linked diagnostic requires runtime graphics")
     if use_runtime_graphics and not graphics_api:
         raise SystemExit("Runtime graphics requires a graphics API build")
+    if d16_depth_witness == "1" and (use_runtime_graphics or continuous == "1" or
+            observe_scene != "0" or witnesses != "0" or scene_split != "0" or
+            exit_control or keep_agc_module or shell_close or
+            os.environ.get("PS5VK_GRAPHICS_PRESENT") == "1"):
+        raise SystemExit("D16 depth witness requires the bounded non-runtime, non-presented probe-14 draw")
     if compute:
         common += ["-I" + str(ROOT / "third_party/vulkan-headers/include"),
                    "-I" + str(ROOT / "build/program-library")]
@@ -409,6 +425,8 @@ def main():
         if graphics_api:
             sources = [s for s in sources if s[0] != "graphics_link_main"]
             graphics_source = graphics_manifest.get("source")
+            if d16_depth_witness == "1" and graphics_source != "experiments/graphics/scene3d.pipe":
+                raise SystemExit("D16 depth witness requires experiments/graphics/scene3d.pipe")
             scene = (not use_runtime_graphics or scissor_probe == "12") and graphics_source in (
                 "experiments/graphics/scene3d.pipe",
                 "experiments/graphics/scene3d-uint.pipe",
@@ -470,6 +488,7 @@ def main():
             common += ["-DPS5VK_GATHER_FORM=" + gather_form]
             common += ["-DPS5VK_GATHER_EXTENDED_DIAGNOSTIC=" +
                        ("1" if gather_form in ("2", "3", "4") else "0")]
+            common += ["-DPS5VK_D16_DEPTH_WITNESS=" + d16_depth_witness]
             common += ["-DPS5VK_MIP_VIEW_BASE=" + mip_view_base]
             common += ["-DPS5VK_MIP_FORCE_LOD=" + mip_force_lod]
             common += ["-DPS5VK_MIP_LOD_BIAS=" + mip_lod_bias]
@@ -856,7 +875,8 @@ def main():
     extra_libs = []
     if use_runtime_sdk:
         extra_libs.append(str(ROOT / "dist-sdk/lib/libps5vk.a"))
-    if use_runtime_compiler or use_runtime_graphics:
+    if use_runtime_compiler or use_runtime_graphics or (
+            use_runtime_sdk and d16_depth_witness == "1"):
         psbc_lib = ROOT / ("dist-sdk/lib/libpsbc.a" if use_runtime_sdk else "build/libpsbc.ps5.a")
         if not psbc_lib.is_file():
             run(sys.executable, str(ROOT / "tools/build_psbc.py"), "--target=ps5")

@@ -41,7 +41,7 @@ static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     if (!a || !out || a->format != format ||
         (depth ? a->samples != VK_SAMPLE_COUNT_1_BIT : !(served & a->samples)) ||
-        (depth ? format != VK_FORMAT_D32_SFLOAT :
+        (depth ? (format != VK_FORMAT_D32_SFLOAT && format != VK_FORMAT_D16_UNORM) :
          !ps5vk_color_target_format_supported(format)) ||
         (reference != attachment && reference != VK_IMAGE_LAYOUT_GENERAL) ||
         (a->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED &&

@@ -45,13 +45,18 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
         base >= (UINT64_C(1) << 48) || bytes > (UINT64_C(1) << 48) - base) return VK_ERROR_UNKNOWN;
     struct ps5vk_target_registers result = {0};
     uint32_t width = image->info.extent.width, height = image->info.extent.height;
-    if (view->format == VK_FORMAT_D32_SFLOAT) {
+    if (view->format == VK_FORMAT_D32_SFLOAT || view->format == VK_FORMAT_D16_UNORM) {
         if (!(image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         /* No multisampled depth target exists on this path yet, so a depth
          * surface this profile creates is single-sample; the colour role is
          * the only one that carries a count (DXVK262-T06). */
         if (image->info.samples != VK_SAMPLE_COUNT_1_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
         if (ps5_depth_build_d32_no_htile(result.registers, base, width, height)) return VK_ERROR_UNKNOWN;
+        /* Public GFX10 DB_Z_INFO.FORMAT: Z_16=1, Z_32_FLOAT=3. Keep the
+         * measured no-HTILE target plan and alter only its documented format
+         * field for the single 128x128 diagnostic shape. */
+        if (view->format == VK_FORMAT_D16_UNORM)
+            result.registers[20].value = (result.registers[20].value & ~UINT32_C(3)) | UINT32_C(1);
         result.count = PS5_DEPTH_REGISTER_COUNT;
     } else if (view->format == VK_FORMAT_B8G8R8A8_UNORM ||
                view->format == VK_FORMAT_R8G8B8A8_UNORM ||
@@ -133,11 +138,13 @@ VkResult ps5vk_native_layer_target(VkDevice d, VkImageView view, uint32_t layer,
         return VK_ERROR_UNKNOWN;
     struct ps5vk_target_registers result = {0};
     const uint32_t width = image->info.extent.width, height = image->info.extent.height;
-    if (view->format == VK_FORMAT_D32_SFLOAT) {
+    if (view->format == VK_FORMAT_D32_SFLOAT || view->format == VK_FORMAT_D16_UNORM) {
         if (!(image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
         /* No multisampled depth target exists on this path yet. */
         if (image->info.samples != VK_SAMPLE_COUNT_1_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
         if (ps5_depth_build_d32_no_htile(result.registers, base, width, height)) return VK_ERROR_UNKNOWN;
+        if (view->format == VK_FORMAT_D16_UNORM)
+            result.registers[20].value = (result.registers[20].value & ~UINT32_C(3)) | UINT32_C(1);
         result.count = PS5_DEPTH_REGISTER_COUNT;
     } else if (view->format == VK_FORMAT_B8G8R8A8_UNORM ||
                view->format == VK_FORMAT_R8G8B8A8_UNORM ||

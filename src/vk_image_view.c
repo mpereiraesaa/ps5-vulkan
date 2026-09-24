@@ -42,7 +42,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
         (c->a != VK_COMPONENT_SWIZZLE_IDENTITY && c->a != VK_COMPONENT_SWIZZLE_A))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkImageSubresourceRange range = info->subresourceRange;
-    VkImageAspectFlags aspect = image->info.format == VK_FORMAT_D32_SFLOAT ?
+    VkImageAspectFlags aspect = (image->info.format == VK_FORMAT_D32_SFLOAT ||
+        image->info.format == VK_FORMAT_D16_UNORM) ?
         VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
     if (range.aspectMask != aspect || range.baseMipLevel >= image->info.mipLevels)
         return VK_ERROR_UNKNOWN;
