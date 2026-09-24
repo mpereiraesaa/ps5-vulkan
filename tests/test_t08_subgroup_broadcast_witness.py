@@ -46,8 +46,29 @@ class SubgroupWitnessTests(unittest.TestCase):
             offset += size
         self.assertIsNotNone(constant_id)
         self.assertIsNotNone(broadcast_source_offset)
+        source_id = words[broadcast_source_offset]
         words[broadcast_source_offset] = constant_id
-        with self.assertRaisesRegex(ValueError, "runtime-loaded source ID"):
+        with self.assertRaisesRegex(ValueError, "storage-buffer-sourced ID"):
+            checked_spirv(struct.pack(f"<{len(words)}I", *words))
+        words[broadcast_source_offset] = source_id
+        source_pointer = None
+        store_value_offset = None
+        offset = 5
+        while offset < len(words):
+            size, opcode = words[offset] >> 16, words[offset] & 0xffff
+            if opcode == 61 and words[offset + 2] == source_id:
+                source_pointer = words[offset + 3]
+            offset += size
+        self.assertIsNotNone(source_pointer)
+        offset = 5
+        while offset < len(words):
+            size, opcode = words[offset] >> 16, words[offset] & 0xffff
+            if opcode == 62 and words[offset + 1] == source_pointer:
+                store_value_offset = offset + 2
+            offset += size
+        self.assertIsNotNone(store_value_offset)
+        words[store_value_offset] = constant_id
+        with self.assertRaisesRegex(ValueError, "storage-buffer-sourced ID"):
             checked_spirv(struct.pack(f"<{len(words)}I", *words))
 
     def test_diagnostic_switch_has_distinct_cts_build_identity(self):
