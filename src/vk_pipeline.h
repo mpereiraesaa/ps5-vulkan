@@ -65,6 +65,12 @@ struct ps5vk_raster_state {
     /* VK_POLYGON_MODE_FILL, _LINE or _POINT (fillModeNonSolid for the last
      * two). Static in this profile. */
     VkPolygonMode polygon_mode;
+    /* Stencil test, resolved per draw: the pipeline's static state with the
+     * command buffer's dynamic compare mask, write mask and reference folded
+     * in when the pipeline declared them dynamic. Only a depth/stencil
+     * attachment with a stencil aspect enables it. */
+    VkBool32 stencil_test;
+    VkStencilOpState stencil_front, stencil_back;
 };
 struct VkPipeline_T {
     VkDevice device;
@@ -115,6 +121,9 @@ struct VkPipeline_T {
      * takes them from the command buffer instead. */
     struct ps5vk_raster_state raster;
     VkBool32 dynamic_depth_bias;
+    /* VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK / _WRITE_MASK / _REFERENCE. */
+    VkBool32 dynamic_stencil_compare_mask, dynamic_stencil_write_mask,
+        dynamic_stencil_reference;
     VkCullModeFlags cull_mode;
     VkFrontFace front_face;
     /* Input-assembly state, not a shader capability: the fixed-function front

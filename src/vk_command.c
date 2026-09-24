@@ -1081,6 +1081,29 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
         raster.depth_bias_clamp=c->depth_bias_clamp;
         raster.depth_bias_slope=c->depth_bias_slope;
     }
+    /* The stencil masks and reference the pipeline declared dynamic come
+     * from the command buffer, and each one must have been set for both
+     * faces: the test reads the front and the back state. A pipeline with the
+     * test disabled ignores them, exactly as Vulkan does. */
+    if(raster.stencil_test) {
+        const VkStencilFaceFlags both=VK_STENCIL_FACE_FRONT_BIT|VK_STENCIL_FACE_BACK_BIT;
+        if((p->dynamic_stencil_compare_mask && (c->stencil_compare_faces&both)!=both) ||
+           (p->dynamic_stencil_write_mask && (c->stencil_write_faces&both)!=both) ||
+           (p->dynamic_stencil_reference && (c->stencil_reference_faces&both)!=both))
+            {invalid(c);return;}
+        if(p->dynamic_stencil_compare_mask) {
+            raster.stencil_front.compareMask=c->stencil_compare_mask[0];
+            raster.stencil_back.compareMask=c->stencil_compare_mask[1];
+        }
+        if(p->dynamic_stencil_write_mask) {
+            raster.stencil_front.writeMask=c->stencil_write_mask[0];
+            raster.stencil_back.writeMask=c->stencil_write_mask[1];
+        }
+        if(p->dynamic_stencil_reference) {
+            raster.stencil_front.reference=c->stencil_reference[0];
+            raster.stencil_back.reference=c->stencil_reference[1];
+        }
+    }
     if(p->push_constant_size && (!c->push_constants_valid ||
         memcmp(p->push_constant_stages,c->push_constant_stages,
                sizeof(c->push_constant_stages)))) {invalid(c);return;}

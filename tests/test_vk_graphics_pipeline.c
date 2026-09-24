@@ -385,9 +385,30 @@ int main(void)
     vkDestroyPipeline(&d,dynamic_pipeline,NULL);
     const VkDynamicState unsupported_dynamic[]={
         VK_DYNAMIC_STATE_LINE_WIDTH,
-        VK_DYNAMIC_STATE_BLEND_CONSTANTS,VK_DYNAMIC_STATE_DEPTH_BOUNDS,
+        VK_DYNAMIC_STATE_BLEND_CONSTANTS,VK_DYNAMIC_STATE_DEPTH_BOUNDS};
+    /* The three stencil states are dynamic values the draw folds into its
+     * stencil snapshot (T09); declaring them is valid whether or not the
+     * pipeline enables the test, which then ignores them. */
+    const VkDynamicState stencil_dynamic[]={
         VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
         VK_DYNAMIC_STATE_STENCIL_REFERENCE};
+    const unsigned stencil_saved[4]={created,released,acquired,compiled_released};
+    dynamic.dynamicStateCount=3;dynamic.pDynamicStates=stencil_dynamic;
+    vp.pViewports=&viewport;vp.pScissors=&scissor;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==VK_SUCCESS);
+    assert(dynamic_pipeline->dynamic_stencil_compare_mask &&
+           dynamic_pipeline->dynamic_stencil_write_mask &&
+           dynamic_pipeline->dynamic_stencil_reference &&
+           !dynamic_pipeline->dynamic_viewport && !dynamic_pipeline->raster.stencil_test);
+    vkDestroyPipeline(&d,dynamic_pipeline,NULL);
+    const VkDynamicState repeated[]={VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+        VK_DYNAMIC_STATE_STENCIL_REFERENCE};
+    dynamic.dynamicStateCount=2;dynamic.pDynamicStates=repeated;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)!=VK_SUCCESS &&
+           !dynamic_pipeline);
+    created=stencil_saved[0];released=stencil_saved[1];
+    acquired=stencil_saved[2];compiled_released=stencil_saved[3];
+    vp.pViewports=NULL;vp.pScissors=NULL;
     unsigned before_created=created;
     dynamic.dynamicStateCount=1;
     for(unsigned i=0;i<sizeof(unsupported_dynamic)/sizeof(unsupported_dynamic[0]);++i) {
