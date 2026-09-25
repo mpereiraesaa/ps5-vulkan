@@ -15,6 +15,7 @@
  * Both extensions stay unadvertised until the platform sets their bits; only
  * platform discovery and the memory backend are mocked. */
 #include "vk_image.h"
+#include "vk_command.h"
 #include "graphics_formats.h"
 #include "device_profile_report.h"
 #include "texture_descriptor.h"
@@ -453,6 +454,52 @@ static void object_routes(void)
     forged.format = VK_FORMAT_R8G8B8A8_UNORM;
     assert(ps5vk_texture_descriptor(&d, &forged, sampler, native_words) ==
            VK_ERROR_FEATURE_NOT_PRESENT);
+
+    /* The tiled colour readback of the mutable render target is the whole
+     * surface into offset zero. The first native run of the mutable-view
+     * witness packed three readbacks into one buffer; the copy at
+     * bufferOffset 1024 was refused while recording (unmarked), and the next
+     * vkCmdPipelineBarrier reported the invalid command buffer. */
+    {
+        VkBufferCreateInfo buffer_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = 3 * 64 * 64 * 4, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+        VkBuffer readback;
+        assert(vkCreateBuffer(&d, &buffer_info, NULL, &readback) == VK_SUCCESS);
+        VkMemoryRequirements req;
+        vkGetBufferMemoryRequirements(&d, readback, &req);
+        VkMemoryAllocateInfo ai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = req.size};
+        VkDeviceMemory readback_memory;
+        assert(vkAllocateMemory(&d, &ai, NULL, &readback_memory) == VK_SUCCESS);
+        assert(vkBindBufferMemory(&d, readback, readback_memory, 0) == VK_SUCCESS);
+        VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+        VkCommandPool pool;
+        assert(vkCreateCommandPool(&d, &pool_info, NULL, &pool) == VK_SUCCESS);
+        VkCommandBufferAllocateInfo command_info = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = pool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 2};
+        VkCommandBuffer commands[2];
+        assert(vkAllocateCommandBuffers(&d, &command_info, commands) == VK_SUCCESS);
+        const VkBufferImageCopy base = {.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                                        .imageExtent = {64, 64, 1}};
+        const unsigned errors_before = d.lifetime_errors;
+        for (unsigned n = 0; n < 2; ++n) {
+            VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+            assert(vkBeginCommandBuffer(commands[n], &begin) == VK_SUCCESS);
+            VkBufferImageCopy region = base;
+            region.bufferOffset = n ? 64 * 64 * 4 : 0;
+            vkCmdCopyImageToBuffer(commands[n], rt, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   readback, 1, &region);
+            assert(vkEndCommandBuffer(commands[n]) ==
+                   (n ? VK_ERROR_UNKNOWN : VK_SUCCESS));
+        }
+        assert(d.lifetime_errors == errors_before + 1);
+        d.lifetime_errors = errors_before;
+        vkDestroyCommandPool(&d, pool, NULL);
+        vkDestroyBuffer(&d, readback, NULL);
+        vkFreeMemory(&d, readback_memory, NULL);
+    }
 
     vkDestroySampler(&d, sampler, NULL);
     vkDestroyImageView(&d, unorm_view, NULL);
