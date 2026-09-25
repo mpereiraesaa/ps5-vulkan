@@ -1,4 +1,5 @@
 #include "vk_queue.h"
+#include <string.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -611,7 +612,10 @@ int main(void)
     vkCmdBeginRenderPass(c, &ri, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, &pipeline);
     struct VkDescriptorPool_T sampled_pool={.device=&d};
-    struct VkDescriptorSet_T sampled_sets[4]={0};VkDescriptorSet sampled_handles[4];
+    struct VkDescriptorSet_T sampled_sets[4]={0};
+    static struct ps5vk_descriptor_storage sampled_sets_storage[4];
+    for(unsigned sampled_sets_i=0;sampled_sets_i<4;++sampled_sets_i)ps5vk_descriptor_set_use_storage(&sampled_sets[sampled_sets_i],&sampled_sets_storage[sampled_sets_i]);
+    VkDescriptorSet sampled_handles[4];
     struct VkPipelineLayout_T sampled_layout={.device=&d,.set_count=4};
     pipeline.set_count=4;
     for(unsigned s=0;s<4;++s) {

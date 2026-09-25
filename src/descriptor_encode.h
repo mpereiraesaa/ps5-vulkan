@@ -1,6 +1,7 @@
 #ifndef PS5VK_DESCRIPTOR_ENCODE_H
 #define PS5VK_DESCRIPTOR_ENCODE_H
 #include "vk_pipeline.h"
+#include "descriptor_table_layout.h"
 #include <string.h>
 /* nullDescriptor (VK_EXT_robustness2): the record written for a
  * VK_NULL_HANDLE buffer, buffer view or image view is all zero, the GFX10
@@ -27,6 +28,19 @@ VkResult ps5vk_texel_buffer_descriptor(VkDevice device, VkBufferView view,
  * GPU work. Failure leaves the caller's table untouched. */
 VkResult ps5vk_descriptor_encode(VkDevice device,
     const struct ps5vk_compiled_program *program, uint32_t set_index, VkDescriptorSet set,
-    const VkDeviceSize dynamic_offsets[PS5VK_MAX_DESCRIPTORS],
+    const VkDeviceSize dynamic_offsets[PS5VK_MAX_DYNAMIC_DESCRIPTORS],
     uint32_t *table, size_t capacity_dwords);
+/* Table dwords the compiled program addresses in `set_index` (its records'
+ * furthest extent), zero when it reads nothing there. */
+static inline size_t ps5vk_compute_table_dwords(const struct ps5vk_compiled_program *program,
+                                               uint32_t set_index)
+{
+    size_t dwords = 0;
+    for (uint32_t i = 0; program && i < program->descriptor_count; ++i) {
+        const struct ps5vk_program_descriptor *p = &program->descriptors[i];
+        const size_t end = (size_t)p->table_dword + ps5vk_compute_record_dwords(p->type);
+        if (p->set == set_index && end > dwords) dwords = end;
+    }
+    return (dwords + 3u) & ~(size_t)3u;
+}
 #endif

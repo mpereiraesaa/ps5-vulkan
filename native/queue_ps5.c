@@ -118,14 +118,27 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             }
             size_t code_bytes = program->code_words * 4;
             size_t table_offset = (code_bytes + 255) & ~(size_t)255;
-            size_t push_offset = table_offset + PS5VK_MAX_SETS * 512;
+            /* Each set's table is as long as the records the program reads
+             * (up to PS5VK_MAX_DESCRIPTORS of them); the bootstrap template
+             * still needs one mapped 512-byte anchor when no set is read. */
+            size_t set_dwords[PS5VK_MAX_SETS] = {0}, set_offsets[PS5VK_MAX_SETS] = {0};
+            size_t table_bytes = 0;
+            for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set) {
+                if (!(program->descriptor_set_mask & (1u << set))) continue;
+                set_dwords[set] = ps5vk_compute_table_dwords(program, set);
+                if (!set_dwords[set]) { result = VK_ERROR_UNKNOWN; goto fail; }
+                set_offsets[set] = table_bytes / 4;
+                table_bytes += (set_dwords[set] * 4 + 15) & ~(size_t)15;
+            }
+            if (table_bytes < 512) table_bytes = 512;
+            size_t push_offset = table_offset + table_bytes;
             p->bytes = push_offset + (program->push_constant_size ?
                 PS5VK_MAX_PUSH_CONSTANT_BYTES : 0);
             result = device->memory.allocate(device->memory.context, p->bytes, &p->arena, &p->backing);
             if (result != VK_SUCCESS) goto fail;
             memcpy(p->arena, program->code, code_bytes);
             uint32_t *tables = (void *)((unsigned char *)p->arena + table_offset);
-            memset(tables, 0, PS5VK_MAX_SETS * 512);
+            memset(tables, 0, table_bytes);
             struct ps5vk_dispatch_encoding encoding = {.program = program,
                 .addresses = {.code=(uintptr_t)p->arena,
                     /* The bootstrap template requires a mapped table anchor
@@ -145,9 +158,9 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             }
             for(uint32_t set=0;set<PS5VK_MAX_SETS;++set)
                 if(program->descriptor_set_mask&(1u<<set)) {
-                    uint32_t *table=tables+set*128;
+                    uint32_t *table=tables+set_offsets[set];
                     result=ps5vk_descriptor_encode(device,program,set,op->sets[set],
-                        op->descriptor_dynamic_offsets,table,128);
+                        op->dynamic_offsets[set],table,set_dwords[set]);
                     if(result!=VK_SUCCESS)goto fail;
                     encoding.descriptor_tables[set]=(uintptr_t)table;
                 }

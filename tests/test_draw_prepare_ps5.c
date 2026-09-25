@@ -219,6 +219,8 @@ int main(void)
     fetch_rc=VK_SUCCESS;
     struct VkDescriptorPool_T pool={.device=&d};
     struct VkDescriptorSet_T set={.pool=&pool,.generation=7};
+    static struct ps5vk_descriptor_storage set_storage;
+    memset(&set_storage,0,sizeof(set_storage));ps5vk_descriptor_set_use_storage(&set,&set_storage);
     set.signature.count=1;set.signature.binding[0].count=1;set.signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;set.defined[0]=VK_TRUE;
     set.signature.binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
     for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)set.signature.binding[b].first=1;
@@ -270,6 +272,8 @@ int main(void)
     assert(ps5vk_native_prepare_vertex_draw(&d,&op,&area,NULL,NULL,shader_address,NULL,&prepared)==flush_rc && allocations==releases);
     flush_rc=VK_SUCCESS;
     struct VkDescriptorSet_T sets[4]={0};
+    static struct ps5vk_descriptor_storage sets_storage[4];
+    for(unsigned sets_i=0;sets_i<4;++sets_i)ps5vk_descriptor_set_use_storage(&sets[sets_i],&sets_storage[sets_i]);
     p.set_count=4;runtime.enabled=1;
     for(unsigned s=0;s<4;++s) {
         sets[s].pool=&pool;sets[s].generation=11+s;
@@ -411,6 +415,8 @@ int main(void)
         struct VkDescriptorPool_T mixed_pool={.device=&d};
         struct VkPipeline_T mixed_pipeline={.device=&d};
         struct VkDescriptorSet_T mixed[4]={0};
+        static struct ps5vk_descriptor_storage mixed_storage[4];
+        for(unsigned mixed_i=0;mixed_i<4;++mixed_i)ps5vk_descriptor_set_use_storage(&mixed[mixed_i],&mixed_storage[mixed_i]);
         struct ps5vk_runtime_draw_abi mixed_runtime={.enabled=1};
         struct ps5vk_operation mixed_op=op;
         mixed_op.pipeline=&mixed_pipeline;mixed_op.pipeline->set_count=4;
@@ -514,9 +520,7 @@ int main(void)
         /* A dynamic uniform buffer adds its recorded offset to the record. */
         mixed[0].signature.type[5]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         mixed_pipeline.sets[0]=mixed[0].signature;
-        mixed_op.graphics_dynamic_offsets[0][0]=256;
-        /* This legacy index must not supply the runtime table offset. */
-        mixed_op.descriptor_dynamic_offsets[0]=768;
+        mixed_op.dynamic_offsets[0][0]=256;
         assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,NULL,&prepared)==
             VK_SUCCESS);
         assert(first_set_buffer_dynamic==256);
@@ -538,7 +542,7 @@ int main(void)
         /* Same local element in different sets must not alias its offset. */
         mixed[3].signature.type[5]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         mixed_pipeline.sets[3]=mixed[3].signature;
-        mixed_op.graphics_dynamic_offsets[3][0]=512;
+        mixed_op.dynamic_offsets[3][0]=512;
         assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,NULL,&prepared)==VK_SUCCESS);
         assert(first_set_buffer_dynamic==256 && last_buffer_dynamic==512);
         ps5vk_native_release_draw(&prepared);assert(allocations==releases);
@@ -552,6 +556,8 @@ int main(void)
         struct VkDescriptorPool_T views_pool={.device=&d};
         struct VkPipeline_T views_pipeline={.device=&d,.set_count=1};
         struct VkDescriptorSet_T views={.pool=&views_pool,.generation=41};
+        static struct ps5vk_descriptor_storage views_storage;
+        memset(&views_storage,0,sizeof(views_storage));ps5vk_descriptor_set_use_storage(&views,&views_storage);
         struct VkSampler_T sampler={.device=&d,.words={0xa0,0xa1,0xa2,0xa3}};
         const VkDescriptorType types[3]={VK_DESCRIPTOR_TYPE_SAMPLER,
             VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER};
@@ -646,6 +652,8 @@ int main(void)
         struct ps5vk_operation in_op=op;
         struct VkDevice_T foreign={0};
         struct VkDescriptorSet_T in={0};
+        static struct ps5vk_descriptor_storage in_storage;
+        memset(&in_storage,0,sizeof(in_storage));ps5vk_descriptor_set_use_storage(&in,&in_storage);
         uint32_t prefix=0;
         for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
             struct ps5vk_binding *binding=&in.signature.binding[b];
@@ -770,6 +778,8 @@ int main(void)
         struct VkPipeline_T single_pipeline={.device=&d};
         struct ps5vk_operation single_op=in_op;
         struct VkDescriptorSet_T single={0};
+        static struct ps5vk_descriptor_storage single_storage;
+        memset(&single_storage,0,sizeof(single_storage));ps5vk_descriptor_set_use_storage(&single,&single_storage);
         single.pool=&in_pool;single.generation=41;
         single.signature.count=1;
         single.signature.binding[0]=(struct ps5vk_binding){.count=1,

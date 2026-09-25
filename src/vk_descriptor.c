@@ -256,23 +256,16 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
             ++d->lifetime_errors; return;
         }
         /* Copy descriptor references, not pointed-to data. Undefined descriptors
-         * may legally be copied; resolving GPU addresses happens at consumption. */
-        VkDescriptorBufferInfo values[PS5VK_MAX_DESCRIPTORS];
-        VkDescriptorImageInfo image_values[PS5VK_MAX_DESCRIPTORS];
-        VkBufferView texel_values[PS5VK_MAX_DESCRIPTORS];
-        VkImage resources[PS5VK_MAX_DESCRIPTORS];
+         * may legally be copied; resolving GPU addresses happens at consumption.
+         * A range's slots are contiguous (canonical prefixes, rollover into the
+         * next binding), so each array moves as one overlapping-safe block. */
         if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_DESCRIPTOR_SET, c->dstSet)) { ++d->lifetime_errors; return; }
-        VkBool32 defined[PS5VK_MAX_DESCRIPTORS];
-        for (uint32_t k = 0; k < c->descriptorCount; ++k) {
-            values[k] = c->srcSet->buffers[src[k]]; defined[k] = c->srcSet->defined[src[k]];
-            image_values[k]=c->srcSet->images[src[k]];resources[k]=c->srcSet->image_resources[src[k]];
-            texel_values[k]=c->srcSet->texel_views[src[k]];
-        }
-        for (uint32_t k = 0; k < c->descriptorCount; ++k) {
-            c->dstSet->buffers[dst[k]] = values[k]; c->dstSet->defined[dst[k]] = defined[k];
-            c->dstSet->images[dst[k]]=image_values[k];c->dstSet->image_resources[dst[k]]=resources[k];
-            c->dstSet->texel_views[dst[k]]=texel_values[k];
-        }
+        const size_t n = c->descriptorCount;
+        memmove(c->dstSet->buffers + dst[0], c->srcSet->buffers + src[0], n * sizeof(VkDescriptorBufferInfo));
+        memmove(c->dstSet->images + dst[0], c->srcSet->images + src[0], n * sizeof(VkDescriptorImageInfo));
+        memmove(c->dstSet->texel_views + dst[0], c->srcSet->texel_views + src[0], n * sizeof(VkBufferView));
+        memmove(c->dstSet->image_resources + dst[0], c->srcSet->image_resources + src[0], n * sizeof(VkImage));
+        memmove(c->dstSet->defined + dst[0], c->srcSet->defined + src[0], n * sizeof(VkBool32));
         ++c->dstSet->generation;
     }
 }
@@ -290,6 +283,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
     struct ps5vk_set_signature signature = {0};
     struct ps5vk_inline_uniform_layout inline_uniform = {0};
     VkBool32 seen[PS5VK_MAX_BINDINGS] = {0};
+    uint32_t dynamic_uniform = 0, dynamic_storage = 0;
     for (uint32_t j = 0; j < info->bindingCount; ++j) {
         const VkDescriptorSetLayoutBinding *b = &info->pBindings[j];
         if (b->binding >= PS5VK_MAX_BINDINGS) return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -357,6 +351,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount > PS5VK_MAX_DESCRIPTORS - signature.count)
             return VK_ERROR_FEATURE_NOT_PRESENT;
+        /* Bind-time offsets are stored per set in PS5VK_MAX_DYNAMIC_*
+         * compact slots, the reported per-layout dynamic limits. */
+        if (b->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) {
+            if (b->descriptorCount > PS5VK_MAX_DYNAMIC_UNIFORM - dynamic_uniform)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            dynamic_uniform += b->descriptorCount;
+        } else if (b->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
+            if (b->descriptorCount > PS5VK_MAX_DYNAMIC_STORAGE - dynamic_storage)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            dynamic_storage += b->descriptorCount;
+        }
         signature.binding[b->binding].count = b->descriptorCount;
         signature.type[b->binding]=b->descriptorCount?b->descriptorType:0;
         signature.binding[b->binding].stages = b->descriptorCount ? b->stageFlags : 0;
@@ -564,8 +569,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
     VkDescriptorSet pending = NULL;
     for (uint32_t j = 0; j < info->descriptorSetCount; ++j) {
         VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
+        /* One allocation: the structure, then arrays sized from the layout. */
+        const uint32_t capacity = info->pSetLayouts[j]->signature.count ?
+            info->pSetLayouts[j]->signature.count : 1u;
+        const size_t header = (sizeof(struct VkDescriptorSet_T) + 15u) & ~(size_t)15u;
+        const size_t per_descriptor = sizeof(VkDescriptorBufferInfo) +
+            sizeof(VkDescriptorImageInfo) + sizeof(VkBufferView) + sizeof(VkImage) +
+            sizeof(VkBool32);
         VkDescriptorSet set = ps5vk_object_alloc(NULL,
-            pool->custom_allocator ? &pool->allocator : NULL, sizeof(*set),
+            pool->custom_allocator ? &pool->allocator : NULL,
+            header + (size_t)capacity * per_descriptor,
             VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, &saved, &custom);
         if (!set) {
             while (pending) {
@@ -575,6 +588,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
             }
             for (uint32_t k = 0; k < info->descriptorSetCount; ++k) out[k] = VK_NULL_HANDLE;
             return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        {
+            unsigned char *tail = (unsigned char *)set + header;
+            memset(tail, 0, (size_t)capacity * per_descriptor);
+            set->capacity = capacity;
+            set->buffers = (VkDescriptorBufferInfo *)tail; tail += capacity * sizeof(VkDescriptorBufferInfo);
+            set->images = (VkDescriptorImageInfo *)tail; tail += capacity * sizeof(VkDescriptorImageInfo);
+            set->texel_views = (VkBufferView *)tail; tail += capacity * sizeof(VkBufferView);
+            set->image_resources = (VkImage *)tail; tail += capacity * sizeof(VkImage);
+            set->defined = (VkBool32 *)tail;
         }
         set->pool = pool; set->signature = info->pSetLayouts[j]->signature;
         set->inline_uniform = info->pSetLayouts[j]->inline_uniform;
@@ -780,32 +803,52 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplateKHR(VkDevice d,
         ++d->lifetime_errors; return;
     }
     const unsigned char *bytes = data;
+    /* Entries are applied in bounded chunks so that a 1024-element entry
+     * needs no 1024-element stack copy. A chunk starts where the previous
+     * one ended, following the same consecutive-binding rollover. */
+    enum { CHUNK = 64 };
     for (uint32_t j = 0; j < t->entry_count; ++j) {
         const VkDescriptorUpdateTemplateEntry *e = &t->entries[j];
-        VkDescriptorImageInfo images[PS5VK_MAX_DESCRIPTORS];
-        VkDescriptorBufferInfo buffers[PS5VK_MAX_DESCRIPTORS];
-        VkBufferView views[PS5VK_MAX_DESCRIPTORS];
-        VkWriteDescriptorSet w = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = set, .dstBinding = e->dstBinding, .dstArrayElement = e->dstArrayElement,
-            .descriptorCount = e->descriptorCount, .descriptorType = e->descriptorType};
-        /* The application's pData is not necessarily aligned for these
-         * structures, so every element is copied, never dereferenced. */
-        for (uint32_t k = 0; k < e->descriptorCount; ++k) {
-            const unsigned char *element = bytes + e->offset + (size_t)k * e->stride;
-            if (template_image_type(e->descriptorType))
-                memcpy(&images[k], element, sizeof(images[k]));
-            else if (template_texel_type(e->descriptorType))
-                memcpy(&views[k], element, sizeof(views[k]));
-            else
-                memcpy(&buffers[k], element, sizeof(buffers[k]));
+        uint32_t binding = e->dstBinding, element = e->dstArrayElement;
+        for (uint32_t done = 0; done < e->descriptorCount;) {
+            const uint32_t n = e->descriptorCount - done < CHUNK ? e->descriptorCount - done : CHUNK;
+            VkDescriptorImageInfo images[CHUNK];
+            VkDescriptorBufferInfo buffers[CHUNK];
+            VkBufferView views[CHUNK];
+            while (binding < PS5VK_MAX_BINDINGS && element == set->signature.binding[binding].count) {
+                ++binding; element = 0;
+            }
+            if (binding >= PS5VK_MAX_BINDINGS) { ++d->lifetime_errors; return; }
+            VkWriteDescriptorSet w = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = set, .dstBinding = binding, .dstArrayElement = element,
+                .descriptorCount = n, .descriptorType = e->descriptorType};
+            /* The application's pData is not necessarily aligned for these
+             * structures, so every element is copied, never dereferenced. */
+            for (uint32_t k = 0; k < n; ++k) {
+                const unsigned char *item = bytes + e->offset + (size_t)(done + k) * e->stride;
+                if (template_image_type(e->descriptorType))
+                    memcpy(&images[k], item, sizeof(images[k]));
+                else if (template_texel_type(e->descriptorType))
+                    memcpy(&views[k], item, sizeof(views[k]));
+                else
+                    memcpy(&buffers[k], item, sizeof(buffers[k]));
+            }
+            if (template_image_type(e->descriptorType)) w.pImageInfo = images;
+            else if (template_texel_type(e->descriptorType)) w.pTexelBufferView = views;
+            else w.pBufferInfo = buffers;
+            unsigned before = d->lifetime_errors;
+            vkUpdateDescriptorSets(d, 1, &w, 0, NULL);
+            /* Like a write array, an invalid entry stops the update; entries
+             * already applied stay applied. */
+            if (d->lifetime_errors != before) return;
+            /* Advance past the n descriptors just written. */
+            for (uint32_t k = 0; k < n; ++k) {
+                while (binding < PS5VK_MAX_BINDINGS && element == set->signature.binding[binding].count) {
+                    ++binding; element = 0;
+                }
+                ++element;
+            }
+            done += n;
         }
-        if (template_image_type(e->descriptorType)) w.pImageInfo = images;
-        else if (template_texel_type(e->descriptorType)) w.pTexelBufferView = views;
-        else w.pBufferInfo = buffers;
-        unsigned before = d->lifetime_errors;
-        vkUpdateDescriptorSets(d, 1, &w, 0, NULL);
-        /* Like a write array, an invalid entry stops the update; entries
-         * already applied stay applied. */
-        if (d->lifetime_errors != before) return;
     }
 }

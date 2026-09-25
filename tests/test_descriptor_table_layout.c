@@ -78,7 +78,8 @@ int main(void)
         prefix(&sets[s]);
     }
     assert(ps5vk_descriptor_table_layout_build(4,sets,&out)==VK_SUCCESS);
-    assert(out.descriptor_count==512 && out.set_bytes[3]==6144);
+    assert(out.descriptor_count==4u*PS5VK_MAX_DESCRIPTORS &&
+           out.set_bytes[3]==48u*PS5VK_MAX_DESCRIPTORS);
     sets[3].binding[31].count++;prefix(&sets[3]);rejects(4,sets);
     /* The input-attachment role is a resource-only record: the encoder's eight
      * DWORDs and no sampler payload. Its stride is half a combined T#/S#

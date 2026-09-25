@@ -214,8 +214,8 @@
      "id": "limit:maxPerSetDescriptors",
      "kind": "limit",
      "requirement": ">= 1024",
-     "status": "blocker",
-     "note": "one descriptor set holds at most PS5VK_MAX_DESCRIPTORS = 128 entries",
+     "status": "in-progress",
+     "note": "a set holds PS5VK_MAX_DESCRIPTORS = 1024 descriptors on the host path (layout-sized storage, compute tables sized from the program); native 1024-entry witnesses pending",
      "dxvk": true
     },
     {

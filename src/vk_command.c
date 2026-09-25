@@ -667,10 +667,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(VkCommandBuffer c, VkPipeline
             if(ps5vk_dynamic_descriptor_type(sets[j]->signature.type[binding]))
                 expected_dynamic+=sets[j]->signature.binding[binding].count;
     if(dynamic_count!=expected_dynamic){invalid(c);return;}
-    VkDeviceSize prepared[PS5VK_MAX_SETS][PS5VK_MAX_DESCRIPTORS]={{0}};
+    VkDeviceSize prepared[PS5VK_MAX_SETS][PS5VK_MAX_DYNAMIC_DESCRIPTORS]={{0}};
     uint32_t cursor=0;
     for(uint32_t j=0;j<count;++j) {
         VkDescriptorSet set=sets[j];
+        uint32_t slot=0;
         for(uint32_t binding=0;binding<PS5VK_MAX_BINDINGS;++binding) {
             const struct ps5vk_binding *b=&set->signature.binding[binding];
             if(!ps5vk_dynamic_descriptor_type(set->signature.type[binding]))continue;
@@ -679,8 +680,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(VkCommandBuffer c, VkPipeline
                 c->pool->device->buffer_alignment;
             for(uint32_t element=0;element<b->count;++element) {
                 VkDeviceSize offset=offsets[cursor++];
-                if(!alignment || offset%alignment){invalid(c);return;}
-                prepared[j][b->first+element]=offset;
+                if(!alignment || offset%alignment ||
+                   slot==PS5VK_MAX_DYNAMIC_DESCRIPTORS){invalid(c);return;}
+                prepared[j][slot++]=offset;
             }
         }
     }
@@ -742,12 +744,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer c, uint32_t x, uint32_t
     for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set)) {
         op->sets[set]=c->sets[set];op->generations[set]=c->sets[set]->generation;
     }
-    for(uint32_t j=0;j<p->descriptor_count;++j) {
-        const struct ps5vk_program_descriptor *binding=&p->descriptors[j];
-        uint32_t index=c->sets[binding->set]->signature.binding[binding->binding].first+
-            binding->element;
-        op->descriptor_dynamic_offsets[j]=c->set_dynamic_offsets[binding->set][index];
-    }
+    for(uint32_t set=0;set<PS5VK_MAX_SETS;++set) if(p->descriptor_set_mask&(1u<<set))
+        memcpy(op->dynamic_offsets[set],c->set_dynamic_offsets[set],
+               sizeof(op->dynamic_offsets[set]));
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHR(VkCommandBuffer c,
     uint32_t base_x, uint32_t base_y, uint32_t base_z,
@@ -1251,14 +1250,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     for(unsigned s=0;s<p->set_count;++s)if(ps5vk_graphics_set_required(p,s)) {
         op->sets[s]=c->graphics_sets[s];
         op->generations[s]=c->graphics_sets[s]->generation;
-        memcpy(op->graphics_dynamic_offsets[s],c->graphics_set_dynamic_offsets[s],
-            sizeof(op->graphics_dynamic_offsets[s]));
-    }
-    for(uint32_t j=0;j<p->program.descriptor_count;++j) {
-        const struct ps5vk_program_descriptor *binding=&p->program.descriptors[j];
-        uint32_t index=c->graphics_sets[binding->set]->signature.binding[binding->binding].first+
-            binding->element;
-        op->descriptor_dynamic_offsets[j]=c->graphics_set_dynamic_offsets[binding->set][index];
+        memcpy(op->dynamic_offsets[s],c->graphics_set_dynamic_offsets[s],
+            sizeof(op->dynamic_offsets[s]));
     }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer c,uint32_t count,uint32_t instances,
