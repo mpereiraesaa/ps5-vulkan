@@ -110,28 +110,59 @@ static int rasterization_pnext_supported(const void *pnext)
 /* The stencil states (compare mask, write mask, reference) are dynamic
  * values the draw folds into its stencil snapshot; they are honoured on the
  * combined depth/stencil attachment the stencil test runs on. */
-static int dynamic_states(const VkPipelineDynamicStateCreateInfo *info,
+/* VK_EXT_extended_dynamic_state adds the PS5VK_EDS_* states, accepted only on
+ * a device that enabled the extendedDynamicState feature. Vulkan forbids
+ * naming a state twice (VUID-VkPipelineDynamicStateCreateInfo-pDynamicStates-
+ * 01442) and naming both VIEWPORT and VIEWPORT_WITH_COUNT, or both SCISSOR and
+ * SCISSOR_WITH_COUNT (VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-04132,
+ * -04133). This profile also requires the two *_WITH_COUNT states together:
+ * the shape DXVK always declares, and the only one whose draw-time count
+ * agreement it checks. The topology and binding-stride states stay refused
+ * because the native program bakes both. */
+static int dynamic_states(VkDevice d, const VkPipelineDynamicStateCreateInfo *info,
                           VkBool32 *viewport, VkBool32 *scissor, VkBool32 *depth_bias,
-                          VkBool32 stencil[3])
+                          VkBool32 stencil[3], uint32_t *eds)
 {
     *viewport=*scissor=*depth_bias=VK_FALSE;
     stencil[0]=stencil[1]=stencil[2]=VK_FALSE;
+    *eds=0;
     if(!info)return 1;
     if(info->sType!=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO ||
-       info->pNext || info->flags || info->dynamicStateCount>6 ||
+       info->pNext || info->flags || info->dynamicStateCount>16 ||
        (info->dynamicStateCount && !info->pDynamicStates))return 0;
     for(uint32_t i=0;i<info->dynamicStateCount;++i) {
-        VkBool32 *flag;
-        if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_VIEWPORT)flag=viewport;
-        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_SCISSOR)flag=scissor;
-        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_DEPTH_BIAS)flag=depth_bias;
-        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK)flag=&stencil[0];
-        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_STENCIL_WRITE_MASK)flag=&stencil[1];
-        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_STENCIL_REFERENCE)flag=&stencil[2];
-        else return 0;
-        if(*flag)return 0;
-        *flag=VK_TRUE;
+        VkBool32 *flag=NULL; uint32_t bit=0;
+        switch(info->pDynamicStates[i]) {
+        case VK_DYNAMIC_STATE_VIEWPORT: flag=viewport; break;
+        case VK_DYNAMIC_STATE_SCISSOR: flag=scissor; break;
+        case VK_DYNAMIC_STATE_DEPTH_BIAS: flag=depth_bias; break;
+        case VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK: flag=&stencil[0]; break;
+        case VK_DYNAMIC_STATE_STENCIL_WRITE_MASK: flag=&stencil[1]; break;
+        case VK_DYNAMIC_STATE_STENCIL_REFERENCE: flag=&stencil[2]; break;
+        case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT: bit=PS5VK_EDS_VIEWPORT_WITH_COUNT; break;
+        case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT: bit=PS5VK_EDS_SCISSOR_WITH_COUNT; break;
+        case VK_DYNAMIC_STATE_CULL_MODE_EXT: bit=PS5VK_EDS_CULL_MODE; break;
+        case VK_DYNAMIC_STATE_FRONT_FACE_EXT: bit=PS5VK_EDS_FRONT_FACE; break;
+        case VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT: bit=PS5VK_EDS_DEPTH_TEST_ENABLE; break;
+        case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT: bit=PS5VK_EDS_DEPTH_WRITE_ENABLE; break;
+        case VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT: bit=PS5VK_EDS_DEPTH_COMPARE_OP; break;
+        case VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT: bit=PS5VK_EDS_DEPTH_BOUNDS_TEST_ENABLE; break;
+        case VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT: bit=PS5VK_EDS_STENCIL_TEST_ENABLE; break;
+        case VK_DYNAMIC_STATE_STENCIL_OP_EXT: bit=PS5VK_EDS_STENCIL_OP; break;
+        default: return 0;
+        }
+        if(flag) {
+            if(*flag)return 0;
+            *flag=VK_TRUE;
+        } else {
+            if(!d->extended_dynamic_state_enabled || (*eds & bit))return 0;
+            *eds|=bit;
+        }
     }
+    const uint32_t counts=PS5VK_EDS_VIEWPORT_WITH_COUNT|PS5VK_EDS_SCISSOR_WITH_COUNT;
+    if((*viewport && (*eds & PS5VK_EDS_VIEWPORT_WITH_COUNT)) ||
+       (*scissor && (*eds & PS5VK_EDS_SCISSOR_WITH_COUNT)) ||
+       ((*eds & counts) && (*eds & counts)!=counts))return 0;
     return 1;
 }
 
@@ -209,9 +240,15 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         in->layout->set_count>PS5VK_MAX_SETS)
         return refuse(2);
     VkBool32 dynamic_viewport,dynamic_scissor,dynamic_depth_bias,dynamic_stencil[3];
-    if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor,&dynamic_depth_bias,
-                       dynamic_stencil))
+    uint32_t eds;
+    if(!dynamic_states(d,in->pDynamicState,&dynamic_viewport,&dynamic_scissor,&dynamic_depth_bias,
+                       dynamic_stencil,&eds))
         return refuse(3);
+    /* With *_WITH_COUNT the viewport and scissor arrays, and their count,
+     * are the command buffer's: the static counts must be zero
+     * (VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-03379, -03380). */
+    const VkBool32 with_count=(eds & PS5VK_EDS_VIEWPORT_WITH_COUNT) ? VK_TRUE : VK_FALSE;
+    if(with_count) dynamic_viewport=dynamic_scissor=VK_TRUE;
     const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL, *gs=NULL,
         *tcs=NULL, *tes=NULL;
     for (unsigned i=0; i<in->stageCount; ++i) {
@@ -359,7 +396,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          * 1..PS5VK_MAX_VIEWPORTS; more than one needs multiViewport ENABLED
          * on this logical device. The count is static in this profile (no
          * *_WITH_COUNT dynamic state), so a zero count is malformed. */
-        vp->pNext || vp->flags || !vp->viewportCount || vp->viewportCount > PS5VK_MAX_VIEWPORTS ||
+        vp->pNext || vp->flags ||
+        (with_count ? (vp->viewportCount || vp->scissorCount) : !vp->viewportCount) ||
+        vp->viewportCount > PS5VK_MAX_VIEWPORTS ||
         vp->scissorCount != vp->viewportCount ||
         (vp->viewportCount > 1 && !(d->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT)) ||
         (b && !ps5vk_color_blend_state_shape_supported(b)))
@@ -382,8 +421,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             !scissor->extent.width || !scissor->extent.height)))
             return VK_ERROR_UNKNOWN;
     }
-    if (r->cullMode & ~VK_CULL_MODE_FRONT_AND_BACK ||
-        (r->frontFace != VK_FRONT_FACE_CLOCKWISE && r->frontFace != VK_FRONT_FACE_COUNTER_CLOCKWISE))
+    /* A state declared dynamic makes its static value ignored, so only the
+     * static ones are validated. */
+    if ((!(eds & PS5VK_EDS_CULL_MODE) && (r->cullMode & ~VK_CULL_MODE_FRONT_AND_BACK)) ||
+        (!(eds & PS5VK_EDS_FRONT_FACE) && r->frontFace != VK_FRONT_FACE_CLOCKWISE &&
+         r->frontFace != VK_FRONT_FACE_COUNTER_CLOCKWISE))
         return VK_ERROR_UNKNOWN;
     const VkPipelineDepthStencilStateCreateInfo *depth=in->pDepthStencilState;
     VkRenderPass pass=in->renderPass;
@@ -401,11 +443,21 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         VK_FORMAT_UNDEFINED : pass->attachments[subpass->depth.attachment].format;
     const int stencil_aspect =
         (ps5vk_format_aspects(depth_attachment_format) & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+    /* A dynamic depth-bounds, stencil-test or compare-op state makes the
+     * static value ignored; the draw enforces the dynamic one. A dynamic
+     * stencil test may be enabled at draw time, so the static ops it would
+     * then use are validated whenever that is possible. */
+    const int stencil_possible = depth &&
+        (depth->stencilTestEnable || (eds & PS5VK_EDS_STENCIL_TEST_ENABLE));
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
-        depth->pNext || depth->flags || depth->depthBoundsTestEnable ||
-        (depth->stencilTestEnable && (!stencil_aspect ||
-            !stencil_op_state_valid(&depth->front) || !stencil_op_state_valid(&depth->back))) ||
-        depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
+        depth->pNext || depth->flags ||
+        (depth->depthBoundsTestEnable && !(eds & PS5VK_EDS_DEPTH_BOUNDS_TEST_ENABLE)) ||
+        (depth->stencilTestEnable && !(eds & PS5VK_EDS_STENCIL_TEST_ENABLE) && !stencil_aspect) ||
+        (stencil_possible && !(eds & PS5VK_EDS_STENCIL_OP) &&
+            (!stencil_op_state_valid(&depth->front) || !stencil_op_state_valid(&depth->back))) ||
+        (!(eds & PS5VK_EDS_DEPTH_COMPARE_OP) &&
+         (depth->depthCompareOp < VK_COMPARE_OP_NEVER ||
+          depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))))
         return refuse(16);
     struct ps5vk_graphics_key key={
         .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
@@ -597,12 +649,21 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         p->depth_compare=depth->depthCompareOp;
         /* The stencil state is kept whole; the draw replaces the masks and
          * the reference the pipeline declared dynamic. */
-        if(depth->stencilTestEnable) {
-            p->raster.stencil_test=VK_TRUE;
+        if(depth->stencilTestEnable || (eds & PS5VK_EDS_STENCIL_TEST_ENABLE)) {
+            p->raster.stencil_test=depth->stencilTestEnable && stencil_aspect;
             p->raster.stencil_front=depth->front;
             p->raster.stencil_back=depth->back;
         }
     }
+    /* A dynamic state's static value is ignored by Vulkan and never reaches a
+     * draw (the recorder resolves it from the command buffer), so the object
+     * keeps a canonical valid value rather than whatever the caller left. */
+    p->dynamic_eds=eds;
+    if(eds & PS5VK_EDS_CULL_MODE)p->cull_mode=VK_CULL_MODE_NONE;
+    if(eds & PS5VK_EDS_FRONT_FACE)p->front_face=VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    if(eds & PS5VK_EDS_DEPTH_TEST_ENABLE)p->depth_test=VK_FALSE;
+    if(eds & PS5VK_EDS_DEPTH_WRITE_ENABLE)p->depth_write=VK_FALSE;
+    if(eds & PS5VK_EDS_DEPTH_COMPARE_OP)p->depth_compare=VK_COMPARE_OP_NEVER;
     p->dynamic_stencil_compare_mask=dynamic_stencil[0];
     p->dynamic_stencil_write_mask=dynamic_stencil[1];
     p->dynamic_stencil_reference=dynamic_stencil[2];

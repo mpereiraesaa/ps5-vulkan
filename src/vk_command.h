@@ -212,6 +212,23 @@ struct VkCommandBuffer_T {
     VkStencilFaceFlags stencil_write_faces;
     VkStencilFaceFlags stencil_reference_faces;
     uint32_t dynamic_state_valid;
+    /* VK_EXT_extended_dynamic_state values, and the PS5VK_EDS_* mask of the
+     * ones set since the last reset. viewport_with_count is the count the last
+     * vkCmdSetViewportWithCountEXT named (its arrays are the ones above), and
+     * scissor_with_count the scissor twin; a draw whose pipeline declared the
+     * *_WITH_COUNT states needs both set and equal. */
+    uint32_t eds_valid;
+    uint32_t viewport_with_count, scissor_with_count;
+    VkCullModeFlags cull_mode;
+    VkFrontFace front_face;
+    VkBool32 depth_test_enable, depth_write_enable, depth_bounds_test_enable;
+    VkBool32 stencil_test_enable;
+    VkCompareOp depth_compare_op;
+    /* Front [0] and back [1] stencil operations; compare masks, write masks
+     * and references keep their own 1.0 dynamic fields above. */
+    VkStencilOp stencil_fail_op[2], stencil_pass_op[2], stencil_depth_fail_op[2];
+    VkCompareOp stencil_compare_op[2];
+    VkStencilFaceFlags stencil_op_faces;
     unsigned operation_count;
     struct ps5vk_operation operations[PS5VK_MAX_OPERATIONS];
 };

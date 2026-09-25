@@ -207,6 +207,19 @@ static const struct entry entries[] = {
     ENTRY(vkCmdCopyQueryPoolResults, DEVICE),
     ENTRY(vkGetImageSparseMemoryRequirements, DEVICE),
     ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties, INSTANCE),
+    /* VK_EXT_extended_dynamic_state (DXVK262-T10). */
+    ENTRY(vkCmdSetCullModeEXT, DEVICE),
+    ENTRY(vkCmdSetFrontFaceEXT, DEVICE),
+    ENTRY(vkCmdSetPrimitiveTopologyEXT, DEVICE),
+    ENTRY(vkCmdSetViewportWithCountEXT, DEVICE),
+    ENTRY(vkCmdSetScissorWithCountEXT, DEVICE),
+    ENTRY(vkCmdBindVertexBuffers2EXT, DEVICE),
+    ENTRY(vkCmdSetDepthTestEnableEXT, DEVICE),
+    ENTRY(vkCmdSetDepthWriteEnableEXT, DEVICE),
+    ENTRY(vkCmdSetDepthCompareOpEXT, DEVICE),
+    ENTRY(vkCmdSetDepthBoundsTestEnableEXT, DEVICE),
+    ENTRY(vkCmdSetStencilTestEnableEXT, DEVICE),
+    ENTRY(vkCmdSetStencilOpEXT, DEVICE),
 };
 #undef ENTRY
 
@@ -344,6 +357,23 @@ static int timeline_semaphore_command(const char *name)
            !strcmp(name, "vkSignalSemaphoreKHR");
 }
 
+/* VK_EXT_extended_dynamic_state commands, reachable only on a device that
+ * enabled the extension. Vulkan 1.0 has no core names for them. */
+static int extended_dynamic_state_command(const char *name)
+{
+    static const char *const commands[] = {
+        "vkCmdSetCullModeEXT", "vkCmdSetFrontFaceEXT", "vkCmdSetPrimitiveTopologyEXT",
+        "vkCmdSetViewportWithCountEXT", "vkCmdSetScissorWithCountEXT",
+        "vkCmdBindVertexBuffers2EXT", "vkCmdSetDepthTestEnableEXT",
+        "vkCmdSetDepthWriteEnableEXT", "vkCmdSetDepthCompareOpEXT",
+        "vkCmdSetDepthBoundsTestEnableEXT", "vkCmdSetStencilTestEnableEXT",
+        "vkCmdSetStencilOpEXT",
+    };
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        if (!strcmp(name, commands[n])) return 1;
+    return 0;
+}
+
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
                                                               const char *name)
 {
@@ -397,6 +427,9 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
     if (bind_memory2_command(name) && !device->bind_memory2_extension_enabled)
         return NULL;
     if (maintenance4_command(name) && !device->maintenance4_extension_enabled)
+        return NULL;
+    if (extended_dynamic_state_command(name) &&
+        !device->extended_dynamic_state_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;

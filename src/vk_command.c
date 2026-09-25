@@ -81,6 +81,18 @@ static void clear(VkCommandBuffer c)
     c->min_depth_bounds = 0.0f;
     c->max_depth_bounds = 1.0f;
     c->dynamic_state_valid = 0;
+    c->eds_valid = 0;
+    c->viewport_with_count = c->scissor_with_count = 0;
+    c->cull_mode = VK_CULL_MODE_NONE;
+    c->front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    c->depth_test_enable = c->depth_write_enable = VK_FALSE;
+    c->depth_bounds_test_enable = c->stencil_test_enable = VK_FALSE;
+    c->depth_compare_op = VK_COMPARE_OP_NEVER;
+    memset(c->stencil_fail_op, 0, sizeof(c->stencil_fail_op));
+    memset(c->stencil_pass_op, 0, sizeof(c->stencil_pass_op));
+    memset(c->stencil_depth_fail_op, 0, sizeof(c->stencil_depth_fail_op));
+    memset(c->stencil_compare_op, 0, sizeof(c->stencil_compare_op));
+    c->stencil_op_faces = 0;
     memset(c->blend_constants, 0, sizeof(c->blend_constants));
     memset(c->stencil_compare_mask, 0, sizeof(c->stencil_compare_mask));
     memset(c->stencil_write_mask, 0, sizeof(c->stencil_write_mask));
@@ -1096,6 +1108,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(VkCommandBuffer c,VkBuffer buffe
        (uintptr_t)address%size) {invalid(c);return;}
     c->indices=(struct ps5vk_index_binding){buffer,offset,type};
 }
+static int ps5vk_command_resolve_extended_dynamic_state(VkCommandBuffer c, VkPipeline p,
+    struct ps5vk_raster_state *raster);
 VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint32_t instances,
     uint32_t first_vertex, uint32_t first_instance)
 {
@@ -1106,8 +1120,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     VkPipeline p = c->graphics_pipeline;
     /* The pipeline's viewport_count decides how many indices the draw needs.
      * Dynamic arrays must have every one of those indices set; indices at or
-     * above the count are neither required nor copied. */
-    const uint32_t viewport_count = p->viewport_count;
+     * above the count are neither required nor copied. A pipeline that
+     * declared the *_WITH_COUNT states takes the count from the command
+     * buffer, where both setters must have named the same one
+     * (VUID-vkCmdDraw-viewportCount-03419). */
+    uint32_t viewport_count = p->viewport_count;
+    if (p->dynamic_eds & PS5VK_EDS_VIEWPORT_WITH_COUNT) {
+        const uint32_t counts = PS5VK_EDS_VIEWPORT_WITH_COUNT | PS5VK_EDS_SCISSOR_WITH_COUNT;
+        if ((c->eds_valid & counts) != counts ||
+            c->viewport_with_count != c->scissor_with_count) { invalid(c); return; }
+        viewport_count = c->viewport_with_count;
+    }
     if (!viewport_count || viewport_count > PS5VK_MAX_VIEWPORTS) { invalid(c); return; }
     const uint32_t needed = ((1u << viewport_count) - 1u);
     const VkViewport *viewport = p->dynamic_viewport ?
@@ -1126,6 +1149,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
         raster.depth_bias_clamp=c->depth_bias_clamp;
         raster.depth_bias_slope=c->depth_bias_slope;
     }
+    /* VK_EXT_extended_dynamic_state: every state the pipeline declared
+     * dynamic must have been set, and the snapshot carries the resolved value
+     * so the native encoder never reads a pipeline value the draw overrode. */
+    if(!ps5vk_command_resolve_extended_dynamic_state(c,p,&raster)) {invalid(c);return;}
     /* The stencil masks and reference the pipeline declared dynamic come
      * from the command buffer, and each one must have been set for both
      * faces: the test reads the front and the back state. A pipeline with the
@@ -1758,4 +1785,190 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents(VkCommandBuffer c, uint32_t event_cou
             .src_stage = src, .dst_stage = dst,
         };
     c->operation_count += event_count;
+}
+
+/* VK_EXT_extended_dynamic_state (DXVK262-T10).
+ *
+ * Every setter needs the extendedDynamicState feature enabled on the device
+ * (VUID-vkCmdSetCullMode-None-03384 and its twins) and a recording buffer,
+ * validates its whole argument before storing anything, and marks its state
+ * set. The values reach a draw only through
+ * ps5vk_command_resolve_extended_dynamic_state below, and only for a pipeline
+ * that declared the state dynamic, so a value set for a state no pipeline
+ * declares is retained and never executed. */
+static int eds_recording(VkCommandBuffer c)
+{
+    if (!recording(c)) return 0;
+    if (!c->pool->device->extended_dynamic_state_enabled) { invalid(c); return 0; }
+    return 1;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetCullModeEXT(VkCommandBuffer c, VkCullModeFlags mode)
+{
+    if (!eds_recording(c)) return;
+    if (mode & ~VK_CULL_MODE_FRONT_AND_BACK) { invalid(c); return; }
+    c->cull_mode = mode; c->eds_valid |= PS5VK_EDS_CULL_MODE;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFaceEXT(VkCommandBuffer c, VkFrontFace face)
+{
+    if (!eds_recording(c)) return;
+    if (face != VK_FRONT_FACE_COUNTER_CLOCKWISE && face != VK_FRONT_FACE_CLOCKWISE) {
+        invalid(c); return;
+    }
+    c->front_face = face; c->eds_valid |= PS5VK_EDS_FRONT_FACE;
+}
+/* Only the fixed-function topology state is dynamic here, and the native
+ * program bakes it, so no pipeline can declare it: the value is validated and
+ * retained, exactly like any other state no bound pipeline reads. */
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopologyEXT(VkCommandBuffer c,
+    VkPrimitiveTopology topology)
+{
+    if (!eds_recording(c)) return;
+    if ((uint32_t)topology > (uint32_t)VK_PRIMITIVE_TOPOLOGY_PATCH_LIST) invalid(c);
+}
+/* The *_WITH_COUNT setters replace the count and the first `count` elements;
+ * the count is bounded by the array and, without multiViewport enabled, is
+ * exactly one (VUID-vkCmdSetViewportWithCount-viewportCount-03395). */
+static int with_count_range(VkCommandBuffer c, uint32_t count)
+{
+    if (!count || count > PS5VK_MAX_VIEWPORTS) return 0;
+    return count == 1 || (c->pool->device->enabled_features & PS5VK_FEATURE_MULTI_VIEWPORT);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCountEXT(VkCommandBuffer c, uint32_t count,
+    const VkViewport *viewports)
+{
+    if (!eds_recording(c)) return;
+    if (!with_count_range(c, count) || !viewports) { invalid(c); return; }
+    for (uint32_t i = 0; i < count; ++i)
+        if (!valid_viewport(&viewports[i])) { invalid(c); return; }
+    for (uint32_t i = 0; i < count; ++i) c->viewports[i] = viewports[i];
+    c->viewport_valid |= (1u << count) - 1u;
+    c->viewport_with_count = count;
+    c->eds_valid |= PS5VK_EDS_VIEWPORT_WITH_COUNT;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCountEXT(VkCommandBuffer c, uint32_t count,
+    const VkRect2D *scissors)
+{
+    if (!eds_recording(c)) return;
+    if (!with_count_range(c, count) || !scissors) { invalid(c); return; }
+    for (uint32_t i = 0; i < count; ++i)
+        if (!valid_scissor(&scissors[i])) { invalid(c); return; }
+    for (uint32_t i = 0; i < count; ++i) c->scissors[i] = scissors[i];
+    c->scissor_valid |= (1u << count) - 1u;
+    c->scissor_with_count = count;
+    c->eds_valid |= PS5VK_EDS_SCISSOR_WITH_COUNT;
+}
+/* vkCmdBindVertexBuffers2EXT. pSizes bounds each binding's range: it must fit
+ * the buffer (VUID-vkCmdBindVertexBuffers2-pSizes-03358) and is otherwise not
+ * carried, because the native fetch already bounds reads by the buffer, which
+ * robustBufferAccess permits (an out-of-range read may return any value inside
+ * the buffer's bound memory). pStrides needs a pipeline that declared
+ * VERTEX_INPUT_BINDING_STRIDE dynamic (VUID-vkCmdBindVertexBuffers2-pStrides-
+ * 03362 at draw time), and no pipeline here can, so a non-NULL pStrides is
+ * refused where it is recorded rather than at a later draw. */
+VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(VkCommandBuffer c, uint32_t first,
+    uint32_t count, const VkBuffer *buffers, const VkDeviceSize *offsets,
+    const VkDeviceSize *sizes, const VkDeviceSize *strides)
+{
+    if (!eds_recording(c)) return;
+    if (strides || first >= PS5VK_MAX_VERTEX_BINDINGS ||
+        count > PS5VK_MAX_VERTEX_BINDINGS - first || (count && (!buffers || !offsets))) {
+        invalid(c); return;
+    }
+    for (uint32_t i = 0; i < count && sizes; ++i) {
+        void *address; VkDeviceSize bytes;
+        if (sizes[i] == VK_WHOLE_SIZE) continue;
+        if (!buffers[i] || ps5vk_buffer_span(c->pool->device, buffers[i], offsets[i],
+                VK_WHOLE_SIZE, &address, &bytes) != VK_SUCCESS || sizes[i] > bytes) {
+            invalid(c); return;
+        }
+    }
+    vkCmdBindVertexBuffers(c, first, count, buffers, offsets);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnableEXT(VkCommandBuffer c, VkBool32 enable)
+{
+    if (!eds_recording(c)) return;
+    if (enable > VK_TRUE) { invalid(c); return; }
+    c->depth_test_enable = enable; c->eds_valid |= PS5VK_EDS_DEPTH_TEST_ENABLE;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnableEXT(VkCommandBuffer c, VkBool32 enable)
+{
+    if (!eds_recording(c)) return;
+    if (enable > VK_TRUE) { invalid(c); return; }
+    c->depth_write_enable = enable; c->eds_valid |= PS5VK_EDS_DEPTH_WRITE_ENABLE;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOpEXT(VkCommandBuffer c, VkCompareOp op)
+{
+    if (!eds_recording(c)) return;
+    if ((uint32_t)op > (uint32_t)VK_COMPARE_OP_ALWAYS) { invalid(c); return; }
+    c->depth_compare_op = op; c->eds_valid |= PS5VK_EDS_DEPTH_COMPARE_OP;
+}
+/* The depth bounds test is not implemented (the static enable is refused at
+ * pipeline creation), so the only value a draw may execute is VK_FALSE; the
+ * draw refuses a snapshot that would enable it. */
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnableEXT(VkCommandBuffer c, VkBool32 enable)
+{
+    if (!eds_recording(c)) return;
+    if (enable > VK_TRUE) { invalid(c); return; }
+    c->depth_bounds_test_enable = enable; c->eds_valid |= PS5VK_EDS_DEPTH_BOUNDS_TEST_ENABLE;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnableEXT(VkCommandBuffer c, VkBool32 enable)
+{
+    if (!eds_recording(c)) return;
+    if (enable > VK_TRUE) { invalid(c); return; }
+    c->stencil_test_enable = enable; c->eds_valid |= PS5VK_EDS_STENCIL_TEST_ENABLE;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(VkCommandBuffer c, VkStencilFaceFlags faces,
+    VkStencilOp fail, VkStencilOp pass, VkStencilOp depth_fail, VkCompareOp compare)
+{
+    if (!eds_recording(c)) return;
+    if (!faces || (faces & ~VK_STENCIL_FACE_FRONT_AND_BACK) ||
+        (uint32_t)fail > (uint32_t)VK_STENCIL_OP_DECREMENT_AND_WRAP ||
+        (uint32_t)pass > (uint32_t)VK_STENCIL_OP_DECREMENT_AND_WRAP ||
+        (uint32_t)depth_fail > (uint32_t)VK_STENCIL_OP_DECREMENT_AND_WRAP ||
+        (uint32_t)compare > (uint32_t)VK_COMPARE_OP_ALWAYS) { invalid(c); return; }
+    for (unsigned face = 0; face < 2; ++face) {
+        if (!(faces & (face ? VK_STENCIL_FACE_BACK_BIT : VK_STENCIL_FACE_FRONT_BIT))) continue;
+        c->stencil_fail_op[face] = fail; c->stencil_pass_op[face] = pass;
+        c->stencil_depth_fail_op[face] = depth_fail; c->stencil_compare_op[face] = compare;
+    }
+    c->stencil_op_faces |= faces;
+    if ((c->stencil_op_faces & VK_STENCIL_FACE_FRONT_AND_BACK) == VK_STENCIL_FACE_FRONT_AND_BACK)
+        c->eds_valid |= PS5VK_EDS_STENCIL_OP;
+}
+/* Resolve the extended dynamic state of one draw into its snapshot. Every
+ * state the pipeline declared dynamic must have been set since the buffer was
+ * reset (VUID-vkCmdDraw-None-07845 and its twins); the stencil operations
+ * need both faces. A dynamically enabled stencil test on an attachment
+ * without a stencil aspect is disabled, because Vulkan defines the test to
+ * pass when there is no stencil attachment; a dynamically enabled depth
+ * bounds test is refused, because this profile does not implement it. */
+static int ps5vk_command_resolve_extended_dynamic_state(VkCommandBuffer c, VkPipeline p,
+    struct ps5vk_raster_state *raster)
+{
+    const uint32_t eds = p->dynamic_eds;
+    const uint32_t per_draw = eds & ~(PS5VK_EDS_VIEWPORT_WITH_COUNT | PS5VK_EDS_SCISSOR_WITH_COUNT);
+    if ((c->eds_valid & per_draw) != per_draw) return 0;
+    raster->fixed_function_resolved = VK_TRUE;
+    raster->cull_mode = (eds & PS5VK_EDS_CULL_MODE) ? c->cull_mode : p->cull_mode;
+    raster->front_face = (eds & PS5VK_EDS_FRONT_FACE) ? c->front_face : p->front_face;
+    raster->depth_test = (eds & PS5VK_EDS_DEPTH_TEST_ENABLE) ? c->depth_test_enable : p->depth_test;
+    raster->depth_write = (eds & PS5VK_EDS_DEPTH_WRITE_ENABLE) ?
+        c->depth_write_enable : p->depth_write;
+    raster->depth_compare = (eds & PS5VK_EDS_DEPTH_COMPARE_OP) ?
+        c->depth_compare_op : p->depth_compare;
+    if ((eds & PS5VK_EDS_DEPTH_BOUNDS_TEST_ENABLE) && c->depth_bounds_test_enable) return 0;
+    if (eds & PS5VK_EDS_STENCIL_TEST_ENABLE)
+        raster->stencil_test = c->stencil_test_enable &&
+            (ps5vk_format_aspects(p->depth_format) & VK_IMAGE_ASPECT_STENCIL_BIT) ?
+            VK_TRUE : VK_FALSE;
+    if (eds & PS5VK_EDS_STENCIL_OP) {
+        VkStencilOpState *state[2] = {&raster->stencil_front, &raster->stencil_back};
+        for (unsigned face = 0; face < 2; ++face) {
+            state[face]->failOp = c->stencil_fail_op[face];
+            state[face]->passOp = c->stencil_pass_op[face];
+            state[face]->depthFailOp = c->stencil_depth_fail_op[face];
+            state[face]->compareOp = c->stencil_compare_op[face];
+        }
+    }
+    return 1;
 }

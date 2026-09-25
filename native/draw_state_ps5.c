@@ -147,6 +147,19 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
         PS5VK_DRAW_UNSUPPORTED();
+    /* VK_EXT_extended_dynamic_state: a snapshot the recorder resolved carries
+     * the cull, facing and depth-test state this draw executes; otherwise the
+     * pipeline's static values are the draw's. */
+    const int resolved = raster->fixed_function_resolved != VK_FALSE;
+    const VkCullModeFlags cull_mode = resolved ? raster->cull_mode : p->cull_mode;
+    const VkFrontFace front_face = resolved ? raster->front_face : p->front_face;
+    const VkBool32 depth_test = resolved ? raster->depth_test : p->depth_test;
+    const VkBool32 depth_write = resolved ? raster->depth_write : p->depth_write;
+    const VkCompareOp depth_compare = resolved ? raster->depth_compare : p->depth_compare;
+    if ((cull_mode & ~VK_CULL_MODE_FRONT_AND_BACK) ||
+        (front_face != VK_FRONT_FACE_CLOCKWISE && front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
+        depth_compare > VK_COMPARE_OP_ALWAYS || depth_compare < VK_COMPARE_OP_NEVER)
+        PS5VK_DRAW_UNSUPPORTED();
     int depth_format_supported = p->depth_format == VK_FORMAT_D32_SFLOAT ||
         p->depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT;
     /* The stencil test needs the stencil plane, which only the combined
@@ -340,8 +353,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     }
     /* Override the depth builder's Gears policy. Vulkan disables writes when
      * depth testing is disabled, even if depthWriteEnable was specified. */
-    uint32_t depth_control = depth && p->depth_test ?
-        2u | (p->depth_write ? 4u : 0u) | ((uint32_t)p->depth_compare << 4) : 0u;
+    uint32_t depth_control = depth && depth_test ?
+        2u | (depth_write ? 4u : 0u) | ((uint32_t)depth_compare << 4) : 0u;
     /* The stencil test (public GFX10 DB_DEPTH_CONTROL: STENCIL_ENABLE[0],
      * BACKFACE_ENABLE[7], STENCILFUNC[10:8], STENCILFUNC_BF[22:20]; the
      * hardware compare codes equal VkCompareOp). Front and back always carry
@@ -484,7 +497,7 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     const uint32_t polygon_offset_enable = raster->depth_bias_enable ?
         (1u << 11) | (1u << 12) | (1u << 13) : 0u;
     result.cx[result.cx_count++] = (ps5_agc_register){0x205,
-        (uint32_t)p->cull_mode | ((uint32_t)p->front_face << 2) |
+        (uint32_t)cull_mode | ((uint32_t)front_face << 2) |
         (hardware_polygon_type << 5) | (hardware_polygon_type << 8) |
         polygon_mode | polygon_offset_enable};
     /* Shader exports homogeneous W, not reciprocal W. Mesa RADV and the
