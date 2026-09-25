@@ -5,6 +5,7 @@
 #include "vertex_format_probe.h"
 #include "texture_format.h"
 #include "descriptor_table_layout.h"
+#include "kill_export_ps5.h"
 #include "vk_descriptor.h"
 #include <assert.h>
 #include <stdio.h>
@@ -529,6 +530,94 @@ static void check_depth_only_target(void)
     assert(!ps5vk_spirv_graphics_interface(&key));
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_ERROR_FEATURE_NOT_PRESENT && !out);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
+/* The SPIR-V version word and whether one opcode occurs, so each fixture is
+ * pinned to the exact form it stands for before the compiler sees it. */
+static int module_has_opcode(const struct ps5vk_graphics_module_key *m,uint32_t opcode)
+{
+    for(size_t at=5;at<m->word_count;at+=m->words[at]>>16) {
+        assert(m->words[at]>>16);
+        if((m->words[at]&0xffffu)==opcode)return 1;
+    }
+    return 0;
+}
+
+/* DXVK262-T11 pixel removal. A depth-only stage that removes a checkerboard
+ * and writes no colour, in the three SPIR-V forms DXVK 2.6.2 emits or relies
+ * on: OpKill (a Vulkan 1.0 module), OpTerminateInvocation (SPIR-V 1.6 core;
+ * DXVK's internal meta shaders are built for vulkan1.3 and emit this for GLSL
+ * discard) and OpDemoteToHelperInvocation (SPIR-V 1.6 with the
+ * DemoteToHelperInvocation capability; DXVK's DXBC discard). Each must compile
+ * to a pixel program with DB_SHADER_CONTROL.KILL_ENABLE and an empty export,
+ * which is exactly the package that needs export memory before the hardware
+ * honours its valid mask (native/kill_export_ps5.h). The control is the same
+ * pipeline without removal: no kill, nothing needed. */
+static void check_depth_kill_forms(void)
+{
+    static const struct {
+        const char *path; uint32_t version, opcode, capability;
+    } forms[]={
+        {"build/runtime-graphics/depth_kill.frag.spv",0x00010000u,252u,0},
+        {"build/runtime-graphics/depth_terminate.frag.spv",0x00010600u,4416u,0},
+        {"build/runtime-graphics/depth_demote.frag.spv",0x00010600u,5380u,5379u},
+    };
+    uint32_t published_control=0,published_removal=0;
+    for(unsigned f=0;f<=sizeof(forms)/sizeof(forms[0]);++f) {
+        const int control=f==sizeof(forms)/sizeof(forms[0]);
+        struct ps5vk_graphics_key key={
+            .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+            .fragment=read_module(control?"build/runtime-graphics/depth_only.frag.spv":
+                forms[f].path),
+            .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .color_format={VK_FORMAT_UNDEFINED},.color_attachment_count=0,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={0}};
+        if(!control) {
+            assert(key.fragment.words[1]==forms[f].version);
+            assert(module_has_opcode(&key.fragment,forms[f].opcode));
+            /* No form carries another form's instruction. */
+            for(unsigned other=0;other<sizeof(forms)/sizeof(forms[0]);++other)
+                if(other!=f)assert(!module_has_opcode(&key.fragment,forms[other].opcode));
+            int declared=0;
+            for(size_t at=5;at<key.fragment.word_count;at+=key.fragment.words[at]>>16)
+                if((key.fragment.words[at]&0xffffu)==17u &&
+                   key.fragment.words[at+1]==5379u)declared=1;
+            assert(declared==(forms[f].capability!=0));
+        }
+        assert(ps5vk_spirv_graphics_interface(&key));
+        const void *out=NULL;
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+        const struct ps5vk_runtime_graphics_program *program=out;
+        PsbcShaderMetadata *m=(PsbcShaderMetadata *)&program->fragment.metadata;
+        assert(m->hardware_stage==PSBC_HW_STAGE_PIXEL);
+        const PsbcRegisterWrite *db=context_register(m,0x203u);
+        const PsbcRegisterWrite *z=context_register(m,0x1c4u);
+        const PsbcRegisterWrite *format=context_register(m,0x1c5u);
+        const PsbcRegisterWrite *mask=context_register(m,0x08fu);
+        assert(db && z && format && mask);
+        /* Removal is the ONLY difference: kill enabled, no memory side effect
+         * (EXEC_ON_HIER_FAIL/EXEC_ON_NOOP clear) and nothing exported. */
+        assert(!!(db->value&0x40u)==!control);
+        assert(!(db->value&UINT32_C(0x600)));
+        assert(!z->value && !format->value && !mask->value);
+        /* All three removal forms publish one and the same word. */
+        if(control)published_control=db->value;
+        else if(f==0)published_removal=db->value;
+        else assert(db->value==published_removal);
+        /* The loader view carries the three registers through unchanged, and
+         * the rule reads them there: a removing stage needs export memory,
+         * the control does not. */
+        struct ps5vk_runtime_shader header;
+        assert(!ps5vk_runtime_shader_build(&header,&program->fragment));
+        assert(ps5vk_kill_needs_export_memory(header.context,
+            header.header.num_cx_registers)==!control);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)key.vertex.words);free((void *)key.fragment.words);
+    }
+    /* The pinned compiler's value for the control: EARLY_Z_THEN_LATE_Z. The
+     * removing forms add KILL_ENABLE to exactly that (0x50, the value the T09
+     * native witness recorded). */
+    assert(published_control==0x10u && published_removal==0x50u);
 }
 
 static void check_clip_cull_distances(void)
@@ -2397,6 +2486,7 @@ int main(void)
     check_view_index_builtin();
     check_clip_cull_distances();
     check_depth_only_target();
+    check_depth_kill_forms();
     check_fragment_distance_read();
     check_fragment_position();
     check_sample_rate_compilation();

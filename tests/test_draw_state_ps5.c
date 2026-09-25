@@ -1,5 +1,6 @@
 #include "draw_state_ps5.h"
 #include "blend_ps5.h"
+#include "kill_export_ps5.h"
 #include <assert.h>
 #include <math.h>
 #include <string.h>
@@ -10,6 +11,76 @@ static uint32_t last_cx(const struct ps5vk_draw_state *s,uint32_t offset)
     assert(!"missing context register");return 0;
 }
 static uint32_t bits(float f) { uint32_t u; memcpy(&u, &f, sizeof(u)); return u; }
+
+/* A depth-only pixel program that can kill (DB_SHADER_CONTROL 0x50, the
+ * value the pinned compiler publishes for a discarding depth-only stage) and
+ * exports nothing. Without export memory the hardware ignores its valid mask
+ * (kill_export_ps5.h); the measurement switch gives it MRT0 export memory and
+ * nothing else. Each case is checked in the bank the draw hands the hardware. */
+static void check_kill_export_memory(struct VkPipeline_T *depth_only,
+    struct ps5vk_graphics_pair *pair,const struct ps5vk_raster_state *raster,
+    const struct ps5vk_target_registers *depth,const VkRect2D *area)
+{
+    const ps5_agc_register saved[4]={pair->runtime_fragment.context[0],
+        pair->runtime_fragment.context[1],pair->runtime_fragment.context[2],
+        pair->runtime_fragment.context[3]};
+    struct ps5vk_draw_state out;
+    /* The compiler's empty export pair: no colour format, no shader mask. */
+    pair->runtime_fragment.context[0]=(ps5_agc_register){0x1c5,0};
+    pair->runtime_fragment.context[1]=(ps5_agc_register){0x08f,0};
+    pair->runtime_fragment.context[2].value=0x50;
+    assert(ps5vk_native_draw_state(depth_only,&depth_only->viewport,&depth_only->scissor,1,
+        raster,NULL,0,depth,area,640,480,0,&out)==VK_SUCCESS);
+    /* CB_SHADER_MASK is never widened: export memory is not a colour write. */
+    assert(last_cx(&out,0x08f)==0u && last_cx(&out,0x203)==0x50u);
+#if defined(PS5VK_KILL_EXPORT_MEMORY) && PS5VK_KILL_EXPORT_MEMORY
+    assert(last_cx(&out,0x1c5)==1u);
+#else
+    /* The shipping bank is the compiler's pair, unchanged. */
+    assert(last_cx(&out,0x1c5)==0u);
+#endif
+    /* A program that cannot kill needs no allocation under either build. */
+    pair->runtime_fragment.context[2].value=0x10;
+    assert(ps5vk_native_draw_state(depth_only,&depth_only->viewport,&depth_only->scissor,1,
+        raster,NULL,0,depth,area,640,480,0,&out)==VK_SUCCESS);
+    assert(last_cx(&out,0x1c5)==0u);
+    /* Without the compiler's DB_SHADER_CONTROL the switch cannot decide, so
+     * the draw is refused rather than guessed; the shipping build still
+     * programs the compiler's pair. */
+    pair->runtime_fragment.context[2]=(ps5_agc_register){0,0};
+#if defined(PS5VK_KILL_EXPORT_MEMORY) && PS5VK_KILL_EXPORT_MEMORY
+    assert(ps5vk_native_draw_state(depth_only,&depth_only->viewport,&depth_only->scissor,1,
+        raster,NULL,0,depth,area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT &&
+        !out.cx_count);
+#else
+    assert(ps5vk_native_draw_state(depth_only,&depth_only->viewport,&depth_only->scissor,1,
+        raster,NULL,0,depth,area,640,480,0,&out)==VK_SUCCESS);
+#endif
+    for(unsigned i=0;i<4;++i)pair->runtime_fragment.context[i]=saved[i];
+
+    /* The rule itself, on the last write of each register. */
+    ps5_agc_register bank[5]={{0x1c5,0},{0x1c4,0},{0x203,0x50},{0x08f,0},{0x1c5,0}};
+    assert(ps5vk_kill_needs_export_memory(bank,5)==1);
+    /* A colour export already allocates export memory. */
+    bank[4].value=9;
+    assert(ps5vk_kill_needs_export_memory(bank,5)==0);
+    /* Only the last write counts: an earlier colour format does not. */
+    bank[0].value=9;bank[4].value=0;
+    assert(ps5vk_kill_needs_export_memory(bank,5)==1);
+    assert(ps5vk_kill_export_memory_apply(bank,5)==1);
+    assert(bank[4].value==1u && bank[0].value==9u && bank[3].value==0u);
+    assert(ps5vk_kill_export_memory_apply(bank,5)==0);
+    /* A depth, stencil or sample-mask export allocates it too. */
+    bank[4].value=0;bank[1].value=4;
+    assert(ps5vk_kill_needs_export_memory(bank,5)==0);
+    bank[1].value=0;bank[2].value=0x10;
+    assert(ps5vk_kill_needs_export_memory(bank,5)==0);
+    /* Any of the three registers missing: no decision. */
+    bank[2].offset=0;
+    assert(ps5vk_kill_needs_export_memory(bank,5)==-1 &&
+           ps5vk_kill_export_memory_apply(bank,5)==-1);
+    assert(ps5vk_kill_needs_export_memory(NULL,0)==-1);
+}
 /* The polygon-offset block follows PA_SU_VTX_CNTL (0x2f9) at `at`. */
 static void check_polygon_offset(const struct ps5vk_draw_state *out, unsigned at,
     int depth, float clamp, float slope, float constant)
@@ -208,6 +279,10 @@ int main(void)
     p.color_format[0]=VK_FORMAT_R8G8B8A8_UNORM;
     pair.runtime_fragment.context[0]=(ps5_agc_register){0x1c5,9};
     pair.runtime_fragment.context[1]=(ps5_agc_register){0x08f,15};
+    /* The compiler's DB_SHADER_CONTROL (EARLY_Z_THEN_LATE_Z, no kill) and its
+     * empty SPI_SHADER_Z_FORMAT: every runtime pixel package publishes both. */
+    pair.runtime_fragment.context[2]=(ps5_agc_register){0x203,0x10};
+    pair.runtime_fragment.context[3]=(ps5_agc_register){0x1c4,0};
     pair.runtime_vertex.header.num_sh_registers=6;
     pair.runtime_fragment.header.num_sh_registers=4;
     pair.runtime_vertex.context[10]=(ps5_agc_register){0x2ab,1};
@@ -365,6 +440,7 @@ int main(void)
             assert(only.cx[i].value == 0u);
         }
         assert(last_cx(&only,0x08e)==0u);
+        check_kill_export_memory(&depth_only,&depth_pair,&raster,&depth,&area);
 
         /* The two facts travel together in both directions: a colour target
          * handed to a depth-only pipeline, and a colour pipeline given no

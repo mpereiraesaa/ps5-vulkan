@@ -333,6 +333,8 @@ check:
 	./build/tests/test_draw_state_ps5
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c src/color_attachment_contract.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5_d16_diagnostic
 	./build/tests/test_draw_state_ps5_d16_diagnostic
+	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_KILL_EXPORT_MEMORY=1 $(VULKAN_CFLAGS) -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/draw_state_ps5.c src/color_attachment_contract.c native/viewport_ps5.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_pipeline.c tests/test_draw_state_ps5.c -o build/tests/test_draw_state_ps5_kill_export
+	./build/tests/test_draw_state_ps5_kill_export
 	@mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/viewport_ps5.c tests/test_viewport_ps5.c -o build/tests/test_viewport_ps5
 	./build/tests/test_viewport_ps5
@@ -563,6 +565,9 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_subpass_fetch_const.frag -o build/runtime-graphics/runtime_subpass_fetch_const.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_subpass_resolve.frag -o build/runtime-graphics/runtime_subpass_resolve.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_depth_only.frag -o build/runtime-graphics/depth_only.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_depth_kill.frag -o build/runtime-graphics/depth_kill.frag.spv
+	$(GLSLANG) -V --target-env vulkan1.3 experiments/graphics/runtime_depth_kill.frag -o build/runtime-graphics/depth_terminate.frag.spv
+	$(GLSLANG) -V --target-env vulkan1.3 -DDEMOTE=1 experiments/graphics/runtime_depth_kill.frag -o build/runtime-graphics/depth_demote.frag.spv
 	$(GLSLANG) -V -DWITH_DISTANCES=1 experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_control.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_probe.vert -o build/runtime-graphics/geometry_probe.vert.spv
