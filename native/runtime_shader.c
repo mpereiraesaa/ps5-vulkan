@@ -161,7 +161,9 @@ static int descriptors_valid(const PsbcShaderMetadata *m)
          * the same eight DWORDs a sampled T# occupies, with no sampler words,
          * so a metadata record that claims 48 bytes for this type - or 32 for
          * a combined pair - is refused instead of being sized by its words. */
-        case PSBC_DESCRIPTOR_INPUT_ATTACHMENT:stride=32;break;
+        case PSBC_DESCRIPTOR_INPUT_ATTACHMENT:
+        case PSBC_DESCRIPTOR_SAMPLED_IMAGE:stride=32;break;
+        case PSBC_DESCRIPTOR_SAMPLER:
         case PSBC_DESCRIPTOR_UNIFORM_BUFFER:
         case PSBC_DESCRIPTOR_STORAGE_BUFFER:
         case PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER:stride=16;break;

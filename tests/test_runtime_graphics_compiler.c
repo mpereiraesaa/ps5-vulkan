@@ -1935,6 +1935,51 @@ static void check_cube_array_feature_mask(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+/* DXVK's fragment view set: SAMPLER, SAMPLED_IMAGE and UNIFORM_TEXEL_BUFFER
+ * bindings reach the compiler as their own record types at canonical offsets,
+ * the separate texture sample compiles, and the draw-side shader header
+ * accepts the resulting metadata. */
+static void check_separate_sampler_options(void)
+{
+    struct ps5vk_set_signature set={0};
+    const VkDescriptorType types[3]={VK_DESCRIPTOR_TYPE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER};
+    for(unsigned b=0;b<3;++b) {
+        set.binding[b].count=1;set.binding[b].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+        set.type[b]=types[b];
+    }
+    for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+        set.binding[b].first=set.count;set.count+=set.binding[b].count;
+    }
+    struct ps5vk_graphics_key key={.descriptor_set_count=1,.descriptor_sets=&set};
+    PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
+        .entrypoint="main",.optimise=true,.address32_hi=2,.primitive_type=4,.rasterization_samples=1};
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_FRAGMENT_BIT,&options)==VK_SUCCESS);
+    assert(options.descriptor_binding_count==3);
+    const PsbcDescriptorType expected[3]={PSBC_DESCRIPTOR_SAMPLER,PSBC_DESCRIPTOR_SAMPLED_IMAGE,
+        PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER};
+    const uint32_t offsets[3]={0,16,48},strides[3]={16,32,16};
+    for(unsigned b=0;b<3;++b) {
+        const PsbcDescriptorBinding *binding=&options.descriptor_bindings[b];
+        assert(binding->set==0 && binding->binding==b && binding->type==expected[b] &&
+            binding->array_size==1 && binding->offset==offsets[b] && binding->stride==strides[b]);
+    }
+    struct ps5vk_graphics_module_key module=read_module("build/runtime-graphics/separate_sampler.frag.spv");
+    PsbcShaderOutput output={0};
+    assert(psbc_compile_shader(module.words,module.word_count*4,&options,&output)==PSBC_RESULT_OK);
+    assert(output.machine_code_size && output.metadata.hardware_stage==PSBC_HW_STAGE_PIXEL);
+    assert(output.metadata.descriptor_set_valid[0] &&
+        output.metadata.descriptor_used_binding_mask[0]==7);
+    struct ps5vk_runtime_shader header;
+    assert(!ps5vk_runtime_shader_build(&header,&output));
+    psbc_free_output(&output);
+    free((void *)module.words);
+    /* A storage texel buffer in a fragment stage stays outside the profile. */
+    set.type[2]=VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+    assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_FRAGMENT_BIT,&options)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+}
+
 static void check_descriptor_options(void)
 {
     struct ps5vk_set_signature sets[4]={0};
@@ -2640,7 +2685,7 @@ int main(void)
 {
     check_t08_compiler_options();
     check_flat_interfaces();
-    check_descriptor_options();
+    check_descriptor_options(); check_separate_sampler_options();
     check_input_attachment_descriptors();
     check_input_attachment_probe_pipelines();
     check_fragment_store_atomic_contract();

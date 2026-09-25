@@ -1,6 +1,7 @@
 #include "ps5vk_compiler.h"
 #include "compile_stack.h"
 #include "descriptor_table_layout.h"
+#include "spirv_descriptor_types.h"
 #include "libpsbc/psbc_compile.h"
 #include "include/pssl_types.h"
 #include "gnm_shaderbinary.h"
@@ -219,6 +220,10 @@ static VkResult runtime_compile_compute_features(
     }
 
     if (layout->set_count > PS5VK_MAX_SETS)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Opaque resources must be the type their binding holds, or the compiled
+     * code would read another record's width at that offset. */
+    if (!ps5vk_spirv_descriptor_types_match(spirv, spirv_words, layout->set_count, layout->sets))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Pipeline layouts built by Vulkan already have canonical prefixes. Build
      * them here as well for callers of this adapter that supply only counts. */

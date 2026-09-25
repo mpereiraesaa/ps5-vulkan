@@ -35,6 +35,7 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_cube_array.frag -o build/runtime-graphics/cube_array.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.1 experiments/graphics/runtime_view_index.frag -o build/runtime-graphics/view_index.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_descriptor_arrays.frag -o build/runtime-graphics/descriptor_arrays.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_separate_sampler.frag -o build/runtime-graphics/separate_sampler.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_fragment_store.frag -o build/runtime-graphics/fragment_store.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_fragment_coord_store.frag -o build/runtime-graphics/fragment_coord_store.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_fragment_coord_store_after_kill.frag -o build/runtime-graphics/fragment_coord_store_after_kill.frag.spv

@@ -54,7 +54,7 @@ static VkResult storage_image_descriptor(VkDevice device,
 /* One typed texel-buffer V#, shared by the uniform (OpImageFetch) and storage
  * (OpImageRead/Write) roles. The row must carry the IMPLEMENTED role asked
  * for; view creation is where the witnessed role is enforced. */
-static VkResult texel_buffer_descriptor(VkDevice device, VkBufferView view,
+VkResult ps5vk_texel_buffer_descriptor(VkDevice device, VkBufferView view,
     uint32_t capability, uint32_t out[4])
 {
     if (!view || view->device != device || !view->buffer) return VK_ERROR_UNKNOWN;
@@ -193,7 +193,7 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
                 if (extent < p->table_dword + 4) extent = p->table_dword + 4;
                 continue;
             }
-            if (texel_buffer_descriptor(device, view,
+            if (ps5vk_texel_buffer_descriptor(device, view,
                     p->type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER ?
                         PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER :
                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER,

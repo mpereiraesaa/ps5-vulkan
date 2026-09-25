@@ -12,6 +12,7 @@ unsigned ps5vk_draw_prepare_site;
 #include "graphics_pipeline_ps5.h"
 #include "runtime_resource_use.h"
 #include "graphics_descriptor_profile.h"
+#include "texture_format.h"
 #include <string.h>
 
 static int graphics_descriptor_type(VkDescriptorType type)
@@ -105,6 +106,12 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
                 if(graphics_buffer_type(set->signature.type[b]) &&
                    !set->buffers[index].buffer && !(d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR))
                     return VK_ERROR_UNKNOWN;
+                /* The separate roles carry exactly one handle each; a null one
+                 * never reaches its encoder. */
+                if((set->signature.type[b]==VK_DESCRIPTOR_TYPE_SAMPLER &&
+                    !set->images[index].sampler) ||
+                   (set->signature.type[b]==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER &&
+                    !set->texel_views[index]))return VK_ERROR_UNKNOWN;
                 /* The recorded view and the layout it is consumed through are
                  * preconditions this path owns: the encoder receives a view
                  * and cannot see a VkDescriptorImageInfo. VkDescriptorImageInfo's
@@ -286,6 +293,17 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
                      * combined T#/S# path - an input attachment's slot in the
                      * table can therefore never receive sampler words. */
                     rc=ps5vk_image_resource_descriptor(d,set->images[index].imageView,words);
+                } else if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_SAMPLER) {
+                    /* A separate S#: the sampler's four words in a sixteen-byte
+                     * record; the image arrives through its own T# binding. */
+                    VkSampler sampler=set->images[index].sampler;
+                    if(sampler && sampler->device==d)memcpy(words,sampler->words,16);
+                    else rc=VK_ERROR_UNKNOWN;
+                } else if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) {
+                    rc=ps5vk_sampled_image_descriptor(d,set->images[index].imageView,words);
+                } else if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
+                    rc=ps5vk_texel_buffer_descriptor(d,set->texel_views[index],
+                        PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER,words);
                 } else {
                     const VkDescriptorImageInfo *image=&set->images[index];
                     if(!image->imageView && (d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR) && image->sampler &&
