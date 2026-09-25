@@ -812,12 +812,14 @@ static void separate_sampler_types(void)
     view.device = &d; view.image = &image; view.view_type = VK_IMAGE_VIEW_TYPE_2D;
     unbound_view = view; unbound_view.image = &unbound;
     storage_only_view = view; storage_only_view.image = &storage_only;
-    /* vkCreateBuffer does not yet admit STORAGE_TEXEL_BUFFER usage, so no
-     * view can satisfy a storage-texel write; only the refusal is reachable. */
+    /* vkCreateBuffer admits STORAGE_TEXEL_BUFFER usage, but no format has a
+     * storage-texel capability, so no view can satisfy a storage-texel write;
+     * only the refusal is reachable. */
     VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 512,
         .usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT};
     VkBuffer uniform_only;
-    assert(vkCreateBuffer(&d, &bi, NULL, &uniform_only) == VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(vkCreateBuffer(&d, &bi, NULL, &uniform_only) == VK_SUCCESS);
+    vkDestroyBuffer(&d, uniform_only, NULL);
     bi.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
     assert(vkCreateBuffer(&d, &bi, NULL, &uniform_only) == VK_SUCCESS);
     assert(vkBindBufferMemory(&d, uniform_only, memory, 1536) == VK_SUCCESS);
