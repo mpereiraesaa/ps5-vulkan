@@ -508,13 +508,20 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(VkCommandBuffer c, VkPipelineBindPo
     if (point != VK_PIPELINE_BIND_POINT_COMPUTE || p->graphics) { invalid(c); return; }
     c->pipeline = p;
 }
-static int valid_viewport(const VkViewport *v)
+/* VK_KHR_maintenance1 permits a negative height (the viewport then flips y);
+ * without it the height is positive. Zero stays invalid either way. */
+static int valid_viewport_on(VkCommandBuffer c, const VkViewport *v)
 {
+    const int flip = c && c->pool && c->pool->device &&
+        c->pool->device->maintenance1_extension_enabled;
     return v && v->x >= -FLT_MAX && v->x <= FLT_MAX &&
         v->y >= -FLT_MAX && v->y <= FLT_MAX &&
-        v->width > 0 && v->width <= FLT_MAX && v->height > 0 && v->height <= FLT_MAX &&
+        v->width > 0 && v->width <= FLT_MAX &&
+        (v->height > 0 || (flip && v->height < 0)) &&
+        v->height <= FLT_MAX && v->height >= -FLT_MAX &&
         v->minDepth >= 0 && v->minDepth <= 1 && v->maxDepth >= 0 && v->maxDepth <= 1;
 }
+#define valid_viewport(v) valid_viewport_on(c, (v))
 static int valid_scissor(const VkRect2D *s)
 {
     return s && s->offset.x >= 0 && s->offset.y >= 0 &&
@@ -1971,4 +1978,16 @@ static int ps5vk_command_resolve_extended_dynamic_state(VkCommandBuffer c, VkPip
         }
     }
     return 1;
+}
+
+/* VK_KHR_maintenance1: trimming returns unused pool memory to the system.
+ * This pool keeps no memory beyond its live command buffers, so there is
+ * nothing to return and the call is a no-op on a valid pool; flags are
+ * reserved and must be zero. */
+VKAPI_ATTR void VKAPI_CALL vkTrimCommandPoolKHR(VkDevice d, VkCommandPool p,
+    VkCommandPoolTrimFlags flags)
+{
+    if (!d) return;
+    if (!p || p->device != d || flags || !d->maintenance1_extension_enabled)
+        ++d->lifetime_errors;
 }

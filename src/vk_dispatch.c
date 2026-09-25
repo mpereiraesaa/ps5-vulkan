@@ -220,6 +220,8 @@ static const struct entry entries[] = {
     ENTRY(vkCmdSetDepthBoundsTestEnableEXT, DEVICE),
     ENTRY(vkCmdSetStencilTestEnableEXT, DEVICE),
     ENTRY(vkCmdSetStencilOpEXT, DEVICE),
+    /* VK_KHR_maintenance1 (DXVK262-T10). */
+    ENTRY(vkTrimCommandPoolKHR, DEVICE),
 };
 #undef ENTRY
 
@@ -430,6 +432,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
         return NULL;
     if (extended_dynamic_state_command(name) &&
         !device->extended_dynamic_state_extension_enabled)
+        return NULL;
+    if (!strcmp(name, "vkTrimCommandPoolKHR") && !device->maintenance1_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;

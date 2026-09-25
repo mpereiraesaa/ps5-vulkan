@@ -18,11 +18,17 @@ VkResult ps5vk_native_viewport_bank(uint32_t index, const VkViewport *v, const V
     memset(out, 0, sizeof(*out) * PS5VK_VIEWPORT_REGISTERS);
     if (index >= PS5VK_VIEWPORT_BANKS) return VK_ERROR_UNKNOWN;
     uint32_t sr, sb, ar, ab;
-    /* Ordered comparisons also reject NaNs. Negative-height extensions are not
-     * advertised. Vulkan minDepth > maxDepth is valid and must stay reversed. */
-    if (!v || !(v->width > 0 && v->width <= 16384) || !(v->height > 0 && v->height <= 16384) ||
+    /* Ordered comparisons also reject NaNs. A negative height is the
+     * VK_KHR_maintenance1 y-flip, which the front end admits only on a device
+     * that enabled it: the same scale/offset formula then encodes a negative
+     * YSCALE with YOFFSET = y + height/2, and both y and y + height must lie in
+     * the viewport bounds. Vulkan minDepth > maxDepth is valid and must stay
+     * reversed. */
+    if (!v || !(v->width > 0 && v->width <= 16384) ||
+        !((v->height > 0 && v->height <= 16384) || (v->height < 0 && v->height >= -16384)) ||
         !(v->x >= -32768 && v->x + v->width <= 32767) ||
-        !(v->y >= -32768 && v->y + v->height <= 32767) ||
+        !(v->y >= -32768 && v->y <= 32767 &&
+          v->y + v->height >= -32768 && v->y + v->height <= 32767) ||
         !(v->minDepth >= 0 && v->minDepth <= 1) || !(v->maxDepth >= 0 && v->maxDepth <= 1) ||
         !rect(s, &sr, &sb) || !rect(area, &ar, &ab)) return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t x = s->offset.x > area->offset.x ? (uint32_t)s->offset.x : (uint32_t)area->offset.x;
