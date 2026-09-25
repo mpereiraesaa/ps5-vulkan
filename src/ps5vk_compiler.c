@@ -258,6 +258,11 @@ static VkResult runtime_compile_compute_features(
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: type=PSBC_DESCRIPTOR_STORAGE_IMAGE;break;
+                /* DXVK's DXBC forms: a separate S# and T# the shader combines
+                 * with OpSampledImage, and a typed UAV buffer. */
+                case VK_DESCRIPTOR_TYPE_SAMPLER: type=PSBC_DESCRIPTOR_SAMPLER;break;
+                case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: type=PSBC_DESCRIPTOR_SAMPLED_IMAGE;break;
+                case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_STORAGE_TEXEL_BUFFER;break;
                 default:
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 }

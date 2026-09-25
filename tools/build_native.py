@@ -430,7 +430,8 @@ def main():
         compute_srcs = [ROOT / "native/compute_main.c",
             ROOT / "src/graphics_program.c", ROOT / "src/texture_copy.c", ROOT / "src/texture_format.c", ROOT / "src/texture_layout.c",
             ROOT / "native/platform_ps5.c", ROOT / "native/memory_ps5.c", ROOT / "native/queue_ps5.c",
-            ROOT / "src/compute_commands.c", ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c"]
+            ROOT / "src/compute_commands.c", ROOT / "src/dispatch_encode.c", ROOT / "src/descriptor_encode.c",
+            ROOT / "src/texture_descriptor.c", ROOT / "src/depth_layout.c"]
         if use_runtime_compiler:
             compute_srcs += [ROOT / "src/compilation_cache.c", ROOT / "src/vk_pipeline_cache.c",
                              ROOT / "src/ps5vk_compiler.c", ROOT / "src/ps5_compiler_shims.c"]

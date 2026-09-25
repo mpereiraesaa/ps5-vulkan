@@ -65,7 +65,7 @@ VK_COMMAND_TEST_SOURCES = $(VK_COMMAND_SOURCES) src/color_attachment_contract.c 
 VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_sync.c src/vk_buffer_transfer.c src/vk_image_transfer.c src/color_clear.c src/color_detile.c src/depth_detile.c src/texture_copy.c src/texture_layout.c src/vk_query_pool.c src/vk_queue.c src/vk_queue_router.c src/vk_sync2.c
 VK_GRAPHICS_SOURCES = src/color_attachment_contract.c src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/graphics_program.c src/vk_transfer.c src/vk_copy_commands2.c src/vk_dynamic_rendering.c
 VK_DEVICE_SOURCES = $(VK_QUEUE_SOURCES) $(VK_GRAPHICS_SOURCES) src/vk_device.c src/vk_dispatch.c src/vk_swapchain.c native/wsi_present_ps5.c
-NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/queue_ps5.c src/vk_indirect.c src/descriptor_encode.c src/texture_format.c src/dispatch_encode.c src/compute_commands.c tests/test_native_prepare.c
+NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/queue_ps5.c src/vk_indirect.c src/descriptor_encode.c src/texture_format.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c src/dispatch_encode.c src/compute_commands.c tests/test_native_prepare.c
 # graphics_pair.c reads the canonical topology -> primitive mapping from
 # src/graphics_program.h, so this host rule needs the pinned Vulkan headers the
 # native build already passes.
@@ -189,7 +189,7 @@ check-sanitize: check-thread-sanitize
 	# all surrounding queue/descriptor tests below retain ASan+UBSan.
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=undefined $(NATIVE_PREPARE_TEST) -o build/tests/test_native_prepare_sanitized
 	./build/tests/test_native_prepare_sanitized
-	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/descriptor_encode.c src/texture_format.c tests/test_descriptor_encode.c -o build/tests/test_descriptor_encode_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/descriptor_encode.c src/texture_format.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c tests/test_descriptor_encode.c -o build/tests/test_descriptor_encode_sanitized
 	./build/tests/test_descriptor_encode_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/compute_commands.c src/dispatch_encode.c tests/test_dispatch_encode.c -o build/tests/test_dispatch_encode_sanitized
 	./build/tests/test_dispatch_encode_sanitized
@@ -385,7 +385,7 @@ check:
 	./build/tests/test_shader_relocate
 	$(CC) -std=c11 -Wall -Wextra -Werror $(NATIVE_PREPARE_TEST) -o build/tests/test_native_prepare
 	./build/tests/test_native_prepare
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/descriptor_encode.c src/texture_format.c tests/test_descriptor_encode.c -o build/tests/test_descriptor_encode
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/descriptor_encode.c src/texture_format.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c tests/test_descriptor_encode.c -o build/tests/test_descriptor_encode
 	./build/tests/test_descriptor_encode
 	$(PYTHON) tools/prepare_vulkan_headers.py --check
 	$(PYTHON) tools/check_command_surface.py --check

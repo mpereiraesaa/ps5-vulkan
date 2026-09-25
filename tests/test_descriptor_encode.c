@@ -1,5 +1,7 @@
 #include "descriptor_encode.h"
+#include "texture_descriptor.h"
 #include "vk_image.h"
+#include "vk_sampler.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -241,5 +243,83 @@ int main(void)
     device.enabled_features_t09&=~(uint32_t)PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2;
     assert(ps5vk_buffer_descriptor(&device,&huge,0,record)==VK_SUCCESS);
     assert(record[2]==UINT32_MAX);
+    /* DXVK's DXBC forms. A separate SAMPLER is the sampler's own four words;
+     * a separate SAMPLED_IMAGE is exactly the combined record's T#; the two
+     * texel roles share one V# but each needs its own implemented role. */
+    struct VkImage_T sampled_image={.device=&device,
+        .memory=(VkDeviceMemory)(uintptr_t)1,.requirements={.size=4096},
+        .info={.format=VK_FORMAT_R8G8B8A8_UNORM,.imageType=VK_IMAGE_TYPE_2D,
+            .extent={8,4,1},.mipLevels=1,.arrayLayers=1,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT}};
+    struct VkImageView_T sampled_view={.device=&device,.image=&sampled_image,
+        .format=VK_FORMAT_R8G8B8A8_UNORM,.view_type=VK_IMAGE_VIEW_TYPE_2D,
+        .range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+    struct VkSampler_T sampler={.device=&device,.words={0x11111111u,0x22222222u,
+        0x33333333u,0x44444444u}};
+    struct VkBufferView_T typed_view={.device=&device,.buffer=(VkBuffer)(uintptr_t)0x200004000,
+        .format=VK_FORMAT_R32_UINT,.offset=64,.range=256};
+    struct VkDescriptorSet_T separate={.pool=&pool,
+        .defined={VK_TRUE,VK_TRUE,VK_TRUE,VK_TRUE},
+        .image_resources={VK_NULL_HANDLE,&sampled_image},
+        .texel_views={VK_NULL_HANDLE,VK_NULL_HANDLE,&typed_view,&typed_view}};
+    const VkDescriptorType separate_types[4]={VK_DESCRIPTOR_TYPE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+        VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER};
+    for(uint32_t b=0;b<4;++b) {
+        separate.signature.binding[b]=(struct ps5vk_binding){1,b,VK_SHADER_STAGE_COMPUTE_BIT};
+        separate.signature.type[b]=separate_types[b];
+    }
+    separate.images[0]=(VkDescriptorImageInfo){&sampler,VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};
+    separate.images[1]=(VkDescriptorImageInfo){VK_NULL_HANDLE,&sampled_view,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    /* Canonical offsets: S# at dword 0, T# at 4, uniform V# at 12. */
+    struct ps5vk_compiled_program separate_program={.gfx=1013,.descriptor_count=3,
+        .descriptors={{0,0,0,0,VK_DESCRIPTOR_TYPE_SAMPLER},
+                      {0,1,0,4,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
+                      {0,2,0,12,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER}}};
+    uint32_t separate_table[20], combined[12];
+    memset(separate_table,0xab,sizeof(separate_table));
+    assert(ps5vk_descriptor_encode(&device,&separate_program,0,&separate,dynamic,
+        separate_table,20)==VK_SUCCESS);
+    assert(!memcmp(separate_table,sampler.words,16));
+    assert(ps5vk_texture_descriptor(&device,&sampled_view,&sampler,combined)==VK_SUCCESS);
+    assert(!memcmp(separate_table+4,combined,32));
+    assert(separate_table[4]==0x2000010 && ((separate_table[6]>>14)&0x3fffu)==3u);
+    assert(separate_table[12]==0x4040 && separate_table[13]==0x00040002 &&
+        separate_table[14]==64 && separate_table[15]==0x11014204);
+    assert(separate_table[16]==0xabababab);
+    /* A sampled-image record in the wrong layout, over an image without
+     * SAMPLED usage or with a missing sampler is refused, table unchanged. */
+    memcpy(saved,separate_table,sizeof(saved));
+    separate.images[1].imageLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    assert(ps5vk_descriptor_encode(&device,&separate_program,0,&separate,dynamic,
+        separate_table,20)!=VK_SUCCESS);
+    separate.images[1].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    sampled_image.info.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    assert(ps5vk_descriptor_encode(&device,&separate_program,0,&separate,dynamic,
+        separate_table,20)!=VK_SUCCESS);
+    assert(ps5vk_sampled_image_descriptor(&device,&sampled_view,combined)==
+        VK_ERROR_FEATURE_NOT_PRESENT);
+    sampled_image.info.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    separate.images[0].sampler=VK_NULL_HANDLE;
+    assert(ps5vk_descriptor_encode(&device,&separate_program,0,&separate,dynamic,
+        separate_table,20)!=VK_SUCCESS);
+    separate.images[0].sampler=&sampler;
+    assert(!memcmp(saved,separate_table,sizeof(saved)));
+    /* The storage role is a distinct implemented capability: the same R32 view
+     * that serves texelFetch is refused for imageStore until its row carries
+     * the storage-texel role. */
+    struct ps5vk_compiled_program storage_texel_program={.gfx=1013,.descriptor_count=1,
+        .descriptors={{0,3,0,16,VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER}}};
+    assert(!(ps5vk_texture_format_capabilities(VK_FORMAT_R32_UINT) &
+        PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER));
+    assert(ps5vk_descriptor_encode(&device,&storage_texel_program,0,&separate,dynamic,
+        separate_table,20)!=VK_SUCCESS);
+    /* A compiled type the compute path has no record for is refused. */
+    separate_program.descriptors[0].type=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    separate.signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    assert(ps5vk_descriptor_encode(&device,&separate_program,0,&separate,dynamic,
+        separate_table,20)!=VK_SUCCESS);
     puts("Compiler-ordered raw descriptor table: pass (host only)");
 }

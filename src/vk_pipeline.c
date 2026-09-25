@@ -2,6 +2,7 @@
 #include "compilation_cache.h"
 #include "vk_pipeline_cache.h"
 #include "spirv_ubo_layout.h"
+#include "descriptor_table_layout.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -294,23 +295,19 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
     if (invocations > 1024) return 0;
     for (uint32_t j = 0; j < p->descriptor_count; ++j) {
         const struct ps5vk_program_descriptor *b = &p->descriptors[j];
+        /* Zero for every type the compute path cannot encode. */
+        const uint32_t dwords = ps5vk_compute_record_dwords(b->type);
         if (b->set >= layout->set_count || !(p->descriptor_set_mask & (1u << b->set)) ||
-            b->binding >= PS5VK_MAX_BINDINGS || b->table_dword % 4 ||
-            b->table_dword > 128u -
-                (b->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u)) return 0;
+            b->binding >= PS5VK_MAX_BINDINGS || b->table_dword % 4 || !dwords ||
+            b->table_dword > 128u - dwords) return 0;
         const struct ps5vk_binding *binding = &layout->sets[b->set].binding[b->binding];
         if (layout->sets[b->set].type[b->binding] != b->type ||
-            (ps5vk_base_buffer_descriptor_type(b->type) != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER &&
-             ps5vk_base_buffer_descriptor_type(b->type) != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
-             b->type != VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER &&
-             b->type != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) ||
             binding->count <= b->element || !(binding->stages & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
         for (uint32_t k = 0; k < j; ++k)
             if (p->descriptors[k].set == b->set &&
-                ((p->descriptors[k].table_dword < b->table_dword +
-                    (b->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u) &&
+                ((p->descriptors[k].table_dword < b->table_dword + dwords &&
                   b->table_dword < p->descriptors[k].table_dword +
-                    (p->descriptors[k].type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u)) ||
+                    ps5vk_compute_record_dwords(p->descriptors[k].type)) ||
                  (p->descriptors[k].binding == b->binding && p->descriptors[k].element == b->element))) return 0;
     }
     return 1;

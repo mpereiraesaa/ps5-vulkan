@@ -29,14 +29,38 @@ static inline uint32_t ps5vk_descriptor_record_bytes(VkDescriptorType type)
 {
     switch (type) {
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: return 48;
-    /* Resource-only image record: the same GFX10 image fields, no S# words. */
+    /* Resource-only image record: the same GFX10 image fields, no S# words.
+     * A separate sampled image is the combined record's T# alone. */
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: return 32;
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: return 32;
+    /* Four-DWORD records: buffer and texel-buffer V#s and a separate S#. */
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: return 16;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+    case VK_DESCRIPTOR_TYPE_SAMPLER: return 16;
+    default: return 0;
+    }
+}
+
+/* The DWORDs one compiled compute descriptor occupies in its set table: the
+ * record size of every type the compute path encodes, zero otherwise. */
+static inline uint32_t ps5vk_compute_record_dwords(VkDescriptorType type)
+{
+    switch (type) {
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+    case VK_DESCRIPTOR_TYPE_SAMPLER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+        return ps5vk_descriptor_record_bytes(type) / 4u;
     default: return 0;
     }
 }

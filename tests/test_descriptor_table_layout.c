@@ -85,6 +85,20 @@ int main(void)
      * record, so a mixed table's canonical offsets are neither compacted nor
      * re-based around it. */
     assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)==32);
+    /* DXVK's separate forms: a sampled image is the T# alone and a sampler the
+     * S# alone; a storage texel buffer is one V# like the uniform one. The
+     * compute path encodes all of them, never a combined or input record. */
+    assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)==32);
+    assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_SAMPLER)==16);
+    assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)==16);
+    assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)==0);
+    assert(ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_SAMPLER)==4 &&
+           ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)==8 &&
+           ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)==4 &&
+           ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)==8 &&
+           ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)==4);
+    assert(!ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
+           !ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT));
     memset(sets,0,sizeof(sets));
     for(unsigned s=0;s<2;++s) {
         sets[s].binding[1]=(struct ps5vk_binding){.count=1,.stages=VK_SHADER_STAGE_FRAGMENT_BIT};

@@ -1,4 +1,5 @@
 #include "dispatch_encode.h"
+#include "descriptor_table_layout.h"
 #include <string.h>
 
 static int overlap(uint64_t a, uint64_t an, uint64_t b, uint64_t bn)
@@ -31,20 +32,18 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
     if (local > 1024) return 0;
     for (uint32_t j = 0; j < p->descriptor_count; ++j) {
         const struct ps5vk_program_descriptor *b = &p->descriptors[j];
+        const uint32_t dwords = ps5vk_compute_record_dwords(b->type);
         if (b->set >= PS5VK_MAX_SETS || !(p->descriptor_set_mask & (1u << b->set)) ||
-            b->binding >= PS5VK_MAX_BINDINGS || b->table_dword % 4 ||
-            b->table_dword > 128u -
-                (b->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u))
+            b->binding >= PS5VK_MAX_BINDINGS || b->table_dword % 4 || !dwords ||
+            b->table_dword > 128u - dwords)
             return 0;
-        uint64_t end = (b->table_dword +
-            (b->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u)) * 4;
+        uint64_t end = (b->table_dword + dwords) * 4;
         if (end > table_bytes[b->set]) table_bytes[b->set] = end;
         for (uint32_t k = 0; k < j; ++k)
             if (p->descriptors[k].set == b->set &&
-                ((p->descriptors[k].table_dword < b->table_dword +
-                    (b->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u) &&
+                ((p->descriptors[k].table_dword < b->table_dword + dwords &&
                   b->table_dword < p->descriptors[k].table_dword +
-                    (p->descriptors[k].type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 8u : 4u)) ||
+                    ps5vk_compute_record_dwords(p->descriptors[k].type)) ||
                  (p->descriptors[k].binding == b->binding && p->descriptors[k].element == b->element)))
                 return 0;
     }
