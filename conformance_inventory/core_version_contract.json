@@ -1,0 +1,1794 @@
+{
+ "schema": "ps5vk-core-version-contract/1",
+ "purpose": "Mandatory Vulkan 1.1-1.3 device contract that gates PS5VK_DEVICE_API_VERSION. Statuses describe the shipping graphics profile on main; 'in-progress' marks routes that exist unadvertised or in review. Vulkan 1.0 floors stay governed by tools/check_reporting_matrix.py.",
+ "registry": {
+  "path": "third_party/vulkan-headers/registry/vk.xml",
+  "commit": "b51f6b865c18fc5b33990d12f75e8dfd672cede6"
+ },
+ "promotion_switch": {
+  "path": "src/physical_device_profile.h",
+  "macro": "PS5VK_DEVICE_API_VERSION"
+ },
+ "versions": {
+  "1.1": {
+   "commands": {
+    "global": [
+     "vkEnumerateInstanceVersion"
+    ],
+    "instance": [
+     "vkEnumeratePhysicalDeviceGroups",
+     "vkGetPhysicalDeviceExternalBufferProperties",
+     "vkGetPhysicalDeviceExternalFenceProperties",
+     "vkGetPhysicalDeviceExternalSemaphoreProperties",
+     "vkGetPhysicalDeviceFeatures2",
+     "vkGetPhysicalDeviceFormatProperties2",
+     "vkGetPhysicalDeviceImageFormatProperties2",
+     "vkGetPhysicalDeviceMemoryProperties2",
+     "vkGetPhysicalDeviceProperties2",
+     "vkGetPhysicalDeviceQueueFamilyProperties2",
+     "vkGetPhysicalDeviceSparseImageFormatProperties2"
+    ],
+    "device": [
+     "vkBindBufferMemory2",
+     "vkBindImageMemory2",
+     "vkCmdDispatchBase",
+     "vkCmdSetDeviceMask",
+     "vkCreateDescriptorUpdateTemplate",
+     "vkCreateSamplerYcbcrConversion",
+     "vkDestroyDescriptorUpdateTemplate",
+     "vkDestroySamplerYcbcrConversion",
+     "vkGetBufferMemoryRequirements2",
+     "vkGetDescriptorSetLayoutSupport",
+     "vkGetDeviceGroupPeerMemoryFeatures",
+     "vkGetDeviceQueue2",
+     "vkGetImageMemoryRequirements2",
+     "vkGetImageSparseMemoryRequirements2",
+     "vkTrimCommandPool",
+     "vkUpdateDescriptorSetWithTemplate"
+    ]
+   },
+   "core_aliases": {
+    "vkBindBufferMemory2": [
+     "vkBindBufferMemory2KHR"
+    ],
+    "vkBindImageMemory2": [
+     "vkBindImageMemory2KHR"
+    ],
+    "vkGetDeviceGroupPeerMemoryFeatures": [
+     "vkGetDeviceGroupPeerMemoryFeaturesKHR"
+    ],
+    "vkCmdSetDeviceMask": [
+     "vkCmdSetDeviceMaskKHR"
+    ],
+    "vkEnumeratePhysicalDeviceGroups": [
+     "vkEnumeratePhysicalDeviceGroupsKHR"
+    ],
+    "vkGetImageMemoryRequirements2": [
+     "vkGetImageMemoryRequirements2KHR"
+    ],
+    "vkGetBufferMemoryRequirements2": [
+     "vkGetBufferMemoryRequirements2KHR"
+    ],
+    "vkGetImageSparseMemoryRequirements2": [
+     "vkGetImageSparseMemoryRequirements2KHR"
+    ],
+    "vkGetPhysicalDeviceFeatures2": [
+     "vkGetPhysicalDeviceFeatures2KHR"
+    ],
+    "vkGetPhysicalDeviceProperties2": [
+     "vkGetPhysicalDeviceProperties2KHR"
+    ],
+    "vkGetPhysicalDeviceFormatProperties2": [
+     "vkGetPhysicalDeviceFormatProperties2KHR"
+    ],
+    "vkGetPhysicalDeviceImageFormatProperties2": [
+     "vkGetPhysicalDeviceImageFormatProperties2KHR"
+    ],
+    "vkGetPhysicalDeviceQueueFamilyProperties2": [
+     "vkGetPhysicalDeviceQueueFamilyProperties2KHR"
+    ],
+    "vkGetPhysicalDeviceMemoryProperties2": [
+     "vkGetPhysicalDeviceMemoryProperties2KHR"
+    ],
+    "vkGetPhysicalDeviceSparseImageFormatProperties2": [
+     "vkGetPhysicalDeviceSparseImageFormatProperties2KHR"
+    ],
+    "vkTrimCommandPool": [
+     "vkTrimCommandPoolKHR"
+    ],
+    "vkGetPhysicalDeviceExternalBufferProperties": [
+     "vkGetPhysicalDeviceExternalBufferPropertiesKHR"
+    ],
+    "vkGetPhysicalDeviceExternalFenceProperties": [
+     "vkGetPhysicalDeviceExternalFencePropertiesKHR"
+    ],
+    "vkGetPhysicalDeviceExternalSemaphoreProperties": [
+     "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"
+    ],
+    "vkCmdDispatchBase": [
+     "vkCmdDispatchBaseKHR"
+    ],
+    "vkCreateDescriptorUpdateTemplate": [
+     "vkCreateDescriptorUpdateTemplateKHR"
+    ],
+    "vkDestroyDescriptorUpdateTemplate": [
+     "vkDestroyDescriptorUpdateTemplateKHR"
+    ],
+    "vkUpdateDescriptorSetWithTemplate": [
+     "vkUpdateDescriptorSetWithTemplateKHR"
+    ],
+    "vkGetDescriptorSetLayoutSupport": [
+     "vkGetDescriptorSetLayoutSupportKHR"
+    ],
+    "vkCreateSamplerYcbcrConversion": [
+     "vkCreateSamplerYcbcrConversionKHR"
+    ],
+    "vkDestroySamplerYcbcrConversion": [
+     "vkDestroySamplerYcbcrConversionKHR"
+    ]
+   },
+   "mandatory_features": [
+    {
+     "feature": "multiview",
+     "depends": null
+    },
+    {
+     "feature": "shaderDrawParameters",
+     "depends": "VK_KHR_shader_draw_parameters"
+    },
+    {
+     "feature": "storageBuffer16BitAccess",
+     "depends": "VkPhysicalDevice16BitStorageFeatures::uniformAndStorageBuffer16BitAccess"
+    }
+   ],
+   "promoted_extensions": [
+    "VK_KHR_16bit_storage",
+    "VK_KHR_bind_memory2",
+    "VK_KHR_dedicated_allocation",
+    "VK_KHR_descriptor_update_template",
+    "VK_KHR_device_group",
+    "VK_KHR_device_group_creation",
+    "VK_KHR_external_fence",
+    "VK_KHR_external_fence_capabilities",
+    "VK_KHR_external_memory",
+    "VK_KHR_external_memory_capabilities",
+    "VK_KHR_external_semaphore",
+    "VK_KHR_external_semaphore_capabilities",
+    "VK_KHR_get_memory_requirements2",
+    "VK_KHR_get_physical_device_properties2",
+    "VK_KHR_maintenance1",
+    "VK_KHR_maintenance2",
+    "VK_KHR_maintenance3",
+    "VK_KHR_multiview",
+    "VK_KHR_relaxed_block_layout",
+    "VK_KHR_sampler_ycbcr_conversion",
+    "VK_KHR_shader_draw_parameters",
+    "VK_KHR_storage_buffer_storage_class",
+    "VK_KHR_variable_pointers"
+   ],
+   "requirements": [
+    {
+     "id": "feature:multiview",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "graphics profile; PS5VK_FEATURE_MULTIVIEW is set by the native graphics platform and answered through VkPhysicalDeviceMultiviewFeatures; six-view hardware witness in VALIDATION.md",
+     "note": "the compute-only profile does not carry it and cannot report 1.1"
+    },
+    {
+     "id": "feature:shaderDrawParameters",
+     "kind": "feature",
+     "requirement": "mandatory if VK_KHR_shader_draw_parameters is supported",
+     "status": "satisfied",
+     "evidence": "graphics profile; the extension is advertised and the feature reported true"
+    },
+    {
+     "id": "feature:storageBuffer16BitAccess",
+     "kind": "feature",
+     "requirement": "mandatory if uniformAndStorageBuffer16BitAccess is supported",
+     "status": "condition-false",
+     "evidence": "uniformAndStorageBuffer16BitAccess is reported false"
+    },
+    {
+     "id": "query:VkPhysicalDeviceIDProperties",
+     "kind": "query",
+     "requirement": "deviceUUID, driverUUID, deviceLUID, deviceNodeMask, deviceLUIDValid answered",
+     "status": "missing",
+     "note": "not answered"
+    },
+    {
+     "id": "query:VkPhysicalDeviceProtectedMemoryProperties",
+     "kind": "query",
+     "requirement": "protectedNoFault answered (false)",
+     "status": "missing",
+     "note": "not answered"
+    },
+    {
+     "id": "query:VkPhysicalDeviceMaintenance3Properties",
+     "kind": "query",
+     "requirement": "maxPerSetDescriptors and maxMemoryAllocationSize answered",
+     "status": "missing",
+     "note": "not answered"
+    },
+    {
+     "id": "limit:maxPerSetDescriptors",
+     "kind": "limit",
+     "requirement": ">= 1024",
+     "status": "blocker",
+     "note": "one descriptor set holds at most PS5VK_MAX_DESCRIPTORS = 128 entries",
+     "dxvk": true
+    },
+    {
+     "id": "limit:maxMemoryAllocationSize",
+     "kind": "limit",
+     "requirement": ">= 2^30",
+     "status": "blocker",
+     "note": "the native heap budget is 256 MiB (graphics) and 64 MiB (compute)"
+    },
+    {
+     "id": "limit:subgroupSize",
+     "kind": "limit",
+     "requirement": ">= 1, power of two",
+     "status": "missing",
+     "note": "reported 0; PSBC compiles compute as wave32"
+    },
+    {
+     "id": "limit:subgroupSupportedStages",
+     "kind": "limit",
+     "requirement": "includes VK_SHADER_STAGE_COMPUTE_BIT",
+     "status": "missing",
+     "note": "reported 0"
+    },
+    {
+     "id": "limit:subgroupSupportedOperations",
+     "kind": "limit",
+     "requirement": "includes VK_SUBGROUP_FEATURE_BASIC_BIT",
+     "status": "missing",
+     "note": "reported 0; the shader-module gate refuses BASIC-only modules"
+    },
+    {
+     "id": "limit:subgroupQuadOperationsInAllStages",
+     "kind": "limit",
+     "requirement": "implementation-dependent",
+     "status": "satisfied",
+     "evidence": "reported false"
+    },
+    {
+     "id": "limit:pointClippingBehavior",
+     "kind": "limit",
+     "requirement": "implementation-dependent",
+     "status": "satisfied",
+     "evidence": "VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES answered through VkPhysicalDevicePointClippingProperties"
+    },
+    {
+     "id": "limit:maxMultiviewViewCount",
+     "kind": "limit",
+     "requirement": ">= 6",
+     "status": "satisfied",
+     "evidence": "graphics profile; 6, the measured floor"
+    },
+    {
+     "id": "limit:maxMultiviewInstanceIndex",
+     "kind": "limit",
+     "requirement": ">= 2^27-1",
+     "status": "satisfied",
+     "evidence": "graphics profile; 2^27-1, the measured floor"
+    },
+    {
+     "id": "behaviour:spirv-1.3",
+     "kind": "behaviour",
+     "requirement": "SPIR-V 1.0-1.3 modules accepted",
+     "status": "missing",
+     "note": "not audited per version"
+    },
+    {
+     "id": "behaviour:core-names-without-extension",
+     "kind": "behaviour",
+     "requirement": "core-named commands and promoted structures work without enabling the extension",
+     "status": "missing",
+     "note": "device-group, create_renderpass2 and maintenance2 paths test *_extension_enabled flags"
+    },
+    {
+     "id": "extension:VK_KHR_16bit_storage",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_16bit_storage behaviour is core",
+     "status": "satisfied",
+     "evidence": "graphics profile; advertised; storageBuffer16BitAccess only, the other members false",
+     "note": "graphics profile; advertised; storageBuffer16BitAccess only, the other members false"
+    },
+    {
+     "id": "extension:VK_KHR_bind_memory2",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_bind_memory2 behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route on main (measurement switch)",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_dedicated_allocation",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_dedicated_allocation behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route on main (measurement switch)",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_descriptor_update_template",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_descriptor_update_template behaviour is core",
+     "status": "in-progress",
+     "note": "route on main behind a measurement switch",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_device_group",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_device_group behaviour is core",
+     "status": "satisfied",
+     "evidence": "singleton-group commands dispatched with the buffer-address route",
+     "note": "singleton-group commands dispatched with the buffer-address route"
+    },
+    {
+     "id": "extension:VK_KHR_device_group_creation",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_device_group_creation behaviour is core",
+     "status": "satisfied",
+     "evidence": "instance extension and core vkEnumeratePhysicalDeviceGroups",
+     "note": "instance extension and core vkEnumeratePhysicalDeviceGroups"
+    },
+    {
+     "id": "extension:VK_KHR_external_fence",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_external_fence behaviour is core",
+     "status": "missing",
+     "note": "VkExportFenceCreateInfo with handleTypes 0 is not accepted"
+    },
+    {
+     "id": "extension:VK_KHR_external_fence_capabilities",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_external_fence_capabilities behaviour is core",
+     "status": "satisfied",
+     "evidence": "core query reports no handle types",
+     "note": "core query reports no handle types"
+    },
+    {
+     "id": "extension:VK_KHR_external_memory",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_external_memory behaviour is core",
+     "status": "missing",
+     "note": "VkExternalMemory{Buffer,Image}CreateInfo and VkExportMemoryAllocateInfo with handleTypes 0 are not accepted"
+    },
+    {
+     "id": "extension:VK_KHR_external_memory_capabilities",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_external_memory_capabilities behaviour is core",
+     "status": "satisfied",
+     "evidence": "core queries report no handle types",
+     "note": "core queries report no handle types"
+    },
+    {
+     "id": "extension:VK_KHR_external_semaphore",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_external_semaphore behaviour is core",
+     "status": "missing",
+     "note": "VkExportSemaphoreCreateInfo with handleTypes 0 is not accepted"
+    },
+    {
+     "id": "extension:VK_KHR_external_semaphore_capabilities",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_external_semaphore_capabilities behaviour is core",
+     "status": "satisfied",
+     "evidence": "core query reports no handle types",
+     "note": "core query reports no handle types"
+    },
+    {
+     "id": "extension:VK_KHR_get_memory_requirements2",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_get_memory_requirements2 behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route on main (measurement switch)",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_get_physical_device_properties2",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_get_physical_device_properties2 behaviour is core",
+     "status": "satisfied",
+     "evidence": "instance extension and core names",
+     "note": "instance extension and core names"
+    },
+    {
+     "id": "extension:VK_KHR_maintenance1",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_maintenance1 behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route on main (trim, negative viewport height); 2D_ARRAY_COMPATIBLE and transfer format features not audited"
+    },
+    {
+     "id": "extension:VK_KHR_maintenance2",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_maintenance2 behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised"
+    },
+    {
+     "id": "extension:VK_KHR_maintenance3",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_maintenance3 behaviour is core",
+     "status": "missing",
+     "note": "vkGetDescriptorSetLayoutSupport and its properties are missing"
+    },
+    {
+     "id": "extension:VK_KHR_multiview",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_multiview behaviour is core",
+     "status": "satisfied",
+     "evidence": "graphics profile; advertised",
+     "note": "graphics profile; advertised"
+    },
+    {
+     "id": "extension:VK_KHR_relaxed_block_layout",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_relaxed_block_layout behaviour is core",
+     "status": "missing",
+     "note": "not audited against the uniform-layout validator"
+    },
+    {
+     "id": "extension:VK_KHR_sampler_ycbcr_conversion",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_sampler_ycbcr_conversion behaviour is core",
+     "status": "missing",
+     "note": "commands must exist with samplerYcbcrConversion false; the feature structure must be answered"
+    },
+    {
+     "id": "extension:VK_KHR_shader_draw_parameters",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_shader_draw_parameters behaviour is core",
+     "status": "satisfied",
+     "evidence": "graphics profile; advertised",
+     "note": "graphics profile; advertised"
+    },
+    {
+     "id": "extension:VK_KHR_storage_buffer_storage_class",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_storage_buffer_storage_class behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised"
+    },
+    {
+     "id": "extension:VK_KHR_variable_pointers",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_variable_pointers behaviour is core",
+     "status": "missing",
+     "note": "VkPhysicalDeviceVariablePointersFeatures must be answered (false) and accepted"
+    }
+   ]
+  },
+  "1.2": {
+   "commands": {
+    "global": [],
+    "instance": [],
+    "device": [
+     "vkCmdBeginRenderPass2",
+     "vkCmdDrawIndexedIndirectCount",
+     "vkCmdDrawIndirectCount",
+     "vkCmdEndRenderPass2",
+     "vkCmdNextSubpass2",
+     "vkCreateRenderPass2",
+     "vkGetBufferDeviceAddress",
+     "vkGetBufferOpaqueCaptureAddress",
+     "vkGetDeviceMemoryOpaqueCaptureAddress",
+     "vkGetSemaphoreCounterValue",
+     "vkResetQueryPool",
+     "vkSignalSemaphore",
+     "vkWaitSemaphores"
+    ]
+   },
+   "core_aliases": {
+    "vkResetQueryPool": [
+     "vkResetQueryPoolEXT"
+    ],
+    "vkGetSemaphoreCounterValue": [
+     "vkGetSemaphoreCounterValueKHR"
+    ],
+    "vkWaitSemaphores": [
+     "vkWaitSemaphoresKHR"
+    ],
+    "vkSignalSemaphore": [
+     "vkSignalSemaphoreKHR"
+    ],
+    "vkGetBufferDeviceAddress": [
+     "vkGetBufferDeviceAddressEXT",
+     "vkGetBufferDeviceAddressKHR"
+    ],
+    "vkGetBufferOpaqueCaptureAddress": [
+     "vkGetBufferOpaqueCaptureAddressKHR"
+    ],
+    "vkGetDeviceMemoryOpaqueCaptureAddress": [
+     "vkGetDeviceMemoryOpaqueCaptureAddressKHR"
+    ],
+    "vkCmdDrawIndirectCount": [
+     "vkCmdDrawIndirectCountAMD",
+     "vkCmdDrawIndirectCountKHR"
+    ],
+    "vkCmdDrawIndexedIndirectCount": [
+     "vkCmdDrawIndexedIndirectCountAMD",
+     "vkCmdDrawIndexedIndirectCountKHR"
+    ],
+    "vkCreateRenderPass2": [
+     "vkCreateRenderPass2KHR"
+    ],
+    "vkCmdBeginRenderPass2": [
+     "vkCmdBeginRenderPass2KHR"
+    ],
+    "vkCmdNextSubpass2": [
+     "vkCmdNextSubpass2KHR"
+    ],
+    "vkCmdEndRenderPass2": [
+     "vkCmdEndRenderPass2KHR"
+    ]
+   },
+   "mandatory_features": [
+    {
+     "feature": "descriptorBindingPartiallyBound",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "descriptorBindingSampledImageUpdateAfterBind",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "descriptorBindingStorageBufferUpdateAfterBind",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "descriptorBindingStorageImageUpdateAfterBind",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "descriptorBindingStorageTexelBufferUpdateAfterBind",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "descriptorBindingUniformTexelBufferUpdateAfterBind",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "descriptorBindingUpdateUnusedWhilePending",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "descriptorIndexing",
+     "depends": "VK_EXT_descriptor_indexing"
+    },
+    {
+     "feature": "drawIndirectCount",
+     "depends": "VK_KHR_draw_indirect_count"
+    },
+    {
+     "feature": "hostQueryReset",
+     "depends": null
+    },
+    {
+     "feature": "imagelessFramebuffer",
+     "depends": null
+    },
+    {
+     "feature": "runtimeDescriptorArray",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "samplerFilterMinmax",
+     "depends": "VK_EXT_sampler_filter_minmax"
+    },
+    {
+     "feature": "samplerMirrorClampToEdge",
+     "depends": "VK_KHR_sampler_mirror_clamp_to_edge"
+    },
+    {
+     "feature": "separateDepthStencilLayouts",
+     "depends": null
+    },
+    {
+     "feature": "shaderInt64",
+     "depends": "VkPhysicalDeviceShaderAtomicInt64Features::shaderSharedInt64Atomics,VkPhysicalDeviceShaderAtomicInt64Features::shaderBufferInt64Atomics"
+    },
+    {
+     "feature": "shaderOutputLayer",
+     "depends": "VK_EXT_shader_viewport_index_layer"
+    },
+    {
+     "feature": "shaderOutputViewportIndex",
+     "depends": "VK_EXT_shader_viewport_index_layer"
+    },
+    {
+     "feature": "shaderSampledImageArrayDynamicIndexing",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "shaderSampledImageArrayNonUniformIndexing",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "shaderStorageBufferArrayDynamicIndexing",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "shaderStorageBufferArrayNonUniformIndexing",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "shaderStorageTexelBufferArrayDynamicIndexing",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "shaderSubgroupExtendedTypes",
+     "depends": null
+    },
+    {
+     "feature": "shaderUniformTexelBufferArrayDynamicIndexing",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "shaderUniformTexelBufferArrayNonUniformIndexing",
+     "depends": "VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "storageBuffer8BitAccess",
+     "depends": "VkPhysicalDevice8BitStorageFeatures::uniformAndStorageBuffer8BitAccess"
+    },
+    {
+     "feature": "subgroupBroadcastDynamicId",
+     "depends": null
+    },
+    {
+     "feature": "timelineSemaphore",
+     "depends": null
+    },
+    {
+     "feature": "uniformBufferStandardLayout",
+     "depends": null
+    }
+   ],
+   "promoted_extensions": [
+    "VK_EXT_descriptor_indexing",
+    "VK_EXT_host_query_reset",
+    "VK_EXT_sampler_filter_minmax",
+    "VK_EXT_scalar_block_layout",
+    "VK_EXT_separate_stencil_usage",
+    "VK_EXT_shader_viewport_index_layer",
+    "VK_KHR_8bit_storage",
+    "VK_KHR_buffer_device_address",
+    "VK_KHR_create_renderpass2",
+    "VK_KHR_depth_stencil_resolve",
+    "VK_KHR_draw_indirect_count",
+    "VK_KHR_driver_properties",
+    "VK_KHR_image_format_list",
+    "VK_KHR_imageless_framebuffer",
+    "VK_KHR_sampler_mirror_clamp_to_edge",
+    "VK_KHR_separate_depth_stencil_layouts",
+    "VK_KHR_shader_atomic_int64",
+    "VK_KHR_shader_float16_int8",
+    "VK_KHR_shader_float_controls",
+    "VK_KHR_shader_subgroup_extended_types",
+    "VK_KHR_spirv_1_4",
+    "VK_KHR_timeline_semaphore",
+    "VK_KHR_uniform_buffer_standard_layout",
+    "VK_KHR_vulkan_memory_model"
+   ],
+   "requirements": [
+    {
+     "id": "query:VkPhysicalDeviceVulkan11Features",
+     "kind": "query",
+     "requirement": "answered and accepted by vkCreateDevice",
+     "status": "missing",
+     "dxvk": true
+    },
+    {
+     "id": "query:VkPhysicalDeviceVulkan11Properties",
+     "kind": "query",
+     "requirement": "answered",
+     "status": "missing",
+     "dxvk": true
+    },
+    {
+     "id": "query:VkPhysicalDeviceVulkan12Features",
+     "kind": "query",
+     "requirement": "answered and accepted by vkCreateDevice",
+     "status": "missing",
+     "dxvk": true
+    },
+    {
+     "id": "query:VkPhysicalDeviceVulkan12Properties",
+     "kind": "query",
+     "requirement": "answered",
+     "status": "missing",
+     "dxvk": true
+    },
+    {
+     "id": "query:VkPhysicalDeviceDriverProperties",
+     "kind": "query",
+     "requirement": "driverID, driverName, driverInfo, conformanceVersion answered",
+     "status": "missing",
+     "note": "no registered VkDriverId identifies this driver"
+    },
+    {
+     "id": "query:VkPhysicalDeviceFloatControlsProperties",
+     "kind": "query",
+     "requirement": "answered",
+     "status": "missing",
+     "note": "no float-control guarantee is measured; all-false/NONE is the truthful answer"
+    },
+    {
+     "id": "limit:supportedDepthResolveModes",
+     "kind": "limit",
+     "requirement": "includes VK_RESOLVE_MODE_SAMPLE_ZERO_BIT",
+     "status": "missing",
+     "note": "render-pass depth resolve execution is not proven"
+    },
+    {
+     "id": "limit:supportedStencilResolveModes",
+     "kind": "limit",
+     "requirement": "includes VK_RESOLVE_MODE_SAMPLE_ZERO_BIT",
+     "status": "missing",
+     "note": "as above"
+    },
+    {
+     "id": "limit:framebufferIntegerColorSampleCounts",
+     "kind": "limit",
+     "requirement": "includes VK_SAMPLE_COUNT_1_BIT",
+     "status": "blocker",
+     "note": "no integer format has a color-attachment role"
+    },
+    {
+     "id": "limit:maxTimelineSemaphoreValueDifference",
+     "kind": "limit",
+     "requirement": ">= 2^31-1",
+     "status": "satisfied",
+     "evidence": "UINT64_MAX (full-width payload comparisons)"
+    },
+    {
+     "id": "behaviour:spirv-1.5",
+     "kind": "behaviour",
+     "requirement": "SPIR-V 1.4 and 1.5 modules accepted",
+     "status": "missing",
+     "note": "not audited per version"
+    },
+    {
+     "id": "feature:descriptorBindingPartiallyBound",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:descriptorBindingSampledImageUpdateAfterBind",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:descriptorBindingStorageBufferUpdateAfterBind",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:descriptorBindingStorageImageUpdateAfterBind",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:descriptorBindingStorageTexelBufferUpdateAfterBind",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:descriptorBindingUniformTexelBufferUpdateAfterBind",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:descriptorBindingUpdateUnusedWhilePending",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:descriptorIndexing",
+     "kind": "feature",
+     "requirement": "mandatory if VK_EXT_descriptor_indexing",
+     "status": "condition-false",
+     "evidence": "VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:drawIndirectCount",
+     "kind": "feature",
+     "requirement": "mandatory if VK_KHR_draw_indirect_count",
+     "status": "condition-false",
+     "evidence": "VK_KHR_draw_indirect_count is not advertised"
+    },
+    {
+     "id": "feature:hostQueryReset",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "VK_EXT_host_query_reset advertised",
+     "dxvk": true
+    },
+    {
+     "id": "feature:imagelessFramebuffer",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "diagnostic platform bit only"
+    },
+    {
+     "id": "feature:runtimeDescriptorArray",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:samplerFilterMinmax",
+     "kind": "feature",
+     "requirement": "mandatory if VK_EXT_sampler_filter_minmax",
+     "status": "condition-false",
+     "evidence": "VK_EXT_sampler_filter_minmax is not advertised"
+    },
+    {
+     "id": "feature:samplerMirrorClampToEdge",
+     "kind": "feature",
+     "requirement": "mandatory if VK_KHR_sampler_mirror_clamp_to_edge",
+     "status": "satisfied",
+     "evidence": "VK_KHR_sampler_mirror_clamp_to_edge advertised",
+     "dxvk": true
+    },
+    {
+     "id": "feature:separateDepthStencilLayouts",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "VK_KHR_separate_depth_stencil_layouts advertised"
+    },
+    {
+     "id": "feature:shaderInt64",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceShaderAtomicInt64Features::shaderSharedInt64Atomics,VkPhysicalDeviceShaderAtomicInt64Features::shaderBufferInt64Atomics",
+     "status": "condition-false",
+     "evidence": "shaderBufferInt64Atomics and shaderSharedInt64Atomics are false"
+    },
+    {
+     "id": "feature:shaderOutputLayer",
+     "kind": "feature",
+     "requirement": "mandatory if VK_EXT_shader_viewport_index_layer",
+     "status": "condition-false",
+     "evidence": "VK_EXT_shader_viewport_index_layer is not advertised"
+    },
+    {
+     "id": "feature:shaderOutputViewportIndex",
+     "kind": "feature",
+     "requirement": "mandatory if VK_EXT_shader_viewport_index_layer",
+     "status": "condition-false",
+     "evidence": "VK_EXT_shader_viewport_index_layer is not advertised"
+    },
+    {
+     "id": "feature:shaderSampledImageArrayDynamicIndexing",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:shaderSampledImageArrayNonUniformIndexing",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:shaderStorageBufferArrayDynamicIndexing",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:shaderStorageBufferArrayNonUniformIndexing",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:shaderStorageTexelBufferArrayDynamicIndexing",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:shaderSubgroupExtendedTypes",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "vacuously true only while no typed subgroup operation category is reported"
+    },
+    {
+     "id": "feature:shaderUniformTexelBufferArrayDynamicIndexing",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:shaderUniformTexelBufferArrayNonUniformIndexing",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false and VK_EXT_descriptor_indexing is not advertised"
+    },
+    {
+     "id": "feature:storageBuffer8BitAccess",
+     "kind": "feature",
+     "requirement": "mandatory if VkPhysicalDevice8BitStorageFeatures::uniformAndStorageBuffer8BitAccess",
+     "status": "condition-false",
+     "evidence": "uniformAndStorageBuffer8BitAccess is reported false"
+    },
+    {
+     "id": "feature:subgroupBroadcastDynamicId",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "vacuously true only while BALLOT stays out of subgroupSupportedOperations; subgroup BASIC is not reported yet"
+    },
+    {
+     "id": "feature:timelineSemaphore",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "VK_KHR_timeline_semaphore advertised",
+     "dxvk": true
+    },
+    {
+     "id": "feature:uniformBufferStandardLayout",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "VK_KHR_uniform_buffer_standard_layout advertised"
+    },
+    {
+     "id": "extension:VK_EXT_descriptor_indexing",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_descriptor_indexing behaviour is core",
+     "status": "satisfied",
+     "evidence": "optional; descriptorIndexing false",
+     "note": "optional; descriptorIndexing false"
+    },
+    {
+     "id": "extension:VK_EXT_host_query_reset",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_host_query_reset behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised"
+    },
+    {
+     "id": "extension:VK_EXT_sampler_filter_minmax",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_sampler_filter_minmax behaviour is core",
+     "status": "satisfied",
+     "evidence": "optional; samplerFilterMinmax false",
+     "note": "optional; samplerFilterMinmax false"
+    },
+    {
+     "id": "extension:VK_EXT_scalar_block_layout",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_scalar_block_layout behaviour is core",
+     "status": "satisfied",
+     "evidence": "optional; scalarBlockLayout false",
+     "note": "optional; scalarBlockLayout false"
+    },
+    {
+     "id": "extension:VK_EXT_separate_stencil_usage",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_separate_stencil_usage behaviour is core",
+     "status": "missing",
+     "note": "VkImageStencilUsageCreateInfo is not accepted"
+    },
+    {
+     "id": "extension:VK_EXT_shader_viewport_index_layer",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_shader_viewport_index_layer behaviour is core",
+     "status": "satisfied",
+     "evidence": "optional; both features false",
+     "note": "optional; both features false"
+    },
+    {
+     "id": "extension:VK_KHR_8bit_storage",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_8bit_storage behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised; storageBuffer8BitAccess only",
+     "note": "advertised; storageBuffer8BitAccess only"
+    },
+    {
+     "id": "extension:VK_KHR_buffer_device_address",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_buffer_device_address behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised on the native profile",
+     "note": "advertised on the native profile",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_create_renderpass2",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_create_renderpass2 behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised"
+    },
+    {
+     "id": "extension:VK_KHR_depth_stencil_resolve",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_depth_stencil_resolve behaviour is core",
+     "status": "missing",
+     "note": "SAMPLE_ZERO depth and stencil resolve must execute"
+    },
+    {
+     "id": "extension:VK_KHR_draw_indirect_count",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_draw_indirect_count behaviour is core",
+     "status": "missing",
+     "note": "feature optional, but vkCmdDraw(Indexed)IndirectCount must exist in 1.2",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_driver_properties",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_driver_properties behaviour is core",
+     "status": "missing",
+     "note": "see query:VkPhysicalDeviceDriverProperties"
+    },
+    {
+     "id": "extension:VK_KHR_image_format_list",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_image_format_list behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route in an open PR",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_imageless_framebuffer",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_imageless_framebuffer behaviour is core",
+     "status": "missing",
+     "note": "diagnostic only; the feature is mandatory"
+    },
+    {
+     "id": "extension:VK_KHR_sampler_mirror_clamp_to_edge",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_sampler_mirror_clamp_to_edge behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised"
+    },
+    {
+     "id": "extension:VK_KHR_separate_depth_stencil_layouts",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_separate_depth_stencil_layouts behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised"
+    },
+    {
+     "id": "extension:VK_KHR_shader_atomic_int64",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_shader_atomic_int64 behaviour is core",
+     "status": "satisfied",
+     "evidence": "optional; both features false",
+     "note": "optional; both features false"
+    },
+    {
+     "id": "extension:VK_KHR_shader_float16_int8",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_shader_float16_int8 behaviour is core",
+     "status": "missing",
+     "note": "features optional; VkPhysicalDeviceShaderFloat16Int8Features must be answered and accepted"
+    },
+    {
+     "id": "extension:VK_KHR_shader_float_controls",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_shader_float_controls behaviour is core",
+     "status": "missing",
+     "note": "see query:VkPhysicalDeviceFloatControlsProperties; float-control execution modes must be refused"
+    },
+    {
+     "id": "extension:VK_KHR_shader_subgroup_extended_types",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_shader_subgroup_extended_types behaviour is core",
+     "status": "missing",
+     "note": "see feature:shaderSubgroupExtendedTypes"
+    },
+    {
+     "id": "extension:VK_KHR_spirv_1_4",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_spirv_1_4 behaviour is core",
+     "status": "missing",
+     "note": "see behaviour:spirv-1.5"
+    },
+    {
+     "id": "extension:VK_KHR_timeline_semaphore",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_timeline_semaphore behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_uniform_buffer_standard_layout",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_uniform_buffer_standard_layout behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised"
+    },
+    {
+     "id": "extension:VK_KHR_vulkan_memory_model",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_vulkan_memory_model behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised",
+     "note": "advertised",
+     "dxvk": true
+    }
+   ]
+  },
+  "1.3": {
+   "commands": {
+    "global": [],
+    "instance": [
+     "vkGetPhysicalDeviceToolProperties"
+    ],
+    "device": [
+     "vkCmdBeginRendering",
+     "vkCmdBindVertexBuffers2",
+     "vkCmdBlitImage2",
+     "vkCmdCopyBuffer2",
+     "vkCmdCopyBufferToImage2",
+     "vkCmdCopyImage2",
+     "vkCmdCopyImageToBuffer2",
+     "vkCmdEndRendering",
+     "vkCmdPipelineBarrier2",
+     "vkCmdResetEvent2",
+     "vkCmdResolveImage2",
+     "vkCmdSetCullMode",
+     "vkCmdSetDepthBiasEnable",
+     "vkCmdSetDepthBoundsTestEnable",
+     "vkCmdSetDepthCompareOp",
+     "vkCmdSetDepthTestEnable",
+     "vkCmdSetDepthWriteEnable",
+     "vkCmdSetEvent2",
+     "vkCmdSetFrontFace",
+     "vkCmdSetPrimitiveRestartEnable",
+     "vkCmdSetPrimitiveTopology",
+     "vkCmdSetRasterizerDiscardEnable",
+     "vkCmdSetScissorWithCount",
+     "vkCmdSetStencilOp",
+     "vkCmdSetStencilTestEnable",
+     "vkCmdSetViewportWithCount",
+     "vkCmdWaitEvents2",
+     "vkCmdWriteTimestamp2",
+     "vkCreatePrivateDataSlot",
+     "vkDestroyPrivateDataSlot",
+     "vkGetDeviceBufferMemoryRequirements",
+     "vkGetDeviceImageMemoryRequirements",
+     "vkGetDeviceImageSparseMemoryRequirements",
+     "vkGetPrivateData",
+     "vkQueueSubmit2",
+     "vkSetPrivateData"
+    ]
+   },
+   "core_aliases": {
+    "vkGetPhysicalDeviceToolProperties": [
+     "vkGetPhysicalDeviceToolPropertiesEXT"
+    ],
+    "vkCreatePrivateDataSlot": [
+     "vkCreatePrivateDataSlotEXT"
+    ],
+    "vkDestroyPrivateDataSlot": [
+     "vkDestroyPrivateDataSlotEXT"
+    ],
+    "vkSetPrivateData": [
+     "vkSetPrivateDataEXT"
+    ],
+    "vkGetPrivateData": [
+     "vkGetPrivateDataEXT"
+    ],
+    "vkCmdPipelineBarrier2": [
+     "vkCmdPipelineBarrier2KHR"
+    ],
+    "vkCmdWriteTimestamp2": [
+     "vkCmdWriteTimestamp2KHR"
+    ],
+    "vkQueueSubmit2": [
+     "vkQueueSubmit2KHR"
+    ],
+    "vkCmdCopyBuffer2": [
+     "vkCmdCopyBuffer2KHR"
+    ],
+    "vkCmdCopyImage2": [
+     "vkCmdCopyImage2KHR"
+    ],
+    "vkCmdCopyBufferToImage2": [
+     "vkCmdCopyBufferToImage2KHR"
+    ],
+    "vkCmdCopyImageToBuffer2": [
+     "vkCmdCopyImageToBuffer2KHR"
+    ],
+    "vkGetDeviceBufferMemoryRequirements": [
+     "vkGetDeviceBufferMemoryRequirementsKHR"
+    ],
+    "vkGetDeviceImageMemoryRequirements": [
+     "vkGetDeviceImageMemoryRequirementsKHR"
+    ],
+    "vkGetDeviceImageSparseMemoryRequirements": [
+     "vkGetDeviceImageSparseMemoryRequirementsKHR"
+    ],
+    "vkCmdSetEvent2": [
+     "vkCmdSetEvent2KHR"
+    ],
+    "vkCmdResetEvent2": [
+     "vkCmdResetEvent2KHR"
+    ],
+    "vkCmdWaitEvents2": [
+     "vkCmdWaitEvents2KHR"
+    ],
+    "vkCmdBlitImage2": [
+     "vkCmdBlitImage2KHR"
+    ],
+    "vkCmdResolveImage2": [
+     "vkCmdResolveImage2KHR"
+    ],
+    "vkCmdBeginRendering": [
+     "vkCmdBeginRenderingKHR"
+    ],
+    "vkCmdEndRendering": [
+     "vkCmdEndRenderingKHR"
+    ],
+    "vkCmdSetCullMode": [
+     "vkCmdSetCullModeEXT"
+    ],
+    "vkCmdSetFrontFace": [
+     "vkCmdSetFrontFaceEXT"
+    ],
+    "vkCmdSetPrimitiveTopology": [
+     "vkCmdSetPrimitiveTopologyEXT"
+    ],
+    "vkCmdSetViewportWithCount": [
+     "vkCmdSetViewportWithCountEXT"
+    ],
+    "vkCmdSetScissorWithCount": [
+     "vkCmdSetScissorWithCountEXT"
+    ],
+    "vkCmdBindVertexBuffers2": [
+     "vkCmdBindVertexBuffers2EXT"
+    ],
+    "vkCmdSetDepthTestEnable": [
+     "vkCmdSetDepthTestEnableEXT"
+    ],
+    "vkCmdSetDepthWriteEnable": [
+     "vkCmdSetDepthWriteEnableEXT"
+    ],
+    "vkCmdSetDepthCompareOp": [
+     "vkCmdSetDepthCompareOpEXT"
+    ],
+    "vkCmdSetDepthBoundsTestEnable": [
+     "vkCmdSetDepthBoundsTestEnableEXT"
+    ],
+    "vkCmdSetStencilTestEnable": [
+     "vkCmdSetStencilTestEnableEXT"
+    ],
+    "vkCmdSetStencilOp": [
+     "vkCmdSetStencilOpEXT"
+    ],
+    "vkCmdSetRasterizerDiscardEnable": [
+     "vkCmdSetRasterizerDiscardEnableEXT"
+    ],
+    "vkCmdSetDepthBiasEnable": [
+     "vkCmdSetDepthBiasEnableEXT"
+    ],
+    "vkCmdSetPrimitiveRestartEnable": [
+     "vkCmdSetPrimitiveRestartEnableEXT"
+    ]
+   },
+   "mandatory_features": [
+    {
+     "feature": "bufferDeviceAddress",
+     "depends": null
+    },
+    {
+     "feature": "computeFullSubgroups",
+     "depends": null
+    },
+    {
+     "feature": "descriptorBindingInlineUniformBlockUpdateAfterBind",
+     "depends": "VK_EXT_descriptor_indexing,VkPhysicalDeviceVulkan12Features::descriptorIndexing"
+    },
+    {
+     "feature": "dynamicRendering",
+     "depends": null
+    },
+    {
+     "feature": "inlineUniformBlock",
+     "depends": null
+    },
+    {
+     "feature": "maintenance4",
+     "depends": null
+    },
+    {
+     "feature": "pipelineCreationCacheControl",
+     "depends": null
+    },
+    {
+     "feature": "privateData",
+     "depends": null
+    },
+    {
+     "feature": "robustImageAccess",
+     "depends": null
+    },
+    {
+     "feature": "shaderDemoteToHelperInvocation",
+     "depends": null
+    },
+    {
+     "feature": "shaderIntegerDotProduct",
+     "depends": null
+    },
+    {
+     "feature": "shaderTerminateInvocation",
+     "depends": null
+    },
+    {
+     "feature": "shaderZeroInitializeWorkgroupMemory",
+     "depends": null
+    },
+    {
+     "feature": "subgroupSizeControl",
+     "depends": null
+    },
+    {
+     "feature": "synchronization2",
+     "depends": null
+    },
+    {
+     "feature": "vulkanMemoryModel",
+     "depends": null
+    },
+    {
+     "feature": "vulkanMemoryModelDeviceScope",
+     "depends": null
+    }
+   ],
+   "promoted_extensions": [
+    "VK_EXT_4444_formats",
+    "VK_EXT_extended_dynamic_state",
+    "VK_EXT_extended_dynamic_state2",
+    "VK_EXT_image_robustness",
+    "VK_EXT_inline_uniform_block",
+    "VK_EXT_pipeline_creation_cache_control",
+    "VK_EXT_pipeline_creation_feedback",
+    "VK_EXT_private_data",
+    "VK_EXT_shader_demote_to_helper_invocation",
+    "VK_EXT_subgroup_size_control",
+    "VK_EXT_texel_buffer_alignment",
+    "VK_EXT_texture_compression_astc_hdr",
+    "VK_EXT_tooling_info",
+    "VK_EXT_ycbcr_2plane_444_formats",
+    "VK_KHR_copy_commands2",
+    "VK_KHR_dynamic_rendering",
+    "VK_KHR_format_feature_flags2",
+    "VK_KHR_maintenance4",
+    "VK_KHR_shader_integer_dot_product",
+    "VK_KHR_shader_non_semantic_info",
+    "VK_KHR_shader_terminate_invocation",
+    "VK_KHR_synchronization2",
+    "VK_KHR_zero_initialize_workgroup_memory"
+   ],
+   "requirements": [
+    {
+     "id": "query:VkPhysicalDeviceVulkan13Features",
+     "kind": "query",
+     "requirement": "answered and accepted by vkCreateDevice",
+     "status": "missing",
+     "dxvk": true
+    },
+    {
+     "id": "query:VkPhysicalDeviceVulkan13Properties",
+     "kind": "query",
+     "requirement": "answered",
+     "status": "missing",
+     "dxvk": true
+    },
+    {
+     "id": "limit:minSubgroupSize",
+     "kind": "limit",
+     "requirement": "<= subgroupSize, power of two",
+     "status": "missing",
+     "note": "32 for compute once subgroup BASIC is reported"
+    },
+    {
+     "id": "limit:maxSubgroupSize",
+     "kind": "limit",
+     "requirement": ">= subgroupSize, power of two",
+     "status": "missing",
+     "note": "as above"
+    },
+    {
+     "id": "limit:maxComputeWorkgroupSubgroups",
+     "kind": "limit",
+     "requirement": "implementation-dependent",
+     "status": "missing",
+     "note": "1024 / 32 = 32"
+    },
+    {
+     "id": "limit:maxInlineUniformBlockSize",
+     "kind": "limit",
+     "requirement": ">= 256",
+     "status": "in-progress",
+     "note": "inline uniform descriptor contracts on main, limits unreported"
+    },
+    {
+     "id": "limit:maxPerStageDescriptorInlineUniformBlocks",
+     "kind": "limit",
+     "requirement": ">= 4",
+     "status": "in-progress",
+     "note": "as above"
+    },
+    {
+     "id": "limit:maxDescriptorSetInlineUniformBlocks",
+     "kind": "limit",
+     "requirement": ">= 4",
+     "status": "in-progress",
+     "note": "as above"
+    },
+    {
+     "id": "limit:maxInlineUniformTotalSize",
+     "kind": "limit",
+     "requirement": ">= 256",
+     "status": "in-progress",
+     "note": "as above"
+    },
+    {
+     "id": "limit:maxBufferSize",
+     "kind": "limit",
+     "requirement": ">= 2^30",
+     "status": "blocker",
+     "note": "the native heap budget is 256 MiB"
+    },
+    {
+     "id": "behaviour:spirv-1.6",
+     "kind": "behaviour",
+     "requirement": "SPIR-V 1.6 modules accepted",
+     "status": "missing",
+     "note": "DXVK emits SPIR-V 1.6; not audited",
+     "dxvk": true
+    },
+    {
+     "id": "feature:bufferDeviceAddress",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "VK_KHR_buffer_device_address advertised on the native profile",
+     "dxvk": true
+    },
+    {
+     "id": "feature:computeFullSubgroups",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "needs subgroup BASIC first"
+    },
+    {
+     "id": "feature:descriptorBindingInlineUniformBlockUpdateAfterBind",
+     "kind": "feature",
+     "requirement": "mandatory if VK_EXT_descriptor_indexing,VkPhysicalDeviceVulkan12Features::descriptorIndexing",
+     "status": "condition-false",
+     "evidence": "descriptorIndexing is false"
+    },
+    {
+     "id": "feature:dynamicRendering",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "in-progress",
+     "note": "unadvertised route in an open PR",
+     "dxvk": true
+    },
+    {
+     "id": "feature:inlineUniformBlock",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "in-progress",
+     "note": "descriptor contracts on main, unreported"
+    },
+    {
+     "id": "feature:maintenance4",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "in-progress",
+     "note": "memory queries on main behind a measurement switch; maxBufferSize blocked",
+     "dxvk": true
+    },
+    {
+     "id": "feature:pipelineCreationCacheControl",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "pipeline flags and externally synchronized caches missing"
+    },
+    {
+     "id": "feature:privateData",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "private data slots missing"
+    },
+    {
+     "id": "feature:robustImageAccess",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "out-of-bounds image access not witnessed"
+    },
+    {
+     "id": "feature:shaderDemoteToHelperInvocation",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "VK_EXT_shader_demote_to_helper_invocation advertised on the native graphics profile",
+     "dxvk": true
+    },
+    {
+     "id": "feature:shaderIntegerDotProduct",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "compiler route not gated or witnessed"
+    },
+    {
+     "id": "feature:shaderTerminateInvocation",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "VK_KHR_shader_terminate_invocation advertised on the native graphics profile"
+    },
+    {
+     "id": "feature:shaderZeroInitializeWorkgroupMemory",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "compiler route not gated or witnessed"
+    },
+    {
+     "id": "feature:subgroupSizeControl",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "missing",
+     "note": "needs subgroup BASIC first"
+    },
+    {
+     "id": "feature:synchronization2",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "in-progress",
+     "note": "synchronization2 tranche in progress",
+     "dxvk": true
+    },
+    {
+     "id": "feature:vulkanMemoryModel",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "VK_KHR_vulkan_memory_model advertised",
+     "dxvk": true
+    },
+    {
+     "id": "feature:vulkanMemoryModelDeviceScope",
+     "kind": "feature",
+     "requirement": "mandatory",
+     "status": "satisfied",
+     "evidence": "advertised with vulkanMemoryModel"
+    },
+    {
+     "id": "extension:VK_EXT_4444_formats",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_4444_formats behaviour is core",
+     "status": "missing",
+     "note": "A4R4G4B4/A4B4G4R4 UNORM_PACK16 sampled-image support is mandatory in 1.3"
+    },
+    {
+     "id": "extension:VK_EXT_extended_dynamic_state",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_extended_dynamic_state behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route on main (measurement switch)",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_EXT_extended_dynamic_state2",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_extended_dynamic_state2 behaviour is core",
+     "status": "missing",
+     "note": "three core commands and dynamic states missing",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_EXT_image_robustness",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_image_robustness behaviour is core",
+     "status": "missing",
+     "note": "see feature:robustImageAccess"
+    },
+    {
+     "id": "extension:VK_EXT_inline_uniform_block",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_inline_uniform_block behaviour is core",
+     "status": "in-progress",
+     "note": "descriptor contracts on main, unreported"
+    },
+    {
+     "id": "extension:VK_EXT_pipeline_creation_cache_control",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_pipeline_creation_cache_control behaviour is core",
+     "status": "missing",
+     "note": "see feature:pipelineCreationCacheControl"
+    },
+    {
+     "id": "extension:VK_EXT_pipeline_creation_feedback",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_pipeline_creation_feedback behaviour is core",
+     "status": "missing",
+     "note": "VkPipelineCreationFeedbackCreateInfo is not accepted"
+    },
+    {
+     "id": "extension:VK_EXT_private_data",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_private_data behaviour is core",
+     "status": "missing",
+     "note": "see feature:privateData"
+    },
+    {
+     "id": "extension:VK_EXT_shader_demote_to_helper_invocation",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_shader_demote_to_helper_invocation behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised on the native graphics profile",
+     "note": "advertised on the native graphics profile",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_EXT_subgroup_size_control",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_subgroup_size_control behaviour is core",
+     "status": "missing",
+     "note": "see feature:subgroupSizeControl"
+    },
+    {
+     "id": "extension:VK_EXT_texel_buffer_alignment",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_texel_buffer_alignment behaviour is core",
+     "status": "missing",
+     "note": "properties not answered"
+    },
+    {
+     "id": "extension:VK_EXT_texture_compression_astc_hdr",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_texture_compression_astc_hdr behaviour is core",
+     "status": "satisfied",
+     "evidence": "optional; feature false",
+     "note": "optional; feature false"
+    },
+    {
+     "id": "extension:VK_EXT_tooling_info",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_tooling_info behaviour is core",
+     "status": "missing",
+     "note": "vkGetPhysicalDeviceToolProperties missing"
+    },
+    {
+     "id": "extension:VK_EXT_ycbcr_2plane_444_formats",
+     "kind": "behaviour",
+     "requirement": "VK_EXT_ycbcr_2plane_444_formats behaviour is core",
+     "status": "satisfied",
+     "evidence": "optional while samplerYcbcrConversion is false",
+     "note": "optional while samplerYcbcrConversion is false"
+    },
+    {
+     "id": "extension:VK_KHR_copy_commands2",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_copy_commands2 behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route in an open PR",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_dynamic_rendering",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_dynamic_rendering behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route in an open PR",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_format_feature_flags2",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_format_feature_flags2 behaviour is core",
+     "status": "in-progress",
+     "note": "unadvertised route in an open PR",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_maintenance4",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_maintenance4 behaviour is core",
+     "status": "in-progress",
+     "note": "memory queries on main behind a measurement switch",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_shader_integer_dot_product",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_shader_integer_dot_product behaviour is core",
+     "status": "missing",
+     "note": "see feature:shaderIntegerDotProduct"
+    },
+    {
+     "id": "extension:VK_KHR_shader_non_semantic_info",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_shader_non_semantic_info behaviour is core",
+     "status": "missing",
+     "note": "compiler handling of NonSemantic.* not audited"
+    },
+    {
+     "id": "extension:VK_KHR_shader_terminate_invocation",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_shader_terminate_invocation behaviour is core",
+     "status": "satisfied",
+     "evidence": "advertised on the native graphics profile",
+     "note": "advertised on the native graphics profile"
+    },
+    {
+     "id": "extension:VK_KHR_synchronization2",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_synchronization2 behaviour is core",
+     "status": "in-progress",
+     "note": "synchronization2 tranche in progress",
+     "dxvk": true
+    },
+    {
+     "id": "extension:VK_KHR_zero_initialize_workgroup_memory",
+     "kind": "behaviour",
+     "requirement": "VK_KHR_zero_initialize_workgroup_memory behaviour is core",
+     "status": "missing",
+     "note": "see feature:shaderZeroInitializeWorkgroupMemory"
+    }
+   ]
+  }
+ }
+}
