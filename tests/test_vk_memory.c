@@ -206,7 +206,16 @@ static void test_failures_and_allocators(void)
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_SUCCESS && b);
     assert(ps5vk_buffer_usage(&d,b,VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
     vkDestroyBuffer(&d,b,NULL);
-    bi.usage = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+    /* D3D11 UAV buffer usage: storage texel next to storage buffer. */
+    bi.usage = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_SUCCESS && b);
+    assert(ps5vk_buffer_usage(&d, b, VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT));
+    assert(!ps5vk_buffer_usage(&d, b, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT));
+    vkDestroyBuffer(&d, b, NULL);
+    /* Transform feedback usage stays refused. */
+    bi.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT; b = VK_NULL_HANDLE;
+    assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_FEATURE_NOT_PRESENT && !b);
+    bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_ERROR_FEATURE_NOT_PRESENT && !b);
     bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     assert(vkCreateBuffer(&d, &bi, NULL, &b) == VK_SUCCESS && b);
@@ -283,6 +292,16 @@ static void test_buffer_views(void)
     vi.format = VK_FORMAT_R32_UINT;
     assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
     vkDestroyBuffer(&d, plain, NULL);
+    /* A storage-texel-only buffer gets no view: no format carries the
+     * witnessed storage-texel role yet. */
+    VkBufferCreateInfo storage_info = bi;
+    storage_info.usage = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+    VkBuffer storage_texel;
+    assert(vkCreateBuffer(&d, &storage_info, NULL, &storage_texel) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, storage_texel, m, 1024) == VK_SUCCESS);
+    vi.buffer = storage_texel;
+    assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+    vkDestroyBuffer(&d, storage_texel, NULL);
     for (unsigned i = 0; i < sizeof(extra) / sizeof(extra[0]); ++i)
         vkDestroyBufferView(&d, extra[i], NULL);
     vkDestroyBufferView(&d, base, NULL);
