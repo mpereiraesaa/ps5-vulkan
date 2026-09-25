@@ -1724,7 +1724,7 @@
      "kind": "behaviour",
      "requirement": "VK_KHR_copy_commands2 behaviour is core",
      "status": "in-progress",
-     "note": "unadvertised route in an open PR",
+     "note": "unadvertised route on main (measurement switch)",
      "dxvk": true
     },
     {
