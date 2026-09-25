@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "75df954111879f9a79860b4713ad3a76035c4bd2b3664629ac1cc2d821cba7de",
+    "artifact_sha256": "b88157ffa829add85acc213a25a40840256825ab1180f839a0f556f32c7d6b60",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -27,6 +27,7 @@
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
       "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
       "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+      "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
       "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
@@ -35,8 +36,8 @@
     ],
     "runs": [
       {
-        "id": "20260924T215614288Z_PPSA99994_ps5vk_0xe6d244aa8b5",
-        "log_sha256": "aa731814b25803746542265adea43f9752db864307a849b9345636013df5e3ad"
+        "id": "20260924T235311412Z_PPSA99994_ps5vk_0x14ceeba58a1e",
+        "log_sha256": "2c5997d112288f768b6ad1b2c631e7e39843c204d40773c4c2bc02a9af7522c2"
       }
     ],
     "transport": "ps5log/1",
@@ -64,16 +65,92 @@
       {
         "route": "VK_EXT_host_query_reset",
         "hostQueryReset": "1"
+      },
+      {
+        "route": "VK_KHR_sampler_mirror_clamp_to_edge",
+        "samplerMirrorClampToEdge": "1"
       }
     ],
-    "source_matrix_sha256": "d040f9e0c993aabe2c7eab283bb605f25dc1f6d2590d6b8f1ecf7a6b9a613644",
-    "satisfied": 28,
-    "blockers": 34,
+    "source_matrix_sha256": "e4bad3e4fac18113effd6b02fa85e38fa5a215eea32d70df188f1da7fc1c6628",
+    "satisfied": 29,
+    "blockers": 33,
     "requirements": 62,
     "device_api": "1.0.0",
-    "device_extensions": 10
+    "device_extensions": 11
   },
   "historical_capability_probes": [
+    {
+      "artifact_sha256": "75df954111879f9a79860b4713ad3a76035c4bd2b3664629ac1cc2d821cba7de",
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260924T215614288Z_PPSA99994_ps5vk_0xe6d244aa8b5",
+          "log_sha256": "aa731814b25803746542265adea43f9752db864307a849b9345636013df5e3ad"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        },
+        {
+          "route": "VK_KHR_uniform_buffer_standard_layout",
+          "uniformBufferStandardLayout": "1"
+        },
+        {
+          "route": "VK_KHR_vulkan_memory_model",
+          "vulkanMemoryModel": "1",
+          "vulkanMemoryModelDeviceScope": "1"
+        },
+        {
+          "route": "VK_KHR_buffer_device_address",
+          "bufferDeviceAddress": "1"
+        },
+        {
+          "route": "VK_EXT_host_query_reset",
+          "hostQueryReset": "1"
+        }
+      ],
+      "source_matrix_sha256": "d040f9e0c993aabe2c7eab283bb605f25dc1f6d2590d6b8f1ecf7a6b9a613644",
+      "satisfied": 28,
+      "blockers": 34,
+      "requirements": 62,
+      "device_api": "1.0.0",
+      "device_extensions": 10
+    },
     {
       "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
       "satisfied_ids": [
@@ -2147,7 +2224,9 @@
           "20260924T220213923Z_PPSA99994_ps5vk_0xec0dff2da2b",
           "20260924T215647835Z_PPSA99994_ps5vk_0xe74f3dab544",
           "20260924T220222966Z_PPSA99994_ps5vk_0xec2faf6f3b7",
-          "20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69"
+          "20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69",
+          "20260924T235846865Z_PPSA99994_ps5vk_0x151d05eafcc2",
+          "20260924T235706586Z_PPSA99994_ps5vk_0x1505ace25712"
         ],
         "artifact_sha256": "950bcfcd86e1e2796997518c327c5e3e0bfe58b603e3bd99d2aa0d838909c2e7",
         "artifact_sha256_refs": {
@@ -2164,12 +2243,15 @@
           "20260924T220213923Z_PPSA99994_ps5vk_0xec0dff2da2b": "02b71c58dfff32fe6471b063e49cd30cc433209aea8fecf8b23383c3b8b8f848",
           "20260924T215647835Z_PPSA99994_ps5vk_0xe74f3dab544": "b2e07979c046c4e7d5d3eb5f5ce23a8f8ffa5900e05e920ee73c9f681752b744",
           "20260924T220222966Z_PPSA99994_ps5vk_0xec2faf6f3b7": "889455cad4f286701dc3b7dcbf134eaa87bf6c537c56f139b1b7fef2fcc38b27",
-          "20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69": "377e0711d350702fdc2f34b76a44979625f0ce9c58544cd158c6ab7d0bc60bdc"
+          "20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69": "377e0711d350702fdc2f34b76a44979625f0ce9c58544cd158c6ab7d0bc60bdc",
+          "20260924T235846865Z_PPSA99994_ps5vk_0x151d05eafcc2": "2fcf57f73b48a8d4078a762fc275dfe0790fae231462c8b835679a534f47bae4",
+          "20260924T235706586Z_PPSA99994_ps5vk_0x1505ace25712": "3358b78774f99678c39a9f247dab6208ef8c026dedeab8e6c9697906a16d08b8"
         },
         "refs": [
-          "VALIDATION.md#t09-sampler-mirror-clamp-diagnostic-measurement-2026-09-24"
+          "VALIDATION.md#t09-sampler-mirror-clamp-diagnostic-measurement-2026-09-24",
+          "VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25"
         ],
-        "note": "Eight strict default-off SDK U/V and six W nearest/linear draw witnesses each matched 373248 pixels with clean lifecycle. Two focused original 3D CTS leaves failed in image upload before sampling, so no CTS PASS is claimed. Public sampler feature and KHR extension remain closed."
+        "note": "Fourteen strict default-off SDK U/V/W witnesses and two shipping KHR SDK U-nearest/W-linear witnesses each matched 373248 CPU/readback pixels with clean lifecycle. The compact upstream 3D W address-mode leaf passed 1/1. Two larger 3D filtering leaves remain Fail at image upload before sampling and do not establish sampler behavior."
       }
     }
   }

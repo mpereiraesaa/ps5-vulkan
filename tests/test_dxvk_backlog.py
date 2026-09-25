@@ -39,11 +39,11 @@ class DxvkBacklogTests(unittest.TestCase):
         # rows on 2026-09-24.
         # The Vulkan 1.0 KHR DeviceScope route has ordinary SDK execution and
         # public-query evidence; original message-passing CTS is ineligible.
-        # T09 host reset has a public EXT route. Imageless and sampler mirror
-        # clamp have native evidence, while their public API rows remain blockers.
+        # T09 host reset has a public EXT route. Sampler mirror clamp uses its
+        # public KHR route; imageless has native evidence but remains blocked.
         self.assertEqual(27, summary["implementation_ready"])
-        self.assertEqual(25, summary["profile_satisfied"])
-        self.assertEqual(36, summary["remaining_profile_blockers"])
+        self.assertEqual(26, summary["profile_satisfied"])
+        self.assertEqual(35, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,

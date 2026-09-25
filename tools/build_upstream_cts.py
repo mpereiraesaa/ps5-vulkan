@@ -48,7 +48,6 @@ def tessellation_build_profile(environment):
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
             "PS5VK_SHADER_INT16_DIAGNOSTIC",
             "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
-            "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
         )
     }
     return {
