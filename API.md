@@ -788,6 +788,21 @@ exact size; that memory then binds only that resource, at offset 0. The bind
 commands validate every element before binding any, and accept only the
 single-device group structures.
 
+`VK_KHR_maintenance4` depends on Vulkan 1.1 in the pinned registry, with no
+extension alternative, so this Vulkan 1.0 device neither lists nor accepts it
+and reports `maintenance4` false. Its three `vkGetDevice*MemoryRequirementsKHR`
+queries are implemented for when the device version allows the route: they
+answer exactly what creating the described object and querying it would, and
+zero (including `memoryTypeBits`) for a description `vkCreateBuffer` or
+`vkCreateImage` refuses. `VkPhysicalDeviceMaintenance4Properties::maxBufferSize`
+is the single-allocation budget (256 MiB on the console), below the extension's
+1 GiB minimum. With `maintenance4` enabled, compute pipelines accept
+`LocalSizeId` whose operands are 32-bit `OpConstant`s (specialization
+constants are refused). A default-off diagnostic build switch,
+`PS5VK_MAINTENANCE4_DIAGNOSTIC`, opens the route on the 1.0 device for
+diagnostic DXVK measurement only; such a build is knowingly non-conformant and
+never ships.
+
 ## Bookkeeping and core command surface
 
 The public driver interface exposes standard Vulkan 1.0 bookkeeping entry points:

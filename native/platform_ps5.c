@@ -408,5 +408,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
     ps5vk_native_tess_profile(platform);
+#if defined(PS5VK_MAINTENANCE4_DIAGNOSTIC) && PS5VK_MAINTENANCE4_DIAGNOSTIC
+    /* DIAGNOSTIC DXVK measurement only, never shipping: VK_KHR_maintenance4
+     * requires a Vulkan 1.1 device, which this profile does not report. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
+    platform->maintenance4_diagnostic_on_vulkan_1_0 = VK_TRUE;
+#endif
     return VK_SUCCESS;
 }

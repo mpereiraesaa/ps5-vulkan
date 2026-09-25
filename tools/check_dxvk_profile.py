@@ -344,6 +344,7 @@ def implemented_device_extensions() -> set[str]:
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
 
         "PS5VK_SHADER_DEMOTE_DIAGNOSTIC",
+        "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 
     ):
         guard = f"#if defined({name}) && {name}"
@@ -400,6 +401,7 @@ def implemented_device_extensions() -> set[str]:
         "VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_DEDICATED_ALLOCATION"},
         "VK_KHR_BIND_MEMORY_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_BIND_MEMORY2"},
+        "VK_KHR_MAINTENANCE_4_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE4"},
 
     }
     unmapped = sorted(tokens - gates.keys())

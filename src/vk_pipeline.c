@@ -105,7 +105,23 @@ VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
     if (found != 1) return VK_FALSE;
     *out = id; return VK_TRUE;
 }
-static int local_size(VkShaderModule module, const char *name, uint32_t dims[3])
+/* The value of a 32-bit OpConstant (opcode 43). A specialization constant is
+ * not resolved here: it is refused rather than read at its default. */
+static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value)
+{
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        if ((w[0] & 0xffff) == 43 && w[0] >> 16 == 4 && w[2] == id) {
+            *value = w[3]; return 1;
+        }
+    }
+    return 0;
+}
+/* LocalSize (OpExecutionMode, mode 17) or, when the device enabled
+ * maintenance4, LocalSizeId (OpExecutionModeId 331, mode 38) whose three
+ * operands are 32-bit OpConstants. Exactly one of them names the entry. */
+static int local_size(VkShaderModule module, const char *name, uint32_t dims[3],
+                      VkBool32 local_size_id)
 {
     uint32_t id;
     if (!ps5vk_shader_entry(module, VK_SHADER_STAGE_COMPUTE_BIT, name, &id)) return 0;
@@ -114,6 +130,11 @@ static int local_size(VkShaderModule module, const char *name, uint32_t dims[3])
         const uint32_t *w = module->words + i;
         if ((w[0] & 0xffff) == 16 && w[0] >> 16 == 6 && w[1] == id && w[2] == 17) {
             memcpy(dims, w + 3, 3 * sizeof(*dims)); ++found;
+        } else if ((w[0] & 0xffff) == 331 && w[0] >> 16 == 6 && w[1] == id && w[2] == 38) {
+            if (!local_size_id) return 0;
+            for (unsigned n = 0; n < 3; ++n)
+                if (!constant_value(module, w[3 + n], &dims[n])) return 0;
+            ++found;
         }
     }
     return found == 1;
@@ -311,7 +332,9 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
         (required_features & ~compile_features))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t dims[3];
-    if (!local_size(info->stage.module, info->stage.pName, dims)) return VK_ERROR_UNKNOWN;
+    if (!local_size(info->stage.module, info->stage.pName, dims,
+                    !!(d->enabled_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE4)))
+        return VK_ERROR_UNKNOWN;
 
     const struct ps5vk_compiled_program *program = NULL;
     struct ps5vk_cache_entry *entry = NULL;

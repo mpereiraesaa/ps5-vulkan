@@ -843,3 +843,48 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory2KHR(VkDevice d, uint32_t count,
         (void)vkBindImageMemory(d, infos[n].image, infos[n].memory, infos[n].memoryOffset);
     return VK_SUCCESS;
 }
+
+/* VK_KHR_maintenance4: requirements for a creation description without a
+ * resource. The answer is, by construction, exactly what vkCreateBuffer or
+ * vkCreateImage followed by the 1.0 query reports: a transient object is
+ * created from the same description, queried and destroyed before return (it
+ * is never visible to the application and cannot be referenced). A
+ * description those commands refuse has no requirements, so the query
+ * reports zero, including a memoryTypeBits of 0. */
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceBufferMemoryRequirementsKHR(VkDevice d,
+    const VkDeviceBufferMemoryRequirements *info, VkMemoryRequirements2 *out)
+{
+    if (!out || out->sType != VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2) return;
+    out->memoryRequirements = (VkMemoryRequirements){0};
+    if (!d || !d->maintenance4_extension_enabled || !info ||
+        info->sType != VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS ||
+        info->pNext || !info->pCreateInfo) return;
+    VkBuffer buffer = VK_NULL_HANDLE;
+    if (vkCreateBuffer(d, info->pCreateInfo, NULL, &buffer) != VK_SUCCESS) return;
+    vkGetBufferMemoryRequirements(d, buffer, &out->memoryRequirements);
+    vkDestroyBuffer(d, buffer, NULL);
+    dedicated_requirements(d, out->pNext);
+}
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageMemoryRequirementsKHR(VkDevice d,
+    const VkDeviceImageMemoryRequirements *info, VkMemoryRequirements2 *out)
+{
+    if (!out || out->sType != VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2) return;
+    out->memoryRequirements = (VkMemoryRequirements){0};
+    /* planeAspect names a plane of a disjoint image, which is never created. */
+    if (!d || !d->maintenance4_extension_enabled || !info ||
+        info->sType != VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS ||
+        info->pNext || !info->pCreateInfo || info->planeAspect) return;
+    VkImage image = VK_NULL_HANDLE;
+    if (vkCreateImage(d, info->pCreateInfo, NULL, &image) != VK_SUCCESS) return;
+    vkGetImageMemoryRequirements(d, image, &out->memoryRequirements);
+    vkDestroyImage(d, image, NULL);
+    dedicated_requirements(d, out->pNext);
+}
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceImageSparseMemoryRequirementsKHR(VkDevice d,
+    const VkDeviceImageMemoryRequirements *info, uint32_t *count,
+    VkSparseImageMemoryRequirements2 *out)
+{
+    (void)d; (void)info; (void)out;
+    /* sparseBinding is not reported: no description can be sparse. */
+    if (count) *count = 0;
+}
