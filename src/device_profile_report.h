@@ -23,13 +23,25 @@
 #define PS5VK_PROFILE_COMPUTE_NAME "ps5vk gfx1013 experimental compute profile"
 #define PS5VK_PROFILE_GRAPHICS_NAME "ps5vk gfx1013 experimental graphics profile"
 #define PS5VK_PROFILE_COMPUTE_HEAP_BYTES (UINT64_C(64) * 1024 * 1024)
-#define PS5VK_PROFILE_GRAPHICS_HEAP_BYTES (UINT64_C(256) * 1024 * 1024)
+/* Graphics: one allocation may be 1 GiB (maxMemoryAllocationSize and
+ * maxBufferSize reach the Vulkan 1.1/1.3 floor of 2^30). The heap adds the
+ * former 256 MiB budget as headroom for the internal shader/state arenas and
+ * presentation, which share it. The compute build keeps 64 MiB for both. */
+#define PS5VK_PROFILE_GRAPHICS_MAX_ALLOCATION_BYTES (UINT64_C(1) << 30)
+#define PS5VK_PROFILE_GRAPHICS_HEAP_BYTES \
+    (PS5VK_PROFILE_GRAPHICS_MAX_ALLOCATION_BYTES + UINT64_C(256) * 1024 * 1024)
 #define PS5VK_PROFILE_COMPUTE_ALLOCATION_GRANULARITY 65536u
 #define PS5VK_PROFILE_GRAPHICS_ALLOCATION_GRANULARITY 131072u
 
 static inline VkDeviceSize ps5vk_device_profile_heap_bytes(int graphics_objects)
 {
     return graphics_objects ? PS5VK_PROFILE_GRAPHICS_HEAP_BYTES
+                            : PS5VK_PROFILE_COMPUTE_HEAP_BYTES;
+}
+
+static inline VkDeviceSize ps5vk_device_profile_max_allocation(int graphics_objects)
+{
+    return graphics_objects ? PS5VK_PROFILE_GRAPHICS_MAX_ALLOCATION_BYTES
                             : PS5VK_PROFILE_COMPUTE_HEAP_BYTES;
 }
 

@@ -78,7 +78,9 @@ class CoreVersionContract(unittest.TestCase):
         self.assertIn("1.2 command vkCmdDrawIndirectCount (device)", message)
         self.assertNotIn("vkWaitSemaphores", message)
         self.assertIn("1.3 feature:synchronization2: in-progress", message)
-        self.assertIn("1.3 limit:maxBufferSize: blocker", message)
+        self.assertIn("1.3 limit:maxInlineUniformBlockSize: in-progress", message)
+        self.assertNotIn("limit:maxBufferSize", message)
+        self.assertNotIn("limit:maxMemoryAllocationSize", message)
 
     def test_every_mandatory_feature_and_promoted_extension_needs_a_row(self):
         contract = copy.deepcopy(self.contract)

@@ -735,8 +735,11 @@ semantic gap, not an application requirement of the full API.
 ## Memory and presentation
 
 GPU resources are backed by native direct-memory allocations with conservative
-alignment and footprint checks. The implementation enforces a 256 MiB budget;
-this is a software safety limit, not a measurement of total console memory.
+alignment and footprint checks. The graphics profile enforces a 1.25 GiB heap
+budget in which one allocation (and one buffer) may be 1 GiB; the remaining
+256 MiB is headroom shared with internal shader, state and presentation
+allocations. Descriptor ranges and images keep a 256 MiB per-resource bound.
+These are software safety limits, not a measurement of total console memory.
 Flush, invalidate, completion and retirement operations are explicit.
 
 The graphics profile reports one device-local, host-visible, non-coherent
@@ -803,8 +806,8 @@ queries are implemented for when the device version allows the route: they
 answer exactly what creating the described object and querying it would, and
 zero (including `memoryTypeBits`) for a description `vkCreateBuffer` or
 `vkCreateImage` refuses. `VkPhysicalDeviceMaintenance4Properties::maxBufferSize`
-is the single-allocation budget (256 MiB on the console), below the extension's
-1 GiB minimum. With `maintenance4` enabled, compute pipelines accept
+is the single-allocation budget (1 GiB on the graphics profile, the extension's
+minimum). With `maintenance4` enabled, compute pipelines accept
 `LocalSizeId` whose operands are 32-bit `OpConstant`s (specialization
 constants are refused). A default-off diagnostic build switch,
 `PS5VK_MAINTENANCE4_DIAGNOSTIC`, opens the route on the 1.0 device for

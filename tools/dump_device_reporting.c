@@ -160,7 +160,7 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
             PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION |
             PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
 
-    platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
+    platform->max_allocation = ps5vk_device_profile_max_allocation(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
     if (graphics_submit)

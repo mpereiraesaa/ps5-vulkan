@@ -199,6 +199,18 @@ static void lifecycle(void)
                pl->lineWidthRange[1]==PS5VK_REQUIRED_LINE_WIDTH);
         assert(strcmp(profile.deviceName, PS5VK_PROFILE_GRAPHICS_NAME)==0);
         assert(profile_memory.memoryHeaps[0].size==PS5VK_PROFILE_GRAPHICS_HEAP_BYTES);
+        /* One allocation may be 1 GiB (the Vulkan 1.1/1.3 floor) inside a
+         * 1.25 GiB heap; the per-resource limits keep their 256 MiB bound. */
+        assert(ps5vk_device_profile_max_allocation(VK_TRUE)==(UINT64_C(1)<<30));
+        assert(PS5VK_PROFILE_GRAPHICS_HEAP_BYTES==(UINT64_C(1)<<30)+(UINT64_C(256)<<20));
+        assert(pl->maxStorageBufferRange==(UINT32_C(256)<<20));
+        assert(pl->maxMemoryAllocationCount==2048);
+        assert(ps5vk_physical_profile_valid(&profile,&profile_memory,
+            ps5vk_device_profile_max_allocation(VK_TRUE),
+            VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT,1,1));
+        assert(!ps5vk_physical_profile_valid(&profile,&profile_memory,
+            PS5VK_PROFILE_GRAPHICS_HEAP_BYTES+1,
+            VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT,1,1));
         /* The compute-only profile shares the same floors. */
         VkPhysicalDeviceProperties compute_profile;
         VkPhysicalDeviceMemoryProperties compute_memory;
@@ -207,6 +219,10 @@ static void lifecycle(void)
         assert(compute_profile.limits.pointSizeRange[1]==PS5VK_REQUIRED_POINT_SIZE);
         assert(compute_profile.limits.sampledImageIntegerSampleCounts==VK_SAMPLE_COUNT_1_BIT);
         assert(strcmp(compute_profile.deviceName, PS5VK_PROFILE_COMPUTE_NAME)==0);
+        assert(ps5vk_device_profile_max_allocation(VK_FALSE)==(UINT64_C(64)<<20));
+        assert(compute_memory.memoryHeaps[0].size==(UINT64_C(64)<<20));
+        assert(compute_profile.limits.maxStorageBufferRange==(UINT32_C(64)<<20));
+        assert(compute_profile.limits.maxMemoryAllocationCount==1024);
         /* maxDrawIndirectCount follows the platform mask through the shared
          * initializer: exactly 1 without multiDrawIndirect, the core floor
          * 65535 with it, on either profile, so a platform cannot report the
@@ -1819,11 +1835,23 @@ static void consumer_physical_queries(void)
                              &p->platform.memory_properties, 1, 1,
                              p->platform.supported_features);
     p->platform.queue_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-    p->platform.max_allocation = UINT64_C(268435456);
+    p->platform.max_allocation = ps5vk_device_profile_max_allocation(1);
     p->platform.format_properties = ps5vk_graphics_format_properties;
     p->platform.image_properties = ps5vk_graphics_image_properties;
     VkPhysicalDeviceProperties props;
     vkGetPhysicalDeviceProperties(p, &props);
+    /* maxBufferSize is the 1 GiB single-allocation budget, while an image
+     * keeps the 256 MiB per-resource bound. */
+    VkPhysicalDeviceMaintenance4Properties m4 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES};
+    VkPhysicalDeviceProperties2 props2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &m4};
+    vkGetPhysicalDeviceProperties2KHR(p, &props2);
+    assert(m4.maxBufferSize == (UINT64_C(1) << 30));
+    VkImageFormatProperties large = {0};
+    assert(vkGetPhysicalDeviceImageFormatProperties(p, VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, 0,
+        &large) == VK_SUCCESS && large.maxResourceSize == (UINT64_C(256) << 20));
     report_physical_device_contract(i, p, &props);
 
     /* A lost advertised role must fail the exact native consumer contract,

@@ -222,8 +222,9 @@
      "id": "limit:maxMemoryAllocationSize",
      "kind": "limit",
      "requirement": ">= 2^30",
-     "status": "blocker",
-     "note": "the native heap budget is 256 MiB (graphics) and 64 MiB (compute)"
+     "status": "satisfied",
+     "evidence": "graphics profile max_allocation is 2^30 in a 1.25 GiB heap (src/device_profile_report.h, tests/test_vk_core_version.c); 1 GiB allocate/bind/GPU-write/free on hardware by tools/run_dxvk_heap_witness.py",
+     "note": "the compute-only measurement build keeps its 64 MiB budget and is not a DXVK target"
     },
     {
      "id": "limit:subgroupSize",
@@ -1485,8 +1486,9 @@
      "id": "limit:maxBufferSize",
      "kind": "limit",
      "requirement": ">= 2^30",
-     "status": "blocker",
-     "note": "the native heap budget is 256 MiB"
+     "status": "satisfied",
+     "evidence": "the maintenance4 maxBufferSize is the 2^30 single-allocation budget of the graphics profile (src/vk_device.c, tests/test_vk_core_version.c); a 1 GiB buffer is bound and GPU-written on hardware by tools/run_dxvk_heap_witness.py",
+     "note": "the compute-only measurement build keeps its 64 MiB budget and is not a DXVK target"
     },
     {
      "id": "behaviour:spirv-1.6",
@@ -1538,7 +1540,7 @@
      "kind": "feature",
      "requirement": "mandatory",
      "status": "in-progress",
-     "note": "memory queries on main behind a measurement switch; maxBufferSize blocked",
+     "note": "memory queries on main behind a measurement switch; maxBufferSize is 1 GiB",
      "dxvk": true
     },
     {

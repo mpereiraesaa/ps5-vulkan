@@ -255,11 +255,11 @@ SECONDARY_MESSAGES = [
 MESSAGES = [
     "PS5VK_CONSUMER_BOOT mode=finite sdk_version=0.1",
     "PS5VK_CONSUMER_PHYSICAL_DEVICE api=00400000 vendor=1002 device=0000 "
-    "heap=268435456 heap_flags=00000001 type_flags=00000003 "
+    "heap=1342177280 heap_flags=00000001 type_flags=00000003 "
     "queue_flags=00000003 storage=268435456 uniform=65536 texel=65536 "
     "push=256 allocations=2048 granularity=131072 map_align=64 "
     "texel_align=4 ubo_align=256 ssbo_align=256 atom=64 shared=65536 "
-    "invocations=1024 hash=be169e1b",
+    "invocations=1024 hash=7f34799b",
     "PS5VK_CONSUMER_PHYSICAL_QUERIES devices=1 queues=1 two_call=1 "
     "tail_preserved=1 pnext_preserved=1 formats=5 image_supported=1 "
     "image_rejected=1",
@@ -905,7 +905,7 @@ class ConsumerResourceAbiTests(unittest.TestCase):
         self.assertEqual(result["storage8_elements_checked"], 64)
         self.assertEqual(result["storage16_elements_checked"], 64)
         self.assertEqual(result["narrow_guard_bytes_checked"], 8000)
-        self.assertEqual(result["physical_device_report_fnv1a32"], "be169e1b")
+        self.assertEqual(result["physical_device_report_fnv1a32"], "7f34799b")
         self.assertFalse(result["reported_host_coherent"])
         self.assertEqual(result["multiwave_atomic_lanes_checked"], 128)
         self.assertEqual(result["wave32_count"], 4)
@@ -925,8 +925,8 @@ class ConsumerResourceAbiTests(unittest.TestCase):
                         ("checksum16=603ddade", "checksum16=00000000"),
                         ("sync_hash=467e2acd", "sync_hash=00000000"),
                         ("permutation=1", "permutation=0"),
-                        ("heap=268435456", "heap=268435455"),
-                        ("hash=be169e1b", "hash=00000000"),
+                        ("heap=1342177280", "heap=268435456"),
+                        ("hash=7f34799b", "hash=00000000"),
                         ("pnext_preserved=1", "pnext_preserved=0"),
                         ("allocations=1", "allocations=0"))
         for old, new in replacements:

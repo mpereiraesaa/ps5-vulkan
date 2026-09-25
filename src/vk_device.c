@@ -753,8 +753,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
                 VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES) {
             /* The largest size vkCreateBuffer accepts: its aligned footprint
-             * must fit one allocation. This is the allocator's software
-             * budget, below the 2^30 minimum the extension sets. */
+             * must fit one allocation (maxMemoryAllocationSize, 1 GiB on the
+             * graphics profile, the extension's 2^30 minimum). */
             const VkDeviceSize alignment =
                 p->platform.properties.limits.minStorageBufferOffsetAlignment;
             ((VkPhysicalDeviceMaintenance4Properties *)next)->maxBufferSize =
@@ -876,7 +876,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties(VkPhysic
         flags&=~(VkImageCreateFlags)VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     }
     return p->platform.image_properties(format,type,tiling,usage,flags,
-        p->platform.max_allocation,out);
+        ps5vk_profile_resource_limit(p->platform.max_allocation),out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2KHR(VkPhysicalDevice p,
     const VkPhysicalDeviceImageFormatInfo2 *info, VkImageFormatProperties2 *out)

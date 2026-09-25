@@ -24,9 +24,10 @@ console really queries rather than a hand-copied table.
 | device ID | `0` | `0` | unresolved; no PCI-style device ID is claimed |
 | queue families | 1 | 1 | single native serial queue implementation |
 | queue flags | compute | graphics + compute | compiled native queue path |
-| heap size | 64 MiB | 256 MiB | bounded project allocation budget |
+| heap size | 64 MiB | 1.25 GiB | bounded project allocation budget |
+| maximum single allocation | 64 MiB | 1 GiB | heap budget minus 256 MiB headroom for internal arenas and presentation (graphics) |
 | minimum allocation charge | 64 KiB | 128 KiB | direct-memory allocator policy |
-| maximum allocation count | 1,024 | 2,048 | heap size divided by minimum allocation charge |
+| maximum allocation count | 1,024 | 2,048 | per-resource bound (at most 256 MiB) divided by minimum allocation charge |
 | memory type | device-local, host-visible | device-local, host-visible | one GPU-used direct-memory heap mapped by the CPU |
 | host coherent | no | no | flush and invalidate remain explicit; coherence is not established |
 | buffer/image granularity | 64 KiB | 128 KiB | conservative separation from the active allocator class |

@@ -154,7 +154,7 @@
       "limits": [
         "This overlay authorises no API change and no emulator port.",
         "Initial acceptance is limited to the RDP command scope; VI and emulator integration are separate.",
-        "The 256 MiB design budget in the SDK is a software policy, not evidence that this workload fits or fails."
+        "The 1.25 GiB design budget in the SDK is a software policy, not evidence that this workload fits or fails."
       ]
     },
     {
