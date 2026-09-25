@@ -361,6 +361,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features_t09 |=
         PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION |
         PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
+#if defined(PS5VK_DXVK_RENDER_DIAGNOSTIC) && PS5VK_DXVK_RENDER_DIAGNOSTIC
+    /* Private measurement build (DXVK262-T10): report the DXVK first-draw
+     * recording routes so the witness negotiates them through the public API
+     * before any shipping platform advertises them. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE |
+        PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
+        PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1;
+#endif
 
 #endif
 #else

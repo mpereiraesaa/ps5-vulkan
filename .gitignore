@@ -17,3 +17,4 @@ dist-sdk/
 dist-consumer/
 dist-cts/
 dist-upstream-cts/
+dist-dxvk-render-witness/
