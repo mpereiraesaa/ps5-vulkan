@@ -3,11 +3,25 @@
 
 #include "vk_command.h"
 
-/* Internal converters for the bounded DXVK 2.6.2 image dependency and
- * buffer-to-image copy shapes. No public synchronization2 route is exposed. */
-void ps5vk_cmd_pipeline_barrier2_bounded(VkCommandBuffer command,
-                                          const VkDependencyInfo *dependency);
-void ps5vk_cmd_copy_buffer_to_image2_bounded(VkCommandBuffer command,
-                                              const VkCopyBufferToImageInfo2 *copy);
+/* VK_KHR_synchronization2 conversion onto the Vulkan 1.0 commands. The KHR
+ * commands themselves are defined in vk_sync2.c and reachable only on a
+ * device that enabled the extension and its feature. */
+enum ps5vk_sync2_kind { PS5VK_SYNC2_MEMORY, PS5VK_SYNC2_BUFFER, PS5VK_SYNC2_IMAGE };
+struct ps5vk_sync2_barrier {
+    enum ps5vk_sync2_kind kind;
+    VkPipelineStageFlags src_stage, dst_stage;
+    VkAccessFlags src_access, dst_access;
+    VkMemoryBarrier memory;
+    VkBufferMemoryBarrier buffer;
+    VkImageMemoryBarrier image;
+};
+
+VkBool32 ps5vk_sync2_stage_mask(VkPipelineStageFlags2 stage2, VkBool32 source,
+                                VkPipelineStageFlags *legacy);
+VkBool32 ps5vk_sync2_access_mask(VkAccessFlags2 access2, VkAccessFlags *legacy);
+VkBool32 ps5vk_sync2_image_layout(VkImageLayout layout, VkImage image,
+                                  VkImageAspectFlags aspect, VkImageLayout *legacy);
+VkResult ps5vk_sync2_convert_dependency(const VkDependencyInfo *dependency,
+    struct ps5vk_sync2_barrier **out, uint32_t *out_count);
 
 #endif

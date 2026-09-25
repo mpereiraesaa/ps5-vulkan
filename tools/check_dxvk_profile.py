@@ -404,6 +404,8 @@ def implemented_device_extensions() -> set[str]:
 
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 
+        "PS5VK_SYNCHRONIZATION2_DIAGNOSTIC",
+
     ):
         guard = f"#if defined({name}) && {name}"
         if guard in platform_source:
@@ -476,6 +478,8 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2"},
         "VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST"},
+        "VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_SYNCHRONIZATION2"},
 
     }
     unmapped = sorted(tokens - gates.keys())

@@ -121,6 +121,7 @@ def main():
             (ROOT / "src/color_clear.c", []),
             (ROOT / "src/vk_queue.c", []),
             (ROOT / "src/vk_queue_router.c", []),
+            (ROOT / "src/vk_sync2.c", []),
             (ROOT / "src/vk_image_view.c", []),
             (ROOT / "src/vk_swapchain.c", []),
             (ROOT / "src/vk_sampler.c", []),
@@ -277,7 +278,10 @@ def main():
                      "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
                      "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
                      "PS5VK_DXVK_RENDER_DIAGNOSTIC",
-                     "PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC"):
+                     "PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC",
+                     # Enumerate VK_KHR_synchronization2 (DXVK262) for a
+                     # witness before the converted route is promoted.
+                     "PS5VK_SYNCHRONIZATION2_DIAGNOSTIC"):
             value = os.environ.get(name, "0")
             if value not in ("0", "1"):
                 raise SystemExit(f"{name} must be 0 or 1")
@@ -391,7 +395,7 @@ def main():
     host_sources = [
         "src/vk_alloc.c", "src/vk_memory.c", "src/vk_descriptor.c",
         "src/vk_pipeline.c", "src/spirv_ubo_layout.c", "src/compilation_cache.c", "src/vk_pipeline_cache.c", "src/vk_command.c", "src/vk_indirect.c",
-        "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c",
+        "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c", "src/vk_sync2.c",
         # The linear staging readback copy reads the tiled colour surface
         # through the shared 64KB_R_X offset contract.
         # through the shared 64KB_R_X offset contract, and a depth readback

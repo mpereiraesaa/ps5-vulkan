@@ -150,6 +150,44 @@ static void submit2_dxvk_shape(void)
     assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN);
     assert(d.queue.next_serial == serial && f.prepares == prepares && !d.submission);
 
+    /* vkQueueSubmit2KHR: only on a device that enabled synchronization2, and
+     * then DXVK's first-frame shape - three command buffers (init barriers,
+     * init buffer, exec) signalling the graphics timeline at BOTTOM_OF_PIPE,
+     * then a host wait on that value. */
+    submit = (VkSubmitInfo2){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    assert(vkQueueSubmit2KHR(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN);
+    assert(d.queue.next_serial == serial && f.prepares == prepares);
+    d.enabled_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;
+    VkCommandBuffer three[3];
+    ai.commandBufferCount = 3;
+    assert(vkAllocateCommandBuffers(&d, &ai, three) == VK_SUCCESS);
+    VkCommandBufferSubmitInfo cbs[3];
+    for (unsigned i = 0; i < 3; ++i) {
+        record_empty(three[i], VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+        cbs[i] = (VkCommandBufferSubmitInfo){
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = three[i]};
+    }
+    signal = (VkSemaphoreSubmitInfo){.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = timeline, .value = 6,
+        .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT};
+    submit = (VkSubmitInfo2){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .commandBufferInfoCount = 3, .pCommandBufferInfos = cbs,
+        .signalSemaphoreInfoCount = 1, .pSignalSemaphoreInfos = &signal};
+    assert(vkQueueSubmit2KHR(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    assert(f.prepares == prepares + 1 && three[0]->pending_count == 1 &&
+           three[2]->pending_count == 1);
+    VkSemaphoreWaitInfo host_wait = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .semaphoreCount = 1, .pSemaphores = &timeline, .pValues = &signal.value};
+    assert(vkWaitSemaphoresKHR(&d, &host_wait, UINT64_MAX) == VK_SUCCESS);
+    assert(timeline->value == 6 && !three[1]->pending_count);
+    /* The empty submit DXVK sends to bump the timeline. */
+    signal.value = 7;
+    submit.commandBufferInfoCount = 0; submit.pCommandBufferInfos = NULL;
+    assert(vkQueueSubmit2KHR(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    assert(vkWaitSemaphoresKHR(&d, &host_wait, UINT64_MAX) == VK_SUCCESS &&
+           timeline->value == 7);
+
     vkDestroySemaphore(&d, binary, NULL);
     vkDestroySemaphore(&d, timeline, NULL);
     vkDestroyCommandPool(&d, pool, NULL);
