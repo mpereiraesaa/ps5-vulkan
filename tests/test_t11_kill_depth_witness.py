@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_t11_kill_depth_witness import (  # noqa: E402
-    SHADERS, checked_spirv, export_memory_switch)
+    SHADERS, checked_spirv)
 from run_t11_kill_depth_witness import (  # noqa: E402
     CASES, REMOVED, SUBMISSIONS_PER_CASE, verify)
 
@@ -26,10 +26,10 @@ def case_line(form, removes, depth=0, stencil=0, written=0, missing=0, fence="co
             f"depth_digest=0badf00d stencil_digest=feedface fence={fence}")
 
 
-def fixture_log(switch="1", tallies=None, retired=True, failure=False, forms=CASES,
+def fixture_log(cases=len(CASES), tallies=None, retired=True, failure=False, forms=CASES,
                 steps=SUBMISSIONS_PER_CASE):
     tallies = tallies or {}
-    lines = [f"T11_KILL_WITNESS_START extent=64 export_memory={switch}"]
+    lines = [f"T11_KILL_WITNESS_START extent=64 cases={cases}"]
     lines += [f"T11_KILL_WITNESS_PIPELINE form={form} created=1" for form in forms]
     for form in forms:
         lines += [f"T11_KILL_WITNESS_STEP form={form} index={i} fence=complete"
@@ -50,10 +50,10 @@ def receipt(log):
                 run_id="unit-run")
 
 
-def artifact(switch="1"):
+def artifact():
     return dict(profile="t11-kill-depth-public-sdk-witness", extent=64,
                 format="D32_SFLOAT_S8_UINT", cases=list(CASES),
-                diagnostic_switch={"PS5VK_KILL_EXPORT_MEMORY": switch},
+                diagnostic_switch=None,
                 eboot_sha256="artifact-sha")
 
 
@@ -62,15 +62,16 @@ class Verifier(unittest.TestCase):
         log = fixture_log()
         result = verify(log, receipt(log), artifact())
         self.assertTrue(result["strict_verified"])
-        self.assertEqual(result["export_memory"], "1")
+        self.assertTrue(result["regression_ok"])
         self.assertEqual(result["verdict"], {"kill": "removal-suppressed",
                                              "terminate": "removal-suppressed",
                                              "demote": "removal-suppressed"})
 
     def test_the_open_defect_is_a_verified_measurement_too(self):
         ignored = dict(depth=REMOVED, stencil=REMOVED, written=REMOVED, missing=0)
-        log = fixture_log(switch="0", tallies={f: ignored for f in CASES[1:]})
-        result = verify(log, receipt(log), artifact("0"))
+        log = fixture_log(tallies={f: ignored for f in CASES[1:]})
+        result = verify(log, receipt(log), artifact())
+        self.assertFalse(result["regression_ok"])
         self.assertEqual(set(result["verdict"].values()), {"removal-ignored"})
         self.assertEqual(result["tallies"]["kill"]["removed_written"], 2048)
 
@@ -82,18 +83,19 @@ class Verifier(unittest.TestCase):
         self.assertEqual(verdict["kill"], "removal-partial")
         self.assertEqual(verdict["demote"], "kept-pixels-lost")
         self.assertEqual(verdict["terminate"], "removal-suppressed")
+        self.assertFalse(verify(log, receipt(log), artifact())["regression_ok"])
 
     def test_invalid_runs_are_rejected(self):
         broken_control = {"control": dict(depth=1, stencil=0, written=0, missing=1)}
         cases = [
             (fixture_log(tallies=broken_control), artifact()),
-            (fixture_log(switch="0"), artifact("1")),
+            (fixture_log(cases=3), artifact()),
             (fixture_log(retired=False), artifact()),
             (fixture_log(failure=True), artifact()),
             (fixture_log(forms=CASES[:3]), artifact()),
             (fixture_log(steps=1), artifact()),
             (fixture_log(), dict(artifact(), cases=["kill"])),
-            (fixture_log(), dict(artifact(), diagnostic_switch={})),
+            (fixture_log(), dict(artifact(), diagnostic_switch={"X": "1"})),
         ]
         for log, art in cases:
             with self.subTest(art=art):
@@ -107,12 +109,6 @@ class Verifier(unittest.TestCase):
 
 
 class Builder(unittest.TestCase):
-    def test_switch_values(self):
-        self.assertEqual(export_memory_switch({}), "0")
-        self.assertEqual(export_memory_switch({"PS5VK_KILL_EXPORT_MEMORY": "1"}), "1")
-        with self.assertRaises(SystemExit):
-            export_memory_switch({"PS5VK_KILL_EXPORT_MEMORY": "yes"})
-
     @unittest.skipUnless(shutil.which("glslangValidator"), "glslangValidator unavailable")
     def test_each_case_is_exactly_its_form(self):
         compiled = {}

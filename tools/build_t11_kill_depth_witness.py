@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build the bounded public-SDK pixel-removal (kill/terminate/demote) witness.
 
-PS5VK_KILL_EXPORT_MEMORY=0|1 selects the driver's default-off export-memory
-measurement switch. Each value is its own executable in its own dist tree, and
-the payload logs the value it was built with.
+The regression witness for the driver's kill export-memory rule, built from
+the ordinary staged SDK with no measurement switch.
 """
 
 import hashlib
@@ -72,15 +71,7 @@ def checked_spirv(payload: bytes, version: int, capabilities: set,
         raise ValueError("unexpected pixel-removal instruction")
 
 
-def export_memory_switch(environment: dict) -> str:
-    value = environment.get("PS5VK_KILL_EXPORT_MEMORY", "0")
-    if value not in ("0", "1"):
-        raise SystemExit("PS5VK_KILL_EXPORT_MEMORY must be 0 or 1")
-    return value
-
-
 def main() -> None:
-    switch = export_memory_switch(os.environ)
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
@@ -91,8 +82,8 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    build = ROOT / f"build/t11-kill-depth-witness-{switch}"
-    dist = ROOT / f"dist-t11-kill-depth-witness-{switch}/PPSA99994"
+    build = ROOT / "build/t11-kill-depth-witness"
+    dist = ROOT / "dist-t11-kill-depth-witness/PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -108,8 +99,8 @@ def main() -> None:
     (build / "t11_kill_depth_shaders.h").write_text(
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
 
-    # The staged SDK carries the switch; nothing else differs between builds.
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), PS5VK_KILL_EXPORT_MEMORY=switch)
+    # The ordinary staged SDK: the rule is part of the shipping draw path.
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t11_kill_depth_witness/main.c"
@@ -117,7 +108,6 @@ def main() -> None:
     dep = build / "main.d"
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
-        f"-DT11_KILL_EXPORT_MEMORY={switch}",
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger),
@@ -169,7 +159,7 @@ def main() -> None:
         "profile": "t11-kill-depth-public-sdk-witness",
         "extent": 64, "format": "D32_SFLOAT_S8_UINT",
         "cases": ["control", "kill", "terminate", "demote"],
-        "diagnostic_switch": {"PS5VK_KILL_EXPORT_MEMORY": switch},
+        "diagnostic_switch": None,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),

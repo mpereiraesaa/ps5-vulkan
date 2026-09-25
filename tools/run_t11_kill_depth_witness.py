@@ -3,8 +3,8 @@
 
 The receipt is valid evidence when the run is complete and its control case is
 clean; the verdict then says, per removal form, whether removed pixels stayed
-out of the depth and stencil planes. A defect verdict is a measurement, not a
-failed run: the knob-off build is expected to reproduce the open defect.
+out of the depth and stencil planes. The regression passes only when every
+form suppressed its removed pixels and lost no kept one.
 """
 
 import argparse
@@ -35,10 +35,10 @@ CASE = re.compile(
 
 
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
-    switch = (artifact.get("diagnostic_switch") or {}).get("PS5VK_KILL_EXPORT_MEMORY")
     if (artifact.get("profile") != PROFILE or artifact.get("extent") != EXTENT or
             artifact.get("format") != "D32_SFLOAT_S8_UINT" or
-            tuple(artifact.get("cases") or ()) != CASES or switch not in ("0", "1")):
+            tuple(artifact.get("cases") or ()) != CASES or
+            artifact.get("diagnostic_switch") is not None):
         raise ValueError("unexpected pixel-removal witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or
             receipt.get("title") != "PPSA99994" or
@@ -49,14 +49,14 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             receipt.get("sha256") != hashlib.sha256(log).hexdigest()):
         raise ValueError("incomplete or corrupt ps5log/1 receipt")
     text = log.decode("utf-8", errors="replace")
-    start = re.findall(r"T11_KILL_WITNESS_START extent=(\d+) export_memory=(\d)", text)
+    start = re.findall(r"T11_KILL_WITNESS_START extent=(\d+) cases=(\d+)", text)
     pipelines = re.findall(r"T11_KILL_WITNESS_PIPELINE form=(\w+) created=1", text)
     steps = re.findall(r"T11_KILL_WITNESS_STEP form=(\w+) index=(\d+) fence=complete", text)
     cases = CASE.findall(text)
     result = re.findall(r"T11_KILL_WITNESS_RESULT cases=(\d+) submissions=(\d+) "
                         r"fence=(\w+)", text)
     retired = re.findall(r"T11_KILL_WITNESS_RETIRED resources=(\w+)", text)
-    if (start != [(str(EXTENT), switch)] or tuple(pipelines) != CASES or
+    if (start != [(str(EXTENT), str(len(CASES)))] or tuple(pipelines) != CASES or
             tuple(c[0] for c in cases) != CASES or
             [c[1] for c in cases] != ["0", "1", "1", "1"] or
             any(c[12] != "complete" for c in cases) or
@@ -88,8 +88,8 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     return {
         "strict_verified": True,
         "run_id": receipt["run_id"],
-        "export_memory": switch,
         "verdict": verdict,
+        "regression_ok": all(v == "removal-suppressed" for v in verdict.values()),
         "tallies": tallies,
         "log_sha256": receipt["sha256"],
         "eboot_sha256": artifact["eboot_sha256"],
@@ -132,7 +132,7 @@ def main() -> int:
     if not lifecycle_ok:
         raise RuntimeError("witness title did not stop")
     print(json.dumps(result, indent=2))
-    return 0
+    return 0 if result.get("regression_ok") else 1
 
 
 if __name__ == "__main__":

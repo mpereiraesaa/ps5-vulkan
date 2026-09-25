@@ -17,10 +17,9 @@
  *
  * The control proves the instrument (every pixel written) in the same process,
  * so a removal case whose removed pixels were written is the defect itself,
- * not a broken readback. The payload is built twice, once per value of the
- * driver's export-memory measurement switch; each build is its own executable
- * and says in its first line which one it is. Every submission waits on a
- * bounded fence and no shader loops.
+ * not a broken readback. This is the regression witness for the driver's
+ * kill export-memory rule: before the rule, every removed pixel was written.
+ * Every submission waits on a bounded fence and no shader loops.
  *
  * Each case is three submissions, the route the T09 depth/stencil witness
  * measured: the render pass alone, then each aspect handed to TRANSFER_SRC and
@@ -37,10 +36,6 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-
-#ifndef T11_KILL_EXPORT_MEMORY
-#error "the builder names the driver's export-memory switch"
-#endif
 
 enum { EXTENT = 64, PIXELS = EXTENT * EXTENT, CASES = 4, SUBMISSIONS_PER_CASE = 3,
        STENCIL_CLEAR = 0xa5, STENCIL_REFERENCE = 0x5a };
@@ -219,8 +214,8 @@ static int run_witness(void)
     struct readback depth[CASES] = {{0}}, stencil[CASES] = {{0}};
     unsigned completed = 0;
 
-    ps5log_printf(PS5LOG_MARK, "T11_KILL_WITNESS_START extent=%u export_memory=%u",
-        EXTENT, (unsigned)T11_KILL_EXPORT_MEMORY);
+    ps5log_printf(PS5LOG_MARK, "T11_KILL_WITNESS_START extent=%u cases=%u", EXTENT,
+        (unsigned)CASES);
     const char *instance_extension = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
     VkInstanceCreateInfo instance_info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .enabledExtensionCount = 1, .ppEnabledExtensionNames = &instance_extension};

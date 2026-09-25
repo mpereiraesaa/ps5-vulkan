@@ -268,9 +268,7 @@ def main():
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")
         if shader_int16_diagnostic == "1":
             native_cflags.append("-DPS5VK_SHADER_INT16_DIAGNOSTIC=1")
-        # PS5VK_KILL_EXPORT_MEMORY (DXVK262-T11): the pixel-removal witness's
-        # measurement switch (native/kill_export_ps5.h), off by default.
-        for name in ("PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC", "PS5VK_KILL_EXPORT_MEMORY"):
+        for name in ("PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",):
             value = os.environ.get(name, "0")
             if value not in ("0", "1"):
                 raise SystemExit(f"{name} must be 0 or 1")
