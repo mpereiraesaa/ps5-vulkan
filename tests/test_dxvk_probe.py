@@ -364,6 +364,47 @@ class DxvkProbeTests(unittest.TestCase):
             fixture.validate()
 
 
+    def test_extension_routes_require_exact_single_route_query(self):
+        """Every table-driven extension route: a satisfied row needs its one
+        exact query line; a wrong value, extra field, duplicate or unknown
+        route is refused."""
+        self.assertEqual(set(probe.EXTENSION_ROUTES), set(matrix.EXTENSION_ROUTES))
+        for identifier, (extension, field, _) in probe.EXTENSION_ROUTES.items():
+            self.assertEqual((extension, field),
+                             (matrix.EXTENSION_ROUTES[identifier]["extension"],
+                              matrix.EXTENSION_ROUTES[identifier]["field"]))
+            with self.subTest(route=extension):
+                fixture = ProbeFixture()
+                self.addCleanup(fixture.tmp.cleanup)
+                records = list(fixture.records)
+                index = next(i for i, record in enumerate(records)
+                             if f"id={identifier} " in record)
+                records[index] = records[index].replace("observed=0 status=blocker",
+                                                         "observed=1 status=satisfied")
+                records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                                 "satisfied=2 blockers=60")
+                fixture.write(records)
+                with self.assertRaisesRegex(ValueError, f"explicit {extension} query route"):
+                    fixture.validate()
+                route = f"DXVK262_EXTENSION_ROUTE_QUERY route={extension} {field}=1"
+                records.insert(1, route)
+                fixture.write(records)
+                result = fixture.validate()
+                self.assertEqual(2, result["satisfied"])
+                self.assertIn({"route": extension, field: "1"}, result["query_routes"])
+                for bad in (route.replace(f"{field}=1", f"{field}=0"),
+                            route + " extra=1"):
+                    records[1] = bad
+                    fixture.write(records)
+                    with self.assertRaisesRegex(ValueError, f"explicit {extension} query route"):
+                        fixture.validate()
+                records[1] = route
+                for extra in (route, "DXVK262_EXTENSION_ROUTE_QUERY route=VK_EXT_invented x=1"):
+                    fixture.write(records[:1] + [extra] + records[1:])
+                    with self.assertRaisesRegex(ValueError,
+                                                "unknown or duplicated extension route"):
+                        fixture.validate()
+
     def test_historical_matrix_snapshot_remains_hash_bound(self):
         fixture = ProbeFixture()
         self.addCleanup(fixture.tmp.cleanup)

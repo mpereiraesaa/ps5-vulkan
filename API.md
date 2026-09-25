@@ -108,9 +108,17 @@ measurements do not claim that DXVK can create a device or run yet; see
   pass load/store and readback. With `VK_KHR_maintenance2` alone, the two mixed
   depth/stencil layouts are accepted on both aspects. `VK_KHR_maintenance2`
   also covers image view usage, input attachment aspects, point clipping
-  (`ALL_CLIP_PLANES`) and upper-left tessellation domain origin. Open issue:
-  fragment `discard` does not suppress depth/stencil writes on this path (see
-  [the DXVK backlog](docs/DXVK_V262_BACKLOG.md)).
+  (`ALL_CLIP_PLANES`) and upper-left tessellation domain origin.
+- The graphics build reports `shaderDemoteToHelperInvocation` through
+  `VK_EXT_shader_demote_to_helper_invocation` and `shaderTerminateInvocation`
+  through `VK_KHR_shader_terminate_invocation`. Each needs
+  `VK_KHR_get_physical_device_properties2` on the instance and its own
+  extension for its own feature structure. `OpKill`, `OpTerminateInvocation`
+  and `OpDemoteToHelperInvocation` (SPIR-V 1.6 core, or the 1.3 EXT form) keep
+  removed pixels out of the colour, depth and stencil targets. A demoted
+  invocation keeps running as a helper, so derivatives its quad takes after the
+  demote stay defined; after `OpTerminateInvocation` they are undefined, as the
+  specification states. The Vulkan 1.3 aggregate remains unadvertised.
 - Multiple logical devices share one serialized process-level AGC session and
   direct-memory budget. The module and shared graphics compiler cache are
   released only after the final device closes; each device still owns and must

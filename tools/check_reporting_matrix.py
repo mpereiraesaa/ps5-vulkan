@@ -354,6 +354,30 @@ ADVERTISED_FEATURES["separateDepthStencilLayouts"] = {
     "profiles": ("graphics",),
     "cts": (),
 }
+ADVERTISED_FEATURES["shaderDemoteToHelperInvocation"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION |"),
+        ("src/vk_device.c", "VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME"),
+        ("native/draw_state_ps5.c", "ps5vk_kill_export_memory_apply(result.cx,result.cx_count)"),
+    ),
+    "detail": ("the Vulkan 1.0 EXT query and opt-in route; demoted pixels leave colour, "
+               "depth and stencil untouched and keep running as helpers, measured by "
+               "the public-SDK pixel-removal and helper-derivative witnesses"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
+ADVERTISED_FEATURES["shaderTerminateInvocation"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;"),
+        ("src/vk_device.c", "VK_KHR_SHADER_TERMINATE_INVOCATION_EXTENSION_NAME"),
+        ("native/draw_state_ps5.c", "ps5vk_kill_export_memory_apply(result.cx,result.cx_count)"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query and opt-in route; terminated pixels leave "
+               "depth and stencil untouched, measured by the public-SDK "
+               "pixel-removal witness"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
 
 # DXVK262-T04. The applicable upstream oracle for both distance features is the
 # pinned clipping module's user-defined family, which the frozen selection lists
@@ -1303,7 +1327,8 @@ def main() -> int:
         for name in ("uniformBufferStandardLayout", "vulkanMemoryModel",
                      "vulkanMemoryModelDeviceScope", "bufferDeviceAddress",
                      "hostQueryReset", "timelineSemaphore",
-                     "separateDepthStencilLayouts"):
+                     "separateDepthStencilLayouts", "shaderDemoteToHelperInvocation",
+                     "shaderTerminateInvocation"):
 
             value = dump["extensionFeatures"][name]
             verdict, detail = evaluate_feature(name, value, profile)
@@ -1400,7 +1425,8 @@ def main() -> int:
                                "host_query_reset_query": dump["hostQueryResetQuery"],
                                "timeline_semaphore_query": dump["timelineSemaphoreQuery"],
                                "separate_depth_stencil_layouts_query":
-                                   dump["separateDepthStencilLayoutsQuery"]}
+                                   dump["separateDepthStencilLayoutsQuery"],
+                               "extension_route_queries": dump["extensionRouteQueries"]}
 
                      for profile, dump in dumps.items()},
         "limits": limits,

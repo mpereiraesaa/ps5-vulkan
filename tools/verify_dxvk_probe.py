@@ -18,6 +18,16 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = ROOT / "conformance_inventory/dxvk_v262_profile.json"
 EXPECTED_PROFILE = "VP_DXVK_d3d11_level_11_0_baseline"
 EXPECTED_ARTIFACT_PROFILE = "dxvk-v262-capability-probe"
+# Single-feature extension routes (tools/check_dxvk_profile.py EXTENSION_ROUTES):
+# requirement id -> (extension, feature field, first core version of the field).
+# The probe logs each as one DXVK262_EXTENSION_ROUTE_QUERY line.
+EXTENSION_ROUTES = {
+    "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation":
+        ("VK_EXT_shader_demote_to_helper_invocation", "shaderDemoteToHelperInvocation",
+         (1, 3, 0)),
+    "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation":
+        ("VK_KHR_shader_terminate_invocation", "shaderTerminateInvocation", (1, 3, 0)),
+}
 
 
 def require(condition: object, message: str) -> None:
@@ -223,6 +233,18 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
                     str(observed[separate_id]),
                 "explicit separate depth/stencil layouts query route")
 
+    extension_routes = [row for kind, row in messages
+                        if kind == "DXVK262_EXTENSION_ROUTE_QUERY"]
+    known = {extension for extension, _, _ in EXTENSION_ROUTES.values()}
+    require(all(row.get("route") in known for row in extension_routes) and
+            len({row.get("route") for row in extension_routes}) == len(extension_routes),
+            "unknown or duplicated extension route")
+    for identifier, (extension, field, core) in EXTENSION_ROUTES.items():
+        rows = [row for row in extension_routes if row.get("route") == extension]
+        if rows or (version < core and observed[identifier]):
+            require(len(rows) == 1 and set(rows[0]) == {"route", field} and
+                    rows[0][field] == str(observed[identifier]),
+                    f"explicit {extension} query route")
 
     total = len(expected_rows)
     blockers = total - satisfied
@@ -247,7 +269,7 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
 
         "query_routes": (routes + standard_ubo_routes + memory_model_routes +
                          bda_routes + host_routes + mirror_routes + timeline_routes +
-                         separate_routes),
+                         separate_routes + extension_routes),
 
         "source_matrix_sha256": dxvk["matrix_sha256"],
     }

@@ -153,6 +153,12 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         platform->supported_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |
                                             PS5VK_T09_FEATURE_MAINTENANCE2 |
                                             PS5VK_T09_FEATURE_CREATE_RENDERPASS2;
+    /* DXVK262-T11, mirroring native/platform_ps5.c: the demote and terminate
+     * extension routes on the graphics submit path. */
+    if (graphics_submit)
+        platform->supported_features_t09 |=
+            PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION |
+            PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
 
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
@@ -609,6 +615,10 @@ int main(int argc, char **argv)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES};
     VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures separate_layouts = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES};
+    VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures demote = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES};
+    VkPhysicalDeviceShaderTerminateInvocationFeatures terminate = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES};
 
     VkPhysicalDeviceMultiviewProperties multiview_properties = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
@@ -633,6 +643,8 @@ int main(int argc, char **argv)
     device_address.pNext = &host_query_reset;
     host_query_reset.pNext = &timeline;
     timeline.pNext = &separate_layouts;
+    separate_layouts.pNext = &demote;
+    demote.pNext = &terminate;
     multiview_properties.pNext = &timeline_properties;
 
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -680,6 +692,17 @@ int main(int argc, char **argv)
                     "\"VK_KHR_separate_depth_stencil_layouts\", "
                     "\"separateDepthStencilLayouts\": %s},\n",
         separate_layouts.separateDepthStencilLayouts ? "true" : "false");
+    /* One entry per single-feature extension route: the extension that
+     * carries the promoted Vulkan 1.2/1.3 feature on this 1.0 device and the
+     * value its own feature structure reports. */
+    fprintf(stdout, "  \"extensionRouteQueries\": {\n"
+                    "    \"VK_EXT_shader_demote_to_helper_invocation\": "
+                    "{\"shaderDemoteToHelperInvocation\": %s},\n"
+                    "    \"VK_KHR_shader_terminate_invocation\": "
+                    "{\"shaderTerminateInvocation\": %s}\n"
+                    "  },\n",
+        demote.shaderDemoteToHelperInvocation ? "true" : "false",
+        terminate.shaderTerminateInvocation ? "true" : "false");
 
     fprintf(stdout, "  \"extensionCount\": %u,\n", extensions);
     fputs("  \"extensions\": [", stdout);
@@ -703,7 +726,9 @@ int main(int argc, char **argv)
 
                     "    \"hostQueryReset\": %s,\n"
                     "    \"timelineSemaphore\": %s,\n"
-                    "    \"separateDepthStencilLayouts\": %s\n"
+                    "    \"separateDepthStencilLayouts\": %s,\n"
+                    "    \"shaderDemoteToHelperInvocation\": %s,\n"
+                    "    \"shaderTerminateInvocation\": %s\n"
 
                     "  },\n",
         storage8.storageBuffer8BitAccess ? "true" : "false",
@@ -722,7 +747,9 @@ int main(int argc, char **argv)
 
         host_query_reset.hostQueryReset ? "true" : "false",
         timeline.timelineSemaphore ? "true" : "false",
-        separate_layouts.separateDepthStencilLayouts ? "true" : "false");
+        separate_layouts.separateDepthStencilLayouts ? "true" : "false",
+        demote.shaderDemoteToHelperInvocation ? "true" : "false",
+        terminate.shaderTerminateInvocation ? "true" : "false");
 
     free(extension_names);
     free(extension_properties);

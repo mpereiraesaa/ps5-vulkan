@@ -265,6 +265,35 @@ static int run_dxvk262_capability_probe(void)
             "route=VK_KHR_separate_depth_stencil_layouts separateDepthStencilLayouts=%u",
             separate.separateDepthStencilLayouts);
     }
+    /* Single-feature extension routes to promoted Vulkan 1.3 features: each
+     * extension's own feature structure, queried only when it is enumerated,
+     * logged in one shape the verifier checks against the requirement row. */
+    if (properties.apiVersion < VK_API_VERSION_1_3 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME)) {
+        VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures demote = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &demote};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features13.shaderDemoteToHelperInvocation = demote.shaderDemoteToHelperInvocation;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_EXTENSION_ROUTE_QUERY route=VK_EXT_shader_demote_to_helper_invocation "
+            "shaderDemoteToHelperInvocation=%u", demote.shaderDemoteToHelperInvocation);
+    }
+    if (properties.apiVersion < VK_API_VERSION_1_3 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_SHADER_TERMINATE_INVOCATION_EXTENSION_NAME)) {
+        VkPhysicalDeviceShaderTerminateInvocationFeatures terminate = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &terminate};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features13.shaderTerminateInvocation = terminate.shaderTerminateInvocation;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_EXTENSION_ROUTE_QUERY route=VK_KHR_shader_terminate_invocation "
+            "shaderTerminateInvocation=%u", terminate.shaderTerminateInvocation);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",

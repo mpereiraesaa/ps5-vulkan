@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "d2bb5425d51c11f214efd7533b51c81dab49956e769852eacd9279d98a689248",
+    "artifact_sha256": "40ff50ee5f22a6197b5c31bee1156adb2b35ce0d7f15560759710b38079c3d0e",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -33,14 +33,16 @@
       "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+      "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
+      "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
       "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
     ],
     "runs": [
       {
-        "id": "20260925T012038463Z_PPSA99994_ps5vk_0x199493f2488f",
-        "log_sha256": "f123a5bc4e3e5cf287c1877e7725965cb9c4cd207363adb9499063ef579585ab"
+        "id": "20260925T104135104Z_PPSA99994_ps5vk_0x3830c556bcc9",
+        "log_sha256": "6c9519a32bd0fde218459f0558af97c13f9c884114e95a6debda863e9f250bc8"
       }
     ],
     "transport": "ps5log/1",
@@ -81,16 +83,113 @@
       {
         "route": "VK_KHR_separate_depth_stencil_layouts",
         "separateDepthStencilLayouts": "1"
+      },
+      {
+        "route": "VK_EXT_shader_demote_to_helper_invocation",
+        "shaderDemoteToHelperInvocation": "1"
+      },
+      {
+        "route": "VK_KHR_shader_terminate_invocation",
+        "shaderTerminateInvocation": "1"
       }
     ],
     "requirements": 62,
-    "satisfied": 32,
-    "blockers": 30,
+    "satisfied": 34,
+    "blockers": 28,
     "device_api": "1.0.0",
-    "device_extensions": 15,
-    "source_matrix_sha256": "d9776b6f225ae9c3854dce7c97604ea7fe31325c88eb1846aca08eb9863bdcdf"
+    "device_extensions": 17,
+    "source_matrix_sha256": "48199dbd39cda74ae046dcaabd569ac8c2b4d19b1fe69bf633b893cc168bcf07"
   },
   "historical_capability_probes": [
+    {
+      "artifact_sha256": "d2bb5425d51c11f214efd7533b51c81dab49956e769852eacd9279d98a689248",
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+        "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
+        "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+        "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+      ],
+      "runs": [
+        {
+          "id": "20260925T012038463Z_PPSA99994_ps5vk_0x199493f2488f",
+          "log_sha256": "f123a5bc4e3e5cf287c1877e7725965cb9c4cd207363adb9499063ef579585ab"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        },
+        {
+          "route": "VK_KHR_uniform_buffer_standard_layout",
+          "uniformBufferStandardLayout": "1"
+        },
+        {
+          "route": "VK_KHR_vulkan_memory_model",
+          "vulkanMemoryModel": "1",
+          "vulkanMemoryModelDeviceScope": "1"
+        },
+        {
+          "route": "VK_KHR_buffer_device_address",
+          "bufferDeviceAddress": "1"
+        },
+        {
+          "route": "VK_EXT_host_query_reset",
+          "hostQueryReset": "1"
+        },
+        {
+          "route": "VK_KHR_sampler_mirror_clamp_to_edge",
+          "samplerMirrorClampToEdge": "1"
+        },
+        {
+          "route": "VK_KHR_timeline_semaphore",
+          "timelineSemaphore": "1",
+          "maxTimelineSemaphoreValueDifference": "18446744073709551615"
+        },
+        {
+          "route": "VK_KHR_separate_depth_stencil_layouts",
+          "separateDepthStencilLayouts": "1"
+        }
+      ],
+      "requirements": 62,
+      "satisfied": 32,
+      "blockers": 30,
+      "device_api": "1.0.0",
+      "device_extensions": 15,
+      "source_matrix_sha256": "d9776b6f225ae9c3854dce7c97604ea7fe31325c88eb1846aca08eb9863bdcdf"
+    },
     {
       "artifact_sha256": "75df954111879f9a79860b4713ad3a76035c4bd2b3664629ac1cc2d821cba7de",
       "satisfied_ids": [
@@ -2546,6 +2645,34 @@
           "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
         ],
         "note": "Two strict public-SDK D32_SFLOAT_S8_UINT witness runs on the shipping build: the feature and its extension route negotiated, both 64x64 planes written by the DB and read back per aspect with zero mismatches across independent depth-only and stencil-only transitions, bounded fences and clean retirement."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260925T094400138Z_PPSA99994_ps5vk_0x350c5b5ff3a9",
+          "20260925T075052853Z_PPSA99994_ps5vk_0x2ee0169efba3"
+        ],
+        "artifact_sha256": "d8064caa4b2e4c54f14bd03b6b884dff1f7aa448819202e3fb863c735bee99de",
+        "refs": [
+          "VALIDATION.md#t11-demote-and-terminate-public-extension-promotion-2026-09-25"
+        ],
+        "note": "Public-SDK helper witness strictly verified every demote spelling (SPIR-V 1.6 core as DXVK emits it, 1.6 with the extension, 1.3 EXT): removed pixels unwritten and every helper-dependent derivative exact; the pixel-removal regression witness (eboot ca27870206acb3a36f2ce08e81dd34c0842f045a3b34760c7b86e7937939690f) kept demoted pixels out of depth and stencil."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260925T075052853Z_PPSA99994_ps5vk_0x2ee0169efba3",
+          "20260925T094400138Z_PPSA99994_ps5vk_0x350c5b5ff3a9"
+        ],
+        "artifact_sha256": "ca27870206acb3a36f2ce08e81dd34c0842f045a3b34760c7b86e7937939690f",
+        "refs": [
+          "VALIDATION.md#t11-demote-and-terminate-public-extension-promotion-2026-09-25"
+        ],
+        "note": "Public-SDK pixel-removal regression witness strictly verified that OpTerminateInvocation keeps every removed pixel out of the depth and stencil planes; the helper witness (eboot d8064caa4b2e4c54f14bd03b6b884dff1f7aa448819202e3fb863c735bee99de) removed the same pixels, and its derivatives after termination are undefined by the specification and reported only."
       }
     }
   }

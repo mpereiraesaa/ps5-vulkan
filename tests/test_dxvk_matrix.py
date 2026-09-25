@@ -60,6 +60,45 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual(("blocker", "missing"),
                          (api["state"], implementation["state"]))
 
+    def test_extension_routes_are_profile_rows_and_fail_closed(self):
+        rows = {row["id"]: row for row in json.loads(derive.OUTPUT.read_text())["requirements"]}
+        for identifier, route in matrix.EXTENSION_ROUTES.items():
+            with self.subTest(identifier=identifier):
+                row = rows[identifier]
+                extension, field = route["extension"], route["field"]
+                self.assertEqual(field, row["name"])
+                queries = {extension: {field: True}}
+                reports = {field: {"kind": "extension-feature", "reported": True,
+                                   "verdict": "satisfied"}}
+                api, implementation = matrix.extension_route_axes(
+                    row, queries, {extension}, reports)
+                self.assertEqual(("satisfied", "implemented", extension),
+                                 (api["state"], implementation["state"], api["via"]))
+                # Not enumerated, not reported, or reported false: blocked.
+                for args in ((queries, set(), reports),
+                             (queries, {extension}, {}),
+                             ({extension: {field: False}}, {extension}, reports)):
+                    api, implementation = matrix.extension_route_axes(row, *args)
+                    self.assertEqual("missing", implementation["state"])
+                api, _ = matrix.extension_route_axes(row, queries, set(), reports)
+                self.assertEqual("blocker", api["state"])
+                for bad in ({}, {extension: {}}, {extension: {field: 1}},
+                            {extension: {field: True, "other": True}}):
+                    with self.assertRaises(ValueError):
+                        matrix.extension_route_axes(row, bad, {extension}, reports)
+        unrelated = rows["feature:VkPhysicalDeviceVulkan12Features:hostQueryReset"]
+        self.assertIsNone(matrix.extension_route_axes(unrelated, {}, set(), {}))
+
+    def test_demote_diagnostic_switch_is_retired(self):
+        retired = "PS5VK_SHADER_DEMOTE_" + "DIAGNOSTIC"
+        for relative in ("native/platform_ps5.c", "tools/build_sdk.py",
+                         "tools/check_dxvk_profile.py", "tools/dump_device_reporting.c"):
+            with self.subTest(relative=relative):
+                self.assertNotIn(retired, (matrix.ROOT / relative).read_text())
+        extensions = matrix.implemented_device_extensions()
+        for route in matrix.EXTENSION_ROUTES.values():
+            self.assertIn(route["extension"], extensions)
+
     def test_device_scope_diagnostic_switch_is_retired(self):
         retired = "PS5VK_MEMORY_MODEL_" + "DIAGNOSTIC"
         for relative in ("native/platform_ps5.c", "tools/build_sdk.py",
@@ -241,8 +280,8 @@ class DxvkMatrixTests(unittest.TestCase):
         # the four T05 rasterization and viewport features, and the four T07
         # resource/query features advance; API 1.3 remains a separate blocker.
 
-        self.assertEqual(30, document["summary"]["satisfied"])
-        self.assertEqual(32, document["summary"]["blocker"])
+        self.assertEqual(32, document["summary"]["satisfied"])
+        self.assertEqual(30, document["summary"]["blocker"])
 
 
     def test_t07_public_rows_have_all_four_axes_and_original_cts_cases(self):
@@ -270,8 +309,8 @@ class DxvkMatrixTests(unittest.TestCase):
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
 
-        self.assertEqual(30, document["summary"]["satisfied"])
-        self.assertEqual(32, document["summary"]["blocker"])
+        self.assertEqual(32, document["summary"]["satisfied"])
+        self.assertEqual(30, document["summary"]["blocker"])
 
         self.assertEqual(
             [
@@ -305,6 +344,8 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
                          "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
                          "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+                         "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
+                         "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
                          "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
@@ -398,8 +439,8 @@ class DxvkMatrixTests(unittest.TestCase):
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
 
-                self.assertEqual(30, document["summary"]["satisfied"])
-                self.assertEqual(32, document["summary"]["blocker"])
+                self.assertEqual(32, document["summary"]["satisfied"])
+                self.assertEqual(30, document["summary"]["blocker"])
 
             finally:
                 matrix.EVIDENCE = original

@@ -5944,7 +5944,8 @@ suppress depth/stencil writes, even though the compiled fragment shader
 enables kill (`DB_SHADER_CONTROL=0x50`). The depth/stencil witness saw every
 texel written. The root cause is not known. This breaks alpha-tested depth in
 DXVK, and it is tracked as an open blocker in
-[docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md).
+[docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md). (Resolved later: see
+[the T11 promotion](#t11-demote-and-terminate-public-extension-promotion-2026-09-25).)
 
 Every console window restored the ordinary acceptance payload, exact-self eboot
 SHA-256
@@ -6083,3 +6084,75 @@ recorded in this receipt. The `timelineSemaphore`,
 `maxTimelineSemaphoreValueDifference` and `separateDepthStencilLayouts` DXVK
 rows now cite these leaves as frozen-selection CTS evidence; the matrix stays
 at 30/62 ready.
+
+## T11 demote and terminate public extension promotion (2026-09-25)
+
+**Root cause of the fragment-discard defect.** A pixel program that can remove
+pixels (`OpKill`, `OpTerminateInvocation` or `OpDemoteToHelperInvocation`) and
+exports no colour, depth, stencil or sample mask compiles to
+`DB_SHADER_CONTROL.KILL_ENABLE` with `SPI_SHADER_COL_FORMAT=0`. The pinned RADV
+source records that the hardware ignores the EXEC mask when no export memory
+is allocated, and allocates MRT0 `32_R` for such a program; the standalone
+compiler has no pipeline step that does. The runtime draw now applies that rule
+to every pixel package (`native/kill_export_ps5.h`); `CB_SHADER_MASK` is never
+widened.
+
+**Pixel-removal witness** (`tools/build_t11_kill_depth_witness.py`): a 64x64
+`D32_SFLOAT_S8_UINT` target, a no-removal control and the three removal forms,
+each removing a checkerboard from a depth plane and a stencil REPLACE, each
+aspect read back in its own submission, 300 ms fences.
+
+* Before the rule (measurement build): eboot SHA-256
+  `5c0658ff2d1a633239cd1e9597d6bf40eda8c8514ce0639492bcc9e4591d4528`, run
+  `20260925T070247555Z_PPSA99994_ps5vk_0x2c4050540adf`. The control was clean;
+  every form wrote all 2048 removed pixels in both planes.
+* With the rule (measurement build): eboot SHA-256
+  `820ac34b4f169a7390ea11c396bb4410570bb7dfb1c668b07be2ee145c73069c`, run
+  `20260925T070255953Z_PPSA99994_ps5vk_0x2c424502f192`. Every form: zero depth
+  and stencil mismatches, no kept pixel lost.
+* Regression witness on the promoted rule: eboot SHA-256
+  `ca27870206acb3a36f2ce08e81dd34c0842f045a3b34760c7b86e7937939690f`, run
+  `20260925T075052853Z_PPSA99994_ps5vk_0x2ee0169efba3`, log SHA-256
+  `6748d7c187ed0506e7dcbb10cad7830fffb27e5b6c532676fb99e627d7e3606c`,
+  `regression_ok`.
+
+The T09 depth/stencil witness on the same tree (eboot SHA-256
+`4f94a27a1970902cd9bde2956801978511c20894ef4c70e7ba4170b6ad57fb37`, run
+`20260925T075101112Z_PPSA99994_ps5vk_0x2ee20386132c`) stayed exact, and the
+frozen acceptance selection (eboot SHA-256
+`88a6a422c997df7d16940b590b4c6dbe7cc4a43356d391ae5fab15d389af809d`, run
+`20260925T094305586Z_PPSA99994_upstream-cts_0x34ffa7d95328`) passed 879/879.
+
+**Helper-invocation witness** (`tools/build_t11_helper_witness.py`): a 64x64
+`R8G8B8A8_UNORM` target; the top-left pixel of every quad is removed before the
+quad takes `dFdx`/`dFdy` that read it. Eboot SHA-256
+`d8064caa4b2e4c54f14bd03b6b884dff1f7aa448819202e3fb863c735bee99de`, run
+`20260925T094400138Z_PPSA99994_ps5vk_0x350c5b5ff3a9`, log SHA-256
+`205dd6f58fce6254218a87bd5b00ceac3aa4258e0acbfb747cab08bf0d16cfc2`,
+`helper_ok`. `OpKill` and every demote spelling (SPIR-V 1.6 core without the
+extension declaration, as DXVK 2.6.2 emits it; 1.6 with it; the 1.3 EXT form)
+left removed pixels unwritten and every kept pixel exact. After
+`OpTerminateInvocation`, 3069 kept pixels had wrong derivatives; the
+specification leaves derivatives that involve a terminated invocation
+undefined, so this is recorded as a measurement, not a defect. The host
+compiler contract shows the same split in machine code.
+
+**Public routes.** The shipping platform sets both T09-mask bits:
+`VK_EXT_shader_demote_to_helper_invocation` carries
+`shaderDemoteToHelperInvocation` and `VK_KHR_shader_terminate_invocation`
+carries `shaderTerminateInvocation`. The DXVK profile checker and probe
+verifier join both through one table of single-feature extension routes.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`40ff50ee5f22a6197b5c31bee1156adb2b35ce0d7f15560759710b38079c3d0e`, build-time
+matrix snapshot SHA-256
+`48199dbd39cda74ae046dcaabd569ac8c2b4d19b1fe69bf633b893cc168bcf07`, run
+`20260925T104135104Z_PPSA99994_ps5vk_0x3830c556bcc9`, log SHA-256 `6c9519a32bd0fde218459f0558af97c13f9c884114e95a6debda863e9f250bc8`. `tools/verify_dxvk_probe.py`
+verified it strictly: API 1.0.0, 17 device extensions, 34/62 requested query
+values met, both routes queried explicitly. The joined four-axis DXVK matrix
+has **32/62 ready and 30 blockers**. This probe creates no logical device and
+executes no GPU work. The payload was launched and closed with
+`tools/run_consumer.py`, whose resource-witness verifier rejects the probe
+artifact profile by design; the captured log is verified with
+`tools/verify_dxvk_probe.py <run> --manifest <artifact.json> --artifact
+<eboot.bin> --matrix-snapshot <build-time matrix>`.
