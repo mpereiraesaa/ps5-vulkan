@@ -70,6 +70,13 @@ def diagnostic_implementation(identifier: str) -> dict | None:
                        "public API and native evidence remain independent, and observed CTS failures stay visible.")}
 
 
+DEVICE_SCOPE_IMPLEMENTATION_TOKENS = (
+    ("src/vk_device.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
+    ("src/vk_pipeline.c", "case 5346u: /* VulkanMemoryModelDeviceScope */"),
+    ("src/ps5vk_compiler.c", "opts.enable_vulkan_memory_model_device_scope"),
+)
+
+
 def memory_model_axes(row: dict, query: dict, extensions: set[str],
                       feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
     field = MEMORY_MODEL_IDS.get(row["id"])
@@ -87,6 +94,12 @@ def memory_model_axes(row: dict, query: dict, extensions: set[str],
     report = feature_reports.get(field, {})
     implemented = (value and extension and report.get("kind") == "extension-feature" and
                    report.get("reported") is True and report.get("verdict") == "satisfied")
+    scope_missing = (
+        [f"{path}:{token}" for path, token in DEVICE_SCOPE_IMPLEMENTATION_TOKENS
+         if not (ROOT / path).is_file() or token not in (ROOT / path).read_text()]
+        if row["id"] == DEVICE_SCOPE_ID else []
+    )
+    implemented = implemented and not scope_missing
     return ({"state": "satisfied" if value and extension else "blocker",
              "observed": value and extension, "expected": row["expected"],
              "via": "VK_KHR_vulkan_memory_model" if extension else None,
@@ -95,8 +108,13 @@ def memory_model_axes(row: dict, query: dict, extensions: set[str],
              "refs": ["src/vk_device.c", "src/vk_pipeline.c", "src/ps5vk_compiler.c",
                       "native/runtime_graphics_compiler.c",
                       "conformance_inventory/reporting_matrix.json"],
-            "detail": "The base model and DeviceScope are independently gated; "
-                       "compute and graphics compiler options follow each SPIR-V module's memory model."})
+            "detail": (("Missing reviewed DeviceScope implementation: " +
+                        ", ".join(scope_missing)) if scope_missing else
+                       "Reviewed public KHR query and device-creation opt-in; DeviceScope is "
+                       "independently gated in compute and graphics compilation."
+                       if row["id"] == DEVICE_SCOPE_ID else
+                       "The base model and DeviceScope are independently gated; "
+                       "compute and graphics compiler options follow each SPIR-V module's memory model.")})
 
 
 def buffer_address_axes(row: dict, query: dict, extensions: set[str],
@@ -632,6 +650,7 @@ def generate() -> dict:
         diagnostic = diagnostic_implementation(identifier)
         if diagnostic is not None and sampler_mirror_clamp is None:
             implementation = diagnostic
+
         cts = cts_join(related, override.get("cts"), selected_cases, diagnostic_cases)
         if "native" in override:
             native = override["native"]
