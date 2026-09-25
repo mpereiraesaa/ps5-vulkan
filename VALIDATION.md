@@ -4771,6 +4771,26 @@ payload. Firmware was not recorded in these receipts. This proves one bounded
 16-bit subgroup types, other stages or operations, original CTS, either public
 T08 feature bit, or a higher public `apiVersion`.
 
+The later stacked witness builder verifies SPIR-V 1.5 and traces the Broadcast
+source ID through buffer loads and stores; host tests reject a constant ID or
+local variable fed by one. Its signed combined-branch eboot SHA-256 is
+`9be30438ae1dd5abf59ee9f97951423ea0422b351e05647eb4615f8cc31ea448`
+(shader SHA-256
+`3ab87a59111c45818f039f3ca4cb70dc8d791f9cd21e9c92475f643f47f88946`).
+Two strict runs of this exact payload again verified 128/128 Broadcast words,
+zero value and guard mismatches, digest `a4d88c85`, bounded fence completion
+and clean closure:
+
+- `20260924T235742672Z_PPSA99994_ps5vk_0x150e13cd8a63`, log SHA-256
+  `3bb169feed0194a916352d084e9fb4fb0fe707032fd4c229700f11035cf6d82a`.
+- `20260924T235758088Z_PPSA99994_ps5vk_0x1511aaa4305c`, log SHA-256
+  `60a58dc7ed005500fc009958c4fb1043809b451b22eb09fbe8ec0d83206f6950`.
+
+The acceptance eboot SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+was restored after each run; the console ended idle with no claim. Firmware
+was not independently recorded. These runs remain diagnostic evidence only.
+
 An independent default-off diagnostic gate now admits compute
 `OpGroupNonUniformIAdd` only with `GroupNonUniform` and
 `GroupNonUniformArithmetic` capabilities. The host frontend accepts that
