@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include "ps5vk_compiler.h"
 #include <assert.h>
 #include <stdio.h>
@@ -20,6 +21,35 @@ static uint32_t *read_file(const char *path, size_t *out_size)
     fclose(f);
     *out_size = (size_t)sz;
     return buf;
+}
+
+/* An application compile thread with a stack far below what PSBC needs
+ * (the host measurement in src/compile_stack.h is 160-192 KiB): the driver
+ * must move the compile onto its own sized stack, or this thread overflows. */
+struct small_stack_compile {
+    const uint32_t *spirv; size_t words; VkPipelineLayout layout;
+    struct ps5vk_compiled_program program; uint32_t *code; VkResult result;
+};
+static void *small_stack_compile(void *opaque)
+{
+    struct small_stack_compile *c = opaque;
+    c->result = ps5vk_runtime_compile_compute(c->spirv, c->words, "main", c->layout,
+                                              NULL, &c->program, &c->code);
+    return NULL;
+}
+static void check_small_stack_compile(const uint32_t *spirv, size_t words,
+                                      VkPipelineLayout layout)
+{
+    struct small_stack_compile c = {spirv, words, layout, {0}, NULL, VK_ERROR_UNKNOWN};
+    pthread_attr_t attr;
+    pthread_t thread;
+    assert(!pthread_attr_init(&attr));
+    assert(!pthread_attr_setstacksize(&attr, (size_t)64u << 10));
+    assert(!pthread_create(&thread, &attr, small_stack_compile, &c));
+    assert(!pthread_join(thread, NULL));
+    pthread_attr_destroy(&attr);
+    assert(c.result == VK_SUCCESS && c.code && c.program.code_words);
+    free(c.code);
 }
 
 int main(void)
@@ -48,6 +78,7 @@ int main(void)
     VkResult res = ps5vk_runtime_compile_compute(spv1, spv1_words, "main", &layout, NULL, &prog1, &code1);
     assert(res == VK_SUCCESS);
     assert(code1 != NULL);
+    check_small_stack_compile(spv1, spv1_words, &layout);
     assert(prog1.gfx == 1013);
     assert(prog1.wave_size == 32);
     assert(prog1.user_sgprs == 3);

@@ -1,4 +1,5 @@
 #include "ps5vk_compiler.h"
+#include "compile_stack.h"
 #include "descriptor_table_layout.h"
 #include "libpsbc/psbc_compile.h"
 #include "include/pssl_types.h"
@@ -30,7 +31,7 @@ static int module_uses_vulkan_memory_model(const uint32_t *spirv, size_t words)
     return model == 3;
 }
 
-VkResult ps5vk_runtime_compile_compute_features(
+static VkResult runtime_compile_compute_features(
     const uint32_t *spirv,
     size_t spirv_words,
     const char *entry_name,
@@ -404,6 +405,39 @@ VkResult ps5vk_runtime_compile_compute_features(
     psbc_free_output(&out);
     *out_code = code;
     return VK_SUCCESS;
+}
+
+struct compute_compile_call {
+    const uint32_t *spirv; size_t spirv_words; const char *entry_name;
+    VkPipelineLayout layout; const VkSpecializationInfo *specialization;
+    uint32_t feature_mask; struct ps5vk_compiled_program *out_program;
+    uint32_t **out_code; VkResult result;
+};
+
+static void compute_compile_call(void *opaque)
+{
+    struct compute_compile_call *c = opaque;
+    c->result = runtime_compile_compute_features(c->spirv, c->spirv_words, c->entry_name,
+        c->layout, c->specialization, c->feature_mask, c->out_program, c->out_code);
+}
+
+/* The compile runs on a driver-sized stack (compile_stack.h): the calling
+ * thread may be an application worker with a small default stack. */
+VkResult ps5vk_runtime_compile_compute_features(
+    const uint32_t *spirv,
+    size_t spirv_words,
+    const char *entry_name,
+    VkPipelineLayout layout,
+    const VkSpecializationInfo *specialization,
+    uint32_t feature_mask,
+    struct ps5vk_compiled_program *out_program,
+    uint32_t **out_code)
+{
+    struct compute_compile_call call = {spirv, spirv_words, entry_name, layout,
+        specialization, feature_mask, out_program, out_code, VK_ERROR_UNKNOWN};
+    if (ps5vk_compile_on_sized_stack(compute_compile_call, &call))
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    return call.result;
 }
 
 VkResult ps5vk_runtime_compile_compute(
