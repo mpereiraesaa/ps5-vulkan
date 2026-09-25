@@ -6018,3 +6018,32 @@ two incomplete repeats; those receipts remain incomplete and are not counted
 as acceptance of this artifact. The 829-case selection contains no applicable
 subgroup leaf. These runs establish neutrality of the advertised Vulkan 1.0
 profile, not subgroup conformance or either blocked T08 profile row.
+
+## Final integrated public query after T08 (2026-09-25)
+
+The ordinary SDK consumer was built from `main` HEAD
+`1d39842d72871982db795a5b0a3e4095d3891504` with every diagnostic switch
+off and the `--dxvk-v262-probe` entry point. Its signed eboot SHA-256 was
+`acc01ac16af98e981aa19ef6756a45aaeb386cdc6733ee2e31a581e6cc87f250`;
+the build-time DXVK matrix snapshot SHA-256 was
+`4d23dc4652fe12f72a0355e2e3a36efe221f97bf987df25d2ebbca0ec0019caa`.
+The captured run
+`20260925T025408988Z_PPSA99994_ps5vk_0x1eaedc9924e5` has source-log
+SHA-256 `29ede471249a16eb33a09a653471e28032bba3572f32ff1d4322ec13179b36e9`.
+
+`tools/verify_dxvk_probe.py` strictly verified all 62 ordered query records,
+the artifact identity and complete transport. It observed API 1.0.0, 15 device
+extensions and 32/62 requested query values met; both
+`shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` were false.
+The separate four-axis matrix remained 30/62 ready with 32 blockers. This
+probe creates no logical device and executes no GPU work.
+
+The first command used the generic consumer resource verifier, which rejected
+the probe artifact profile. The captured log then passed the dedicated probe
+verifier without a second console run. The consumer's close check succeeded,
+and the ordinary acceptance eboot SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+was restored by exact-self readback. Console status afterwards was
+`running=none` with no active claim. Firmware was not independently recorded
+in this receipt. This run is public reporting evidence, not subgroup CTS,
+subgroup execution or execution of DXVK 2.6.2.
