@@ -165,6 +165,17 @@ Compute subgroup support is required by the original CTS;
 other stages depend on their reported masks. The quad field does not establish
 broadcast support. Neither subgroup bit nor `apiVersion` changes in this slice.
 
+The same pinned `vk.xml` contains 21 Vulkan 1.1 and seven Vulkan 1.2 core
+command names. At this checkpoint, none of those names has a public prototype,
+dispatch entry or C implementation in ps5vk; the exact lists and fail-closed
+source checks are in `subgroup_profile_contract.json`. The seven 1.2 names
+cover host query reset, timeline semaphore counter/wait/signal, buffer device
+address and two opaque capture-address queries. KHR/EXT aliases used by the
+Vulkan 1.0 routes do not supply the core names. Version promotion must review
+each command's semantics and the accumulated feature, property and limit
+contracts; structural wiring alone earns no version claim. This version gate
+does not delay extension-route work toward DXVK.
+
 ## Readiness versus profile completion
 
 For Vulkan 1.1–1.3 rows, implementation can be ready before the device is

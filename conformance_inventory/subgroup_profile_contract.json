@@ -51,8 +51,26 @@
       "vkGetPhysicalDeviceExternalFenceProperties",
       "vkGetPhysicalDeviceExternalSemaphoreProperties"
     ],
+    "current_public_prototypes": [],
     "current_core_dispatch": [],
+    "current_implementations": [],
     "note": "KHR-suffixed entry points do not provide the required core command names; implementing the names alone would not establish full Vulkan 1.1 conformance."
+  },
+  "api12_command_gate": {
+    "registry_feature": "VK_BASE_VERSION_1_2",
+    "core_commands": [
+      "vkResetQueryPool",
+      "vkGetSemaphoreCounterValue",
+      "vkWaitSemaphores",
+      "vkSignalSemaphore",
+      "vkGetBufferDeviceAddress",
+      "vkGetBufferOpaqueCaptureAddress",
+      "vkGetDeviceMemoryOpaqueCaptureAddress"
+    ],
+    "current_public_prototypes": [],
+    "current_core_dispatch": [],
+    "current_implementations": [],
+    "note": "The Vulkan 1.2 core names are absent from the current dispatch table. EXT/KHR entry points and diagnostic implementations do not satisfy these core names or their semantics; this is a structural inventory, not a Vulkan 1.2 conformance claim."
   },
   "properties": {
     "query": "VkPhysicalDeviceSubgroupProperties via VkPhysicalDeviceProperties2",

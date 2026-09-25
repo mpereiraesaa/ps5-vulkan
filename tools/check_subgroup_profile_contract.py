@@ -19,16 +19,18 @@ def require(condition, message):
 
 
 def check_registry(root, contract):
-    command_gate = contract["api11_command_gate"]
-    require(command_gate["registry_feature"] == "VK_BASE_VERSION_1_1",
-            "Vulkan 1.1 command gate feature changed")
-    base11 = next(node for node in root.findall("feature")
-                  if node.get("name") == command_gate["registry_feature"])
-    core_commands = [command.get("name") for requirement in base11.findall("require")
-                     if "vulkan" in requirement.get("api", "vulkan").split(",")
-                     for command in requirement.findall("command")]
-    require(core_commands == command_gate["core_commands"],
-            "Vulkan 1.1 core command census changed")
+    for version, feature in (("11", "VK_BASE_VERSION_1_1"),
+                             ("12", "VK_BASE_VERSION_1_2")):
+        command_gate = contract[f"api{version}_command_gate"]
+        require(command_gate["registry_feature"] == feature,
+                f"Vulkan 1.{version[-1]} command gate feature changed")
+        base = next(node for node in root.findall("feature")
+                    if node.get("name") == feature)
+        core_commands = [command.get("name") for requirement in base.findall("require")
+                         if "vulkan" in requirement.get("api", "vulkan").split(",")
+                         for command in requirement.findall("command")]
+        require(core_commands == command_gate["core_commands"],
+                f"Vulkan 1.{version[-1]} core command census changed")
     extensions = {node.get("name"): node for node in root.findall(".//extensions/extension")}
     extended = extensions["VK_KHR_shader_subgroup_extended_types"]
     route = contract["routes"]["shaderSubgroupExtendedTypes"]
@@ -139,15 +141,16 @@ def check_reporting(contract, report, matrix, profile_source, device_source,
                 f"{profile} public API version changed")
     require("properties->apiVersion = VK_API_VERSION_1_0;" in profile_source,
             "source API version changed; re-audit subgroup profile")
-    command_gate = contract["api11_command_gate"]
-    require(len(command_gate["core_commands"]) == 21 and
-            len(set(command_gate["core_commands"])) == 21,
-            "Vulkan 1.1 core command census is incomplete")
     exported = set(re.findall(r"ENTRY\((vk\w+),\s*(?:GLOBAL|INSTANCE|DEVICE)\)",
                               dispatch_source))
-    require(sorted(exported.intersection(command_gate["core_commands"])) ==
-            command_gate["current_core_dispatch"],
-            "Vulkan 1.1 core command dispatch changed; re-audit API gate")
+    for version, count in (("11", 21), ("12", 7)):
+        command_gate = contract[f"api{version}_command_gate"]
+        commands = command_gate["core_commands"]
+        require(len(commands) == count and len(set(commands)) == count,
+                f"Vulkan 1.{version[-1]} core command census is incomplete")
+        require(sorted(exported.intersection(commands)) ==
+                command_gate["current_core_dispatch"],
+                f"Vulkan 1.{version[-1]} core command dispatch changed; re-audit API gate")
     require("VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES" not in device_source and
             "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES" not in device_source,
             "new subgroup query route requires contract review")
@@ -177,6 +180,20 @@ def check_reporting(contract, report, matrix, profile_source, device_source,
                 f"{name} matrix was promoted without subgroup contract review")
 
 
+def check_core_sources(contract, public_source, implementation_source):
+    public = set(re.findall(r"VKAPI_ATTR\s[^;]*?\b(vk[A-Za-z0-9_]+)\s*\(",
+                            public_source))
+    implemented = set(re.findall(r"VKAPI_CALL\s+(vk[A-Za-z0-9_]+)\s*\(",
+                                 implementation_source))
+    for version in ("11", "12"):
+        gate = contract[f"api{version}_command_gate"]
+        commands = set(gate["core_commands"])
+        require(sorted(public & commands) == gate["current_public_prototypes"],
+                f"Vulkan 1.{version[-1]} core public prototypes changed; re-audit API gate")
+        require(sorted(implemented & commands) == gate["current_implementations"],
+                f"Vulkan 1.{version[-1]} core implementations changed; re-audit API gate")
+
+
 def check(root=ROOT):
     contract = json.loads((root / "conformance_inventory/subgroup_profile_contract.json").read_text())
     manifest = json.loads((root / "cts/upstream/manifest.json").read_text())
@@ -204,6 +221,9 @@ def check(root=ROOT):
                     (root / "src/physical_device_profile.h").read_text(),
                     (root / "src/vk_device.c").read_text(),
                     (root / "src/vk_dispatch.c").read_text())
+    sources = list((root / "src").glob("*.c")) + list((root / "native").glob("*.c"))
+    check_core_sources(contract, (root / "include/ps5vk/ps5vk.h").read_text(),
+                       "\n".join(path.read_text() for path in sources))
 
 
 if __name__ == "__main__":
