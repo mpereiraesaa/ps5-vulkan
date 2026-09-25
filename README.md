@@ -44,23 +44,21 @@ the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 
 ## In progress
 
+The Vulkan 1.0 profile exposes selected newer features through their EXT/KHR
+routes, including shader demote and terminate invocation. A native
+surface/swapchain adapter has completed acquire, graphics
+submit and presentation on PS5; it is not yet proof of a frame rendered by
+DXVK. An unmodified DXVK 2.6.2 build has reached physical-device enumeration
+on the console, then rejected the advertised Vulkan 1.0 version. Diagnostic
+variants have identified further feature and extension requirements without
+advertising unverified support. See [API.md](API.md) for the current public
+contract and [VALIDATION.md](VALIDATION.md) for the exact run evidence.
 
-The Vulkan 1.0 profile exposes `hostQueryReset`, `samplerMirrorClampToEdge`,
-`timelineSemaphore`, `maxTimelineSemaphoreValueDifference`,
-`separateDepthStencilLayouts`, `shaderDemoteToHelperInvocation` and
-`shaderTerminateInvocation` through their EXT/KHR routes. The checked DXVK
-2.6.2 matrix has **32/62** requirements ready; a public SDK capability probe
-of the combined build observed 34/62 requested values. `imagelessFramebuffer`
-has a bounded default-off witness but no public route yet. Two larger sampler
-CTS leaves still fail during image upload before sampling. A real DXVK build
-has not yet run on PS5. See [the T09 measurements](VALIDATION.md#t09-combined-public-query-2026-09-25)
-and [the DXVK backlog](docs/DXVK_V262_BACKLOG.md).
-
-
-There is no Vulkan loader/ICD or Vulkan WSI/swapchain implementation. The
-native VideoOut path is separate from WSI. Format, shader, queue and resource
-coverage is intentionally bounded; [API.md](API.md) records those limits.
-Focused upstream CTS results are available for debugging and regression in
+The historical DXVK requirement matrix remains available for auditing with
+`make check-dxvk-ledger`; its counts are not a build or promotion gate.
+Development uses targeted host checks and artifact-identified native witnesses.
+There is no Vulkan loader/ICD, and format, shader, queue and resource coverage
+remains bounded. Focused upstream CTS results are available for debugging in
 [UPSTREAM_CTS.md](UPSTREAM_CTS.md), but no full CTS or Vulkan conformance claim
 is made.
 

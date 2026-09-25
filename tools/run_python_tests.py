@@ -49,6 +49,16 @@ SERIAL = (
     "test_verify_geometry",
 )
 
+# These modules assert historical DXVK inventory snapshots and promotion
+# bookkeeping. Keep them available for an explicit audit, but do not make
+# ordinary implementation work fail because the ledger trails measured code.
+LEDGER_ONLY = frozenset({
+    "test_dxvk_backlog",
+    "test_dxvk_matrix",
+    "test_subgroup_profile_contract",
+    "test_t08_device_scope_cts_gate",
+})
+
 SUMMARY = re.compile(r"^Ran (\d+) tests? in", re.M)
 SKIPS = re.compile(r"skipped=(\d+)")
 
@@ -70,6 +80,13 @@ def run_serial(modules: list[str], verbose: bool,
     return [run_module(module, verbose, tests) for module in modules]
 
 
+def select_modules(tests: Path, requested: list[str], exclude_ledger: bool) -> list[str]:
+    if requested:
+        return requested
+    discovered = sorted(p.stem for p in tests.glob("test_*.py"))
+    return [m for m in discovered if not exclude_ledger or m not in LEDGER_ONLY]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -78,11 +95,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--start-dir", type=Path, default=TESTS)
     parser.add_argument("--times", type=Path, default=TIMES)
+    parser.add_argument("--exclude-ledger", action="store_true",
+                        help="skip historical DXVK matrix/backlog snapshot modules")
     parser.add_argument("modules", nargs="*", help="module names (default: every test_*.py)")
     args = parser.parse_args(argv)
 
     tests = args.start_dir
-    modules = args.modules or sorted(p.stem for p in tests.glob("test_*.py"))
+    modules = select_modules(tests, args.modules, args.exclude_ledger)
     try:
         times = json.loads(args.times.read_text())
     except (OSError, ValueError):
