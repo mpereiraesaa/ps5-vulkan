@@ -67,6 +67,17 @@ instance API minor above 0. Its public `apiVersion` remains 1.0. Supporting
 an honest PS5 run requires a real presentation route and the missing Vulkan
 contracts; changing the reported version alone would not pass this boundary.
 
+`tools/run_dxvk_ps5vk_host_bootstrap.py` now measures that boundary with the
+same pinned DXVK libraries and a temporary `libvulkan.so` compiled from
+ps5vk's host SDK sources. On ps5vk commit `5d8c79b`, the loader SHA-256 was
+`70e46a2f0e508f5d2e5f7433ccd0b7e4a6582a9f202378be3e457d3b95d5a696`.
+DXVK's first refusal was `Required Vulkan extension VK_KHR_surface not
+supported`; `D3D11CreateDevice` returned `0x80004005` without a device or
+context. The API 1.3 request and adapter filter are later gates and were not
+reached in this run. This is a host boundary test, not DXVK execution on PS5.
+Run the new script after the same pinned DXVK native build above; it writes a
+compact JSON receipt with `--output <path>`.
+
 T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
 `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` disabled. A
 default-off diagnostic compute route has twice read back 128 exact 32-bit
