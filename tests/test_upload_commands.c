@@ -540,4 +540,57 @@ int main(void)
     assert(ps5vk_upload_commands(&device,query_transitions,2,&query_color,
         &layouts,&cursor,words+256,flush)==VK_ERROR_FEATURE_NOT_PRESENT);
     assert(!layouts.count && cursor==words);
+    /* DXVK262-T10: DXVK 2.6.2's first-frame barrier-only submissions on its
+     * 64x64 RGBA8 render target (usage TRANSFER_SRC|TRANSFER_DST|COLOR = 0x13),
+     * after the synchronization2 conversion, exactly as a measured native run
+     * delivered them: InitBarriers UNDEFINED -> TRANSFER_DST; the hand-over
+     * TRANSFER_DST -> COLOR_ATTACHMENT, stages 0x1000 -> 0x1400, access
+     * 0x1000 -> 0x1980, alone in its submission; and the readback hand-over
+     * and hand-back with no source access. */
+    {
+        struct VkImage_T rt={.device=&device};
+        rt.info=(VkImageCreateInfo){.imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+            .extent={64,64,1},.mipLevels=1,.arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,
+            .tiling=VK_IMAGE_TILING_OPTIMAL,.usage=0x13u};
+        const VkImageSubresourceRange all={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+        struct ps5vk_operation init={.type=PS5VK_IMAGE_BARRIER,
+            .src_stage=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,.dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+            .dst_access=VK_ACCESS_TRANSFER_WRITE_BIT,.image_barrier={
+            .sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,.image=&rt,
+            .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.subresourceRange=all}};
+        struct ps5vk_operation handover={.type=PS5VK_IMAGE_BARRIER,
+            .src_stage=0x1000u,.dst_stage=0x1400u,.src_access=0x1000u,.dst_access=0x1980u,
+            .image_barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,.image=&rt,
+            .oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcAccessMask=0x1000u,.dstAccessMask=0x1980u,.subresourceRange=all}};
+        layouts=(struct ps5vk_layout_state){0};cursor=words;
+        assert(ps5vk_upload_commands(&device,&init,1,NULL,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
+        assert(ps5vk_upload_commands(&device,&handover,1,NULL,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
+        assert(ps5vk_layout_require(&layouts,&rt,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)==VK_SUCCESS);
+        struct ps5vk_operation readback[2]={handover,handover};
+        readback[0].src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT;readback[0].dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT;
+        readback[0].image_barrier.oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        readback[0].image_barrier.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        readback[0].image_barrier.srcAccessMask=0;
+        readback[0].image_barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+        readback[1].src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT;readback[1].dst_stage=0x1400u;
+        readback[1].image_barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        readback[1].image_barrier.newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        readback[1].image_barrier.srcAccessMask=0;
+        readback[1].image_barrier.dstAccessMask=0x1980u;
+        assert(ps5vk_upload_commands(&device,readback,2,NULL,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
+        assert(ps5vk_layout_require(&layouts,&rt,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)==VK_SUCCESS);
+        /* Bounded: a foreign destination stage or a source access on the
+         * dependency form stays refused, atomically. */
+        struct ps5vk_layout_state before=layouts;uint32_t *mark=cursor;
+        readback[0].dst_stage=VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+        assert(ps5vk_upload_commands(&device,readback,2,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+        assert(cursor==mark && !memcmp(&before,&layouts,sizeof(layouts)));
+        handover.dst_stage=VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+        layouts=(struct ps5vk_layout_state){0};
+        assert(ps5vk_upload_commands(&device,&init,1,NULL,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
+        assert(ps5vk_upload_commands(&device,&handover,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
+    }
 }
