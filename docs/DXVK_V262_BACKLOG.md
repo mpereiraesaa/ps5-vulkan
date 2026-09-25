@@ -79,8 +79,8 @@ for an unmodified, truthful route:**
    version while any mandatory 1.1/1.2/1.3 item is missing; run it with
    `--assume-version 1.N` to list them. The largest items are
    `maxPerSetDescriptors` ≥ 1024 (128 today; needs set-owned descriptor
-   tables) and `maxMemoryAllocationSize`/`maxBufferSize` ≥ 2^30, which the
-   256 MiB device heap cannot satisfy without a larger memory budget.
+   tables). `maxMemoryAllocationSize`/`maxBufferSize` ≥ 2^30 are answered by
+   the 1.25 GiB graphics heap (one 1 GiB allocation plus headroom).
 2. **Transform feedback.** The FL 10_0+ gate requires `transformFeedback`
    and `geometryStreams`. Capture-interface reflection has landed; bind,
    begin/end, counters, streams and the native witness have not.

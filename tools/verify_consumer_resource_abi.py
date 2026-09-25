@@ -908,11 +908,11 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
     require("mode=finite" in boot[1], "finite mode")
     require(physical[1] ==
         "PS5VK_CONSUMER_PHYSICAL_DEVICE api=00400000 vendor=1002 device=0000 "
-        "heap=268435456 heap_flags=00000001 type_flags=00000003 "
+        "heap=1342177280 heap_flags=00000001 type_flags=00000003 "
         "queue_flags=00000003 storage=268435456 uniform=65536 texel=65536 "
         "push=256 allocations=2048 granularity=131072 map_align=64 "
         "texel_align=4 ubo_align=256 ssbo_align=256 atom=64 shared=65536 "
-        "invocations=1024 hash=be169e1b",
+        "invocations=1024 hash=7f34799b",
         "deterministic physical-device report")
     require(physical_queries[1].split()[1:] == [
         "devices=1", "queues=1", "two_call=1", "tail_preserved=1",
@@ -1216,7 +1216,7 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         "narrow_guard_bytes_checked": 8000,
         "storage8_checksum_fnv1a32": "9575e8c5",
         "storage16_checksum_fnv1a32": "603ddade",
-        "physical_device_report_fnv1a32": "be169e1b",
+        "physical_device_report_fnv1a32": "7f34799b",
         "reported_heap_bytes": 268435456,
         "reported_memory_type_flags": "DEVICE_LOCAL|HOST_VISIBLE",
         "reported_host_coherent": False,

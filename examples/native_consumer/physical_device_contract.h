@@ -39,7 +39,7 @@ static void report_physical_device_contract(VkInstance instance,
     memset(&memory, 0xa5, sizeof(memory));
     vkGetPhysicalDeviceMemoryProperties(physical_device, &memory);
     REQUIRE(memory.memoryHeapCount == 1 && memory.memoryTypeCount == 1 &&
-            memory.memoryHeaps[0].size == UINT64_C(268435456) &&
+            memory.memoryHeaps[0].size == UINT64_C(1342177280) &&
             memory.memoryHeaps[0].flags == VK_MEMORY_HEAP_DEVICE_LOCAL_BIT &&
             memory.memoryTypes[0].heapIndex == 0 &&
             memory.memoryTypes[0].propertyFlags ==

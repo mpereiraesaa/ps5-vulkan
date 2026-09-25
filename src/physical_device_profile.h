@@ -120,6 +120,15 @@ static inline void ps5vk_pipeline_cache_uuid(uint8_t out[VK_UUID_SIZE],
 static inline uint32_t ps5vk_profile_u32(VkDeviceSize value)
 { return value > UINT32_MAX ? UINT32_MAX : (uint32_t)value; }
 
+/* The per-resource bound: maxStorageBufferRange, maxMemoryAllocationCount and
+ * the image maxResourceSize derive from min(heap, this), never from the heap
+ * alone. The heap and maxMemoryAllocationSize may be larger (the graphics
+ * profile allows one 1 GiB allocation) without widening what a single
+ * descriptor range or image claims. */
+#define PS5VK_PROFILE_RESOURCE_LIMIT_BYTES (UINT64_C(256) * 1024 * 1024)
+static inline VkDeviceSize ps5vk_profile_resource_limit(VkDeviceSize budget)
+{ return budget < PS5VK_PROFILE_RESOURCE_LIMIT_BYTES ? budget : PS5VK_PROFILE_RESOURCE_LIMIT_BYTES; }
+
 static inline void ps5vk_physical_profile_init(
     VkPhysicalDeviceProperties *properties,
     VkPhysicalDeviceMemoryProperties *memory,
@@ -141,7 +150,8 @@ static inline void ps5vk_physical_profile_init(
     }
 
     VkPhysicalDeviceLimits *limits = &properties->limits;
-    limits->maxStorageBufferRange = ps5vk_profile_u32(info->heap_size);
+    const VkDeviceSize resource_limit = ps5vk_profile_resource_limit(info->heap_size);
+    limits->maxStorageBufferRange = ps5vk_profile_u32(resource_limit);
     limits->maxUniformBufferRange = 64u * 1024u;
     limits->maxTexelBufferElements = 64u * 1024u;
     limits->maxPushConstantsSize = PS5VK_MAX_PUSH_CONSTANT_BYTES;
@@ -150,7 +160,7 @@ static inline void ps5vk_physical_profile_init(
      * to the core floor from that mask (vk_internal.h). */
     limits->maxDrawIndirectCount = 1;
     limits->maxMemoryAllocationCount = info->allocation_granularity
-        ? ps5vk_profile_u32(info->heap_size / info->allocation_granularity) : 0;
+        ? ps5vk_profile_u32(resource_limit / info->allocation_granularity) : 0;
     limits->bufferImageGranularity = info->buffer_image_granularity;
     limits->minMemoryMapAlignment = 64;
     limits->minTexelBufferOffsetAlignment = 4;

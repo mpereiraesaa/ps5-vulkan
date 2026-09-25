@@ -45,15 +45,18 @@ void ps5vk_native_graphics_queue_configure(VkDevice);
 #include "ps5vk_compiler.h"
 #endif
 
-/* A deliberately bounded implementation heap, NOT measured physical RAM or
- * Vulkan conformance limits. Memory allocations and internal shader arenas
- * share the budget; the separate command mapping adds 128 KiB while pending. */
+/* A deliberately bounded implementation heap, NOT measured physical RAM.
+ * Memory allocations and internal shader arenas share the budget; the
+ * separate command mapping adds 128 KiB while pending. The values live in
+ * src/device_profile_report.h so the host reporting dump reads the same ones. */
 #ifdef PS5VK_GRAPHICS_API
-/* Room for presentation allocations plus pipeline/state objects. This is a
- * project budget, not a claim about the console's available memory. */
-#define HEAP_BYTES (UINT64_C(256) * 1024 * 1024)
+/* One 1 GiB allocation plus headroom for presentation and pipeline/state
+ * objects. A project budget, not a claim about the console's memory. */
+#define HEAP_BYTES PS5VK_PROFILE_GRAPHICS_HEAP_BYTES
+#define MAX_ALLOCATION_BYTES PS5VK_PROFILE_GRAPHICS_MAX_ALLOCATION_BYTES
 #else
-#define HEAP_BYTES (UINT64_C(64) * 1024 * 1024)
+#define HEAP_BYTES PS5VK_PROFILE_COMPUTE_HEAP_BYTES
+#define MAX_ALLOCATION_BYTES PS5VK_PROFILE_COMPUTE_HEAP_BYTES
 #endif
 static struct ps5vk_native_memory_budget budget = {HEAP_BYTES, 0};
 /* AGC and its direct-memory budget are process resources, while Vulkan permits
@@ -430,7 +433,7 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * is UINT64_MAX because every comparison is full-width. Promoted on the
      * public-SDK witness and the focused original timeline leaves. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;
-    platform->max_allocation = HEAP_BYTES;
+    platform->max_allocation = MAX_ALLOCATION_BYTES;
     /* The same initializer the host reporting dump uses; see
      * src/device_profile_report.h. Object-model sizing follows
      * PS5VK_GRAPHICS_API, the advertised graphics limit/format matrix follows

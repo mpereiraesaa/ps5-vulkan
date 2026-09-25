@@ -1,6 +1,7 @@
 #include "vk_internal.h"
 #include "vk_descriptor.h"
 #include "vk_image.h"
+#include "physical_device_profile.h"
 #include "depth_stencil_layout.h"
 #include "texture_format.h"
 #include "texture_layout.h"
@@ -652,7 +653,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     VkMemoryRequirements requirements = {0};
     VkResult rc = d->image_requirements(d, &storage, &requirements);
     if (rc != VK_SUCCESS) return rc;
-    if (!requirements.size || requirements.size > d->max_allocation ||
+    if (!requirements.size ||
+        requirements.size > ps5vk_profile_resource_limit(d->max_allocation) ||
         !power_two(requirements.alignment) || requirements.memoryTypeBits != 1 ||
         requirements.size % requirements.alignment) return VK_ERROR_INITIALIZATION_FAILED;
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
