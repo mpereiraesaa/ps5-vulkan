@@ -4,6 +4,7 @@
 #include "graphics_program.h"
 #include "vk_pipeline_cache.h"
 #include "color_attachment_contract.h"
+#include "vk_transform_feedback.h"
 #if (defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE) || (defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG)
 #define PS5VK_PIPELINE_DIAGNOSTICS 1
 #endif
@@ -362,6 +363,26 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (tcs && !(d->enabled_features & PS5VK_FEATURE_TESSELLATION_SHADER))
         return refuse(7);
 #endif
+    /* Transform feedback (VK_EXT_transform_feedback) is not negotiated on this
+     * device, so no stage may declare the Xfb execution mode. Such a module
+     * would otherwise be compiled and only refused later, by the native header
+     * builder, when it sees streamout metadata; this site names the reason
+     * before any compiler or backend work. A malformed capture interface is
+     * refused here as well. */
+    {
+        static const struct ps5vk_xfb_limits no_capture;
+        const VkPipelineShaderStageCreateInfo *const stages[]={vs,tcs,tes,gs,fs};
+        for (unsigned i=0; i<sizeof(stages)/sizeof(stages[0]); ++i) {
+            const VkPipelineShaderStageCreateInfo *s=stages[i];
+            uint32_t id;
+            struct ps5vk_xfb_interface xfb;
+            if (!s) continue;
+            if (!ps5vk_shader_entry(s->module, s->stage, s->pName, &id) ||
+                ps5vk_xfb_reflect(s->module->words, s->module->word_count, id,
+                                  &no_capture, &xfb) != PS5VK_XFB_NONE)
+                return refuse(19);
+        }
+    }
     const VkPipelineVertexInputStateCreateInfo *v=in->pVertexInputState;
     const VkPipelineInputAssemblyStateCreateInfo *ia=in->pInputAssemblyState;
     const VkPipelineRasterizationStateCreateInfo *r=in->pRasterizationState;
