@@ -1,6 +1,7 @@
 #include "draw_state_ps5.h"
 #include "viewport_ps5.h"
 #include "blend_ps5.h"
+#include "kill_export_ps5.h"
 #include "runtime_fragment_shape.h"
 #include "sample_rate_diagnostic.h"
 #include <string.h>
@@ -804,6 +805,14 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
          * leave its downconversion active for the 32-bit export path. */
         for(unsigned i=0;i<3;++i)
             result.cx[result.cx_count++]=(ps5_agc_register){0x1d5+i,conversion[i]};
+        /* A pixel program that can kill and exports nothing gets MRT0 export
+         * memory, or the hardware ignores its valid mask and every removed
+         * pixel still writes depth and stencil (kill_export_ps5.h; measured by
+         * the T11 pixel-removal witness). It runs after the colour contract
+         * above, which judged the compiler's own pair, and rewrites only the
+         * format the hardware receives; CB_SHADER_MASK stays zero. */
+        if(ps5vk_kill_export_memory_apply(result.cx,result.cx_count)<0)
+            PS5VK_DRAW_UNSUPPORTED();
     }
 #if defined(PS5VK_TESS_STATE_DUMP) && PS5VK_TESS_STATE_DUMP
     /* One patch draw and one ORDINARY runtime draw, so the two can be
