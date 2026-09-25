@@ -400,6 +400,8 @@ def implemented_device_extensions() -> set[str]:
 
         "PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC",
 
+        "PS5VK_DXVK_ROUTES_DIAGNOSTIC",
+
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
 
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
