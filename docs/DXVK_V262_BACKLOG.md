@@ -30,6 +30,43 @@ routes and artifact-bound witnesses. The combined public SDK probe observed
 32/62 requested values on API 1.0.0. The ordered table preserves the original
 tranche membership.
 
+### DXVK runtime checkpoint (2026-09-25)
+
+The upstream DXVK v2.6.2 source pinned at commit
+`9d6f54a1ade20d1d27dd421024717a636f3d8c68` builds its native SDL2
+D3D11/DXGI libraries on the host. `tools/run_dxvk_host_smoke.py` calls the
+actual `D3D11CreateDevice` entry point and requires a feature-level 11_0
+device and context. That host run passed with D3D11 library SHA-256
+`cdee9710090ce17334daf16f0df49f03687060d722357513b4f625f6bd3d4190`
+and DXGI library SHA-256
+`998615c138e69bb88d74e3d7b060d82b78d573d8c69ba74ef46d935e11eb5211`.
+It used the host Vulkan driver; DXVK has not run against ps5vk or on PS5.
+
+To repeat from an ignored checkout of that pinned source with its submodules
+and host SDL2 dependencies, configure and build with:
+
+```sh
+meson setup <checkout>/build-native <checkout> --buildtype debugoptimized \
+  -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false \
+  -Denable_d3d11=true -Denable_dxgi=true \
+  -Dnative_sdl2=enabled -Dnative_sdl3=disabled -Dnative_glfw=disabled
+ninja -C <checkout>/build-native
+python3 tools/run_dxvk_host_smoke.py --dxvk-dir <checkout> \
+  --build-dir <checkout>/build-native
+```
+
+The script rejects a different source commit and records the exact built
+library hashes.
+
+The first ps5vk integration obstacle is the DXVK instance bootstrap:
+`src/dxvk/dxvk_instance.cpp` requires `VK_KHR_surface` and a platform WSI
+extension, and requests Vulkan 1.3; `src/dxvk/dxvk_device_filter.cpp` rejects a
+physical device reporting less than 1.3. The current ps5vk instance lists
+neither Vulkan surface extensions nor Vulkan WSI and rejects a requested
+instance API minor above 0. Its public `apiVersion` remains 1.0. Supporting
+an honest PS5 run requires a real presentation route and the missing Vulkan
+contracts; changing the reported version alone would not pass this boundary.
+
 T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
 `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` disabled. A
 default-off diagnostic compute route has twice read back 128 exact 32-bit
