@@ -17,10 +17,10 @@
  *
  * The standalone compiler publishes the pixel stage's own format (zero for a
  * depth-only discard program) and has no pipeline pass that adds the
- * allocation, which matches the open native observation that kill does not
- * suppress depth/stencil writes on the depth-only path. This header states the
- * rule over the register bank the draw hands the hardware; applying it is a
- * default-off measurement switch until a native pixel witness proves it.
+ * allocation. Measured on hardware with the T11 pixel-removal witness (OpKill,
+ * OpTerminateInvocation and OpDemoteToHelperInvocation on D32_SFLOAT_S8_UINT):
+ * without the allocation every removed pixel still wrote depth and stencil,
+ * with it none did. The runtime draw applies the rule to every pixel package.
  *
  * Context-register indices ((address - 0x28000) / 4, GFX10.3 register data):
  * SPI_SHADER_Z_FORMAT 0x28710, SPI_SHADER_COL_FORMAT 0x28714,

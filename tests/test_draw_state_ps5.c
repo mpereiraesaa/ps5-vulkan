@@ -15,7 +15,7 @@ static uint32_t bits(float f) { uint32_t u; memcpy(&u, &f, sizeof(u)); return u;
 /* A depth-only pixel program that can kill (DB_SHADER_CONTROL 0x50, the
  * value the pinned compiler publishes for a discarding depth-only stage) and
  * exports nothing. Without export memory the hardware ignores its valid mask
- * (kill_export_ps5.h); the measurement switch gives it MRT0 export memory and
+ * (kill_export_ps5.h); the draw gives it MRT0 export memory and
  * nothing else. Each case is checked in the bank the draw hands the hardware. */
 static void check_kill_export_memory(struct VkPipeline_T *depth_only,
     struct ps5vk_graphics_pair *pair,const struct ps5vk_raster_state *raster,
@@ -33,29 +33,18 @@ static void check_kill_export_memory(struct VkPipeline_T *depth_only,
         raster,NULL,0,depth,area,640,480,0,&out)==VK_SUCCESS);
     /* CB_SHADER_MASK is never widened: export memory is not a colour write. */
     assert(last_cx(&out,0x08f)==0u && last_cx(&out,0x203)==0x50u);
-#if defined(PS5VK_KILL_EXPORT_MEMORY) && PS5VK_KILL_EXPORT_MEMORY
     assert(last_cx(&out,0x1c5)==1u);
-#else
-    /* The shipping bank is the compiler's pair, unchanged. */
-    assert(last_cx(&out,0x1c5)==0u);
-#endif
     /* A program that cannot kill needs no allocation under either build. */
     pair->runtime_fragment.context[2].value=0x10;
     assert(ps5vk_native_draw_state(depth_only,&depth_only->viewport,&depth_only->scissor,1,
         raster,NULL,0,depth,area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1c5)==0u);
     /* Without the compiler's DB_SHADER_CONTROL the switch cannot decide, so
-     * the draw is refused rather than guessed; the shipping build still
-     * programs the compiler's pair. */
+     * the draw is refused rather than guessed. */
     pair->runtime_fragment.context[2]=(ps5_agc_register){0,0};
-#if defined(PS5VK_KILL_EXPORT_MEMORY) && PS5VK_KILL_EXPORT_MEMORY
     assert(ps5vk_native_draw_state(depth_only,&depth_only->viewport,&depth_only->scissor,1,
         raster,NULL,0,depth,area,640,480,0,&out)==VK_ERROR_FEATURE_NOT_PRESENT &&
         !out.cx_count);
-#else
-    assert(ps5vk_native_draw_state(depth_only,&depth_only->viewport,&depth_only->scissor,1,
-        raster,NULL,0,depth,area,640,480,0,&out)==VK_SUCCESS);
-#endif
     for(unsigned i=0;i<4;++i)pair->runtime_fragment.context[i]=saved[i];
 
     /* The rule itself, on the last write of each register. */
