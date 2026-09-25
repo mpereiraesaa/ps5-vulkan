@@ -593,4 +593,51 @@ int main(void)
         assert(ps5vk_upload_commands(&device,&init,1,NULL,&layouts,&cursor,words+256,flush)==VK_SUCCESS);
         assert(ps5vk_upload_commands(&device,&handover,1,NULL,&layouts,&cursor,words+256,flush)!=VK_SUCCESS);
     }
+    {
+        /* A transfer-only swapchain image crosses the display layout around
+         * a CPU copy: measured on PS5 as PS5VK_UPLOAD_PREPARE_FAILED rc=-8
+         * before these two forms were accepted. */
+        struct VkImage_T scanout={0};
+        scanout.info=(VkImageCreateInfo){.imageType=VK_IMAGE_TYPE_2D,
+            .format=VK_FORMAT_B8G8R8A8_UNORM,.extent={1920,1080,1},.mipLevels=1,
+            .arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+        scanout.swapchain_owned=VK_TRUE;scanout.layout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        struct ps5vk_operation import={.type=PS5VK_IMAGE_BARRIER,
+            .src_stage=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,.dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+            .image_barrier={.image=&scanout,.oldLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+             .newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+             .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT}};
+        struct ps5vk_operation release={.type=PS5VK_IMAGE_BARRIER,
+            .src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,.dst_stage=VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            .image_barrier={.image=&scanout,.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+             .newLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+             .srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT}};
+        uint32_t present_words[64]={0},*at=present_words;
+        struct ps5vk_layout_state present_layouts={0};
+        assert(ps5vk_upload_commands(&device,&import,1,NULL,&present_layouts,&at,
+            present_words+64,flush)==VK_SUCCESS);
+        assert(at-present_words==PS5VK_GRAPHICS_ACQUIRE_WORDS);
+        assert(ps5vk_layout_require(&present_layouts,&scanout,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)==VK_SUCCESS);
+        assert(ps5vk_upload_commands(&device,&release,1,NULL,&present_layouts,&at,
+            present_words+64,flush)==VK_SUCCESS);
+        assert(ps5vk_layout_require(&present_layouts,&scanout,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)==VK_SUCCESS);
+        release.image_barrier.dstAccessMask=VK_ACCESS_MEMORY_READ_BIT;
+        present_layouts=(struct ps5vk_layout_state){0};at=present_words;
+        assert(ps5vk_upload_commands(&device,&import,1,NULL,&present_layouts,&at,
+            present_words+64,flush)==VK_SUCCESS);
+        assert(ps5vk_upload_commands(&device,&release,1,NULL,&present_layouts,&at,
+            present_words+64,flush)==VK_SUCCESS);
+        /* Refused: a source access on the import, and any image the
+         * swapchain does not own. */
+        present_layouts=(struct ps5vk_layout_state){0};at=present_words;
+        import.image_barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+        assert(ps5vk_upload_commands(&device,&import,1,NULL,&present_layouts,&at,
+            present_words+64,flush)==VK_ERROR_FEATURE_NOT_PRESENT && at==present_words);
+        import.image_barrier.srcAccessMask=0;scanout.swapchain_owned=VK_FALSE;
+        assert(ps5vk_upload_commands(&device,&import,1,NULL,&present_layouts,&at,
+            present_words+64,flush)!=VK_SUCCESS && at==present_words);
+    }
 }
