@@ -47,6 +47,31 @@ class SubgroupProfileContract(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "core command dispatch"):
             self.validate(dispatch_source=dispatch)
 
+    def test_each_core_12_command_gap_requires_reaudit(self):
+        commands = self.contract["api12_command_gate"]["core_commands"]
+        self.assertEqual(7, len(commands))
+        dispatched = set(self.contract["api12_command_gate"]["current_core_dispatch"])
+        implemented = set(self.contract["api12_command_gate"]["current_implementations"])
+        self.assertEqual({"vkResetQueryPool"}, dispatched)
+        self.assertEqual({"vkResetQueryPool"}, implemented)
+        for command in commands:
+            with self.subTest(command=command, surface="dispatch"):
+                if command in dispatched:
+                    dispatch = self.dispatch_source.replace(f"ENTRY({command}, DEVICE),", "")
+                else:
+                    dispatch = self.dispatch_source + f"\nENTRY({command}, DEVICE)\n"
+                with self.assertRaisesRegex(AssertionError, "Vulkan 1.2 core command dispatch"):
+                    self.validate(dispatch_source=dispatch)
+            with self.subTest(command=command, surface="public"):
+                prototype = f"VKAPI_ATTR void VKAPI_CALL {command}(void);"
+                with self.assertRaisesRegex(AssertionError, "Vulkan 1.2 core public prototypes"):
+                    checker.check_core_sources(self.contract, prototype, "")
+            with self.subTest(command=command, surface="implementation"):
+                implementation = ("" if command in implemented else
+                                  f"VKAPI_ATTR void VKAPI_CALL {command}(void) {{}}")
+                with self.assertRaisesRegex(AssertionError, "Vulkan 1.2 core implementations"):
+                    checker.check_core_sources(self.contract, "", implementation)
+
     def test_subgroup_promotion_requires_reaudit(self):
         matrix = copy.deepcopy(self.matrix)
         row = next(row for row in matrix["requirements"] if
