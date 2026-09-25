@@ -235,16 +235,27 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice 
 { if (p && out) *out = p->platform.memory_properties; }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures(VkPhysicalDevice p, VkPhysicalDeviceFeatures *out)
 { if (p && out) get_core_features(&p->platform, out); }
+/* VK_KHR_maintenance2 has no registry dependency on Vulkan 1.0. */
+static VkBool32 maintenance2_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE2) != 0;
+}
+/* VK_KHR_create_renderpass2 depends, in the pinned registry, on
+ * VK_KHR_multiview and VK_KHR_maintenance2 (or Vulkan 1.1, which this 1.0
+ * profile is not), so it is reported only when both are. */
+static VkBool32 create_renderpass2_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_CREATE_RENDERPASS2) &&
+        maintenance2_supported(p) &&
+        (p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW);
+}
 /* VK_KHR_separate_depth_stencil_layouts depends, in the pinned registry, on
- * VK_KHR_get_physical_device_properties2 and VK_KHR_create_renderpass2 (which
- * itself needs VK_KHR_multiview and VK_KHR_maintenance2). This profile does
- * not expose create_renderpass2 yet, so the route is closed whatever the
- * platform reports: the extension is neither enumerated nor accepted. The
- * create_renderpass2 exposure replaces this with its own condition. */
+ * VK_KHR_get_physical_device_properties2 and VK_KHR_create_renderpass2. The
+ * instance extension is checked at device creation; the device route is
+ * create_renderpass2. */
 static VkBool32 separate_depth_stencil_route(VkPhysicalDevice p)
 {
-    (void)p;
-    return VK_FALSE;
+    return create_renderpass2_supported(p);
 }
 static VkBool32 separate_depth_stencil_supported(VkPhysicalDevice p)
 {
@@ -479,12 +490,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    /* Eleven conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Thirteen conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
-     * layout, timeline, separate depth/stencil layouts). Keep headroom so a
-     * new entry cannot overflow the array before this bound is revisited;
-     * each push site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 11, DEVICE_EXTENSION_SLOTS = 16 };
+     * layout, timeline, maintenance2, create_renderpass2, separate
+     * depth/stencil layouts). Keep headroom so a new entry cannot overflow
+     * the array before this bound is revisited; each push site must stay
+     * below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 13, DEVICE_EXTENSION_SLOTS = 16 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -537,6 +549,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
             VK_KHR_TIMELINE_SEMAPHORE_SPEC_VERSION};
     }
+    if (maintenance2_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_MAINTENANCE_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_2_SPEC_VERSION};
+    }
+    if (create_renderpass2_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, VK_KHR_CREATE_RENDERPASS_2_SPEC_VERSION};
+    }
     if (separate_depth_stencil_supported(p)) {
         properties[total++] = (VkExtensionProperties){
             VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
@@ -572,6 +592,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 uniform_buffer_standard_layout_extension = VK_FALSE;
     VkBool32 timeline_extension = VK_FALSE;
     VkBool32 separate_depth_stencil_extension = VK_FALSE;
+    VkBool32 maintenance2_extension = VK_FALSE, create_renderpass2_extension = VK_FALSE;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -598,6 +619,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &timeline_extension;
         else if (!strcmp(name, VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME))
             seen = &separate_depth_stencil_extension;
+        else if (!strcmp(name, VK_KHR_MAINTENANCE_2_EXTENSION_NAME))
+            seen = &maintenance2_extension;
+        else if (!strcmp(name, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME))
+            seen = &create_renderpass2_extension;
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -642,8 +667,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
          !p->instance->features2_extension_enabled))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
+    /* Every enabled extension's registry dependencies must be enabled too
+     * (VUID-vkCreateDevice-ppEnabledExtensionNames-01387). */
+    if (maintenance2_extension && !maintenance2_supported(p))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (create_renderpass2_extension &&
+        (!create_renderpass2_supported(p) || !multiview_extension || !maintenance2_extension))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (separate_depth_stencil_extension &&
-        (!separate_depth_stencil_supported(p) || !p->instance->features2_extension_enabled))
+        (!separate_depth_stencil_supported(p) || !p->instance->features2_extension_enabled ||
+         !create_renderpass2_extension))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
@@ -888,6 +921,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->enabled_features_t09 = enabled_features_t09;
     d->device_group_extension_enabled = group_extension;
     d->timeline_extension_enabled = timeline_extension;
+    d->maintenance2_extension_enabled = maintenance2_extension;
+    d->create_renderpass2_extension_enabled = create_renderpass2_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

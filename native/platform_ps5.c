@@ -349,10 +349,12 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
 #if defined(PS5VK_DEPTH_STENCIL_DIAGNOSTIC) && PS5VK_DEPTH_STENCIL_DIAGNOSTIC
     /* separateDepthStencilLayouts measurement build (DXVK262-T09): per-aspect
      * layout state, the D32_SFLOAT_S8_UINT planes and the per-aspect barriers
-     * and readback measured by the SDK depth/stencil witness. Off by default;
-     * the device still refuses the extension until VK_KHR_create_renderpass2
-     * is exposed (src/vk_device.c). */
-    platform->supported_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS;
+     * and readback measured by the SDK depth/stencil witness, plus the
+     * extension route the registry requires for it (VK_KHR_maintenance2 and
+     * VK_KHR_create_renderpass2 over the shipping VK_KHR_multiview), so the
+     * focused upstream CTS can negotiate all three. Off by default. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |
+        PS5VK_T09_FEATURE_MAINTENANCE2 | PS5VK_T09_FEATURE_CREATE_RENDERPASS2;
 #endif
     platform->max_allocation = HEAP_BYTES;
     /* The same initializer the host reporting dump uses; see

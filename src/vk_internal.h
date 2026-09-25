@@ -150,6 +150,13 @@ enum ps5vk_t09_feature_bits {
     PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE = 1u << 2,
     PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE = 1u << 3,
     PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS = 1u << 4,
+    /* VK_KHR_maintenance2 (no feature structure): image view usage, input
+     * attachment aspects, point clipping, tessellation domain origin and the
+     * mixed depth/stencil layouts. */
+    PS5VK_T09_FEATURE_MAINTENANCE2 = 1u << 5,
+    /* VK_KHR_create_renderpass2 (no feature structure). Enumerated only with
+     * its registry dependencies, VK_KHR_multiview and VK_KHR_maintenance2. */
+    PS5VK_T09_FEATURE_CREATE_RENDERPASS2 = 1u << 6,
 };
 
 /* maxTimelineSemaphoreValueDifference, derived from the payload algorithm

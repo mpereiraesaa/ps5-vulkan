@@ -241,6 +241,9 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE"},
         "VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS"},
+        "VK_KHR_MAINTENANCE_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE2"},
+        "VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_CREATE_RENDERPASS2"},
     }
     unmapped = sorted(tokens - gates.keys())
     if unmapped:
