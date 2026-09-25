@@ -16,6 +16,7 @@
  *             firstVertex 3) in one begin/end: records at 64.., counter 224
  *   overflow  a 320-byte binding, 16 points: exactly 10 records, counter 320
  *   streams   stream 0 into buffer 0 and stream 1 into buffer 1, 4 points
+ *   instanced 3 points, 2 instances: 6 records, instance 0 then instance 1
  * Every submission waits on a 300 ms fence; no shader loops.
  */
 #define _DEFAULT_SOURCE 1
@@ -34,10 +35,10 @@ enum { EXTENT = 16, ORDER_POINTS = 6000, CAPTURE_BYTES = 262144, COUNTER_BYTES =
 static const uint64_t fence_timeout = UINT64_C(300000000);
 
 static uint32_t bits(float f) { uint32_t u; memcpy(&u, &f, sizeof(u)); return u; }
-static void value(uint32_t k, uint32_t out[4])
+static void value(uint32_t k, uint32_t instance, uint32_t out[4])
 {
     out[0] = bits((float)k); out[1] = bits((float)(2u * k + 1u));
-    out[2] = bits((float)(k & 255u)); out[3] = bits(7.0f);
+    out[2] = bits((float)(k & 255u)); out[3] = bits(7.0f + (float)instance);
 }
 static uint32_t digest_bytes(uint32_t digest, const void *data, size_t bytes)
 {
@@ -95,17 +96,19 @@ static void destroy_buffer(VkDevice device, struct host_buffer *b)
 }
 
 /* Records of `stride` bytes starting at byte `base`: record r must be vertex
- * first+r with the layout the pipeline captures; every word from the end of
- * the last record to `sentinel_end` must still be the sentinel. */
+ * first+r (or, with `per_instance` vertices per instance, vertex r % n of
+ * instance r / n) with the layout the pipeline captures; every word from the
+ * end of the last record to `sentinel_end` must still be the sentinel. */
 struct tally { uint32_t mismatches, first_bad, sentinel_bad, before_bad; };
-static struct tally score(const uint32_t *words, uint32_t base, uint32_t records,
-    uint32_t first, uint32_t stride, int swizzled, uint32_t sentinel_end)
+static struct tally score_instances(const uint32_t *words, uint32_t base, uint32_t records,
+    uint32_t first, uint32_t stride, int swizzled, uint32_t sentinel_end, uint32_t per_instance)
 {
     struct tally t = {0, UINT32_MAX, 0, 0};
     for (uint32_t w = 0; w < base / 4u; ++w) t.before_bad += words[w] != SENTINEL;
     for (uint32_t r = 0; r < records; ++r) {
         uint32_t v[4], expect[8];
-        value(first + r, v);
+        if (per_instance) value(r % per_instance, r / per_instance, v);
+        else value(first + r, 0, v);
         const uint32_t *got = words + (base + r * stride) / 4u;
         if (stride == 32u) {
             memcpy(expect, v, 16);
@@ -122,6 +125,9 @@ static struct tally score(const uint32_t *words, uint32_t base, uint32_t records
         t.sentinel_bad += words[w] != SENTINEL;
     return t;
 }
+static struct tally score(const uint32_t *words, uint32_t base, uint32_t records,
+    uint32_t first, uint32_t stride, int swizzled, uint32_t sentinel_end)
+{ return score_instances(words, base, records, first, stride, swizzled, sentinel_end, 0); }
 
 static int run_witness(void)
 {
@@ -331,9 +337,9 @@ static int run_witness(void)
     VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     TRY(vkCreateFence(device, &fence_info, NULL, &fence));
 
-    enum { INACTIVE, SMALL, ORDER, RESUME, OVERFLOW, STREAMS, CASES };
+    enum { INACTIVE, SMALL, ORDER, RESUME, OVERFLOW, STREAMS, INSTANCED, CASES };
     static const char *const names[CASES] = {"inactive", "small", "order", "resume",
-                                             "overflow", "streams"};
+                                             "overflow", "streams", "instanced"};
     for (unsigned c = 0; c < CASES; ++c) {
         /* Sentinel every capture word; counters start at 0 (64 for resume). */
         for (uint32_t w = 0; w < CAPTURE_BYTES / 4u; ++w)
@@ -366,9 +372,9 @@ static int run_witness(void)
             bind_xfb(command, 0, c == STREAMS ? 2u : 1u, bound, offsets, sizes);
             begin_xfb(command, 0, 4, counter_buffers, counter_offsets);
         }
-        const uint32_t points = c == INACTIVE || c == SMALL || c == RESUME ? 3u :
-            c == ORDER ? ORDER_POINTS : c == OVERFLOW ? 16u : 4u;
-        vkCmdDraw(command, points, 1, 0, 0);
+        const uint32_t points = c == INACTIVE || c == SMALL || c == RESUME ||
+            c == INSTANCED ? 3u : c == ORDER ? ORDER_POINTS : c == OVERFLOW ? 16u : 4u;
+        vkCmdDraw(command, points, c == INSTANCED ? 2u : 1u, 0, 0);
         if (c == RESUME) vkCmdDraw(command, 2, 1, 3, 0);
         if (c != INACTIVE) end_xfb(command, 0, 4, counter_buffers, counter_offsets);
         vkCmdEndRenderPass(command);
@@ -393,6 +399,8 @@ static int run_witness(void)
             want0 = ORDER_POINTS * 32u; break;
         case RESUME: t0 = score(buffer0.words, 64, 5, 0, 32, 0, 4096); want0 = 64 + 160; break;
         case OVERFLOW: t0 = score(buffer0.words, 0, 10, 0, 32, 0, 4096); want0 = 320; break;
+        case INSTANCED:
+            t0 = score_instances(buffer0.words, 0, 6, 0, 32, 0, 4096, 3); want0 = 192; break;
         default:
             t0 = score(buffer0.words, 0, 4, 0, 16, 0, 4096);
             t1 = score(buffer1.words, 0, 4, 0, 16, 1, 4096);

@@ -1620,26 +1620,9 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
          * draws one command per operation. */
         if(p->pair->runtime_arguments.streamout_valid && command_count>1u)
             {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=50;goto fail;}
-        if(p->pair->runtime_arguments.streamout_valid) {
-            uint8_t *session=(uint8_t *)j->xfb.address+(size_t)xfb_session*PS5VK_XFB_SESSION_BYTES;
-            draw->state->runtime.streamout_low=(uint32_t)((uintptr_t)session+PS5VK_XFB_TABLE_OFFSET);
-            /* Primitive order restarts with every draw: the program's ordered
-             * ids do, so the ticket must too. Every capture draw after the
-             * job's first waits for the previous one to drain completely
-             * (its workgroups hand the ticket on until the last one), then
-             * zeroes the ticket of the table it is about to use. */
-            if(xfb_capture_draws++) {
-                BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u+PS5VK_XFB_DMA_WORDS);
-                size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
-                    (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),i+1u);
-                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}cursor+=n;
-                if(!ps5vk_xfb_zero_dword(cursor,(uintptr_t)session+PS5VK_XFB_TICKET_OFFSET))
-                    {rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}
-                cursor+=PS5VK_XFB_DMA_WORDS;
-                n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
-                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}cursor+=n;
-            }
-        }
+        if(p->pair->runtime_arguments.streamout_valid)
+            draw->state->runtime.streamout_low=(uint32_t)((uintptr_t)j->xfb.address+
+                (size_t)xfb_session*PS5VK_XFB_SESSION_BYTES+PS5VK_XFB_TABLE_OFFSET);
 #if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 4
         if(j->serial==17 && draw->vertex_table && vertex_usage==1u &&
            op->type==PS5VK_DRAW && op->vertex_count==80u &&
@@ -1768,7 +1751,40 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                     if(rc!=VK_SUCCESS){draw_site=__LINE__;goto fail;}
                 }
             }
+            /* A capture keeps primitive order through its first primitive
+             * ids (the ordered no-GDS reservation), and those restart per
+             * draw and per instance: an instanced capture is drawn one
+             * instance at a time, each with its own firstInstance, and every
+             * capture draw after the job's first waits for the previous one
+             * to drain (its workgroups hand the ticket on to the end) and
+             * zeroes the ticket of the table it uses. */
+            const int capture=p->pair->runtime_arguments.streamout_valid!=0;
+            if(capture && view_mask){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=51;goto fail;}
+            const struct ps5vk_operation *whole=op;
+            struct ps5vk_operation single;
+            const uint32_t instance_batch=capture?whole->instance_count:1u;
+            for(uint32_t instance=0;instance<instance_batch;++instance)
             for(uint32_t v=0;v<view_batch;++v) {
+                if(capture) {
+                    single=*whole;
+                    single.instance_count=1u;
+                    single.first_instance=whole->first_instance+instance;
+                    op=&single;
+                    if(xfb_capture_draws++) {
+                        uint8_t *session=(uint8_t *)j->xfb.address+
+                            (size_t)xfb_session*PS5VK_XFB_SESSION_BYTES;
+                        BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u+PS5VK_XFB_DMA_WORDS);
+                        size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
+                            (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),
+                            (i+1u)|(xfb_capture_draws<<16));
+                        if(!n){rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}cursor+=n;
+                        if(!ps5vk_xfb_zero_dword(cursor,(uintptr_t)session+PS5VK_XFB_TICKET_OFFSET))
+                            {rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}
+                        cursor+=PS5VK_XFB_DMA_WORDS;
+                        n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+                        if(!n){rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}cursor+=n;
+                    }
+                }
                 /* Room for one whole emission, measured from the largest one
                  * seen so far; a shortfall seals the open arena behind the
                  * previous emission and continues in the next one. */
@@ -1814,6 +1830,7 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                     ++emitted_draws;
                 }
             }
+            op=whole;
             ++emitted_commands;
         }
         if(indirect && command_count>1u)

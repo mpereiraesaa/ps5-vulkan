@@ -29,6 +29,7 @@ RETIRED = re.compile(r"T14_XFB_WITNESS_RETIRED resources=(\w+)")
 EXPECTED = {
     "inactive": (3, 0, 0), "small": (3, 96, 0), "order": (6000, 192000, 0),
     "resume": (3, 224, 0), "overflow": (16, 320, 0), "streams": (4, 64, 64),
+    "instanced": (3, 192, 0),
 }
 
 
