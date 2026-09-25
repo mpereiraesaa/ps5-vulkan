@@ -143,4 +143,14 @@ void ps5vk_texture_format_properties(VkFormat format, VkFormatProperties *out);
  * before a resource is created. */
 VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usage);
 
+/* Mutable-format views. ps5vk_texture_format_mutable() says whether an image
+ * of this format may be created with VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+ * ps5vk_texture_format_view_compatible() says whether a view (or a
+ * VkImageFormatListCreateInfo entry) of view_format over an image of
+ * image_format is an implemented reinterpretation. Only RGBA8 UNORM <-> SRGB
+ * is. The view's usage is checked separately against the view format's own
+ * witnessed capabilities. */
+VkBool32 ps5vk_texture_format_mutable(VkFormat format);
+VkBool32 ps5vk_texture_format_view_compatible(VkFormat image_format, VkFormat view_format);
+
 #endif

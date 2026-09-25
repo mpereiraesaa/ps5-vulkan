@@ -28,6 +28,15 @@ struct VkImage_T {
     /* Only images owned by a live WSI swapchain may enter PRESENT_SRC_KHR. */
     VkBool32 swapchain_owned;
     struct VkImage_T *next;
+    /* Created with VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT. info.flags keeps the
+     * storage shape only (the flag changes no layout), so every shape
+     * predicate below classifies a mutable image exactly like its immutable
+     * twin. view_formats is the admitted view-format set: the
+     * VkImageFormatListCreateInfo entries, or the implemented family when no
+     * list was given. */
+    VkBool32 mutable_format;
+    uint32_t view_format_count;
+    VkFormat view_formats[4];
 };
 /* Cube-compatible RGBA8 whose sampled role reads a tiled colour attachment.
  * Both descriptor encoding and its render-to-sample barrier use this exact

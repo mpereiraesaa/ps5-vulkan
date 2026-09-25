@@ -23,7 +23,13 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     VkImage image=view->image;
     const struct ps5vk_texture_format *format=ps5vk_texture_format_lookup(view->format);
     const VkBool32 d32_gather=ps5vk_d32_gather_image(image);
-    if(!format || !ps5vk_texture_format_sampled_image(view->format) || image->info.format!=view->format ||
+    /* A mutable image's view may name an implemented reinterpretation of the
+     * image format: same texel block and layout, so only the data-format field
+     * of word 1 below differs (src/texture_format.c). */
+    const VkBool32 view_format_ok=image->info.format==view->format ||
+        (image->mutable_format &&
+         ps5vk_texture_format_view_compatible(image->info.format,view->format));
+    if(!format || !ps5vk_texture_format_sampled_image(view->format) || !view_format_ok ||
         (view->range.aspectMask!=(d32_gather?VK_IMAGE_ASPECT_DEPTH_BIT:VK_IMAGE_ASPECT_COLOR_BIT)) || !view->range.levelCount ||
         view->range.baseMipLevel>=image->info.mipLevels ||
         view->range.levelCount>image->info.mipLevels-view->range.baseMipLevel ||

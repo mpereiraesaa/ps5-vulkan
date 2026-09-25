@@ -517,3 +517,46 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
         usage == (depth | VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return VK_TRUE;
     return VK_FALSE;
 }
+
+/* Mutable-format views (VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT and the
+ * VK_KHR_image_format_list view-format list). A view may name another format
+ * than its image only where the reinterpretation is a change of the GFX10
+ * image data-format field and nothing else: the two rows must share the texel
+ * block (so every layout, copy and footprint computed from either format is
+ * byte-identical) and both must carry a sampled-image encoding whose selectors
+ * are the same. The only family served is RGBA8 UNORM <-> SRGB: the 0x038 and
+ * 0x082 words address the same 32-bit texel and differ only in the sRGB
+ * decode. B8G8R8A8_SRGB has no row in this table, so a BGRA8 image is never
+ * mutable here; every other compatible-class pair stays refused until it has
+ * its own encoding and evidence. Which view USAGE a reinterpreted format
+ * serves is still decided by that format's own witnessed capabilities. */
+static const VkFormat rgba8_view_family[] = {
+    VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB,
+};
+
+static VkBool32 in_rgba8_view_family(VkFormat format)
+{
+    for (unsigned i = 0; i < sizeof(rgba8_view_family) / sizeof(rgba8_view_family[0]); ++i)
+        if (rgba8_view_family[i] == format) return VK_TRUE;
+    return VK_FALSE;
+}
+
+VkBool32 ps5vk_texture_format_mutable(VkFormat format)
+{
+    return in_rgba8_view_family(format) && ps5vk_texture_format_lookup(format) != 0;
+}
+
+VkBool32 ps5vk_texture_format_view_compatible(VkFormat image_format, VkFormat view_format)
+{
+    const struct ps5vk_texture_format *image = ps5vk_texture_format_lookup(image_format);
+    const struct ps5vk_texture_format *view = ps5vk_texture_format_lookup(view_format);
+    if (!image || !view) return VK_FALSE;
+    if (image_format == view_format) return VK_TRUE;
+    return in_rgba8_view_family(image_format) && in_rgba8_view_family(view_format) &&
+        image->bytes_per_texel == view->bytes_per_texel &&
+        image->bytes_per_block == view->bytes_per_block &&
+        image->block_width == view->block_width &&
+        image->block_height == view->block_height &&
+        image->descriptor_format_word && view->descriptor_format_word &&
+        ps5vk_texture_format_dst_sel(image) == ps5vk_texture_format_dst_sel(view);
+}
