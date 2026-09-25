@@ -46,6 +46,15 @@ VkResult ps5vk_buffer_descriptor(VkDevice d,const VkDescriptorBufferInfo *info,
  if((uintptr_t)info->buffer==1)first_set_buffer_dynamic=dynamic;
  for(unsigned i=0;i<4;++i)out[i]=200+i+256*index;
  return buffer_fail && info->buffer==buffer_fail?VK_ERROR_UNKNOWN:buffer_rc;}
+/* Separate sampled-image and texel-buffer records: the same placement stubs. */
+static unsigned sampled_calls, texel_calls;
+static uint32_t texel_capability;
+VkResult ps5vk_sampled_image_descriptor(VkDevice d,VkImageView v,uint32_t out[8])
+{(void)d;++sampled_calls;for(unsigned i=0;i<8;++i)out[i]=400+i+256*(uintptr_t)v;return VK_SUCCESS;}
+VkResult ps5vk_texel_buffer_descriptor(VkDevice d,VkBufferView v,uint32_t capability,uint32_t out[4])
+{(void)d;++texel_calls;texel_capability=capability;
+ for(unsigned i=0;i<4;++i)out[i]=500+i+256*(uintptr_t)v;
+ return VK_SUCCESS;}
 static const void *fetch_address=vertex_source;
 static unsigned fetch_count=1;
 VkResult ps5vk_vertex_fetch_used_spans(VkDevice d,const struct ps5vk_graphics_key *k,
@@ -534,6 +543,66 @@ int main(void)
         assert(first_set_buffer_dynamic==256 && last_buffer_dynamic==512);
         ps5vk_native_release_draw(&prepared);assert(allocations==releases);
         runtime.enabled=1;
+    }
+
+    /* DXVK's pixel-shader set 0 (FsViews): SAMPLER s0 at binding 0,
+     * SAMPLED_IMAGE t0 at binding 1 and a Buffer<> SRV (UNIFORM_TEXEL_BUFFER)
+     * at binding 2. Records: S# 16 bytes at 0, T# 32 at 16, V# 16 at 48. */
+    {
+        struct VkDescriptorPool_T views_pool={.device=&d};
+        struct VkPipeline_T views_pipeline={.device=&d,.set_count=1};
+        struct VkDescriptorSet_T views={.pool=&views_pool,.generation=41};
+        struct VkSampler_T sampler={.device=&d,.words={0xa0,0xa1,0xa2,0xa3}};
+        const VkDescriptorType types[3]={VK_DESCRIPTOR_TYPE_SAMPLER,
+            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER};
+        for(unsigned b=0;b<3;++b) {
+            views.signature.binding[b]=(struct ps5vk_binding){1,b,VK_SHADER_STAGE_FRAGMENT_BIT};
+            views.signature.type[b]=types[b];views.defined[b]=VK_TRUE;
+        }
+        for(unsigned b=3;b<PS5VK_MAX_BINDINGS;++b)views.signature.binding[b].first=3;
+        views.signature.count=3;
+        views.images[0].sampler=&sampler;
+        views.images[1]=(VkDescriptorImageInfo){VK_NULL_HANDLE,(VkImageView)(uintptr_t)7,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        views.texel_views[2]=(VkBufferView)(uintptr_t)9;
+        views_pipeline.sets[0]=views.signature;
+        struct ps5vk_operation views_op=op;
+        views_op.pipeline=&views_pipeline;views_op.sets[0]=&views;
+        for(unsigned s=1;s<4;++s)views_op.sets[s]=NULL;
+        views_op.generations[0]=views.generation;
+        struct ps5vk_runtime_draw_abi saved=runtime,saved_hull=hull_runtime;
+        runtime=(struct ps5vk_runtime_draw_abi){.enabled=1};
+        hull_runtime=(struct ps5vk_runtime_draw_abi){0};
+        runtime.fragment_descriptor_valid[0]=1;
+        runtime.fragment_used_bindings[0]=7;
+        unsigned views_allocated=allocations,views_texture_calls=texture_calls;
+        expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+64;
+        assert(ps5vk_native_prepare_resource_draw(&d,&views_op,&area,NULL,shader_address,NULL,&prepared)==
+            VK_SUCCESS && allocations==views_allocated+1);
+        assert(prepared.descriptor_bytes[0]==64);
+        for(unsigned w=0;w<4;++w)assert(prepared.descriptor_tables[0][w]==0xa0+w);
+        for(unsigned w=0;w<8;++w)assert(prepared.descriptor_tables[0][4+w]==400+w+256*7);
+        for(unsigned w=0;w<4;++w)assert(prepared.descriptor_tables[0][12+w]==500+w+256*9);
+        /* Neither the combined encoder nor any storage role was asked. */
+        assert(texture_calls==views_texture_calls &&
+            texel_capability==PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER);
+        ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+        views_allocated=allocations;
+        /* A null sampler or a null texel view fails closed before allocation. */
+        views.images[0].sampler=VK_NULL_HANDLE;
+        assert(ps5vk_native_prepare_resource_draw(&d,&views_op,&area,NULL,shader_address,NULL,&prepared)!=
+            VK_SUCCESS && allocations==views_allocated && !prepared.backing);
+        views.images[0].sampler=&sampler;
+        views.texel_views[2]=VK_NULL_HANDLE;
+        assert(ps5vk_native_prepare_resource_draw(&d,&views_op,&area,NULL,shader_address,NULL,&prepared)!=
+            VK_SUCCESS && allocations==views_allocated && !prepared.backing);
+        views.texel_views[2]=(VkBufferView)(uintptr_t)9;
+        /* A storage texel buffer in a graphics stage stays outside the profile. */
+        views.signature.type[2]=VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+        views_pipeline.sets[0]=views.signature;
+        assert(ps5vk_native_prepare_resource_draw(&d,&views_op,&area,NULL,shader_address,NULL,&prepared)==
+            VK_ERROR_FEATURE_NOT_PRESENT && allocations==views_allocated && !prepared.backing);
+        runtime=saved;hull_runtime=saved_hull;
     }
 
     /* Only the bindings the compiled stages name are a requirement. Binding 3

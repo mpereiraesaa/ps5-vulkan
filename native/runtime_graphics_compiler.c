@@ -12,6 +12,7 @@
 #include "runtime_resource_use.h"
 #include "spirv_graphics_interface.h"
 #include "descriptor_table_layout.h"
+#include "spirv_descriptor_types.h"
 #include "graphics_descriptor_profile.h"
 #include "blend_ps5.h"
 #include "color_attachment_contract.h"
@@ -273,6 +274,15 @@ static int descriptor_profile_supported(const struct ps5vk_graphics_key *key)
                set->type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT &&
                set->binding[b].stages!=VK_SHADER_STAGE_FRAGMENT_BIT)return 0;
         }
+    /* Each module's opaque resources must be the type their binding holds: a
+     * combined sampler2D over a separate SAMPLED_IMAGE binding would read the
+     * wrong record width rather than fail. */
+    const struct ps5vk_graphics_module_key *modules[5]={&key->vertex,&key->fragment,
+        &key->geometry,&key->tess_control,&key->tess_eval};
+    for(unsigned m=0;m<5;++m)
+        if(modules[m]->word_count &&
+           !ps5vk_spirv_descriptor_types_match(modules[m]->words,modules[m]->word_count,
+               key->descriptor_set_count,key->descriptor_sets))return 0;
     return 1;
 }
 
@@ -672,6 +682,9 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
             case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
+            /* DXVK's separate S# and T#, combined in the shader. */
+            case VK_DESCRIPTOR_TYPE_SAMPLER: type=PSBC_DESCRIPTOR_SAMPLER;break;
+            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: type=PSBC_DESCRIPTOR_SAMPLED_IMAGE;break;
             /* Fragment-only resource-only image data: the canonical table gives
              * this role its own 32-byte record, so the PSBC type is the
              * resource-only one and never the combined T#/S# pair. The stage

@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include <pthread.h>
+#include "spirv_descriptor_types.h"
 #include "ps5vk_compiler.h"
 #include <assert.h>
 #include <stdio.h>
@@ -200,7 +201,27 @@ int main(void)
     separate_layout.sets[0].type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     separate_code=NULL;
     assert(ps5vk_runtime_compile_compute(separate_spv,separate_bytes/4,"main",&separate_layout,
-        NULL,&separate,&separate_code)!=VK_SUCCESS && !separate_code);
+        NULL,&separate,&separate_code)==VK_ERROR_FEATURE_NOT_PRESENT && !separate_code);
+    /* Every opaque type is classified: each binding swapped for its sibling
+     * role of the same record family is refused before compilation. */
+    const VkDescriptorType swapped[4]={VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
+        VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER};
+    for(uint32_t b=0;b<4;++b) {
+        for(uint32_t k=0;k<4;++k)separate_layout.sets[0].type[k]=separate_types[k];
+        assert(ps5vk_spirv_descriptor_types_match(separate_spv,separate_bytes/4,1,
+            separate_layout.sets));
+        separate_layout.sets[0].type[b]=swapped[b];
+        assert(!ps5vk_spirv_descriptor_types_match(separate_spv,separate_bytes/4,1,
+            separate_layout.sets));
+    }
+    /* Bindings the layout does not name are not this check's business. */
+    for(uint32_t k=0;k<4;++k)separate_layout.sets[0].type[k]=separate_types[k];
+    separate_layout.sets[0].binding[3].count=0;
+    assert(ps5vk_spirv_descriptor_types_match(separate_spv,separate_bytes/4,1,
+        separate_layout.sets));
+    /* Malformed modules are refused. */
+    assert(!ps5vk_spirv_descriptor_types_match(separate_spv,4,1,separate_layout.sets));
     free(separate_spv);
 
     /* 3. Runtime compile shader 2 (previously unregistered shader) */

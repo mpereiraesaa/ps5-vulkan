@@ -1375,8 +1375,11 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 const VkDescriptorType type=set->signature.type[b];
                 const int buffer_type=ps5vk_graphics_buffer_type(type);
                 const int input_type=type==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-                if(binding->count && type!=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
-                   !buffer_type && !input_type) {
+                /* Roles with no image layout: a separate S# and a texel V#. */
+                const int layoutless_type=type==VK_DESCRIPTOR_TYPE_SAMPLER ||
+                    type==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+                if(binding->count && !ps5vk_graphics_sampled_image_type(type) &&
+                   !buffer_type && !input_type && !layoutless_type) {
                     rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=14;goto fail;
                 }
                 if(binding->first>PS5VK_MAX_DESCRIPTORS ||
@@ -1398,6 +1401,13 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                          * nullDescriptor record, on a device that enabled it. */
                         if(!set->buffers[index].buffer && !(d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) {
                             rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=17;goto fail;
+                        }
+                        continue;
+                    }
+                    if(layoutless_type) {
+                        if(type==VK_DESCRIPTOR_TYPE_SAMPLER ? !set->images[index].sampler :
+                           !set->texel_views[index]) {
+                            rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=__LINE__;goto fail;
                         }
                         continue;
                     }

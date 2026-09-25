@@ -18,6 +18,11 @@ static inline void ps5vk_null_descriptor_words(uint32_t *out, uint32_t dwords)
  * the caller's words untouched. */
 VkResult ps5vk_buffer_descriptor(VkDevice device,
     const VkDescriptorBufferInfo *info, VkDeviceSize dynamic_offset, uint32_t out[4]);
+/* One GFX1013 typed texel-buffer V# for a view whose format row carries the
+ * implemented `capability` (PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER or
+ * PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER). Failure leaves out untouched. */
+VkResult ps5vk_texel_buffer_descriptor(VkDevice device, VkBufferView view,
+    uint32_t capability, uint32_t out[4]);
 /* GFX1013 raw storage-buffer table for the audited compiler ABI. No uploads or
  * GPU work. Failure leaves the caller's table untouched. */
 VkResult ps5vk_descriptor_encode(VkDevice device,
