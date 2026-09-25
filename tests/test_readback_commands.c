@@ -385,4 +385,51 @@ int main(void)
         assert(ps5vk_readback_commands_set(&device,set,7,NULL,&layouts,&readback)==
             VK_SUCCESS);
     }
+    /* A render-pass postlude holds ONE readback: the partition finds it by its
+     * single image-to-buffer copy. Reading both aspects of a combined
+     * depth/stencil attachment after the pass in the same command buffer is
+     * two copies and is refused before any aspect is validated (measured on
+     * hardware as vkQueueSubmit VK_ERROR_FEATURE_NOT_PRESENT with an empty
+     * partition). Each aspect read back in its own submission after the pass,
+     * the route the depth/stencil witnesses use, is the supported shape. */
+    {
+        struct VkImage_T ds={.device=&device,.layout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            .info={.format=VK_FORMAT_D32_SFLOAT_S8_UINT,.imageType=VK_IMAGE_TYPE_2D,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.extent={64,64,1},.mipLevels=1,.arrayLayers=1,
+            .tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT}};
+        VkBuffer planes[2]={(VkBuffer)(uintptr_t)2,(VkBuffer)(uintptr_t)3};
+        const VkImageAspectFlags aspect[2]={VK_IMAGE_ASPECT_DEPTH_BIT,VK_IMAGE_ASPECT_STENCIL_BIT};
+        const VkImageLayout attachment[2]={VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL};
+        struct ps5vk_operation both[8];
+        for(unsigned a=0;a<2;++a) {
+            both[4*a]=(struct ps5vk_operation){.type=PS5VK_IMAGE_BARRIER,
+                .src_stage=VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                .dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,.image_barrier={.image=&ds,
+                .oldLayout=attachment[a],.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .srcAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                .dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT,
+                .subresourceRange={aspect[a],0,1,0,1}}};
+            both[4*a+1]=(struct ps5vk_operation){.type=PS5VK_COPY_IMAGE_BUFFER,
+                .copy_image=&ds,.copy_destination=planes[a],
+                .copy_layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,.copy_region={
+                .imageSubresource={aspect[a],0,0,1},.imageExtent={64,64,1}}};
+            both[4*a+2]=(struct ps5vk_operation){.type=PS5VK_BARRIER,
+                .src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,.dst_stage=VK_PIPELINE_STAGE_HOST_BIT,
+                .src_access=VK_ACCESS_TRANSFER_WRITE_BIT,.dst_access=VK_ACCESS_HOST_READ_BIT,
+                .buffer_barrier={.buffer=planes[a],.size=VK_WHOLE_SIZE}};
+            both[4*a+3]=(struct ps5vk_operation){.type=PS5VK_BARRIER,
+                .src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,.dst_stage=VK_PIPELINE_STAGE_HOST_BIT};
+        }
+        struct ps5vk_readback_partition split={0};
+        assert(ps5vk_readback_partition(both,8,&split)==VK_ERROR_FEATURE_NOT_PRESENT);
+        assert(!split.readback_count);
+        /* Each aspect alone is one readback the partition locates. */
+        for(unsigned a=0;a<2;++a) {
+            split=(struct ps5vk_readback_partition){0};
+            assert(ps5vk_readback_partition(both+4*a,4,&split)==VK_SUCCESS);
+            assert(!split.prefix_count && split.readback_count==4 && !split.suffix_count);
+        }
+    }
 }
