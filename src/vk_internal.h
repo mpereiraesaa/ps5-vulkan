@@ -212,6 +212,9 @@ enum ps5vk_t09_feature_bits {
      * test state). Dynamic primitive topology and vertex binding stride are
      * not executed yet, so pipelines declaring them stay refused. */
     PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE = 1u << 16,
+    /* VK_KHR_copy_commands2 (no feature structure): the six version-2
+     * transfer commands, converted to the version-1 ones. */
+    PS5VK_T09_FEATURE_COPY_COMMANDS2 = 1u << 17,
     /* VK_KHR_maintenance1 (no feature structure): negative viewport heights,
      * vkTrimCommandPoolKHR and the transfer format-feature bits.
      * VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT is refused by every image
@@ -421,6 +424,8 @@ struct VkDevice_T {
     VkBool32 extended_dynamic_state_extension_enabled;
     /* VK_KHR_maintenance1 was enabled: a viewport may have a negative height. */
     VkBool32 maintenance1_extension_enabled;
+    /* VK_KHR_copy_commands2 was enabled on this device. */
+    VkBool32 copy_commands2_extension_enabled;
     VkBool32 extended_dynamic_state_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample

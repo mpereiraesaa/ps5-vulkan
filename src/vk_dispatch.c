@@ -222,6 +222,13 @@ static const struct entry entries[] = {
     ENTRY(vkCmdSetStencilOpEXT, DEVICE),
     /* VK_KHR_maintenance1 (DXVK262-T10). */
     ENTRY(vkTrimCommandPoolKHR, DEVICE),
+    /* VK_KHR_copy_commands2 (DXVK262-T10). */
+    ENTRY(vkCmdCopyBuffer2KHR, DEVICE),
+    ENTRY(vkCmdCopyImage2KHR, DEVICE),
+    ENTRY(vkCmdCopyBufferToImage2KHR, DEVICE),
+    ENTRY(vkCmdCopyImageToBuffer2KHR, DEVICE),
+    ENTRY(vkCmdBlitImage2KHR, DEVICE),
+    ENTRY(vkCmdResolveImage2KHR, DEVICE),
 };
 #undef ENTRY
 
@@ -376,6 +383,16 @@ static int extended_dynamic_state_command(const char *name)
     return 0;
 }
 
+/* VK_KHR_copy_commands2 commands, reachable only on a device that enabled
+ * the extension. Vulkan 1.0 has no core names for them. */
+static int copy_commands2_command(const char *name)
+{
+    return !strcmp(name, "vkCmdCopyBuffer2KHR") || !strcmp(name, "vkCmdCopyImage2KHR") ||
+           !strcmp(name, "vkCmdCopyBufferToImage2KHR") ||
+           !strcmp(name, "vkCmdCopyImageToBuffer2KHR") ||
+           !strcmp(name, "vkCmdBlitImage2KHR") || !strcmp(name, "vkCmdResolveImage2KHR");
+}
+
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
                                                               const char *name)
 {
@@ -434,6 +451,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
         !device->extended_dynamic_state_extension_enabled)
         return NULL;
     if (!strcmp(name, "vkTrimCommandPoolKHR") && !device->maintenance1_extension_enabled)
+        return NULL;
+    if (copy_commands2_command(name) && !device->copy_commands2_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;

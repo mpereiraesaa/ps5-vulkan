@@ -464,6 +464,7 @@ def implemented_device_extensions() -> set[str]:
         "VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE"},
         "VK_KHR_MAINTENANCE_1_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE1"},
+        "VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_COPY_COMMANDS2"},
 
     }
     unmapped = sorted(tokens - gates.keys())
