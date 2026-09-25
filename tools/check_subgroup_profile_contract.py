@@ -139,7 +139,8 @@ def check_reporting(contract, report, matrix, profile_source, device_source,
     for profile in ("compute", "graphics"):
         require(report["profiles"][profile]["apiVersion"] == 4194304,
                 f"{profile} public API version changed")
-    require("properties->apiVersion = VK_API_VERSION_1_0;" in profile_source,
+    require("#define PS5VK_DEVICE_API_VERSION VK_API_VERSION_1_0\n" in profile_source and
+            "properties->apiVersion = PS5VK_DEVICE_API_VERSION;" in profile_source,
             "source API version changed; re-audit subgroup profile")
     exported = set(re.findall(r"ENTRY\((vk\w+),\s*(?:GLOBAL|INSTANCE|DEVICE)\)",
                               dispatch_source))

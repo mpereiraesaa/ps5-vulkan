@@ -40,6 +40,14 @@ static inline int ps5vk_profile_power_of_two(VkDeviceSize value)
 #define PS5VK_COMPILER_IDENTITY_VERSION 1u
 #define PS5VK_CACHE_ABI_IDENTITY 1u
 
+/* The Vulkan version the physical device reports: the single promotion
+ * switch. Raising it claims every mandatory command, feature, limit and
+ * behaviour of each newer core version, and tools/check_core_version_contract.py
+ * (run by make check) refuses the edit until
+ * conformance_inventory/core_version_contract.json shows that whole contract
+ * met. The instance version (PS5VK_INSTANCE_API_VERSION) is separate. */
+#define PS5VK_DEVICE_API_VERSION VK_API_VERSION_1_0
+
 /* Vulkan 1.0 mandatory floors that both shipped frontends honour.
  *
  * These are the values the specification's "Required Limits" table demands and
@@ -120,7 +128,7 @@ static inline void ps5vk_physical_profile_init(
     memset(properties, 0, sizeof(*properties));
     memset(memory, 0, sizeof(*memory));
 
-    properties->apiVersion = VK_API_VERSION_1_0;
+    properties->apiVersion = PS5VK_DEVICE_API_VERSION;
     properties->driverVersion = 1;
     properties->vendorID = info->vendor_id;
     properties->deviceID = info->device_id;
@@ -228,7 +236,7 @@ static inline int ps5vk_physical_profile_valid(
     int has_image_properties)
 {
     const VkPhysicalDeviceLimits *limits = &properties->limits;
-    if (properties->apiVersion != VK_API_VERSION_1_0 ||
+    if (properties->apiVersion != PS5VK_DEVICE_API_VERSION ||
         !properties->deviceName[0] ||
         properties->deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 1] != '\0' ||
         !max_allocation || !queue_flags ||

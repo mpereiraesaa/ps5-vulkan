@@ -39,6 +39,20 @@ console really queries rather than a hand-copied table.
 The host library uses the same initializer with a 64 MiB mock heap. Its values
 prove API and lifecycle behavior only; they are not PS5 hardware evidence.
 
+## Device API version
+
+The reported version is one macro, `PS5VK_DEVICE_API_VERSION` in
+`src/physical_device_profile.h`. `conformance_inventory/core_version_contract.json`
+lists, for Vulkan 1.1, 1.2 and 1.3, the commands, mandatory features and
+promoted extensions from the pinned registry, plus the limits, query structures
+and behaviours each version makes mandatory, with a status and the evidence for
+each row. `tools/check_core_version_contract.py` (run by `make check`) refuses a
+raised version unless every command of each version up to it resolves by its
+core name and every row is satisfied (or its condition is false). It also
+checks the instance version. `--assume-version 1.N` lists the unmet items
+without editing anything. The device reports 1.0 today; the 1.1 contract alone
+still has descriptor-capacity, heap-size and subgroup gaps.
+
 ## Reporting audit against the pinned specification and CTS
 
 `tools/check_reporting_matrix.py` (run by `make check`) dumps the reported
