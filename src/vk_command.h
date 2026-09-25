@@ -266,6 +266,10 @@ struct VkCommandPool_T {
  * slot; success zeroes and types every reserved operation before publishing
  * the new operation_count. */
 void ps5vk_command_invalidate(VkCommandBuffer command);
+/* Submission-time check of a recorded transform feedback BEGIN/END
+ * (src/vk_xfb_commands.c): the device still has the feature, and every
+ * recorded range still lies in a live buffer bound to memory. */
+VkBool32 ps5vk_xfb_operation_valid(VkDevice device, const struct ps5vk_operation *op);
 /* Vulkan 1.0 render-pass compatibility: matching attachment references,
  * formats and sample counts. Load/store ops and layouts are deliberately not
  * compared, and identity is not required. */

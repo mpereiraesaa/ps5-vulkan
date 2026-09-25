@@ -44,6 +44,7 @@ static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **out
             case PS5VK_CLEAR_COLOR_IMAGE:
             case PS5VK_CLEAR_ATTACHMENT:
             case PS5VK_QUERY_BEGIN: case PS5VK_QUERY_END:
+            case PS5VK_TRANSFORM_FEEDBACK_BEGIN: case PS5VK_TRANSFORM_FEEDBACK_END:
                 graphics=1; break;
             default: return VK_ERROR_FEATURE_NOT_PRESENT;
             }

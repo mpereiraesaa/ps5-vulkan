@@ -60,6 +60,27 @@ static int counters(VkCommandBuffer c, uint32_t first, uint32_t count,
     return 1;
 }
 
+VkBool32 ps5vk_xfb_operation_valid(VkDevice d, const struct ps5vk_operation *op)
+{
+    if (!d || !op || !(d->enabled_features_t09 & PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK) ||
+        (op->type != PS5VK_TRANSFORM_FEEDBACK_BEGIN && op->type != PS5VK_TRANSFORM_FEEDBACK_END))
+        return VK_FALSE;
+    for (unsigned j = 0; j < PS5VK_XFB_ABI_BUFFERS; ++j) {
+        const struct ps5vk_xfb_range *r[2] = {&op->xfb.buffers[j], &op->xfb.counters[j]};
+        for (unsigned k = 0; k < 2; ++k) {
+            void *address;
+            VkDeviceSize bytes;
+            if (!r[k]->buffer) continue;
+            if ((k == 0 && op->type != PS5VK_TRANSFORM_FEEDBACK_BEGIN) ||
+                (k == 1 && r[k]->size != 4u) ||
+                ps5vk_buffer_span(d, r[k]->buffer, r[k]->offset, r[k]->size,
+                                  &address, &bytes) != VK_SUCCESS || bytes != r[k]->size)
+                return VK_FALSE;
+        }
+    }
+    return VK_TRUE;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkCmdBindTransformFeedbackBuffersEXT(VkCommandBuffer c,
     uint32_t first, uint32_t count, const VkBuffer *buffers,
     const VkDeviceSize *offsets, const VkDeviceSize *sizes)

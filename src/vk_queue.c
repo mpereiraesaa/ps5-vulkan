@@ -431,6 +431,9 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     uint32_t subpass = 0;
     VkQueryPool active_query_pool = VK_NULL_HANDLE;
     uint32_t active_query = 0;
+    /* Transform feedback capture is active (DXVK262-T14): between a BEGIN and
+     * an END of the same subpass, never across a subpass boundary. */
+    int xfb_active = 0;
     /* DRAW work seen since the pass began - what will execute, not how many
      * commands were written. A vkCmdExecuteCommands marker naming only empty
      * secondaries executes nothing, so counting markers here would accept the
@@ -490,6 +493,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     if (!draw_operation_valid(d, op)) return 0;
                     ++pass_work;
                 } else if (op->type == PS5VK_NEXT_SUBPASS) {
+                    if (xfb_active) return 0;
                     /* The immutable stream must advance by exactly one.  A
                      * repeated boundary or a jump cannot be repaired by the
                      * backend without changing the recorded program. */
@@ -499,7 +503,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     subpass = op->subpass;
                     contents = op->render_pass_contents;
                 } else {
-                    if (!pass_work) return 0;
+                    if (!pass_work || xfb_active) return 0;
                     /* A pass must end at its last subpass; ending earlier
                      * would drop the subpasses never entered. */
                     if (op->subpass != subpass ||
@@ -555,6 +559,17 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     for (uint32_t k = 0; k < n; ++k) if (children[k] == child) return 0;
                 }
             }
+            continue;
+        }
+        if (op->type == PS5VK_TRANSFORM_FEEDBACK_BEGIN ||
+            op->type == PS5VK_TRANSFORM_FEEDBACK_END) {
+            const int begin = op->type == PS5VK_TRANSFORM_FEEDBACK_BEGIN;
+            if (!active || contents != VK_SUBPASS_CONTENTS_INLINE ||
+                op->render_pass != active || op->framebuffer != framebuffer ||
+                op->subpass != subpass || begin == xfb_active ||
+                !ps5vk_xfb_operation_valid(d, op))
+                return 0;
+            xfb_active = begin;
             continue;
         }
         if (op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) {

@@ -280,7 +280,10 @@ def main():
                      "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
                      "PS5VK_DXVK_RENDER_DIAGNOSTIC",
                      "PS5VK_DXVK_ROUTES_DIAGNOSTIC",
-                     "PS5VK_HOST_COHERENT_DIAGNOSTIC"):
+                     "PS5VK_HOST_COHERENT_DIAGNOSTIC",
+                     # Report VK_EXT_transform_feedback (DXVK262-T14) for the
+                     # capture witness before the route is promoted.
+                     "PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC"):
             value = os.environ.get(name, "0")
             if value not in ("0", "1"):
                 raise SystemExit(f"{name} must be 0 or 1")

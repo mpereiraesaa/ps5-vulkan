@@ -47,6 +47,7 @@ static int ring_get(void *unused,uint64_t *address,uint32_t *size)
 static int ring_set(void *unused,uint64_t address,uint32_t size)
 { (void)unused;return sceAgcDriverSetTFRing(address,size); }
 #include "tess_offchip_lease.h"
+#include "xfb_ps5.h"
 extern int32_t sceAgcDriverSetHsOffchipParam(uint16_t,uint16_t);
 static int offchip_get(void *unused,uint16_t *a,uint16_t *b)
 { (void)unused;return sceAgcDriverGetHsOffchipParam(a,b); }
@@ -110,6 +111,14 @@ struct graphics_job {
      * can block until the colour block has CONFIRMED its writeback: see
      * ps5vk_graphics_color_to_texture_wait in src/graphics_sync.c. */
     unsigned barrier_tokens;
+    /* Transform feedback sessions (DXVK262-T14, native/xfb_ps5.h): one
+     * block of PS5VK_XFB_SESSION_BYTES per BEGIN plus the idle session 0, in
+     * the address32_hi window the capture program's table pointer needs. */
+    struct {
+        void *address, *backing;
+        struct ps5vk_memory_backend memory;
+        unsigned sessions, used;
+    } xfb;
     uint64_t serial, start;
     VkImage color;
     /* The targets this submission reads back after exact completion: one for
@@ -142,6 +151,7 @@ static void release(VkDevice d,void *opaque)
     if(j->query_arena_active && ps5vk_command_arena_release(&j->query_arena)!=VK_SUCCESS)
         retain("query-arena-release");
     if(ps5vk_draw_batch_release(&j->chain)!=VK_SUCCESS)retain("command-release");
+    if(j->xfb.backing)j->xfb.memory.release(j->xfb.memory.context,j->xfb.backing);
     for(unsigned i=0;i<j->count;++i)ps5vk_native_release_draw(&j->draws[i]);
     for(unsigned i=0;i<j->resolve_count;++i) {
         ps5vk_native_release_draw(&j->resolve_draws[i]);
@@ -833,7 +843,8 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         }
         if(op->type!=PS5VK_DRAW && op->type!=PS5VK_DRAW_INDEXED &&
            !ps5vk_indirect_graphics_operation(op->type) &&
-           op->type!=PS5VK_QUERY_BEGIN && op->type!=PS5VK_QUERY_END)
+           op->type!=PS5VK_QUERY_BEGIN && op->type!=PS5VK_QUERY_END &&
+           op->type!=PS5VK_TRANSFORM_FEEDBACK_BEGIN && op->type!=PS5VK_TRANSFORM_FEEDBACK_END)
             {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
         if(body_count==PS5VK_MAX_OPERATIONS){rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
         body[body_count++]=op;
@@ -862,6 +873,34 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             (size_t)PS5VK_QUERY_SLOTS*PS5VK_QUERY_SLOT_BYTES);
         cache(j->query_arena.address,
             (size_t)PS5VK_QUERY_SLOTS*PS5VK_QUERY_SLOT_BYTES);
+    }
+    /* Transform feedback: one session per BEGIN and the idle one, allocated
+     * whenever the pass begins a capture or draws with a capture pipeline. */
+    {
+        unsigned begins=0,capture_draws=0;
+        for(unsigned i=0;i<body_count;++i) {
+            if(body[i]->type==PS5VK_TRANSFORM_FEEDBACK_BEGIN)++begins;
+            else if(body[i]->pipeline && body[i]->pipeline->xfb.buffers_mask)++capture_draws;
+        }
+        if(begins || capture_draws) {
+            phase="xfb-sessions";
+            const size_t bytes=(size_t)(begins+1u)*PS5VK_XFB_SESSION_BYTES;
+            void *address=NULL;
+            j->xfb.memory=d->memory;
+            rc=d->memory.allocate(d->memory.context,bytes,&address,&j->xfb.backing);
+            if(rc!=VK_SUCCESS){j->xfb.backing=NULL;draw_site=__LINE__;goto fail;}
+            const uint64_t base=(uintptr_t)address;
+            if(!address || (base&255u) || (base>>32)!=2u ||
+               ((base+bytes-1u)>>32)!=2u){rc=VK_ERROR_MEMORY_MAP_FAILED;draw_site=__LINE__;goto fail;}
+            memset(address,0,bytes);
+            j->xfb.address=address;j->xfb.sessions=begins+1u;j->xfb.used=0;
+            /* Session 0: four null records and a scratch control block. */
+            const uint64_t zero_address[4]={0};const uint32_t zero_bytes[4]={0};
+            if(!ps5vk_xfb_table((uint32_t *)((uint8_t *)address+PS5VK_XFB_TABLE_OFFSET),
+                    zero_address,zero_bytes,base+PS5VK_XFB_CONTROL_OFFSET))
+                {rc=VK_ERROR_UNKNOWN;draw_site=__LINE__;goto fail;}
+            cache(address,bytes);
+        }
     }
     PHASE("command-arena");
     rc=ps5vk_draw_batch_open(&j->chain,j->serial);
@@ -1125,8 +1164,81 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
 #endif
     uint32_t subpass_index=0;
     int active_query_slot=-1;
+    unsigned xfb_session=0;
     for(unsigned i=0;i<body_count;++i) {
         const struct ps5vk_operation *recorded=body[i];
+        if(recorded->type==PS5VK_TRANSFORM_FEEDBACK_BEGIN) {
+            /* A new session: the table records the bound ranges, the control
+             * block starts at zero, and each named counter's value is copied
+             * into its buffer offset before any draw of the session runs. */
+            if(xfb_session || recorded->subpass!=subpass_index ||
+               j->xfb.used+1u>=j->xfb.sessions){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=40;goto fail;}
+            xfb_session=++j->xfb.used;
+            uint8_t *session=(uint8_t *)j->xfb.address+(size_t)xfb_session*PS5VK_XFB_SESSION_BYTES;
+            const uint64_t control=(uintptr_t)session+PS5VK_XFB_CONTROL_OFFSET;
+            uint64_t address[4]={0};uint32_t bytes[4]={0};
+            for(unsigned b=0;b<4;++b) {
+                const struct ps5vk_xfb_range *r=&recorded->xfb.buffers[b];
+                void *host;VkDeviceSize span;
+                if(!r->buffer)continue;
+                if(ps5vk_buffer_span(d,r->buffer,r->offset,r->size,&host,&span)!=VK_SUCCESS ||
+                   span!=r->size || span>UINT32_MAX){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=41;goto fail;}
+                address[b]=(uintptr_t)host;bytes[b]=(uint32_t)span;
+            }
+            if(!ps5vk_xfb_table((uint32_t *)(session+PS5VK_XFB_TABLE_OFFSET),address,bytes,control))
+                {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=42;goto fail;}
+            cache(session,PS5VK_XFB_SESSION_BYTES);
+            BATCH_RESERVE(4u*PS5VK_XFB_DMA_WORDS+PS5VK_GRAPHICS_ACQUIRE_WORDS);
+            unsigned copies=0;
+            for(unsigned b=0;b<4;++b) {
+                const struct ps5vk_xfb_range *r=&recorded->xfb.counters[b];
+                void *host;VkDeviceSize span;
+                if(!r->buffer)continue;
+                if(ps5vk_buffer_span(d,r->buffer,r->offset,4u,&host,&span)!=VK_SUCCESS ||
+                   !ps5vk_xfb_copy_dword(cursor,(uintptr_t)host,control+4u*b))
+                    {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=43;goto fail;}
+                cursor+=PS5VK_XFB_DMA_WORDS;++copies;
+            }
+            if(copies) {
+                size_t n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=44;goto fail;}cursor+=n;
+            }
+            ps5log_printf(PS5LOG_MARK,
+                "PS5VK_XFB_BEGIN serial=%llu session=%u table=%llx buffers=%u,%u,%u,%u counters=%u",
+                (unsigned long long)j->serial,xfb_session,
+                (unsigned long long)(uintptr_t)(session+PS5VK_XFB_TABLE_OFFSET),
+                bytes[0],bytes[1],bytes[2],bytes[3],copies);
+            continue;
+        }
+        if(recorded->type==PS5VK_TRANSFORM_FEEDBACK_END) {
+            /* Every capture of the session has landed in L2 before its byte
+             * offsets are copied out: wait for the whole pipeline on a label
+             * word, as the depth clear does, then copy each named counter. */
+            if(!xfb_session || recorded->subpass!=subpass_index)
+                {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=45;goto fail;}
+            const uint64_t control=(uintptr_t)j->xfb.address+
+                (size_t)xfb_session*PS5VK_XFB_SESSION_BYTES+PS5VK_XFB_CONTROL_OFFSET;
+            BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u+4u*PS5VK_XFB_DMA_WORDS);
+            size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
+                (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),i+1u);
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=46;goto fail;}cursor+=n;
+            n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=46;goto fail;}cursor+=n;
+            unsigned copies=0;
+            for(unsigned b=0;b<4;++b) {
+                const struct ps5vk_xfb_range *r=&recorded->xfb.counters[b];
+                void *host;VkDeviceSize span;
+                if(!r->buffer)continue;
+                if(ps5vk_buffer_span(d,r->buffer,r->offset,4u,&host,&span)!=VK_SUCCESS ||
+                   !ps5vk_xfb_copy_dword(cursor,control+4u*b,(uintptr_t)host))
+                    {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=47;goto fail;}
+                cursor+=PS5VK_XFB_DMA_WORDS;++copies;
+            }
+            ps5log_printf(PS5LOG_MARK,"PS5VK_XFB_END serial=%llu session=%u counters=%u",
+                (unsigned long long)j->serial,xfb_session,copies);
+            xfb_session=0;
+            continue;
+        }
         if(recorded->type==PS5VK_QUERY_BEGIN) {
             if(active_query_slot>=0 || j->query_count>=PS5VK_QUERY_SLOTS ||
                recorded->query_count!=1 || !recorded->query_pool ||
@@ -1496,6 +1608,16 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             draw_site=31;goto fail;
         }
         ++j->count;
+        /* A capture program reads its table pointer from user data on every
+         * draw: the active session's table, or the idle session's null
+         * records when capture is not active. The pipeline and its compiled
+         * program must agree that it captures. */
+        if(!!op->pipeline->xfb.buffers_mask!=!!p->pair->runtime_arguments.streamout_valid ||
+           (p->pair->runtime_arguments.streamout_valid && !j->xfb.address))
+            {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=48;goto fail;}
+        if(p->pair->runtime_arguments.streamout_valid)
+            draw->state->runtime.streamout_low=(uint32_t)((uintptr_t)j->xfb.address+
+                (size_t)xfb_session*PS5VK_XFB_SESSION_BYTES+PS5VK_XFB_TABLE_OFFSET);
 #if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 4
         if(j->serial==17 && draw->vertex_table && vertex_usage==1u &&
            op->type==PS5VK_DRAW && op->vertex_count==80u &&
