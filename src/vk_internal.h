@@ -202,6 +202,16 @@ enum ps5vk_t09_feature_bits {
      * recording of descriptor writes. Enumerated only when the platform sets
      * it, which the shipping platform does not yet. */
     PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE = 1u << 15,
+
+    /* DXVK first-draw recording routes (T10 minus synchronization2). Bits
+     * 16 and up so concurrent T09-T13 slices can take 7..15 without a
+     * collision. Each is an unadvertised platform capability until a native
+     * witness proves it; the shipping platform leaves it clear. */
+    /* VK_EXT_extended_dynamic_state: the per-draw fixed-function snapshot
+     * (viewport/scissor with count, cull mode, front face, depth and stencil
+     * test state). Dynamic primitive topology and vertex binding stride are
+     * not executed yet, so pipelines declaring them stay refused. */
+    PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE = 1u << 16,
 };
 
 /* robust{Storage,Uniform}BufferAccessSizeAlignment. GFX10 raw buffer records
@@ -400,6 +410,11 @@ struct VkDevice_T {
     VkBool32 bind_memory2_extension_enabled;
     /* VK_KHR_maintenance4 was enabled: vkGetDevice*MemoryRequirementsKHR. */
     VkBool32 maintenance4_extension_enabled;
+    /* VK_EXT_extended_dynamic_state: the extension (which exposes its
+     * commands) and its extendedDynamicState feature (which lets the setters
+     * record and pipelines declare its dynamic states). */
+    VkBool32 extended_dynamic_state_extension_enabled;
+    VkBool32 extended_dynamic_state_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the

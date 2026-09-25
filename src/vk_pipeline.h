@@ -71,6 +71,36 @@ struct ps5vk_raster_state {
      * attachment with a stencil aspect enables it. */
     VkBool32 stencil_test;
     VkStencilOpState stencil_front, stencil_back;
+    /* VK_EXT_extended_dynamic_state. When fixed_function_resolved is set the
+     * recorder resolved the cull mode, front face and depth test state below
+     * (the pipeline's static value, or the command buffer's dynamic one) and
+     * the native encoder reads them from here. A zero-initialized snapshot
+     * leaves it clear, and the encoder then reads the pipeline's static
+     * values exactly as before the extension existed. */
+    VkBool32 fixed_function_resolved;
+    VkCullModeFlags cull_mode;
+    VkFrontFace front_face;
+    VkBool32 depth_test, depth_write;
+    VkCompareOp depth_compare;
+};
+/* The VK_EXT_extended_dynamic_state states a pipeline may declare, as one
+ * mask on the pipeline and one "set since reset" mask on the command buffer.
+ * PRIMITIVE_TOPOLOGY and VERTEX_INPUT_BINDING_STRIDE have no bit: the topology
+ * and the binding stride are compiled into the native program, so a pipeline
+ * declaring either stays refused. DEPTH_BOUNDS_TEST_ENABLE is accepted because
+ * this profile's only depth-bounds state is "disabled", which the draw
+ * enforces. */
+enum {
+    PS5VK_EDS_VIEWPORT_WITH_COUNT = 1u << 0,
+    PS5VK_EDS_SCISSOR_WITH_COUNT = 1u << 1,
+    PS5VK_EDS_CULL_MODE = 1u << 2,
+    PS5VK_EDS_FRONT_FACE = 1u << 3,
+    PS5VK_EDS_DEPTH_TEST_ENABLE = 1u << 4,
+    PS5VK_EDS_DEPTH_WRITE_ENABLE = 1u << 5,
+    PS5VK_EDS_DEPTH_COMPARE_OP = 1u << 6,
+    PS5VK_EDS_DEPTH_BOUNDS_TEST_ENABLE = 1u << 7,
+    PS5VK_EDS_STENCIL_TEST_ENABLE = 1u << 8,
+    PS5VK_EDS_STENCIL_OP = 1u << 9,
 };
 struct VkPipeline_T {
     VkDevice device;
@@ -126,6 +156,11 @@ struct VkPipeline_T {
         dynamic_stencil_reference;
     VkCullModeFlags cull_mode;
     VkFrontFace front_face;
+    /* PS5VK_EDS_* states this pipeline declared dynamic. With
+     * VIEWPORT_WITH_COUNT/SCISSOR_WITH_COUNT (always declared together here)
+     * viewport_count is zero and the draw takes the count, the viewports and
+     * the scissors from the command buffer. */
+    uint32_t dynamic_eds;
     /* Input-assembly state, not a shader capability: the fixed-function front
      * end cuts a strip where an index matches the reset index. Accepted for the
      * strip topologies this profile carries and refused everywhere else. */

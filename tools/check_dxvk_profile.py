@@ -460,6 +460,9 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE"},
         "VK_EXT_ROBUSTNESS_2_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2", "PS5VK_T09_FEATURE_NULL_DESCRIPTOR"},
+        # DXVK262-T10 recording routes, unadvertised until a native witness.
+        "VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE"},
 
     }
     unmapped = sorted(tokens - gates.keys())
