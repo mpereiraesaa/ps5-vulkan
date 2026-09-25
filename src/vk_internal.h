@@ -412,6 +412,11 @@ struct VkDevice_T {
      * tests that hand-build a zeroed device rely on the host C library, where
      * an all-zero mutex is the default static initializer. */
     pthread_mutex_t queue_lock;
+    /* The inlineUniformBlock feature was enabled on this device. Descriptor
+     * set layouts and pools accept VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK
+     * only then. vkCreateDevice never sets it while the feature is
+     * unreported (DXVK262-T12). */
+    VkBool32 inline_uniform_block_enabled;
 };
 
 void ps5vk_device_enable_runtime_compiler(VkDevice device);

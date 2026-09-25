@@ -50,6 +50,55 @@ static int indices(VkDescriptorSet set, uint32_t binding, uint32_t element,
     return set && signature_indices(&set->signature, binding, element, count, out);
 }
 
+/* Byte range [offset, offset + bytes) inside one inline block. Offsets and
+ * sizes are multiples of four (VUID-VkWriteDescriptorSet-descriptorType-02219
+ * and -02220, VkCopyDescriptorSet -02223/-02224/-02225). A range that would
+ * continue into the next binding is refused: that consecutive-binding
+ * rollover is not implemented for inline blocks. */
+static VkBool32 inline_range(VkDescriptorSet set, uint32_t binding, uint32_t offset,
+                             uint32_t bytes)
+{
+    if (binding >= PS5VK_MAX_BINDINGS ||
+        set->signature.type[binding] != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ||
+        !bytes || (offset | bytes) % 4u) return VK_FALSE;
+    uint32_t size = set->inline_uniform.bytes[binding];
+    return offset < size && bytes <= size - offset;
+}
+
+static VkBool32 inline_write(VkDevice d, const VkWriteDescriptorSet *w)
+{
+    const VkWriteDescriptorSetInlineUniformBlock *data = w->pNext;
+    if (!data || data->sType != VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK ||
+        data->pNext || !data->pData || data->dataSize != w->descriptorCount ||
+        !inline_range(w->dstSet, w->dstBinding, w->dstArrayElement, w->descriptorCount))
+        return VK_FALSE;
+    if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_DESCRIPTOR_SET, w->dstSet))
+        return VK_FALSE;
+    VkDescriptorSet set = w->dstSet;
+    memcpy(set->inline_data + set->inline_uniform.offset[w->dstBinding] + w->dstArrayElement,
+           data->pData, w->descriptorCount);
+    set->defined[set->signature.binding[w->dstBinding].first] = VK_TRUE;
+    ++set->generation;
+    return VK_TRUE;
+}
+
+static VkBool32 inline_copy(VkDevice d, const VkCopyDescriptorSet *c)
+{
+    if (!inline_range(c->srcSet, c->srcBinding, c->srcArrayElement, c->descriptorCount) ||
+        !inline_range(c->dstSet, c->dstBinding, c->dstArrayElement, c->descriptorCount))
+        return VK_FALSE;
+    if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_DESCRIPTOR_SET, c->dstSet))
+        return VK_FALSE;
+    memmove(c->dstSet->inline_data + c->dstSet->inline_uniform.offset[c->dstBinding] +
+                c->dstArrayElement,
+            c->srcSet->inline_data + c->srcSet->inline_uniform.offset[c->srcBinding] +
+                c->srcArrayElement, c->descriptorCount);
+    if (c->srcSet->defined[c->srcSet->signature.binding[c->srcBinding].first])
+        c->dstSet->defined[c->dstSet->signature.binding[c->dstBinding].first] = VK_TRUE;
+    ++c->dstSet->generation;
+    return VK_TRUE;
+}
+
 VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_count,
     const VkWriteDescriptorSet *writes, uint32_t copy_count, const VkCopyDescriptorSet *copies)
 {
@@ -57,6 +106,13 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
     if ((write_count && !writes) || (copy_count && !copies)) { ++d->lifetime_errors; return; }
     for (uint32_t j = 0; j < write_count; ++j) {
         const VkWriteDescriptorSet *w = &writes[j];
+        if (w->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+            if (w->sType != VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET || !w->dstSet ||
+                w->dstSet->pool->device != d || w->dstSet->pending || !inline_write(d, w)) {
+                ++d->lifetime_errors; return;
+            }
+            continue;
+        }
         VkBool32 input=w->descriptorType==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
         VkBool32 storage_image=w->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         VkBool32 sampler=w->descriptorType==VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -163,6 +219,15 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
     for (uint32_t j = 0; j < copy_count; ++j) {
         const VkCopyDescriptorSet *c = &copies[j];
         uint32_t src[PS5VK_MAX_DESCRIPTORS], dst[PS5VK_MAX_DESCRIPTORS];
+        if (c->sType == VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET && !c->pNext &&
+            c->srcSet && c->dstSet && c->srcBinding < PS5VK_MAX_BINDINGS &&
+            c->srcSet->signature.type[c->srcBinding] == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+            if (c->srcSet->pool->device != d || c->dstSet->pool->device != d ||
+                c->dstSet->pending || !inline_copy(d, c)) {
+                ++d->lifetime_errors; return;
+            }
+            continue;
+        }
         if (c->sType != VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET || c->pNext ||
             !c->srcSet || !c->dstSet || c->srcSet->pool->device != d ||
             c->dstSet->pool->device != d || c->dstSet->pending ||
@@ -205,12 +270,33 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
     if (info->pNext || info->flags || info->bindingCount > PS5VK_MAX_BINDINGS)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_set_signature signature = {0};
+    struct ps5vk_inline_uniform_layout inline_uniform = {0};
     VkBool32 seen[PS5VK_MAX_BINDINGS] = {0};
     for (uint32_t j = 0; j < info->bindingCount; ++j) {
         const VkDescriptorSetLayoutBinding *b = &info->pBindings[j];
         if (b->binding >= PS5VK_MAX_BINDINGS) return VK_ERROR_FEATURE_NOT_PRESENT;
         if (seen[b->binding]) return INVALID;
         seen[b->binding] = VK_TRUE;
+        if (b->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+            /* descriptorCount is the block's byte size (VUID-02209: a
+             * multiple of four). pImmutableSamplers is ignored for this type.
+             * The block takes one signature slot and bytes of set storage. */
+            if (!d->inline_uniform_block_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (!b->descriptorCount) continue;
+            if (b->descriptorCount % 4u || !valid_descriptor_stages(b->stageFlags))
+                return INVALID;
+            if (b->descriptorCount > PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES ||
+                inline_uniform.blocks == PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET ||
+                signature.count == PS5VK_MAX_DESCRIPTORS)
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            inline_uniform.bytes[b->binding] = b->descriptorCount;
+            ++inline_uniform.blocks;
+            signature.binding[b->binding].count = 1;
+            signature.type[b->binding] = b->descriptorType;
+            signature.binding[b->binding].stages = b->stageFlags;
+            ++signature.count;
+            continue;
+        }
         VkBool32 input=b->descriptorType==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
         VkBool32 storage_image=b->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         VkBool32 sampled_image=b->descriptorType==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
@@ -262,12 +348,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
     for (unsigned j = 0; j < PS5VK_MAX_BINDINGS; ++j) {
         signature.binding[j].first = offset;
         offset += signature.binding[j].count;
+        inline_uniform.offset[j] = inline_uniform.total_bytes;
+        inline_uniform.total_bytes += inline_uniform.bytes[j];
     }
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkDescriptorSetLayout layout = alloc(d, a, sizeof(*layout), &saved, &custom);
     if (!layout) return VK_ERROR_OUT_OF_HOST_MEMORY;
     layout->device = d; layout->allocator = saved; layout->custom_allocator = custom;
-    layout->signature = signature; ++d->descriptor_objects; *out = layout;
+    layout->signature = signature; layout->inline_uniform = inline_uniform;
+    ++d->descriptor_objects; *out = layout;
     return VK_SUCCESS;
 }
 VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorSetLayout(VkDevice d, VkDescriptorSetLayout layout,
@@ -286,14 +375,31 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(VkDevice d,
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO ||
         !info->maxSets || (info->poolSizeCount && !info->pPoolSizes)) return INVALID;
-    if (info->pNext || (info->flags & ~VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT))
+    if (info->flags & ~VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint64_t inline_bindings_capacity=0;
+    if (info->pNext) {
+        /* The only accepted extension sizes the pool's inline-block bindings. */
+        const VkDescriptorPoolInlineUniformBlockCreateInfo *inline_info = info->pNext;
+        if (!d->inline_uniform_block_enabled ||
+            inline_info->sType != VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO ||
+            inline_info->pNext)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        inline_bindings_capacity = inline_info->maxInlineUniformBlockBindings;
+    }
     uint64_t storage_capacity=0,uniform_capacity=0,dynamic_storage_capacity=0,
         dynamic_uniform_capacity=0,texel_capacity=0,image_capacity=0,input_capacity=0,
         storage_image_capacity=0,sampler_capacity=0,sampled_image_capacity=0,
-        storage_texel_capacity=0;
+        storage_texel_capacity=0,inline_bytes_capacity=0;
     for (uint32_t j = 0; j < info->poolSizeCount; ++j) {
         const VkDescriptorPoolSize *size=&info->pPoolSizes[j];
+        if (size->type==VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+            /* descriptorCount is a byte count (VUID-02218: a multiple of 4). */
+            if (!d->inline_uniform_block_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (!size->descriptorCount || size->descriptorCount % 4u) return INVALID;
+            inline_bytes_capacity += size->descriptorCount;
+            continue;
+        }
         uint64_t *capacity=size->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE?&storage_image_capacity:
             size->type==VK_DESCRIPTOR_TYPE_SAMPLER?&sampler_capacity:
             size->type==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE?&sampled_image_capacity:
@@ -331,6 +437,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(VkDevice d,
     pool->sampler_capacity=sampler_capacity;
     pool->sampled_image_capacity=sampled_image_capacity;
     pool->storage_texel_capacity=storage_texel_capacity;
+    pool->inline_bytes_capacity=inline_bytes_capacity;
+    pool->inline_bindings_capacity=inline_bindings_capacity;
     ++d->descriptor_objects; *out = pool;
     return VK_SUCCESS;
 }
@@ -357,6 +465,8 @@ static void free_set(VkDescriptorPool pool, VkDescriptorSet set)
         default: break;
         }
     }
+    pool->inline_bytes_used-=set->inline_uniform.total_bytes;
+    pool->inline_bindings_used-=set->inline_uniform.blocks;
     ps5vk_object_free(set, &pool->allocator, pool->custom_allocator);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkResetDescriptorPool(VkDevice d, VkDescriptorPool pool,
@@ -393,10 +503,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
         return VK_ERROR_OUT_OF_POOL_MEMORY;
     uint64_t storage_needed=0,uniform_needed=0,dynamic_storage_needed=0,
         dynamic_uniform_needed=0,texel_needed=0,image_needed=0,input_needed=0,
-        storage_image_needed=0,sampler_needed=0,sampled_image_needed=0,storage_texel_needed=0;
+        storage_image_needed=0,sampler_needed=0,sampled_image_needed=0,storage_texel_needed=0,
+        inline_bytes_needed=0,inline_bindings_needed=0;
     for (uint32_t j = 0; j < info->descriptorSetCount; ++j) {
         VkDescriptorSetLayout layout = info->pSetLayouts[j];
         if (!layout || layout->device != d) return INVALID;
+        inline_bytes_needed+=layout->inline_uniform.total_bytes;
+        inline_bindings_needed+=layout->inline_uniform.blocks;
         for(unsigned k=0;k<PS5VK_MAX_BINDINGS;++k) {
             uint32_t count=layout->signature.binding[k].count;
             switch(layout->signature.type[k]) {
@@ -411,6 +524,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
             case VK_DESCRIPTOR_TYPE_SAMPLER: sampler_needed+=count;break;
             case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: sampled_image_needed+=count;break;
             case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: storage_texel_needed+=count;break;
+            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK: break;
             default: if(count)return INVALID;
             }
         }
@@ -425,7 +539,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
         storage_image_needed>pool->storage_image_capacity-pool->storage_image_used ||
         sampler_needed>pool->sampler_capacity-pool->sampler_used ||
         sampled_image_needed>pool->sampled_image_capacity-pool->sampled_image_used ||
-        storage_texel_needed>pool->storage_texel_capacity-pool->storage_texel_used)
+        storage_texel_needed>pool->storage_texel_capacity-pool->storage_texel_used ||
+        inline_bytes_needed>pool->inline_bytes_capacity-pool->inline_bytes_used ||
+        inline_bindings_needed>pool->inline_bindings_capacity-pool->inline_bindings_used)
         return VK_ERROR_OUT_OF_POOL_MEMORY;
     VkDescriptorSet pending = NULL;
     for (uint32_t j = 0; j < info->descriptorSetCount; ++j) {
@@ -443,6 +559,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
             return VK_ERROR_OUT_OF_HOST_MEMORY;
         }
         set->pool = pool; set->signature = info->pSetLayouts[j]->signature;
+        set->inline_uniform = info->pSetLayouts[j]->inline_uniform;
         set->generation = 1; set->next = pending; pending = set; out[j] = set;
     }
     while (pending) {
@@ -458,6 +575,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
     pool->sampler_used+=sampler_needed;
     pool->sampled_image_used+=sampled_image_needed;
     pool->storage_texel_used+=storage_texel_needed;
+    pool->inline_bytes_used+=inline_bytes_needed;
+    pool->inline_bindings_used+=inline_bindings_needed;
     pool->used_sets += info->descriptorSetCount;
     return VK_SUCCESS;
 }
@@ -488,6 +607,28 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(VkDevice d,
     if (info->pushConstantRangeCount && !info->pPushConstantRanges) return INVALID;
     for (uint32_t j = 0; j < info->setLayoutCount; ++j)
         if (!info->pSetLayouts[j] || info->pSetLayouts[j]->device != d) return INVALID;
+    /* maxInlineUniformTotalSize and maxPerStageDescriptorInlineUniformBlocks
+     * bound the whole pipeline layout, across its sets. */
+    static const VkShaderStageFlagBits inline_stages[] = {
+        VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, VK_SHADER_STAGE_GEOMETRY_BIT,
+        VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_COMPUTE_BIT};
+    uint32_t inline_bytes = 0, inline_per_stage[6] = {0};
+    for (uint32_t j = 0; j < info->setLayoutCount; ++j) {
+        const VkDescriptorSetLayout set = info->pSetLayouts[j];
+        inline_bytes += set->inline_uniform.total_bytes;
+        for (unsigned b = 0; b < PS5VK_MAX_BINDINGS; ++b) {
+            if (!set->inline_uniform.bytes[b]) continue;
+            for (unsigned s = 0; s < 6; ++s)
+                if (set->signature.binding[b].stages & inline_stages[s])
+                    ++inline_per_stage[s];
+        }
+    }
+    if (inline_bytes > PS5VK_MAX_INLINE_UNIFORM_TOTAL_BYTES)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    for (unsigned s = 0; s < 6; ++s)
+        if (inline_per_stage[s] > PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_STAGE)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkPipelineLayout layout = alloc(d, a, sizeof(*layout), &saved, &custom);
     if (!layout) return VK_ERROR_OUT_OF_HOST_MEMORY;
