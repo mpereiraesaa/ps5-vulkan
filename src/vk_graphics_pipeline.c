@@ -414,7 +414,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         const VkViewport *viewport=&vp->pViewports[i]; const VkRect2D *scissor=&vp->pScissors[i];
         if ((!dynamic_viewport && (!finite_float(viewport->x) || !finite_float(viewport->y) ||
             !finite_float(viewport->width) || !finite_float(viewport->height) ||
-            !(viewport->width > 0) || !(viewport->height > 0) ||
+            !(viewport->width > 0) ||
+            /* VK_KHR_maintenance1 permits a negative height. */
+            !(viewport->height > 0 ||
+              (d->maintenance1_extension_enabled && viewport->height < 0)) ||
             !(viewport->minDepth >= 0 && viewport->minDepth <= 1) ||
             !(viewport->maxDepth >= 0 && viewport->maxDepth <= 1))) ||
             (!dynamic_scissor && (scissor->offset.x < 0 || scissor->offset.y < 0 ||

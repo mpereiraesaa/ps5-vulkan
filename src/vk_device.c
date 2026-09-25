@@ -538,6 +538,11 @@ static VkBool32 maintenance4_supported(VkPhysicalDevice p)
  * platform capability until its native witness promotes it. Each pinned
  * registry entry depends on VK_KHR_get_physical_device_properties2 (or Vulkan
  * 1.1, which this 1.0 profile is not); vkCreateDevice enforces that. */
+/* VK_KHR_maintenance1 has no registry dependency. */
+static VkBool32 maintenance1_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE1) != 0;
+}
 static VkBool32 extended_dynamic_state_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE) != 0;
@@ -841,16 +846,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Twenty-five conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Twenty-six conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
      * helper invocation, terminate invocation, get_memory_requirements2,
      * dedicated_allocation, bind_memory2, maintenance4, descriptor update
-     * template, robustness2, extended dynamic state). Keep headroom so a new
-     * entry cannot overflow the array before this bound is revisited; each push
-     * site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 25, DEVICE_EXTENSION_SLOTS = 28 };
+     * template, robustness2, extended dynamic state, maintenance1). Keep
+     * headroom so a new entry cannot overflow the array before this bound is
+     * revisited; each push site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 26, DEVICE_EXTENSION_SLOTS = 32 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -979,6 +984,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
             VK_EXT_EXTENDED_DYNAMIC_STATE_SPEC_VERSION};
     }
+    if (maintenance1_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_MAINTENANCE_1_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -1023,6 +1032,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 descriptor_update_template_extension = VK_FALSE;
     /* DXVK262-T10 recording routes. */
     VkBool32 extended_dynamic_state_extension = VK_FALSE;
+    VkBool32 maintenance1_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -1080,6 +1090,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &descriptor_update_template_extension;
         else if (!strcmp(name, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME))
             seen = &extended_dynamic_state_extension;
+        else if (!strcmp(name, VK_KHR_MAINTENANCE_1_EXTENSION_NAME))
+            seen = &maintenance1_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1176,6 +1188,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (extended_dynamic_state_extension &&
         (!extended_dynamic_state_supported(p) || !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (maintenance1_extension && !maintenance1_supported(p))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
@@ -1543,6 +1557,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->descriptor_update_template_extension_enabled = descriptor_update_template_extension;
     d->extended_dynamic_state_extension_enabled = extended_dynamic_state_extension;
     d->extended_dynamic_state_enabled = extended_dynamic_state;
+    d->maintenance1_extension_enabled = maintenance1_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

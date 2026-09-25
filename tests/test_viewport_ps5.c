@@ -16,8 +16,22 @@ int main(void)
     s.offset.x = 200;
     assert(ps5vk_native_viewport(&v, &s, &area, r) == VK_SUCCESS);
     assert((r[8].value & 0x7fff) == (r[9].value & 0x7fff));
+    /* VK_KHR_maintenance1 y-flip: the D3D-style viewport DXVK always sets,
+     * y = H, height = -H, maps NDC y=-1 to row H and y=+1 to row 0. */
     v.height = -200;
-    assert(ps5vk_native_viewport(&v, &s, &area, r) != VK_SUCCESS && !r[0].value);
+    assert(ps5vk_native_viewport(&v, &s, &area, r) == VK_SUCCESS);
+    assert(value(r[2]) == -100 && value(r[3]) == -70);
+    {
+        const VkViewport dxvk = {0, 64, 64, -64, 0, 1};
+        const VkRect2D all = {{0, 0}, {64, 64}};
+        assert(ps5vk_native_viewport(&dxvk, &all, &all, r) == VK_SUCCESS);
+        assert(value(r[0]) == 32 && value(r[1]) == 32 && value(r[2]) == -32 && value(r[3]) == 32);
+        assert(r[8].value == 0x80000000u && r[9].value == (64u | (64u << 16)));
+        const VkViewport below = {0, -32760, 64, -64, 0, 1};
+        assert(ps5vk_native_viewport(&below, &all, &all, r) != VK_SUCCESS);
+        const VkViewport huge = {0, 20000, 64, -16385, 0, 1};
+        assert(ps5vk_native_viewport(&huge, &all, &all, r) != VK_SUCCESS);
+    }
     v.height = NAN;
     assert(ps5vk_native_viewport(&v, &s, &area, r) != VK_SUCCESS);
     v.height = 200; s.extent.width = UINT32_MAX;

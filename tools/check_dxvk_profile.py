@@ -463,6 +463,7 @@ def implemented_device_extensions() -> set[str]:
         # DXVK262-T10 recording routes, unadvertised until a native witness.
         "VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE"},
+        "VK_KHR_MAINTENANCE_1_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE1"},
 
     }
     unmapped = sorted(tokens - gates.keys())

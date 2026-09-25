@@ -444,6 +444,8 @@ check:
 	./build/tests/test_cts_draw_case_trace
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tests/test_dxvk_render_eds.c -o build/tests/test_dxvk_render_eds
 	./build/tests/test_dxvk_render_eds
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tests/test_dxvk_maintenance1.c -o build/tests/test_dxvk_maintenance1
+	./build/tests/test_dxvk_maintenance1
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_render_pass_initialization_trace.c -o build/tests/test_render_pass_initialization_trace
 	./build/tests/test_render_pass_initialization_trace
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_indirect_queue.c -o build/tests/test_indirect_queue
