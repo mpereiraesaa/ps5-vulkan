@@ -40,7 +40,7 @@ DEPS = [
         # PR 29 lowers compute LocalInvocationIndex and NumSubgroups from the
         # local invocation IDs: TG_SIZE, which ACO read them from, is not
         # populated by the PS5 compute dispatch.
-        "pin": "bc2be980a151acec1a30fde6d9e2508ec5eef9b7",
+        "pin": "d153f7bdedf9ee76a5f08079e23a8ce6a04c9b73",
     },
     {
         "name": "opengnm",
