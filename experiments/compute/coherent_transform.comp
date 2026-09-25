@@ -1,0 +1,14 @@
+#version 450
+// Coherent-memory witness: the GPU reads host-written words and writes a
+// transform of them. With split set, only the first half of every 64-byte
+// line is written, so the host can own the other half concurrently.
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) readonly buffer Source { uint values[]; } src;
+layout(set = 0, binding = 1, std430) writeonly buffer Destination { uint values[]; } dst;
+layout(push_constant) uniform Parameters { uint salt; uint split; } params;
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (params.split != 0u && (i & 15u) >= 8u) return;
+    dst.values[i] = (src.values[i] * 2654435761u) ^ (params.salt + i);
+}

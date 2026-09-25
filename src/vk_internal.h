@@ -41,6 +41,11 @@ struct ps5vk_memory_backend ps5vk_native_graphics_memory_backend(void);
 /* Resolve a direct-memory allocation's GPU virtual address. The host default
  * refuses this; native memory provides the address used by GPU descriptors. */
 VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out);
+/* HOST_COHERENT maintenance at queue boundaries: CPU writeback of every mapped
+ * coherent allocation before a GPU submission launches, CPU invalidate after
+ * its completion is observed. Both are no-ops without such an allocation. */
+VkResult ps5vk_coherent_host_writeback(VkDevice d);
+VkResult ps5vk_coherent_host_invalidate(VkDevice d);
 VkResult ps5vk_native_image_requirements(VkDevice, const VkImageCreateInfo *, VkMemoryRequirements *);
 /* Storage of one array layer of a color/depth attachment surface, and of a
  * whole layered attachment: stride == the per-layer footprint slice A measured,
@@ -178,6 +183,10 @@ enum ps5vk_t09_feature_bits {
     PS5VK_T09_FEATURE_DEDICATED_ALLOCATION = 1u << 10,
     /* VK_KHR_bind_memory2: vkBind{Buffer,Image}Memory2KHR. */
     PS5VK_T09_FEATURE_BIND_MEMORY2 = 1u << 11,
+    /* A second, HOST_COHERENT memory type whose coherence the driver keeps at
+     * map/unmap and submission boundaries (src/physical_device_profile.h).
+     * Only the diagnostic witness build sets it until native proof. */
+    PS5VK_T09_FEATURE_HOST_COHERENT_MEMORY = 1u << 13,
 };
 
 /* maxTimelineSemaphoreValueDifference, derived from the payload algorithm

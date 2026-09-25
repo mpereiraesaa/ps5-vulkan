@@ -343,6 +343,8 @@ def implemented_device_extensions() -> set[str]:
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
 
+        "PS5VK_HOST_COHERENT_DIAGNOSTIC",
+
     ):
         guard = f"#if defined({name}) && {name}"
         if guard in platform_source:

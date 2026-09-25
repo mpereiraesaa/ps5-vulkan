@@ -29,6 +29,9 @@ struct VkDeviceMemory_T {
     VkDeviceAddress gpu_address;
     VkBool32 device_address_allocation;
     VkBool32 mapped;
+    /* Allocated from the HOST_COHERENT type: the driver keeps the mapped
+     * range coherent at map/unmap and at every submission boundary. */
+    VkBool32 coherent;
     /* VK_KHR_dedicated_allocation: the one resource this allocation was made
      * for, or none. Such memory binds only that resource, at offset 0; it stays
      * dedicated (and unbindable) after that resource is destroyed. */
@@ -87,6 +90,17 @@ __attribute__((weak)) VkResult ps5vk_memory_backend_device_address(
     return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
+/* The profile's memory types: type 0, plus type 1 when the physical profile
+ * carries the driver-maintained HOST_COHERENT variant. A hand-built device
+ * without a physical device has type 0 only. */
+static uint32_t memory_type_count(VkDevice d)
+{
+    const VkPhysicalDeviceMemoryProperties *memory =
+        d->physical ? &d->physical->platform.memory_properties : NULL;
+    return memory && memory->memoryTypeCount == 2 &&
+        (memory->memoryTypes[1].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ? 2u : 1u;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
     const VkMemoryAllocateInfo *info, const VkAllocationCallbacks *allocator,
     VkDeviceMemory *out)
@@ -94,7 +108,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
     if (!out) return INVALID;
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO ||
-        !info->allocationSize || info->memoryTypeIndex != 0) return INVALID;
+        !info->allocationSize || info->memoryTypeIndex >= memory_type_count(d)) return INVALID;
     VkBool32 device_address_allocation = VK_FALSE;
     VkBool32 saw_flags = VK_FALSE, saw_capture = VK_FALSE, saw_dedicated = VK_FALSE;
     VkImage dedicated_image = VK_NULL_HANDLE;
@@ -186,6 +200,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
         m->gpu_address = gpu_address;
     }
     m->device = d; m->size = info->allocationSize;
+    m->coherent = info->memoryTypeIndex == 1;
     m->device_address_allocation = device_address_allocation;
     m->dedicated = dedicated_image || dedicated_buffer;
     m->dedicated_image = dedicated_image; m->dedicated_buffer = dedicated_buffer;
@@ -231,6 +246,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory(VkDevice d, VkDeviceMemory m,
     VkDeviceSize length;
     if (!d || !m || m->device != d || flags || m->mapped ||
         !range_in(m->size, offset, size, &length)) return VK_ERROR_MEMORY_MAP_FAILED;
+    /* Coherent memory: drop any CPU cache line left from an earlier mapping,
+     * so the first host read sees what the device last made available. */
+    if (m->coherent) {
+        VkResult result = d->memory.invalidate(d->memory.context, m->backing, offset, length);
+        if (result != VK_SUCCESS) return result;
+    }
     m->mapped = VK_TRUE; m->map_offset = offset; m->map_size = length;
     *out = (unsigned char *)m->address + offset;
     return VK_SUCCESS;
@@ -239,7 +260,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory(VkDevice d, VkDeviceMemory m,
 VKAPI_ATTR void VKAPI_CALL vkUnmapMemory(VkDevice d, VkDeviceMemory m)
 {
     if (!d || !m || m->device != d) return;
-    /* Unmapping is NOT an implicit noncoherent flush. */
+    /* Unmapping is NOT an implicit noncoherent flush. Coherent memory is
+     * written back here: host writes made before the unmap must reach the
+     * device without the queue seeing the range mapped. */
+    if (m->coherent && m->mapped)
+        (void)d->memory.flush(d->memory.context, m->backing, m->map_offset, m->map_size);
     m->mapped = VK_FALSE; m->map_offset = m->map_size = 0;
 }
 
@@ -390,8 +415,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements(VkDevice d, VkBuffer b,
 {
     if (!out) return;
     *out = (VkMemoryRequirements){0};
+    /* Buffers may live in either type; images stay on type 0. */
     if (d && b && b->device == d)
-        *out = (VkMemoryRequirements){b->required_size, d->buffer_alignment, 1};
+        *out = (VkMemoryRequirements){b->required_size, d->buffer_alignment,
+                                      (1u << memory_type_count(d)) - 1u};
 }
 static VkResult buffer_bind_check(VkDevice d, VkBuffer b, VkDeviceMemory m, VkDeviceSize offset)
 {
@@ -837,3 +864,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory2KHR(VkDevice d, uint32_t count,
         (void)vkBindImageMemory(d, infos[n].image, infos[n].memory, infos[n].memoryOffset);
     return VK_SUCCESS;
 }
+
+/* Driver-maintained HOST_COHERENT memory (src/physical_device_profile.h).
+ * The GPU half is the queue's own: every submission starts with a full GPU
+ * cache invalidate and ends with an L2 writeback before its completion value.
+ * The CPU half is here: write back every mapped coherent range before a
+ * submission launches, and invalidate it once a completion is observed, so the
+ * host needs neither vkFlushMappedMemoryRanges nor
+ * vkInvalidateMappedMemoryRanges. The queue submits synchronously, so no host
+ * access to a coherent range can overlap a running submission's accesses. */
+static VkResult coherent_sync(VkDevice d, int invalidate)
+{
+    if (!d) return INVALID;
+    for (VkDeviceMemory m = d->memories; m; m = m->next) {
+        if (!m->coherent || !m->mapped) continue;
+        VkResult result = (invalidate ? d->memory.invalidate : d->memory.flush)(
+            d->memory.context, m->backing, m->map_offset, m->map_size);
+        if (result != VK_SUCCESS) return result;
+    }
+    return VK_SUCCESS;
+}
+VkResult ps5vk_coherent_host_writeback(VkDevice d) { return coherent_sync(d, 0); }
+VkResult ps5vk_coherent_host_invalidate(VkDevice d) { return coherent_sync(d, 1); }

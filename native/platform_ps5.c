@@ -398,5 +398,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
     ps5vk_native_tess_profile(platform);
+#if defined(PS5VK_HOST_COHERENT_DIAGNOSTIC) && PS5VK_HOST_COHERENT_DIAGNOSTIC
+    /* Witness-only: the driver-maintained HOST_COHERENT type is not part of
+     * the ordinary profile until its native witness passes. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_COHERENT_MEMORY;
+    ps5vk_profile_add_coherent_type(&platform->memory_properties);
+#endif
     return VK_SUCCESS;
 }
