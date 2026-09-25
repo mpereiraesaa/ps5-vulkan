@@ -36,8 +36,9 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
         .max_allocation = 1u << 22, .queue_flags = VK_QUEUE_COMPUTE_BIT,
-        /* The platform reports the capability; the device must still keep
-         * the extension closed until VK_KHR_create_renderpass2 is exposed. */
+        /* The platform reports the capability without the create_renderpass2
+         * route bits, so the device must keep the extension closed
+         * (tests/test_renderpass2_route.c covers the open route). */
         .supported_features_t09 = PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU", .vendor_id = 0x1002u, .heap_size = 1u << 22,
@@ -233,7 +234,7 @@ int main(void)
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 0,
         1u << 22, &image_props) == VK_ERROR_FORMAT_NOT_SUPPORTED);
 
-    /* Exposure: closed until the create_renderpass2 route exists. */
+    /* Exposure: closed while the platform lacks the create_renderpass2 route. */
     {
         uint32_t extensions = 0;
         assert(vkEnumerateDeviceExtensionProperties(physical, NULL, &extensions, NULL) == VK_SUCCESS);
