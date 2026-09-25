@@ -85,6 +85,15 @@ class DxvkMatrixTests(unittest.TestCase):
             scope, reported_scope, extensions, scope_reports)
         self.assertEqual(("satisfied", "implemented"),
                          (api["state"], implementation["state"]))
+        original_tokens = matrix.DEVICE_SCOPE_IMPLEMENTATION_TOKENS
+        try:
+            matrix.DEVICE_SCOPE_IMPLEMENTATION_TOKENS = (("src/missing_device_scope.c", "gate"),)
+            api, implementation = matrix.memory_model_axes(
+                scope, reported_scope, extensions, scope_reports)
+            self.assertEqual(("satisfied", "missing"),
+                             (api["state"], implementation["state"]))
+        finally:
+            matrix.DEVICE_SCOPE_IMPLEMENTATION_TOKENS = original_tokens
         for bad in ({}, {**query, "route": "VK_VERSION_1_2"},
                     {**query, "vulkanMemoryModel": False,
                      "vulkanMemoryModelDeviceScope": True}):
@@ -419,6 +428,8 @@ class DxvkMatrixTests(unittest.TestCase):
                          tuple(row[axis]["state"] for axis in
                                ("api", "implementation", "cts", "native")))
         self.assertEqual("satisfied", row["verdict"])
+        self.assertIn("public KHR", row["implementation"]["detail"])
+        self.assertNotIn("diagnostic", row["implementation"]["detail"])
         self.assertFalse(matrix.row_ready({**row, "api": {"state": "blocker"}}))
         evidence = json.loads(matrix.EVIDENCE.read_text())
         original = matrix.EVIDENCE

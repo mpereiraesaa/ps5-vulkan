@@ -2846,11 +2846,13 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
       "implementation": {
-        "detail": "Bounded implementation exists in a diagnostic build; the independent API, original CTS and native axes still control promotion.",
+        "detail": "Reviewed public KHR query and device-creation opt-in; DeviceScope is independently gated in compute and graphics compilation.",
         "refs": [
-          "src/ps5vk_compiler.c",
           "src/vk_device.c",
-          "src/vk_pipeline.c"
+          "src/vk_pipeline.c",
+          "src/ps5vk_compiler.c",
+          "native/runtime_graphics_compiler.c",
+          "conformance_inventory/reporting_matrix.json"
         ],
         "state": "implemented"
       },
