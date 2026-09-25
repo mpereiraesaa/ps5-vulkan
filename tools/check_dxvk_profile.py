@@ -392,6 +392,7 @@ def implemented_device_extensions() -> set[str]:
     for name in (
 
         "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
+        "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
 
         "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
 
@@ -457,6 +458,8 @@ def implemented_device_extensions() -> set[str]:
         "VK_KHR_MAINTENANCE_4_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE4"},
         "VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE"},
+        "VK_EXT_ROBUSTNESS_2_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2", "PS5VK_T09_FEATURE_NULL_DESCRIPTOR"},
 
     }
     unmapped = sorted(tokens - gates.keys())

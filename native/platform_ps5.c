@@ -330,6 +330,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * capability probe is re-measured with it enumerated. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE;
 #endif
+#if defined(PS5VK_ROBUSTNESS2_DIAGNOSTIC) && PS5VK_ROBUSTNESS2_DIAGNOSTIC
+    /* DXVK262-T13 measurement build only: VK_EXT_robustness2 with
+     * robustBufferAccess2 and nullDescriptor, so the public-SDK witness can
+     * negotiate both before the shipping profile reports them. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
+        PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+#endif
     /* Nearest/linear U, V and W SDK readback plus the compact original 3D
      * address-mode CTS leaf support the Vulkan 1.0 KHR extension route. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE;

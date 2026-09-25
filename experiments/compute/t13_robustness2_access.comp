@@ -1,0 +1,58 @@
+#version 450
+// DXVK262-T13 robustness2 witness, phase 1: ranged and null descriptors.
+// One invocation, straight-line code: every read lands in out.v[] and the
+// host compares each word with the robustBufferAccess2/nullDescriptor oracle.
+layout(local_size_x = 1) in;
+layout(std430, set = 0, binding = 0) buffer Out { uint v[]; } result;
+// Bound with a 38-byte range: rounded to the reported 4-byte alignment, the
+// dword at byte 36 is in bounds and the dword at byte 40 is not.
+layout(std430, set = 0, binding = 1) buffer Ranged { uint v[]; } ranged;
+// Bound with a 40-byte range: v[2] straddles the end dword by dword.
+layout(std140, set = 0, binding = 2) uniform RangedUniform { uvec4 v[4]; } ranged_uniform;
+layout(std430, set = 0, binding = 3) buffer NullStorage { uint v[]; } null_storage;
+layout(std140, set = 0, binding = 4) uniform NullUniform { uvec4 v[4]; } null_uniform;
+layout(set = 0, binding = 5) uniform usamplerBuffer null_texel;
+layout(set = 0, binding = 6, r32ui) uniform uimage2D null_image;
+
+void main()
+{
+    result.v[0] = ranged.v[0];
+    result.v[1] = ranged.v[8];
+    result.v[2] = ranged.v[9];
+    result.v[3] = ranged.v[10];
+    result.v[4] = ranged.v[63];
+    uvec4 straddle = ranged_uniform.v[2];
+    result.v[5] = straddle.x;
+    result.v[6] = straddle.y;
+    result.v[7] = straddle.z;
+    result.v[8] = straddle.w;
+    uvec4 outside = ranged_uniform.v[3];
+    result.v[9] = outside.x;
+    result.v[10] = outside.y;
+    result.v[11] = outside.z;
+    result.v[12] = outside.w;
+    result.v[13] = ranged_uniform.v[0].x;
+    result.v[14] = null_storage.v[0];
+    result.v[15] = null_storage.v[7];
+    uvec4 null_ubo = null_uniform.v[1];
+    result.v[16] = null_ubo.x;
+    result.v[17] = null_ubo.y;
+    result.v[18] = null_ubo.z;
+    result.v[19] = null_ubo.w;
+    uvec4 null_fetch = texelFetch(null_texel, 5);
+    result.v[20] = null_fetch.x;
+    result.v[21] = null_fetch.y;
+    result.v[22] = null_fetch.z;
+    result.v[23] = null_fetch.w;
+    uvec4 null_load = imageLoad(null_image, ivec2(1, 1));
+    result.v[24] = null_load.x;
+    result.v[25] = null_load.w;
+    // Stores: one in range lands; two past the range and three through null
+    // descriptors must be discarded.
+    ranged.v[1] = 0x5a5a0001u;
+    ranged.v[12] = 0xbad0000cu;
+    ranged.v[60] = 0xbad0003cu;
+    null_storage.v[3] = 0xbad00003u;
+    imageStore(null_image, ivec2(0, 0), uvec4(0xbad00000u));
+    result.v[31] = 0xc0de0013u;
+}
