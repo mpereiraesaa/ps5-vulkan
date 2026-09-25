@@ -543,13 +543,11 @@ int main(void)
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
     assert(!properties.bufferFeatures && !properties.linearTilingFeatures);
-    /* The combined depth/stencil attachment is implemented (both planes,
-     * per-aspect readback) but publishes nothing until its on-console witness
-     * passes: only the private diagnostic build reports it. */
+    /* The combined depth/stencil attachment (both planes, per-aspect
+     * readback) publishes its witnessed attachment and readback roles. */
     assert(ps5vk_texture_format_capabilities(VK_FORMAT_D32_SFLOAT_S8_UINT) ==
         (PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT | PS5VK_FORMAT_CAP_TRANSFER_SRC));
     ps5vk_texture_format_properties(VK_FORMAT_D32_SFLOAT_S8_UINT, &properties);
-#if defined(PS5VK_DEPTH_STENCIL_DIAGNOSTIC) && PS5VK_DEPTH_STENCIL_DIAGNOSTIC
     assert(properties.optimalTilingFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT));
@@ -557,11 +555,6 @@ int main(void)
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT_S8_UINT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
-#else
-    assert(!properties.optimalTilingFeatures);
-    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT_S8_UINT,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
-#endif
     /* No transfer destination (no clear or upload into either plane), no
      * sampling, and never a buffer or linear role. */
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT_S8_UINT,

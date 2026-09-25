@@ -245,23 +245,6 @@ def main():
             raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC must be 0 or 1")
         if sample_rate_diagnostic == "1":
             native_cflags.append("-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
-        # Private measurement build (DXVK262-T09 timelineSemaphore): report
-        # VK_KHR_timeline_semaphore so its public-SDK witness can negotiate it
-        # before the shipping platform advertises it. Off by default.
-        timeline_diagnostic = os.environ.get("PS5VK_TIMELINE_DIAGNOSTIC", "0")
-        if timeline_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_TIMELINE_DIAGNOSTIC must be 0 or 1")
-        if timeline_diagnostic == "1":
-            native_cflags.append("-DPS5VK_TIMELINE_DIAGNOSTIC=1")
-        # Private measurement build (T09 separateDepthStencilLayouts): publish
-        # the combined D32_SFLOAT_S8_UINT attachment and accept per-aspect
-        # depth/stencil barriers so the SDK witness can measure both planes
-        # before any shipping build reports the format or the feature.
-        depth_stencil_diagnostic = os.environ.get("PS5VK_DEPTH_STENCIL_DIAGNOSTIC", "0")
-        if depth_stencil_diagnostic not in ("0", "1"):
-            raise SystemExit("PS5VK_DEPTH_STENCIL_DIAGNOSTIC must be 0 or 1")
-        if depth_stencil_diagnostic == "1":
-            native_cflags.append("-DPS5VK_DEPTH_STENCIL_DIAGNOSTIC=1")
         shader_int16_diagnostic = os.environ.get("PS5VK_SHADER_INT16_DIAGNOSTIC", "0")
         if shader_int16_diagnostic not in ("0", "1"):
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")

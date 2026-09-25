@@ -41,6 +41,31 @@ class NativeDiagnosticOptions(unittest.TestCase):
             self.assertNotIn(name, sdk)
             self.assertNotIn(name, (ROOT / "native/platform_ps5.c").read_text())
 
+    def test_t09_promoted_switches_are_retired(self):
+        """timelineSemaphore and separateDepthStencilLayouts (with the
+        maintenance2/create_renderpass2 route and the D32S8 row) are shipping
+        capabilities; their measurement switches must not return."""
+        from tools.build_upstream_cts import tessellation_build_profile
+
+        names = ("PS5VK_TIMELINE_" + "DIAGNOSTIC", "PS5VK_DEPTH_STENCIL_" + "DIAGNOSTIC")
+        profile = tessellation_build_profile({name: "1" for name in names})
+        self.assertFalse(profile["experimental"])
+        for relative in ("tools/build_sdk.py", "tools/build_upstream_cts.py",
+                         "tools/check_dxvk_profile.py", "tools/build_t09_timeline_witness.py",
+                         "tools/build_t09_depth_stencil_witness.py", "native/platform_ps5.c",
+                         "src/vk_command.c", "src/texture_format.c", "src/vk_device.c",
+                         "Makefile"):
+            text = (ROOT / relative).read_text()
+            for name in names:
+                with self.subTest(relative=relative, name=name):
+                    self.assertNotIn(name, text)
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("platform->supported_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;",
+                      platform)
+        self.assertIn("PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |\n"
+                      "        PS5VK_T09_FEATURE_MAINTENANCE2 | PS5VK_T09_FEATURE_CREATE_RENDERPASS2;",
+                      platform)
+
     def test_promoted_fragment_feature_has_no_diagnostic_switch(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
         builder = (ROOT / "tools/build_sdk.py").read_text()

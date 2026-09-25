@@ -5,18 +5,22 @@
       "VK_KHR_16bit_storage",
       "VK_KHR_8bit_storage",
       "VK_KHR_buffer_device_address",
+      "VK_KHR_create_renderpass2",
       "VK_KHR_device_group",
+      "VK_KHR_maintenance2",
       "VK_KHR_multiview",
+      "VK_KHR_separate_depth_stencil_layouts",
       "VK_KHR_shader_draw_parameters",
       "VK_KHR_storage_buffer_storage_class",
+      "VK_KHR_timeline_semaphore",
       "VK_KHR_uniform_buffer_standard_layout",
       "VK_KHR_vulkan_memory_model"
     ],
     "native_probe": {
-      "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
-      "blockers": 35,
+      "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
+      "blockers": 32,
       "device_api": "1.0.0",
-      "device_extensions": 9,
+      "device_extensions": 13,
       "query_routes": [
         {
           "maxMultiviewInstanceIndex": "134217727",
@@ -36,16 +40,25 @@
         {
           "bufferDeviceAddress": "1",
           "route": "VK_KHR_buffer_device_address"
+        },
+        {
+          "maxTimelineSemaphoreValueDifference": "18446744073709551615",
+          "route": "VK_KHR_timeline_semaphore",
+          "timelineSemaphore": "1"
+        },
+        {
+          "route": "VK_KHR_separate_depth_stencil_layouts",
+          "separateDepthStencilLayouts": "1"
         }
       ],
       "requirements": 62,
       "runs": [
         {
-          "id": "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178",
-          "log_sha256": "3972ab2ecf71688a19b70c361d132c278b70186bc0166bcd941f33d9179503f0"
+          "id": "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8",
+          "log_sha256": "2c640eb60bde32473ae31529000dc49493207c29fb52279e43a194fffacb3832"
         }
       ],
-      "satisfied": 27,
+      "satisfied": 30,
       "satisfied_ids": [
         "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
         "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -69,13 +82,16 @@
         "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
         "feature:VkPhysicalDeviceVulkan11Features:multiview",
         "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+        "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
         "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
-        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
       ],
-      "source_matrix_sha256": "b3efcf7012cdef0c4580e739b9719b8c8609dc82b7b6d8f3752feb9b31da8028",
+      "source_matrix_sha256": "bc40d999b56604e9c3f98e21037ce84076df8311ad6ecabeb91d22c1ff39072f",
       "transport": "ps5log/1",
       "verifier": "tools/verify_dxvk_probe.py"
     },
@@ -182,13 +198,13 @@
       "kind": "extension",
       "name": "VK_EXT_robustness2",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -224,13 +240,13 @@
       "kind": "extension",
       "name": "VK_EXT_transform_feedback",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -1695,13 +1711,13 @@
       "kind": "feature",
       "name": "tessellationShader",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "The native query reports the requested value, but the probe does not execute the capability.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "reported-not-executed"
       },
@@ -2037,13 +2053,13 @@
       "kind": "feature",
       "name": "nullDescriptor",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2082,13 +2098,13 @@
       "kind": "feature",
       "name": "robustBufferAccess2",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2124,13 +2140,13 @@
       "kind": "feature",
       "name": "geometryStreams",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2166,13 +2182,13 @@
       "kind": "feature",
       "name": "transformFeedback",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2431,13 +2447,13 @@
       "kind": "feature",
       "name": "hostQueryReset",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2476,13 +2492,13 @@
       "kind": "feature",
       "name": "imagelessFramebuffer",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2524,13 +2540,13 @@
       "kind": "feature",
       "name": "samplerMirrorClampToEdge",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2538,45 +2554,81 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
+        "detail": "Equivalent KHR feature on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied",
+        "via": "VK_KHR_separate_depth_stencil_layouts"
       },
       "capabilities": [
         "vulkan12requirements"
       ],
       "container": "VkPhysicalDeviceVulkan12Features",
       "cts": {
-        "cases": [],
+        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
+        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
+        "cases": [
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_never",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_less",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_less_or_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_greater",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_not_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_greater_or_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_always",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_zero.pass_repl.dfail_incc.comp_always",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_inv.pass_wrap.dfail_decw.comp_less",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_repl.pass_incc.dfail_decc.comp_greater_or_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_decc.pass_inv.dfail_zero.comp_not_equal",
+          "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_not_equal_not_equal_not_equal_not_equal",
+          "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_equal_less_never_always",
+          "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_greater_less_equal_never",
+          "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_greater_or_equal_less_or_equal_always_less"
+        ],
         "mapped_cases": [],
-        "refs": [],
+        "note": "The 16 original d32_sfloat_s8_uint_separate_layouts stencil and depth leaves passed on the promoted shipping CTS package, beside their 16 combined-layout twins.",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
         "related_requirement_ids": [
           "VK14-CORE-003"
         ],
-        "state": "not-mapped"
+        "result": {
+          "Pass": 16
+        },
+        "run_ids": [
+          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
+        ],
+        "state": "cts-focused-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Reviewed per-aspect layout state, render pass 2 stencil layouts, barriers, load/store and readback for D32_SFLOAT_S8_UINT.",
+        "refs": [
+          "src/vk_device.c",
+          "src/vk_render_pass.c",
+          "src/image_layout_state.c",
+          "native/graphics_queue_ps5.c",
+          "conformance_inventory/reporting_matrix.json"
+        ],
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "separateDepthStencilLayouts",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "8fa2b2410ee4e635e5ec7b5a85274d1625f6f51b95d6855405c1cfaff573b742",
+        "note": "Two strict public-SDK D32_SFLOAT_S8_UINT witness runs on the shipping build: the feature and its extension route negotiated, both 64x64 planes written by the DB and read back per aspect with zero mismatches across independent depth-only and stencil-only transitions, bounded fences and clean retirement.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002437399Z_PPSA99994_ps5vk_0x168607a70485",
+          "20260925T002441648Z_PPSA99994_ps5vk_0x168704e1920e"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -2608,13 +2660,13 @@
       "kind": "feature",
       "name": "shaderSubgroupExtendedTypes",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2650,13 +2702,13 @@
       "kind": "feature",
       "name": "subgroupBroadcastDynamicId",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2664,48 +2716,83 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
+        "detail": "Equivalent KHR query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied",
+        "via": "VK_KHR_timeline_semaphore"
       },
       "capabilities": [
         "vulkan12requirements"
       ],
       "container": "VkPhysicalDeviceVulkan12Features",
       "cts": {
-        "cases": [],
+        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
+        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
+        "cases": [
+          "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value",
+          "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_host",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_host",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.host_wait_before_signal",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_host",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.one_queue",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.chain",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.two_threads",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_current_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_lesser_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_current_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_lesser_value"
+        ],
         "mapped_cases": [
           "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value"
         ],
-        "refs": [],
+        "note": "All 16 original legacy timeline leaves (device_host.misc, wait, basic) passed on the promoted shipping CTS package.",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
         "related_requirement_ids": [
           "VK14-CORE-003",
           "VK14-SYNC-008"
         ],
-        "state": "mapped-not-run"
+        "result": {
+          "Pass": 16
+        },
+        "run_ids": [
+          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
+        ],
+        "state": "cts-focused-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Reviewed KHR query, opt-in, frontend payload and full 64-bit comparisons.",
+        "refs": [
+          "src/vk_device.c",
+          "src/vk_sync.c",
+          "src/vk_queue.c",
+          "conformance_inventory/reporting_matrix.json"
+        ],
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "timelineSemaphore",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "612de7a09058f8b57130eaf88e5104381a7b2d673465220bb6dc80508e52eae2",
+        "note": "Two strict public-SDK timeline witness runs on the shipping build: KHR feature negotiated, a submission that waits on an unsignalled value does not run before the host signal, vkWaitSemaphoresKHR then observes exact GPU-written data, a second device signal reaches 2^40; guard words intact, bounded fences and clean retirement.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002416578Z_PPSA99994_ps5vk_0x16812ebb8301",
+          "20260925T002420804Z_PPSA99994_ps5vk_0x16822a9eabf2"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -2900,13 +2987,13 @@
       "kind": "feature",
       "name": "computeFullSubgroups",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2946,13 +3033,13 @@
       "kind": "feature",
       "name": "dynamicRendering",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -2988,13 +3075,13 @@
       "kind": "feature",
       "name": "inlineUniformBlock",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3030,13 +3117,13 @@
       "kind": "feature",
       "name": "maintenance4",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3072,13 +3159,13 @@
       "kind": "feature",
       "name": "pipelineCreationCacheControl",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3117,13 +3204,13 @@
       "kind": "feature",
       "name": "robustImageAccess",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3159,13 +3246,13 @@
       "kind": "feature",
       "name": "shaderDemoteToHelperInvocation",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3201,13 +3288,13 @@
       "kind": "feature",
       "name": "shaderIntegerDotProduct",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3243,13 +3330,13 @@
       "kind": "feature",
       "name": "shaderTerminateInvocation",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3285,13 +3372,13 @@
       "kind": "feature",
       "name": "shaderZeroInitializeWorkgroupMemory",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3327,13 +3414,13 @@
       "kind": "feature",
       "name": "subgroupSizeControl",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3372,13 +3459,13 @@
       "kind": "feature",
       "name": "synchronization2",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3580,47 +3667,82 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
+        "detail": "Equivalent KHR query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": 2147483647,
-        "observed": null,
-        "state": "blocker"
+        "observed": 18446744073709551615,
+        "state": "satisfied",
+        "via": "VK_KHR_timeline_semaphore"
       },
       "capabilities": [
         "vulkan12requirements"
       ],
       "container": "VkPhysicalDeviceVulkan12Properties",
       "cts": {
-        "cases": [],
+        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
+        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
+        "cases": [
+          "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value",
+          "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_host",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_host",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.host_wait_before_signal",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_host",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.one_queue",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.chain",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.two_threads",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_current_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_lesser_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_current_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_lesser_value"
+        ],
         "mapped_cases": [
           "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value"
         ],
-        "refs": [],
+        "note": "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value signals and waits across the reported difference; all 16 original timeline leaves passed on the promoted shipping CTS package.",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
         "related_requirement_ids": [
           "VK14-SYNC-008"
         ],
-        "state": "mapped-not-run"
+        "result": {
+          "Pass": 16
+        },
+        "run_ids": [
+          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
+        ],
+        "state": "cts-focused-pass"
       },
       "expected": 2147483647,
       "id": "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Reviewed KHR query, opt-in, frontend payload and full 64-bit comparisons.",
+        "refs": [
+          "src/vk_device.c",
+          "src/vk_sync.c",
+          "src/vk_queue.c",
+          "conformance_inventory/reporting_matrix.json"
+        ],
+        "state": "implemented"
       },
       "kind": "property",
       "name": "maxTimelineSemaphoreValueDifference",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "612de7a09058f8b57130eaf88e5104381a7b2d673465220bb6dc80508e52eae2",
+        "note": "The same two witness runs read maxTimelineSemaphoreValueDifference = UINT64_MAX through VK_KHR_timeline_semaphore and signal a value above 2^32; the frontend orders every payload with full 64-bit comparisons, so no difference window exists to bound.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002416578Z_PPSA99994_ps5vk_0x16812ebb8301",
+          "20260925T002420804Z_PPSA99994_ps5vk_0x16822a9eabf2"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -3654,13 +3776,13 @@
       "kind": "property",
       "name": "maxBufferSize",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3694,13 +3816,13 @@
       "kind": "property",
       "name": "maxDescriptorSetInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3734,13 +3856,13 @@
       "kind": "property",
       "name": "maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3774,13 +3896,13 @@
       "kind": "property",
       "name": "maxInlineUniformBlockSize",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3814,13 +3936,13 @@
       "kind": "property",
       "name": "maxInlineUniformTotalSize",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3854,13 +3976,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3894,13 +4016,13 @@
       "kind": "property",
       "name": "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "0b68d14114386e7e948b91c4e389dc96f0c59436f69acbf962bdfd23ae133eff",
+        "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260924T205114609Z_PPSA99994_ps5vk_0xae1308d1178"
+          "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8"
         ],
         "state": "witnessed-blocker"
       },
@@ -3919,27 +4041,27 @@
     "tag_object": "e2373f9421f2c70583aea75c54219fbdcd67959c"
   },
   "summary": {
-    "blocker": 37,
+    "blocker": 34,
     "dimensions": {
       "api": {
-        "blocker": 35,
-        "satisfied": 27
+        "blocker": 32,
+        "satisfied": 30
       },
       "cts": {
         "fail": 0,
-        "no-evidence": 36,
-        "pass": 26
+        "no-evidence": 33,
+        "pass": 29
       },
       "implementation": {
-        "blocker": 35,
-        "satisfied": 27
+        "blocker": 32,
+        "satisfied": 30
       },
       "native": {
-        "blocker": 36,
-        "satisfied": 26
+        "blocker": 33,
+        "satisfied": 29
       }
     },
     "requirements": 62,
-    "satisfied": 25
+    "satisfied": 28
   }
 }

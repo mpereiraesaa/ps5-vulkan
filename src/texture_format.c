@@ -33,11 +33,7 @@
 #define CAP_STORAGE_IMAGE PS5VK_FORMAT_CAP_STORAGE_IMAGE
 #define RGBA8_SINT_ATTACHMENT_CAP CAP_INTEGER_TARGET
 #define D32_SAMPLED_CAP (CAP_SAMP | CAP_DST)
-#if defined(PS5VK_DEPTH_STENCIL_DIAGNOSTIC) && PS5VK_DEPTH_STENCIL_DIAGNOSTIC
 #define D32S8_WITNESSED (CAP_DEPTH | CAP_SRC)
-#else
-#define D32S8_WITNESSED 0u
-#endif
 
 /* Sampled row: the GFX1013 word/selectors/texel size are the pinned GPL
  * encoding. ENABLED carries additional directly qualified roles. */
@@ -237,11 +233,11 @@ static const struct ps5vk_texture_format formats[] = {
      * plane, both 64KB_Z_X (src/depth_layout.h), with per-aspect readback
      * (src/depth_detile.c). It carries no sampled or blit role and no
      * transfer destination: nothing here writes it but the DB and the render
-     * pass load-op fills. The row stays unwitnessed - absent from every
-     * public query and from image creation - until the on-console witness
-     * shows the DB writing and the driver reading back both planes; only the
-     * private PS5VK_DEPTH_STENCIL_DIAGNOSTIC build enables it to take that
-     * measurement. */
+     * pass load-op fills. The on-console witness showed the DB writing and
+     * the driver reading back both planes, so the attachment and readback
+     * roles are public (DXVK262-T09). Sampled views, clears through
+     * vkCmdClearDepthStencilImage, layers, mips and HTILE are not
+     * implemented for it. */
     {VK_FORMAT_D32_SFLOAT_S8_UINT, 0, 0, {0, 0, 0, 0}, CAP_DEPTH | CAP_SRC,
      D32S8_WITNESSED, PS5VK_FORMAT_PROVENANCE_GFX10_FORMAT_ENUM, 0, 0, 0},
     /* Narrow depth-attachment profile: exactly one 128x128 D16

@@ -64,6 +64,9 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     text = log.decode("utf-8", errors="replace")
     start = re.findall(r"T09_DS_WITNESS_START extent=(\d+) d32s8=([0-9a-f]{8}) "
                        r"d24s8=([0-9a-f]{8})", text)
+    # The shipping route: the feature is reported and negotiated, never
+    # assumed by a measurement build.
+    feature = re.findall(r"T09_DS_WITNESS_FEATURE separateDepthStencilLayouts=(\d+)", text)
     steps = re.findall(r"T09_DS_WITNESS_STEP index=(\d+) fence=complete", text)
     samples = re.findall(r"T09_DS_WITNESS_SAMPLES depth_0_0=([0-9a-f]{8}) "
                          r"depth_63_0=([0-9a-f]{8}) depth_0_63=([0-9a-f]{8}) "
@@ -78,6 +81,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     stencil_digest = expected_stencil_digest()
     plane = expected_stencil_plane()
     if (len(start) != 1 or len(result) != 1 or len(samples) != 1 or len(retired) != 1 or
+            feature != ["1"] or
             int(start[0][0]) != EXTENT or
             int(start[0][1], 16) & D32S8_FEATURES != D32S8_FEATURES or
             int(start[0][2], 16) != 0 or

@@ -19,12 +19,14 @@ def depth_word(x, y, error=0.0):
 
 
 def fixture_log(*, d32s8=0x4200, d24s8=0, mismatches=(0, 0, 0, 0), stencil=None,
-                steps=6, depth_error=0.0, retired=True, stencil_samples=None):
+                steps=6, depth_error=0.0, retired=True, stencil_samples=None, feature=1):
     plane = expected_stencil_plane()
     stencil = expected_stencil_digest() if stencil is None else stencil
     samples = stencil_samples or [plane[y * EXTENT + x] for x, y in SAMPLE_POINTS]
     depths = [depth_word(x, y, depth_error) for x, y in SAMPLE_POINTS]
     lines = [f"T09_DS_WITNESS_START extent=64 d32s8={d32s8:08x} d24s8={d24s8:08x}"]
+    if feature is not None:
+        lines.append(f"T09_DS_WITNESS_FEATURE separateDepthStencilLayouts={feature}")
     lines += [f"T09_DS_WITNESS_STEP index={i} fence=complete" for i in range(steps)]
     lines.append("T09_DS_WITNESS_SAMPLES depth_0_0=%08x depth_63_0=%08x depth_0_63=%08x "
                  "depth_63_63=%08x stencil_0_0=%02x stencil_63_0=%02x stencil_0_63=%02x "
@@ -78,7 +80,8 @@ class ReceiptContract(unittest.TestCase):
         for changes in ({"mismatches": (1, 0, 0, 0)}, {"mismatches": (0, 0, 0, 2)},
                         {"stencil": "00000000"}, {"steps": 5}, {"retired": False},
                         {"d32s8": 0x200}, {"d24s8": 0x200}, {"depth_error": 1e-3},
-                        {"stencil_samples": [0x5a, 0, 0, 0]}):
+                        {"stencil_samples": [0x5a, 0, 0, 0]},
+                        {"feature": 0}, {"feature": None}):
             with self.subTest(changes=changes):
                 log = fixture_log(**changes)
                 with self.assertRaises(ValueError):

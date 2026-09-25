@@ -179,6 +179,30 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
                 bda_routes[0].get("route") == "VK_KHR_buffer_device_address" and
                 bda_routes[0].get("bufferDeviceAddress") == str(observed[bda_id]),
                 "explicit buffer device address query route")
+    timeline_ids = {
+        "timelineSemaphore": "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
+        "maxTimelineSemaphoreValueDifference":
+            "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference",
+    }
+    timeline_routes = [row for kind, row in messages
+                       if kind == "DXVK262_TIMELINE_SEMAPHORE_QUERY"]
+    if timeline_routes or (version < (1, 2, 0) and
+                           any(observed[i] for i in timeline_ids.values())):
+        require(len(timeline_routes) == 1 and
+                timeline_routes[0].get("route") == "VK_KHR_timeline_semaphore",
+                "explicit timeline semaphore query route")
+        for field, identifier in timeline_ids.items():
+            require(timeline_routes[0].get(field) == str(observed[identifier]),
+                    "timeline semaphore route value mismatch")
+    separate_id = "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts"
+    separate_routes = [row for kind, row in messages
+                       if kind == "DXVK262_SEPARATE_DEPTH_STENCIL_LAYOUTS_QUERY"]
+    if separate_routes or (version < (1, 2, 0) and observed[separate_id]):
+        require(len(separate_routes) == 1 and
+                separate_routes[0].get("route") == "VK_KHR_separate_depth_stencil_layouts" and
+                separate_routes[0].get("separateDepthStencilLayouts") ==
+                    str(observed[separate_id]),
+                "explicit separate depth/stencil layouts query route")
 
     total = len(expected_rows)
     blockers = total - satisfied
@@ -200,7 +224,8 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
         "artifact_eboot_sha256": digest,
         "observed": observed,
         "source_log": str(log_path),
-        "query_routes": routes + standard_ubo_routes + memory_model_routes + bda_routes,
+        "query_routes": (routes + standard_ubo_routes + memory_model_routes + bda_routes +
+                         timeline_routes + separate_routes),
         "source_matrix_sha256": dxvk["matrix_sha256"],
     }
 

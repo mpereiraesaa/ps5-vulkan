@@ -1,9 +1,8 @@
 /*
  * T09 public-API contracts for the combined D32_SFLOAT_S8_UINT attachment and
- * per-aspect (separateDepthStencilLayouts) recording. Built twice: the
- * shipping build, where the format does not exist, and the private
- * PS5VK_DEPTH_STENCIL_DIAGNOSTIC build, where it and the per-aspect barriers
- * are accepted. Host only.
+ * per-aspect (separateDepthStencilLayouts) recording on the shipping build:
+ * the format is public, and the per-aspect barriers need the negotiated
+ * feature. Host only.
  */
 #include "vk_internal.h"
 #include "vk_command.h"
@@ -16,11 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(PS5VK_DEPTH_STENCIL_DIAGNOSTIC) && PS5VK_DEPTH_STENCIL_DIAGNOSTIC
-#define DIAGNOSTIC 1
-#else
-#define DIAGNOSTIC 0
-#endif
 
 static VkResult alloc_memory(void *ctx, VkDeviceSize size, void **address, void **backing)
 {
@@ -222,18 +216,17 @@ int main(void)
      * queries are these two functions. */
     VkFormatProperties props;
     ps5vk_graphics_format_properties(VK_FORMAT_D32_SFLOAT_S8_UINT, &props);
-    assert(props.optimalTilingFeatures == (DIAGNOSTIC ?
+    assert(props.optimalTilingFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
-                               VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) : 0u));
+                               VK_FORMAT_FEATURE_TRANSFER_SRC_BIT));
     ps5vk_graphics_format_properties(VK_FORMAT_D24_UNORM_S8_UINT, &props);
     assert(!props.optimalTilingFeatures);
     VkImageFormatProperties image_props;
     assert(ps5vk_graphics_image_properties(VK_FORMAT_D32_SFLOAT_S8_UINT,
         VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0,
-        1u << 22, &image_props) == (DIAGNOSTIC ? VK_SUCCESS : VK_ERROR_FORMAT_NOT_SUPPORTED));
-    if (DIAGNOSTIC)
-        assert(image_props.maxMipLevels == 1 && image_props.maxArrayLayers == 1 &&
+        1u << 22, &image_props) == VK_SUCCESS);
+    assert(image_props.maxMipLevels == 1 && image_props.maxArrayLayers == 1 &&
                image_props.sampleCounts == VK_SAMPLE_COUNT_1_BIT);
     assert(ps5vk_graphics_image_properties(VK_FORMAT_D32_SFLOAT_S8_UINT,
         VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
@@ -299,11 +292,6 @@ int main(void)
     assert(make_image(usage, 2, &image, &memory) != VK_SUCCESS);
     assert(make_image(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, &image, &memory) != VK_SUCCESS);
-    if (!DIAGNOSTIC) {
-        assert(make_image(usage, 1, &image, &memory) == VK_ERROR_FORMAT_NOT_SUPPORTED);
-        puts("Depth/stencil API: the shipping build publishes no combined format");
-        return 0;
-    }
     assert(make_image(usage, 1, &image, &memory) == VK_SUCCESS);
     assert(image->layout == VK_IMAGE_LAYOUT_UNDEFINED &&
            image->stencil_layout == VK_IMAGE_LAYOUT_UNDEFINED);
@@ -327,6 +315,12 @@ int main(void)
     assert(record_barrier(image, D | S, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, DSW,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT));
+    /* A per-aspect barrier needs the negotiated separateDepthStencilLayouts
+     * feature: without it the recorder refuses it. */
+    device->enabled_features_t09 = 0;
+    assert(!record_barrier(image, D, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, DSW, TR, LATE, XFER));
+    device->enabled_features_t09 = PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS;
     assert(record_barrier(image, D, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, DSW, TR, LATE, XFER));
     assert(record_barrier(image, S, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL,

@@ -207,7 +207,12 @@ static int run_witness(void)
     uint32_t mismatches[4] = {UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX};
     uint32_t depth_digest = 0, stencil_digest = 0;
 
-    VkInstanceCreateInfo instance_info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    /* The Vulkan 1.0 route to separateDepthStencilLayouts, negotiated the way
+     * an application must: properties2 on the instance, then the feature
+     * query and the extension chain the pinned registry requires. */
+    const char *instance_extension = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+    VkInstanceCreateInfo instance_info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 1, .ppEnabledExtensionNames = &instance_extension};
     TRY(vkCreateInstance(&instance_info, NULL, &instance));
     uint32_t count = 1;
     VkPhysicalDevice physical = VK_NULL_HANDLE;
@@ -232,9 +237,22 @@ static int run_witness(void)
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueFamilyIndex = 0, .queueCount = 1, .pQueuePriorities = &priority,
     };
+    VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures separate = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES};
+    VkPhysicalDeviceFeatures2 features2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &separate};
+    vkGetPhysicalDeviceFeatures2KHR(physical, &features2);
+    ps5log_printf(PS5LOG_MARK, "T09_DS_WITNESS_FEATURE separateDepthStencilLayouts=%u",
+        (unsigned)separate.separateDepthStencilLayouts);
+    REQUIRE(separate.separateDepthStencilLayouts, "separateDepthStencilLayouts reported");
+    const char *device_extensions[4] = {
+        VK_KHR_MULTIVIEW_EXTENSION_NAME, VK_KHR_MAINTENANCE_2_EXTENSION_NAME,
+        VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
+        VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME};
     VkDeviceCreateInfo device_info = {
-        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &separate,
         .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
+        .enabledExtensionCount = 4, .ppEnabledExtensionNames = device_extensions,
     };
     TRY(vkCreateDevice(physical, &device_info, NULL, &device));
     vkGetDeviceQueue(device, 0, 0, &queue);

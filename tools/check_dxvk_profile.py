@@ -38,6 +38,9 @@ MEMORY_MODEL_IDS = {
 }
 BDA_ID = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
 DEVICE_SCOPE_ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
+TIMELINE_ID = "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore"
+TIMELINE_DIFFERENCE_ID = "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+SEPARATE_DEPTH_STENCIL_ID = "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts"
 DIAGNOSTIC_IMPLEMENTATIONS = {
     DEVICE_SCOPE_ID: (
         ("src/vk_device.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
@@ -138,6 +141,65 @@ def standard_ubo_axes(row: dict, query: dict, extensions: set[str],
              "detail": "Reviewed KHR feature query, opt-in and layout validation."})
 
 
+def timeline_axes(row: dict, query: dict, extensions: set[str],
+                  feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    """timelineSemaphore and maxTimelineSemaphoreValueDifference through
+    VK_KHR_timeline_semaphore on Vulkan 1.0 (DXVK262-T09)."""
+    if row["id"] not in (TIMELINE_ID, TIMELINE_DIFFERENCE_ID):
+        return None
+    if query.get("route") != "VK_KHR_timeline_semaphore":
+        raise ValueError("timeline semaphore public query route is absent")
+    feature = query.get("timelineSemaphore")
+    difference = query.get("maxTimelineSemaphoreValueDifference")
+    if (not isinstance(feature, bool) or isinstance(difference, bool) or
+            not isinstance(difference, int) or difference < 0 or
+            (difference and not feature) or (feature and not difference)):
+        raise ValueError("invalid timeline semaphore public query")
+    route = "VK_KHR_timeline_semaphore" in extensions and feature
+    observed = feature if row["id"] == TIMELINE_ID else difference
+    satisfied = route and (observed >= row["expected"] if row["id"] == TIMELINE_DIFFERENCE_ID
+                           else observed is True)
+    report = feature_reports.get("timelineSemaphore", {})
+    implemented = (satisfied and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if satisfied else "blocker",
+             "observed": observed if route else None, "expected": row["expected"],
+             "via": "VK_KHR_timeline_semaphore" if route else None,
+             "detail": "Equivalent KHR query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised."},
+            {"state": "implemented" if implemented else "missing",
+             "refs": ["src/vk_device.c", "src/vk_sync.c", "src/vk_queue.c",
+                      "conformance_inventory/reporting_matrix.json"],
+             "detail": "Reviewed KHR query, opt-in, frontend payload and full 64-bit comparisons."})
+
+
+def separate_depth_stencil_axes(row: dict, query: dict, extensions: set[str],
+                                feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    """separateDepthStencilLayouts through VK_KHR_separate_depth_stencil_layouts
+    and its registry route (maintenance2, create_renderpass2) on Vulkan 1.0."""
+    if row["id"] != SEPARATE_DEPTH_STENCIL_ID:
+        return None
+    if query.get("route") != "VK_KHR_separate_depth_stencil_layouts":
+        raise ValueError("separate depth/stencil layouts public query route is absent")
+    value = query.get("separateDepthStencilLayouts")
+    if not isinstance(value, bool):
+        raise ValueError("invalid separate depth/stencil layouts public query")
+    route = {"VK_KHR_separate_depth_stencil_layouts", "VK_KHR_create_renderpass2",
+             "VK_KHR_maintenance2", "VK_KHR_multiview"} <= extensions
+    satisfied = value and route
+    report = feature_reports.get("separateDepthStencilLayouts", {})
+    implemented = (satisfied and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if satisfied else "blocker", "observed": satisfied,
+             "expected": row["expected"],
+             "via": "VK_KHR_separate_depth_stencil_layouts" if satisfied else None,
+             "detail": "Equivalent KHR feature on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised."},
+            {"state": "implemented" if implemented else "missing",
+             "refs": ["src/vk_device.c", "src/vk_render_pass.c", "src/image_layout_state.c",
+                      "native/graphics_queue_ps5.c", "conformance_inventory/reporting_matrix.json"],
+             "detail": "Reviewed per-aspect layout state, render pass 2 stencil layouts, "
+                       "barriers, load/store and readback for D32_SFLOAT_S8_UINT."})
+
+
 def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, dict] | None:
     """Resolve only the three reviewed core/KHR equivalent semantics.
 
@@ -202,8 +264,6 @@ def implemented_device_extensions() -> set[str]:
     # its preprocessor boundary is malformed rather than counting its bits.
     for name in (
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
-        "PS5VK_TIMELINE_DIAGNOSTIC",
-        "PS5VK_DEPTH_STENCIL_DIAGNOSTIC",
     ):
         guard = f"#if defined({name}) && {name}"
         if guard in platform_source:
@@ -493,6 +553,16 @@ def generate() -> dict:
             extensions, feature_reports)
         if buffer_address is not None:
             api, implementation = buffer_address
+        timeline = timeline_axes(requirement,
+            reporting["profiles"]["graphics"].get("timeline_semaphore_query", {}),
+            extensions, feature_reports)
+        if timeline is not None:
+            api, implementation = timeline
+        separate = separate_depth_stencil_axes(requirement,
+            reporting["profiles"]["graphics"].get("separate_depth_stencil_layouts_query", {}),
+            extensions, feature_reports)
+        if separate is not None:
+            api, implementation = separate
         diagnostic = diagnostic_implementation(identifier)
         if diagnostic is not None:
             implementation = diagnostic

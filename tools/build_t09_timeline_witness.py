@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build the bounded public-SDK timeline-semaphore witness executable.
 
-The SDK is staged with the default-off PS5VK_TIMELINE_DIAGNOSTIC measurement
-switch so the witness can negotiate VK_KHR_timeline_semaphore through the
-public API before any shipping platform advertises it."""
+The SDK is the ordinary staged build: VK_KHR_timeline_semaphore is part of the
+shipping profile, and the witness negotiates it through the public API."""
 
 import hashlib
 import json
@@ -91,8 +90,7 @@ def main() -> None:
         "#include <stdint.h>\n" + emit_array("t09_timeline_spirv", shader),
         encoding="utf-8")
 
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk),
-                   PS5VK_TIMELINE_DIAGNOSTIC="1")
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t09_timeline_witness/main.c"
@@ -150,7 +148,7 @@ def main() -> None:
         "profile": PROFILE, "values": VALUES,
         "initial_value": INITIAL_VALUE, "gate_value": GATE_VALUE,
         "phase_values": list(PHASE_VALUES), "seeds": list(SEEDS),
-        "sdk_switches": {"PS5VK_TIMELINE_DIAGNOSTIC": "1"},
+        "sdk_switches": {},
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": hashlib.sha256(shader).hexdigest(),
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
