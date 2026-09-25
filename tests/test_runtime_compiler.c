@@ -111,8 +111,36 @@ static void robust_access_wrap(void)
     free(text); free(code); free(spv);
 }
 
+/* A 1024-descriptor compute set: SAMPLED_IMAGE[1023] read with constant
+ * indices plus the storage buffer the results go to. Every element is a
+ * program descriptor, and the table follows the canonical layout. */
+static void full_set_compile(void)
+{
+    size_t bytes = 0;
+    uint32_t *spv = read_file("build/test-shaders/descriptor-capacity/descriptor_capacity_comp_spirv.spv", &bytes);
+    static struct VkPipelineLayout_T layout = {.set_count = 1};
+    layout.sets[0].binding[0] = (struct ps5vk_binding){PS5VK_MAX_DESCRIPTORS - 1, 0, VK_SHADER_STAGE_COMPUTE_BIT};
+    layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    layout.sets[0].binding[1] = (struct ps5vk_binding){1, PS5VK_MAX_DESCRIPTORS - 1, VK_SHADER_STAGE_COMPUTE_BIT};
+    layout.sets[0].type[1] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    for (uint32_t b = 2; b < PS5VK_MAX_BINDINGS; ++b) layout.sets[0].binding[b].first = PS5VK_MAX_DESCRIPTORS;
+    layout.sets[0].count = PS5VK_MAX_DESCRIPTORS;
+    static struct ps5vk_compiled_program program; uint32_t *code = NULL;
+    assert(ps5vk_runtime_compile_compute(spv, bytes / 4, "main", &layout, NULL, &program, &code) == VK_SUCCESS);
+    assert(program.descriptor_count == PS5VK_MAX_DESCRIPTORS && program.descriptor_set_mask == 1);
+    assert(program.descriptors[PS5VK_MAX_DESCRIPTORS - 2].table_dword == (PS5VK_MAX_DESCRIPTORS - 2) * 8u);
+    assert(program.descriptors[PS5VK_MAX_DESCRIPTORS - 1].binding == 1 &&
+           program.descriptors[PS5VK_MAX_DESCRIPTORS - 1].table_dword == (PS5VK_MAX_DESCRIPTORS - 1) * 8u);
+    /* One more descriptor than a stage may declare is refused. */
+    layout.sets[0].binding[1].count = 2; layout.sets[0].count = PS5VK_MAX_DESCRIPTORS + 1;
+    uint32_t *refused = NULL;
+    assert(ps5vk_runtime_compile_compute(spv, bytes / 4, "main", &layout, NULL, &program, &refused) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !refused);
+    free(code); free(spv);
+}
 int main(void)
 {
+    full_set_compile();
     /* 1. Load minimal.comp SPIR-V */
     size_t spv1_bytes = 0;
     uint32_t *spv1 = read_file("build/test-shaders/minimal.spv", &spv1_bytes);
