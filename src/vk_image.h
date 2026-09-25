@@ -25,6 +25,8 @@ struct VkImage_T {
     VkImageLayout *subresource_layouts;
     /* Native display ownership is independent of queued rendering references. */
     VkBool32 display_busy;
+    /* Only images owned by a live WSI swapchain may enter PRESENT_SRC_KHR. */
+    VkBool32 swapchain_owned;
     struct VkImage_T *next;
 };
 /* Cube-compatible RGBA8 whose sampled role reads a tiled colour attachment.
