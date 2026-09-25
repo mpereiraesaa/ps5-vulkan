@@ -17,13 +17,15 @@ SOURCE_LANES = [7, 19, 31, 1]
 
 
 def expected_digest(operation: str = "broadcast") -> int:
-    if operation not in ("broadcast", "iadd"):
+    if operation not in ("broadcast", "iadd", "iadd_int8"):
         raise ValueError("unknown subgroup operation")
     digest = 2166136261
     for index in range(128):
         subgroup = index // 32
         if operation == "iadd":
             value = 32 * SOURCE_LANES[subgroup] + 496
+        elif operation == "iadd_int8":
+            value = (32 * SOURCE_LANES[subgroup] + 496) & 0xff
         else:
             value = ((subgroup // 2) * 1000 + (subgroup % 2) * 100 +
                      SOURCE_LANES[subgroup])
@@ -33,7 +35,7 @@ def expected_digest(operation: str = "broadcast") -> int:
 
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     operation = artifact.get("operation", "broadcast")
-    if (operation not in ("broadcast", "iadd") or
+    if (operation not in ("broadcast", "iadd", "iadd_int8") or
             artifact.get("profile") !=
             f"t08-subgroup-{operation}-diagnostic-witness" or
             artifact.get("outputs") != 128 or
@@ -50,7 +52,9 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             receipt.get("sha256") != hashlib.sha256(log).hexdigest()):
         raise ValueError("incomplete or corrupt witness receipt")
     text = log.decode("utf-8", errors="replace")
-    mark = "T08_SUBGROUP_IADD" if operation == "iadd" else "T08_SUBGROUP"
+    mark = {"broadcast": "T08_SUBGROUP",
+            "iadd": "T08_SUBGROUP_IADD",
+            "iadd_int8": "T08_SUBGROUP_IADD_INT8"}[operation]
     starts = re.findall(mark + r"_START subgroups=(\d+) outputs=(\d+) "
                         r"ids=([\d,]+) api=([\d.]+)", text)
     results = re.findall(mark + r"_RESULT outputs=(\d+) "
@@ -83,7 +87,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--operation", choices=("broadcast", "iadd"),
+    parser.add_argument("--operation", choices=("broadcast", "iadd", "iadd_int8"),
                         default="broadcast")
     parser.add_argument("--host", required=True)
     parser.add_argument("--runs-dir", type=Path, required=True)
@@ -106,15 +110,20 @@ def main() -> int:
     result = {}
     launched = False
     try:
-        control("launch", args.host)
+        launch_reply = control("launch", args.host)
+        if "Error spawning payload" in launch_reply:
+            raise RuntimeError("console rejected witness launch: " + launch_reply.strip())
         launched = True
         log_path = wait_for_log(args.runs_dir, known, args.timeout)
         receipt = json.loads(log_path.with_suffix(".json").read_text())
         result = verify(log_path.read_bytes(), receipt, artifact)
         result["source_log"] = str(log_path)
     finally:
-        lifecycle_ok = (close_and_confirm(args.host) if launched else
-                        running(args.host) == "none")
+        try:
+            lifecycle_ok = (close_and_confirm(args.host) if launched else
+                            running(args.host) == "none")
+        except RuntimeError:
+            lifecycle_ok = False
         result["lifecycle_ok"] = lifecycle_ok
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(result, indent=2) + "\n")

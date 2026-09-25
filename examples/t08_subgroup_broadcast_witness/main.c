@@ -1,7 +1,14 @@
 #define _DEFAULT_SOURCE 1
 #include <ps5vk/ps5vk.h>
 #include "ps5log.h"
-#ifdef T08_SUBGROUP_IADD_WITNESS
+#if defined(T08_SUBGROUP_IADD_INT8_WITNESS)
+#include "t08_subgroup_iadd_int8_shader.h"
+#define WITNESS_SPIRV t08_subgroup_iadd_int8_spirv
+#define WITNESS_START "T08_SUBGROUP_IADD_INT8_START"
+#define WITNESS_RESULT "T08_SUBGROUP_IADD_INT8_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_IADD_INT8_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_IADD_INT8_FAILURE"
+#elif defined(T08_SUBGROUP_IADD_WITNESS)
 #include "t08_subgroup_iadd_shader.h"
 #define WITNESS_SPIRV t08_subgroup_iadd_spirv
 #define WITNESS_START "T08_SUBGROUP_IADD_START"
@@ -229,7 +236,9 @@ static int witness(void)
         guards += words[i] != sentinel;
     for (uint32_t i = 0; i < OUTPUTS; ++i) {
         uint32_t subgroup = i / 32;
-#ifdef T08_SUBGROUP_IADD_WITNESS
+#if defined(T08_SUBGROUP_IADD_INT8_WITNESS)
+        uint32_t expected = (32u * source_lanes[subgroup] + 496u) & 0xffu;
+#elif defined(T08_SUBGROUP_IADD_WITNESS)
         uint32_t expected = 32u * source_lanes[subgroup] + 496u;
 #else
         uint32_t expected = (subgroup / 2) * 1000u +

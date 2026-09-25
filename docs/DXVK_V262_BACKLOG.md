@@ -38,8 +38,10 @@ An independent default-off compute IAdd gate now has host pipeline and actual
 witness-shader compiler evidence plus two strict GPU readbacks of 128/128
 exact 32-bit values with clean guards and retirement. Both witnesses passed
 twice again on the combined T07 and Int16 source; current artifact and run
-identities are in `VALIDATION.md`. This still has no
-applicable original CTS Pass or narrow-type/stage coverage.
+identities are in `VALIDATION.md`. A separate default-off signed Int8 compute
+IAdd witness passed twice with 128 exact wrapped results, zero guard errors
+and clean retirement on its recorded artifact. This still has no applicable
+original CTS Pass or broad narrow-type, operation and stage coverage.
 The Broadcast result advances implementation evidence only: the Vulkan 1.1
 extended-types contract still needs narrow types and its applicable original
 CTS, while the Vulkan 1.2 dynamic-ID contract still needs a legal public API
