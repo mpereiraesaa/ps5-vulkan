@@ -5452,3 +5452,215 @@ eboot SHA-256 was
 `aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
 The wrapper released the console and the subsequent status reported
 `running=none`.
+
+## T09 diagnostic measurements (2026-09-24)
+
+These are default-off, SDK-linked measurements of three DXVK 2.6.2
+requirements. Their implementation and native evidence are recorded separately
+from the ordinary public capability query in
+`conformance_inventory/dxvk_v262_evidence.json`. The public device still
+reports all three false; the checked profile remains **25/62 satisfied, 37
+blockers** after T08 DeviceScope. Firmware was not queried in these T09 runs.
+Each console window restored the ordinary eboot with SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+and released the console with `running=none`.
+
+### T09 host query reset diagnostic measurement (2026-09-24)
+
+The default-off `VK_EXT_host_query_reset` route accepted a host reset after
+completed precise occlusion queries. The strict SDK verifier checked the
+1/0/3-sample results, their availability, an unavailable result after reset,
+preservation of prior result words, and resubmission of the same command
+buffer. The `ps5log/1` run
+`20260924T194817339Z_PPSA99994_ps5vk_0x771bcbf0e04` completed with a clean
+title lifecycle. Eboot SHA-256:
+`d74390542e83e45e0010467beb9c5e3cd19b4cdfd776c000c9d14f6b9fae28ac`;
+source-log SHA-256:
+`66b1afc0116e1263e77ec15abe2ba8c28076dead266c57c0c3ecb91b587187ed`.
+The original CTS leaf
+`dEQP-VK.query_pool.occlusion_query.get_reset_results_precise_size_64_wait_queue_with_availability_draw_points`
+is identified in the pinned source but has not run against this artifact.
+Public extension and feature reporting remain disabled.
+
+### T09 host query reset public EXT promotion (2026-09-25)
+
+The ordinary Vulkan 1.0 graphics platform now advertises
+`VK_EXT_host_query_reset` and reports `hostQueryReset=1` through
+`VkPhysicalDeviceHostQueryResetFeaturesEXT`; `vkCreateDevice` requires the
+extension and explicit feature opt-in. The Vulkan 1.2 aggregate remains
+unadvertised. The public SDK capability probe run
+`20260924T215614288Z_PPSA99994_ps5vk_0xe6d244aa8b5` verified all 62 rows,
+28 satisfied query values, 34 query blockers and ten device extensions,
+including the tagged EXT feature route. Eboot SHA-256:
+`75df954111879f9a79860b4713ad3a76035c4bd2b3664629ac1cc2d821cba7de`;
+source-log SHA-256:
+`aa731814b25803746542265adea43f9752db864307a849b9345636013df5e3ad`.
+The `ps5log/1` receipt had 70 records, zero gaps and a complete BYE. Its
+build-time matrix SHA-256 was
+`d040f9e0c993aabe2c7eab283bb605f25dc1f6d2590d6b8f1ecf7a6b9a613644`.
+
+The independent shipping SDK graphics run
+`20260924T220133465Z_PPSA99994_ps5vk_0xeb77488067b` passed the strict
+host-reset witness: completed precise occlusion queries gave 1/0/3 samples;
+host reset made all three unavailable without changing old result words; the
+same command buffer then completed new 1/0/3 results with availability one.
+Eboot SHA-256:
+`b96f0a2192c056b18caef61988066ffda507d0cfe5249b284225551edff43aa1`;
+source-log SHA-256:
+`d017a09a63816c0be95ab5207b7f149b7f0080e90bebba2910b8f14ebd60ef87`.
+The `ps5log/1` receipt had 400 records, zero gaps, complete BYE and clean
+title closure. Both windows restored the prior eboot
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`
+and released the console idle. Firmware 12.02 is owner-reported, not queried
+in either run. The checked DXVK matrix is **26/62 ready with 36 blockers**.
+The original CTS leaf named above has not run and is not a claimed PASS.
+
+### T09 imageless framebuffer diagnostic measurement (2026-09-24)
+
+The initial SDK-linked clear/readback witness used one imageless framebuffer
+with two attachment views at separate render pass begins. Two completed
+submissions and 8,192 readback pixels matched the strict oracle with zero
+mismatches in run
+`20260924T194946966Z_PPSA99994_ps5vk_0x7869ad308ae`. Eboot SHA-256:
+`01ff1cfbf7ed3f3cf34a0e49dc1256f2d20f65fbfe7db4725c615cfd26abfd21`;
+source-log SHA-256:
+`df42d9306c02b962a5b7f116f1eee4a1b62083474df42236d023f105ba54deb9`.
+
+A second SDK-linked diagnostic witness cleared and drew into each of two
+begin-time views, then read back both after separate bounded submissions.
+It checked 2,048 drawn pixels and 6,144 clear pixels with zero mismatches
+in run `20260924T225116620Z_PPSA99994_ps5vk_0x116e03cca98b`.
+Eboot SHA-256:
+`0de8621154ed3da156d192631cf31cbd416876bce8a23252f7d2ae1531664cd3`;
+source-log SHA-256:
+`6ad91b76b5b8e41c5c3d18fb1dda16e9599696138a5e618945683c2da8d2dad6`.
+The strict verifier reported two draws, two views, 8,192 checked pixels,
+zero mismatches and clean title closure. Firmware was not queried for this run.
+
+The original `dEQP-VK.imageless_framebuffer.color` leaf was then packaged
+alone in a diagnostic CTS measurement: selection SHA-256
+`aed21135b8b6797c3cd0cf77dce77715d8eb0b701af8db547ae73561e313f7b5`,
+eboot SHA-256
+`34fc5cf0f94a3c2d1f31717852cb8f3c4515fdf71d840697c00bc969809f2cfc`.
+Run `20260924T233314986Z_PPSA99994_upstream-cts_0x13b85c07824e`
+reported **0 Pass, 0 Fail, 1 NotSupported**. QPA SHA-256:
+`9e56f4bdd01816f35c09c2d2a154c71b3665e52ba214f4bf092bda47746eca16`;
+source-log SHA-256:
+`c5fccc7a45d2b89b7197be0b8c88f8c406db08738f2fc91ec24d715b8eacca5f`;
+receipt SHA-256:
+`a86d9da03e503a7da19741d931f169352ece1cccd8cccfddc0b435705542d74b`.
+The upstream support check stopped before rendering because
+`VK_KHR_imageless_framebuffer` is not advertised. The QPA was complete, the
+title closed cleanly and the previous payload was restored. This is not a CTS
+PASS or a render failure. The Vulkan 1.0 public path still needs
+`VK_KHR_maintenance2` and `VK_KHR_image_format_list`; the instance extension
+`VK_KHR_get_physical_device_properties2` is already present.
+
+### T09 sampler mirror clamp diagnostic measurement (2026-09-24)
+
+Eight independently built, default-off SDK witnesses covered nearest and
+linear U/V sampling at negative, inside and positive-edge coordinates. Each
+strict draw readback matched 373,248 pixels; the run IDs and exact eboot
+SHA-256 for all eight cases are bound one to one in
+`conformance_inventory/dxvk_v262_evidence.json`. The first U run was
+`20260924T200150243Z_PPSA99994_ps5vk_0x82f00e17429` on eboot SHA-256
+`950bcfcd86e1e2796997518c327c5e3e0bfe58b603e3bd99d2aa0d838909c2e7`;
+the final V run was
+`20260924T201225901Z_PPSA99994_ps5vk_0x8c3008fcd12` on eboot SHA-256
+`192d0289da708c5cc1f6cc81752b9be6cd812c4d3de9c6d289b613598d57b5f2`.
+
+Two focused original 3D filtering CTS leaves then exercised W mirror clamp:
+`dEQP-VK.texture.filtering.3d.combinations.nearest.nearest.clamp_to_edge.clamp_to_edge.mirror_clamp_to_edge`
+and
+`dEQP-VK.texture.filtering.3d.combinations.linear.linear.clamp_to_edge.clamp_to_edge.mirror_clamp_to_edge`.
+Both reported `Fail` in run
+`20260924T205134796Z_PPSA99994_upstream-cts_0xae5e3b2989b`, but the first
+refusal was `PS5VK_UPLOAD_PREPARE_FAILED site=0 rc=-13` while loading the 3D
+RGBA8 mip image. Neither leaf reached W sampling, so this run cannot establish
+W behavior. The CTS eboot SHA-256 was
+`882beae5a17991b36348407b7aee24521f843410183572a6a2fc74d2a8aa1798`;
+case-list SHA-256
+`ec857802f748d97f664811d1ccb967435aea7f6e59d200411a77db58a1226608`;
+strict receipt SHA-256
+`4d4ae7cb6f483ceae5847e69a6a3a6e2f996042f644fbcc753bd7d79149f8d10`;
+QPA SHA-256
+`f96d8cd5edebe3b6326c51932856f84533cd528b2b24e64362c7ecc74f34daf6`.
+Six subsequent default-off SDK draws tested 3D W mirror clamp without that
+CTS upload path. Nearest and linear filtering each used W coordinates below
+zero, inside the image and above one. The strict CPU/readback oracle matched
+all 373,248 pixels in each draw (zero mismatches); each verifier reported a
+clean lifecycle. The table binds each result to its run, exact eboot and
+source-log SHA-256. Firmware was not re-probed for these runs.
+
+| Case | Filter and W coordinate | Run ID | Eboot SHA-256 | Source-log SHA-256 |
+| --- | --- | --- | --- | --- |
+| 20 | nearest, -0.25 | `20260924T215415552Z_PPSA99994_ps5vk_0xe517f2f1704` | `d0319cafd2af347c4e764ea87e4596b4886beeaa48d806e5affe435786060295` | `0f60ef1c40602ba1c60bc0ae19355ad0e798c260bbb20ebadcc73ee6594e4d64` |
+| 21 | nearest, 0.25 | `20260924T220203376Z_PPSA99994_ps5vk_0xebe6b628f46` | `f55991e7cc49a15ecd17dcdde5b923957ce7858fdf0134c5e7b675873edd6c2c` | `450a2d48ca7b4b15df347417f4a6fcfd661b83c548600a18956be3948ae9667e` |
+| 22 | nearest, 1.25 | `20260924T220213923Z_PPSA99994_ps5vk_0xec0dff2da2b` | `02b71c58dfff32fe6471b063e49cd30cc433209aea8fecf8b23383c3b8b8f848` | `e320118de014abb890ad0c143cd68649ffba35b27c4da84c0aa237b538a31d45` |
+| 23 | linear, -0.375 | `20260924T215647835Z_PPSA99994_ps5vk_0xe74f3dab544` | `b2e07979c046c4e7d5d3eb5f5ce23a8f8ffa5900e05e920ee73c9f681752b744` | `e4c5277266baf0c85767bb00079a629b6d27ea93ecf73a3965705085cc494ac6` |
+| 24 | linear, 0.375 | `20260924T220222966Z_PPSA99994_ps5vk_0xec2faf6f3b7` | `889455cad4f286701dc3b7dcbf134eaa87bf6c537c56f139b1b7fef2fcc38b27` | `d9f25c50e65fafcf5921a9ec5942441ff5c903a769423aef3d525c3cc789773f` |
+| 25 | linear, 1.25 | `20260924T220232022Z_PPSA99994_ps5vk_0xec516a2da69` | `377e0711d350702fdc2f34b76a44979625f0ce9c58544cd158c6ab7d0bc60bdc` | `3673ebfe533f8581f95a32315a27412d827fe149899e9db8de27c32b22f95362` |
+
+These draws establish the bounded W path's native evidence, so the DXVK row's
+native axis is now `native-evidence`. The two original CTS leaves still have
+the pre-sampling `Fail` described above and need a rerun after the 3D upload
+blocker is fixed. The ordinary public
+`samplerMirrorClampToEdge` feature and `VK_KHR_sampler_mirror_clamp_to_edge`
+extension remain disabled, so the DXVK requirement remains blocked.
+
+### T09 sampler mirror clamp compact CTS measurement (2026-09-24)
+
+The pinned upstream
+`dEQP-VK.pipeline.monolithic.sampler.view_type.3d.format.r8g8b8a8_unorm.address_modes.all_mode_mirror_clamp_to_edge`
+leaf uploads an 8×8×8 RGBA8 3D image and samples varying W coordinates. Its
+unchanged upstream oracle reported `Pass` (1/1 selected, no missing cases),
+and the strict runner verified a clean title close. The measurement used the
+default-off sampler diagnostic build; the public feature remained disabled.
+Firmware was not re-probed for this run.
+
+Run ID:
+`20260924T225630973Z_PPSA99994_upstream-cts_0x11b7346e8255`;
+signed eboot SHA-256:
+`ddc59b40852806bee34f144358bc28386acfd067714edbfb4a8f17c0b1999cb1`;
+case-list SHA-256:
+`67d8bfece3acc7305bd211738997b8cfbf2746bc0421ba2719d1372f8a03b627`;
+strict receipt SHA-256:
+`d2e41e12ded0dbc968fb3a91cd6b1f5c1d6bb923d7d200b73da3c11082fc59e2`;
+QPA SHA-256:
+`4d717869c9625040243787e90bdabbe507fd483e54b52af408c8fe64feb15226`;
+source-log SHA-256:
+`106d61194a9f65021088c4fa1b96af838c14d08951452c5b6c2555b6508b9442`.
+The two larger 3D filtering leaves above remain `Fail` at image upload before
+sampling; this compact PASS does not change their recorded verdicts.
+
+### T09 sampler mirror clamp public KHR promotion (2026-09-25)
+
+The shipping graphics profile advertises `VK_KHR_sampler_mirror_clamp_to_edge`
+on Vulkan 1.0 and enables mirror clamp through the ordinary device extension
+route. The SDK-linked public capability probe observed the route and reported
+29/62 requested values, with 33 query blockers. Its strict verifier accepted
+the log and clean lifecycle. Signed eboot SHA-256:
+`b88157ffa829add85acc213a25a40840256825ab1180f839a0f556f32c7d6b60`;
+run ID: `20260924T235311412Z_PPSA99994_ps5vk_0x14ceeba58a1e`;
+source-log SHA-256:
+`2c5997d112288f768b6ad1b2c631e7e39843c204d40773c4c2bc02a9af7522c2`;
+strict receipt SHA-256:
+`a0e2a60e7c15d7e329fb09633641aa6c17a187978a1d8315da1d8aa42fea42d4`;
+pre-promotion matrix SHA-256:
+`e4bad3e4fac18113effd6b02fa85e38fa5a215eea32d70df188f1da7fc1c6628`.
+
+Two further SDK-linked shipping draws used the same public bit without a
+sampler diagnostic build switch. Both passed the strict CPU/readback oracle:
+373,248 expected pixels, zero other pixels, completed submission and clean
+resource retirement. Firmware was not re-probed for these runs.
+
+| Case | Filter/coordinate | Run ID | Eboot SHA-256 | Source-log SHA-256 | Strict receipt SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| 8 | U nearest, -0.25 | `20260924T235846865Z_PPSA99994_ps5vk_0x151d05eafcc2` | `2fcf57f73b48a8d4078a762fc275dfe0790fae231462c8b835679a534f47bae4` | `4ebc318ab873524e03225bc64735cbbb5332b143ca7d4cd68054fb0f6ea7f25a` | `c6fd0b2e56f9bac4ac41247ae4f7214b874fc9b3705e51472bd342cc2dabd3a9` |
+| 23 | W linear, -0.375 | `20260924T235706586Z_PPSA99994_ps5vk_0x1505ace25712` | `3358b78774f99678c39a9f247dab6208ef8c026dedeab8e6c9697906a16d08b8` | `dd5022ec4d62bd6172506e9d950dc41e79a6a44431b2684c785c39dfd4907eed` | `d5518610f27c080b4aa050abea264b0a4905fd049ed0f3c25d8f69fd8553ec82` |
+
+The earlier 14/14 default-off U/V/W draw results and compact original CTS
+3D W address-mode 1/1 PASS remain separate evidence. The two larger 3D
+filtering leaves remain `Fail` at image upload before sampling. The checked
+four-axis DXVK matrix now records **27/62 ready with 35 blockers**; its score
+is distinct from the public probe's 29/62 query count.

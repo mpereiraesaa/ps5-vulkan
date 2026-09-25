@@ -16,6 +16,10 @@ static int address_mode(VkSamplerAddressMode mode)
     case VK_SAMPLER_ADDRESS_MODE_REPEAT:return 0;
     case VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT:return 1;
     case VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE:return 2;
+    /* GFX1013 S# MIRROR_ONCE_LAST_TEXEL mirrors negative coordinates once,
+     * then clamps both ends to the last texel. RADV uses this same S# mode
+     * for Vulkan mirror-clamp-to-edge. */
+    case VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE:return 3;
     case VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER:return 6;
     default:return -1;
     }
@@ -69,6 +73,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
     int u=address_mode(info->addressModeU),v=address_mode(info->addressModeV),w=address_mode(info->addressModeW);
     int border=border_color(info->borderColor);
     if(u<0 || v<0 || w<0 || border<0)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if((u==3 || v==3 || w==3) &&
+       !(d->enabled_features_t09 & PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Defensive handling beyond the advertised valid-usage budget. Do not
      * count failed allocations or release slots while ownership is retained. */
     if(d->sampler_objects>=PS5VK_MAX_SAMPLERS)return VK_ERROR_OUT_OF_HOST_MEMORY;

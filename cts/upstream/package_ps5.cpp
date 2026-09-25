@@ -7,6 +7,8 @@
 #include "vktApiCopiesAndBlittingTests.hpp"
 #include "vktApiFillBufferTests.hpp"
 #include "vktTextureCompressedFormatTests.hpp"
+#include "vktTextureFilteringTests.hpp"
+#include "vktImagelessFramebufferTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
 #include "vktBindingBufferDeviceAddressTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
@@ -19,6 +21,7 @@
 #include "vktPipelineCacheTests.hpp"
 #include "vktPipelineBlendTests.hpp"
 #include "vktPipelineMultisampleTests.hpp"
+#include "vktPipelineSamplerTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktSpvAsmIndexingTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
@@ -170,6 +173,7 @@ void FocusedVkTestPackage::init(void)
     {
         de::MovePtr<tcu::TestCaseGroup> textureGroup(new tcu::TestCaseGroup(m_testCtx, "texture"));
         textureGroup->addChild(vkt::texture::createTextureCompressedFormatTests(m_testCtx));
+        textureGroup->addChild(vkt::texture::createTextureFilteringTests(m_testCtx));
         addChild(textureGroup.release());
     }
 
@@ -359,6 +363,7 @@ void FocusedVkTestPackage::init(void)
     // Their support checks and result oracles stay upstream; the packaged case
     // list selects the small measured leaves for these feature rows.
     addChild(vkt::QueryPool::createTests(m_testCtx, "query_pool"));
+    addChild(vkt::imageless::createTests(m_testCtx, "imageless_framebuffer"));
     {
         de::MovePtr<tcu::TestCaseGroup> shaderRenderGroup(
             new tcu::TestCaseGroup(m_testCtx, "shaderrender"));
@@ -407,6 +412,10 @@ void FocusedVkTestPackage::init(void)
                  * so registering the false form is what makes the selected
                  * names addressable. */
                 false));
+            // The pinned address-modes factory includes a compact 8x8x8 3D
+            // mirror-clamp case. The case list selects its W sampling leaf.
+            monolithicGroup->addChild(vkt::pipeline::createSamplerTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
             pipelineGroup->addChild(monolithicGroup.release());
         }
         addChild(pipelineGroup.release());

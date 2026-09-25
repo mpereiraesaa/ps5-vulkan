@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Join the pinned DXVK 2.6.2 profile to ps5vk's current evidence.
 
-This is intentionally fail-closed.  A required value that cannot be obtained
-from the public reporting matrix, reviewed implementation evidence, upstream
-CTS mapping and native evidence remains a blocker.
+This is intentionally fail-closed. A required value without public reporting,
+reviewed implementation or native execution evidence remains a blocker. CTS
+mapping and runs are regression evidence: an unmapped or unrun leaf does not
+block, while an observed applicable failure does.
 """
 
 from __future__ import annotations
@@ -37,12 +38,18 @@ MEMORY_MODEL_IDS = {
         "vulkanMemoryModelDeviceScope",
 }
 BDA_ID = "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress"
+HOST_QUERY_RESET_ID = "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset"
+SAMPLER_MIRROR_CLAMP_ID = "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge"
 DEVICE_SCOPE_ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope"
 DIAGNOSTIC_IMPLEMENTATIONS = {
-    DEVICE_SCOPE_ID: (
-        ("src/vk_device.c", "PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE"),
-        ("src/vk_pipeline.c", "case 5346u: /* VulkanMemoryModelDeviceScope */"),
-        ("src/ps5vk_compiler.c", "opts.enable_vulkan_memory_model_device_scope"),
+    "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": (
+        ("src/vk_device.c", "PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER"),
+        ("src/vk_framebuffer.c", "VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT"),
+        ("src/vk_command.c", "VkRenderPassAttachmentBeginInfo"),
+    ),
+    "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge": (
+        ("src/vk_device.c", "PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE"),
+        ("src/vk_sampler.c", "VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE"),
     ),
 }
 
@@ -57,7 +64,7 @@ def diagnostic_implementation(identifier: str) -> dict | None:
             "refs": sorted({path for path, _ in citations}),
             "detail": ("Missing reviewed diagnostic implementation: " + ", ".join(missing)
                        if missing else "Bounded implementation exists in a diagnostic build; "
-                       "the independent API, original CTS and native axes still control promotion.")}
+                       "public API and native evidence remain independent, and observed CTS failures stay visible.")}
 
 
 def memory_model_axes(row: dict, query: dict, extensions: set[str],
@@ -138,6 +145,41 @@ def standard_ubo_axes(row: dict, query: dict, extensions: set[str],
              "detail": "Reviewed KHR feature query, opt-in and layout validation."})
 
 
+def host_query_reset_axes(row: dict, query: dict, extensions: set[str],
+                          feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    if row["id"] != HOST_QUERY_RESET_ID:
+        return None
+    if query.get("route") != "VK_EXT_host_query_reset":
+        raise ValueError("host query reset public query route is absent")
+    value = query.get("hostQueryReset")
+    if not isinstance(value, bool):
+        raise ValueError("invalid host query reset public query value")
+    extension = "VK_EXT_host_query_reset" in extensions
+    report = feature_reports.get("hostQueryReset", {})
+    implemented = (value and extension and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if value and extension else "blocker",
+             "observed": value and extension, "expected": row["expected"],
+             "via": "VK_EXT_host_query_reset" if extension else None,
+             "detail": "EXT feature query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised."},
+            {"state": "implemented" if implemented else "missing",
+             "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_query_pool.c",
+                      "conformance_inventory/reporting_matrix.json"],
+             "detail": "Reviewed EXT feature query, opt-in, range and pending-use validation."})
+
+
+def sampler_mirror_clamp_axes(row: dict, extensions: set[str]) -> tuple[dict, dict] | None:
+    if (row["id"] != SAMPLER_MIRROR_CLAMP_ID or
+            "VK_KHR_sampler_mirror_clamp_to_edge" not in extensions):
+        return None
+    return ({"state": "satisfied", "observed": True, "expected": row["expected"],
+             "via": "VK_KHR_sampler_mirror_clamp_to_edge",
+             "detail": "KHR device extension on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised."},
+            {"state": "implemented", "refs": ["native/platform_ps5.c", "src/vk_device.c",
+                                               "src/vk_sampler.c"],
+             "detail": "Public KHR enumeration and device opt-in use the native mirror-clamp sampler path."})
+
+
 def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, dict] | None:
     """Resolve only the three reviewed core/KHR equivalent semantics.
 
@@ -160,7 +202,8 @@ def multiview_axes(row: dict, query: dict, extensions: set[str]) -> tuple[dict, 
              "detail": "Equivalent KHR field; Vulkan 1.2 aggregate structs and API 1.3 remain unadvertised."},
             {"state": "implemented" if satisfied else "missing",
              "refs": ["src/vk_device.c", "src/vk_render_pass.c", "native/graphics_queue_ps5.c"],
-             "detail": "Reviewed multiview execution; the separate CTS and native axes must also pass."})
+             "detail": "Reviewed multiview execution; a strict native witness is required, "
+                       "and an observed applicable CTS failure blocks."})
 
 
 def canonical(value: object) -> str:
@@ -197,11 +240,28 @@ def implemented_device_extensions() -> set[str]:
     # Count only bits assigned to the native platform's supported-features
     # mask, keeping the capability probe aligned with the ordinary build.
     platform_source = (ROOT / "native/platform_ps5.c").read_text()
+    # A default-off measurement build is not the shipping capability probe.
+    # Strip only this explicitly named conditional block, and fail closed if
+    # its preprocessor boundary is malformed rather than counting its bits.
+    for name in (
+        "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
+    ):
+        guard = f"#if defined({name}) && {name}"
+        if guard in platform_source:
+            pattern = re.compile(r"^" + re.escape(guard) + r"\n.*?^#endif\s*$",
+                                 re.MULTILINE | re.DOTALL)
+            blocks = list(pattern.finditer(platform_source))
+            if (len(blocks) != 1 or
+                    re.search(r"^#(?:if|ifdef|ifndef|elif|else)\b",
+                              blocks[0].group()[len(guard):],
+                              re.MULTILINE)):
+                raise ValueError(f"malformed {name} guard")
+            platform_source = pattern.sub("", platform_source)
     platform_source = re.sub(r"/\*.*?\*/|//[^\n]*", "", platform_source, flags=re.DOTALL)
-    assignments = re.findall(r"platform->supported_features\s*(?:\|=|=)\s*(.*?);",
+    assignments = re.findall(r"platform->supported_features(?:_t09)?\s*(?:\|=|=)\s*(.*?);",
                              platform_source, re.DOTALL)
     shipping_bits = {bit for assignment in assignments
-                     for bit in re.findall(r"PS5VK_FEATURE_[A-Z0-9_]+", assignment)}
+                     for bit in re.findall(r"PS5VK_(?:T09_)?FEATURE_[A-Z0-9_]+", assignment)}
     gates = {
         "VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME": {
             "PS5VK_FEATURE_STORAGE_BUFFER_8BIT", "PS5VK_FEATURE_STORAGE_BUFFER_16BIT"},
@@ -218,6 +278,10 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS"},
         "VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME": {
             "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT"},
+        "VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_HOST_QUERY_RESET"},
+        "VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE"},
     }
     unmapped = sorted(tokens - gates.keys())
     if unmapped:
@@ -467,8 +531,16 @@ def generate() -> dict:
             extensions, feature_reports)
         if buffer_address is not None:
             api, implementation = buffer_address
+        host_query_reset = host_query_reset_axes(requirement,
+            reporting["profiles"]["graphics"].get("host_query_reset_query", {}),
+            extensions, feature_reports)
+        if host_query_reset is not None:
+            api, implementation = host_query_reset
+        sampler_mirror_clamp = sampler_mirror_clamp_axes(requirement, extensions)
+        if sampler_mirror_clamp is not None:
+            api, implementation = sampler_mirror_clamp
         diagnostic = diagnostic_implementation(identifier)
-        if diagnostic is not None:
+        if diagnostic is not None and sampler_mirror_clamp is None:
             implementation = diagnostic
         cts = cts_join(related, override.get("cts"), selected_cases, diagnostic_cases)
         if "native" in override:

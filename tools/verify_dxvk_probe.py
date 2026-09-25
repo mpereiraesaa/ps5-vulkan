@@ -179,6 +179,23 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
                 bda_routes[0].get("route") == "VK_KHR_buffer_device_address" and
                 bda_routes[0].get("bufferDeviceAddress") == str(observed[bda_id]),
                 "explicit buffer device address query route")
+    host_id = "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset"
+    host_routes = [row for kind, row in messages
+                   if kind == "DXVK262_HOST_QUERY_RESET_QUERY"]
+    if host_routes or (version < (1, 2, 0) and observed[host_id]):
+        require(len(host_routes) == 1 and
+                host_routes[0].get("route") == "VK_EXT_host_query_reset" and
+                host_routes[0].get("hostQueryReset") == str(observed[host_id]),
+                "explicit host query reset route")
+    mirror_id = "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge"
+    mirror_routes = [row for kind, row in messages
+                     if kind == "DXVK262_SAMPLER_MIRROR_CLAMP_QUERY"]
+    if mirror_routes or (version < (1, 2, 0) and observed[mirror_id]):
+        require(len(mirror_routes) == 1 and
+                mirror_routes[0].get("route") == "VK_KHR_sampler_mirror_clamp_to_edge" and
+                mirror_routes[0].get("samplerMirrorClampToEdge") == "1" and
+                observed[mirror_id] == 1,
+                "explicit sampler mirror clamp route")
 
     total = len(expected_rows)
     blockers = total - satisfied
@@ -200,7 +217,8 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
         "artifact_eboot_sha256": digest,
         "observed": observed,
         "source_log": str(log_path),
-        "query_routes": routes + standard_ubo_routes + memory_model_routes + bda_routes,
+        "query_routes": (routes + standard_ubo_routes + memory_model_routes +
+                         bda_routes + host_routes + mirror_routes),
         "source_matrix_sha256": dxvk["matrix_sha256"],
     }
 

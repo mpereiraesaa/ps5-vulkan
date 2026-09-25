@@ -9,30 +9,6 @@
 #define FB_MARK(...) ((void)0)
 #endif
 
-/* The array layers an attachment view has to carry for a pass that uses view
- * masks: one layer per view, so the highest view index any subpass that names
- * this attachment renders, plus one. Zero means the pass has no masks at all,
- * which is every pass the shipping build can create, and zero adds no
- * requirement anywhere below. */
-static uint32_t attachment_view_count(VkRenderPass pass, uint32_t attachment)
-{
-    const struct ps5vk_render_pass_multiview *multiview = &pass->multiview;
-    if (!multiview->present) return 0;
-    uint32_t views = 0;
-    for (uint32_t s = 0; s < multiview->subpass_count; ++s) {
-        const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, s);
-        if (subpass->color[0].attachment != attachment &&
-            subpass->depth.attachment != attachment &&
-            !(subpass->resolve_count && subpass->resolve[0].attachment == attachment))
-            continue;
-        const uint32_t mask = multiview->view_masks[s];
-        /* A view mask is 32 bits wide, so a view index is a bit position. */
-        for (uint32_t bit = 0; bit < 32u; ++bit)
-            if (mask & (UINT32_C(1) << bit)) views = bit + 1u;
-    }
-    return views;
-}
-
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebufferCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkFramebuffer *out)
 {
@@ -43,12 +19,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO) return VK_ERROR_UNKNOWN;
     if (!d->graphics_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
-    if (info->pNext || info->flags || info->layers != 1) return VK_ERROR_FEATURE_NOT_PRESENT;
+    const VkBool32 imageless = !!(info->flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT);
+    if (info->flags & ~VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT || info->layers != 1)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (imageless && !(d->enabled_features_t09 & PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    const VkFramebufferAttachmentsCreateInfo *attachments_info = NULL;
+    if (imageless) {
+        attachments_info = (const VkFramebufferAttachmentsCreateInfo *)info->pNext;
+        if (!attachments_info ||
+            attachments_info->sType != VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO ||
+            attachments_info->pNext ||
+            attachments_info->attachmentImageInfoCount != info->attachmentCount ||
+            (info->attachmentCount && !attachments_info->pAttachmentImageInfos))
+            return VK_ERROR_UNKNOWN;
+    } else if (info->pNext) return VK_ERROR_FEATURE_NOT_PRESENT;
     VkRenderPass pass = info->renderPass;
     if (!pass || pass->device != d || !info->width || !info->height ||
-        info->attachmentCount != pass->attachment_count || !info->pAttachments)
+        info->attachmentCount != pass->attachment_count ||
+        (!imageless && info->attachmentCount && !info->pAttachments))
         return VK_ERROR_UNKNOWN;
-    for (uint32_t i = 0; i < info->attachmentCount; ++i) {
+    if (!imageless) for (uint32_t i = 0; i < info->attachmentCount; ++i) {
         VkImageView view = info->pAttachments[i];
         if (!view || view->device != d || !view->image->memory || view->range.levelCount != 1 ||
             view->format != pass->attachments[i].format ||
@@ -71,7 +62,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
          * (vkCreateImageView), so a backing with fewer layers than the mask
          * needs cannot satisfy this and is refused here. The framebuffer itself
          * still has exactly one layer. */
-        const uint32_t views = attachment_view_count(pass, i);
+        const uint32_t views = ps5vk_framebuffer_attachment_view_count(pass, i);
         if (views && (view->range.baseArrayLayer || view->range.layerCount < views))
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
@@ -80,6 +71,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
         sizeof(*fb), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, &saved, &custom);
     if (!fb) return VK_ERROR_OUT_OF_HOST_MEMORY;
     memset(fb, 0, sizeof(*fb)); fb->device = d; fb->allocator = saved; fb->custom_allocator = custom;
+    fb->imageless = imageless;
     fb->width = info->width; fb->height = info->height; fb->attachment_count = info->attachmentCount;
     /* The roles are the same in every subpass of this profile, so the first
      * one names them for the framebuffer. */
@@ -95,10 +87,52 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(VkDevice d, const VkFramebuff
     }
     fb->depth_attachment = ps5vk_render_pass_subpass(pass, 0)->depth.attachment;
     for (uint32_t i = 0; i < fb->attachment_count; ++i) {
-        fb->attachments[i] = info->pAttachments[i]; ++fb->attachments[i]->framebuffers;
         fb->formats[i] = pass->attachments[i].format; fb->samples[i] = pass->attachments[i].samples;
+        if (!imageless) {
+            fb->attachments[i] = info->pAttachments[i];
+            ++fb->attachments[i]->framebuffers;
+            continue;
+        }
+        const VkFramebufferAttachmentImageInfo *a = &attachments_info->pAttachmentImageInfos[i];
+        const VkImageUsageFlags usage = i == fb->depth_attachment ?
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        if (a->sType != VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO || a->pNext ||
+            !a->width || !a->height || !a->layerCount ||
+            a->width < fb->width || a->height < fb->height ||
+            a->layerCount < info->layers || !(a->usage & usage) ||
+            !a->viewFormatCount || !a->pViewFormats ||
+            a->layerCount < ps5vk_framebuffer_attachment_view_count(pass, i)) goto fail;
+        VkBool32 match = VK_FALSE;
+        for (uint32_t j = 0; j < a->viewFormatCount; ++j)
+            if (a->pViewFormats[j] == fb->formats[i]) match = VK_TRUE;
+        if (!match) goto fail;
+        fb->view_formats[i] = ps5vk_object_alloc(fb->custom_allocator ? &fb->allocator : NULL,
+            NULL, (size_t)a->viewFormatCount * sizeof(VkFormat),
+            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, &fb->format_allocators[i],
+            &fb->format_custom[i]);
+        if (!fb->view_formats[i]) goto oom;
+        memcpy(fb->view_formats[i], a->pViewFormats,
+            (size_t)a->viewFormatCount * sizeof(VkFormat));
+        fb->view_format_count[i] = a->viewFormatCount;
+        fb->image_flags[i] = a->flags;
+        fb->image_usage[i] = a->usage;
+        fb->image_width[i] = a->width;
+        fb->image_height[i] = a->height;
+        fb->image_layers[i] = a->layerCount;
     }
     ++d->graphics_objects; *out = fb; return VK_SUCCESS;
+oom:
+    for (uint32_t i = 0; i < fb->attachment_count; ++i)
+        if (fb->view_formats[i]) ps5vk_object_free(fb->view_formats[i],
+            &fb->format_allocators[i], fb->format_custom[i]);
+    ps5vk_object_free(fb, &saved, custom);
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
+fail:
+    for (uint32_t i = 0; i < fb->attachment_count; ++i)
+        if (fb->view_formats[i]) ps5vk_object_free(fb->view_formats[i],
+            &fb->format_allocators[i], fb->format_custom[i]);
+    ps5vk_object_free(fb, &saved, custom);
+    return VK_ERROR_UNKNOWN;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkDestroyFramebuffer(VkDevice d, VkFramebuffer fb,
@@ -111,7 +145,11 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyFramebuffer(VkDevice d, VkFramebuffer fb,
         if (d) ++d->lifetime_errors;
         return;
     }
-    for (uint32_t i = 0; i < fb->attachment_count; ++i) --fb->attachments[i]->framebuffers;
+    for (uint32_t i = 0; i < fb->attachment_count; ++i) {
+        if (fb->attachments[i]) --fb->attachments[i]->framebuffers;
+        if (fb->view_formats[i]) ps5vk_object_free(fb->view_formats[i],
+            &fb->format_allocators[i], fb->format_custom[i]);
+    }
     --d->graphics_objects;
     VkAllocationCallbacks saved = fb->allocator; VkBool32 custom = fb->custom_allocator;
     ps5vk_object_free(fb, &saved, custom);

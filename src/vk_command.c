@@ -211,9 +211,11 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
         if(type==VK_OBJECT_TYPE_BUFFER)for(unsigned k=0;k<PS5VK_MAX_VERTEX_BINDINGS;++k)
             if(op->vertices[k].buffer==object)return 1;
         if ((type == VK_OBJECT_TYPE_RENDER_PASS && (const void *)op->render_pass == object) ||
-            (type == VK_OBJECT_TYPE_FRAMEBUFFER && (const void *)op->framebuffer == object)) return 1;
+            (type == VK_OBJECT_TYPE_FRAMEBUFFER &&
+             (const void *)ps5vk_framebuffer_original(op->framebuffer) == object)) return 1;
         if (op->framebuffer) for (uint32_t k = 0; k < op->framebuffer->attachment_count; ++k) {
             VkImageView view = op->framebuffer->attachments[k];
+            if (!view) continue;
             if ((type == VK_OBJECT_TYPE_IMAGE_VIEW && (const void *)view == object) ||
                 (type == VK_OBJECT_TYPE_IMAGE && (const void *)view->image == object)) return 1;
         }
@@ -787,18 +789,36 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     VkRenderPass pass = info->renderPass; VkFramebuffer fb = info->framebuffer;
     VkRect2D area = info->renderArea;
-    if (info->pNext) {
-        const VkDeviceGroupRenderPassBeginInfo *group =
-            (const VkDeviceGroupRenderPassBeginInfo *)info->pNext;
-        if (!c->pool->device->device_group_extension_enabled ||
-            group->sType != VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO ||
-            group->pNext || group->deviceMask != 1 ||
-            group->deviceRenderAreaCount > 1 ||
-            (group->deviceRenderAreaCount && !group->pDeviceRenderAreas)) {
-            invalid(c); return;
-        }
-        if (group->deviceRenderAreaCount) area = group->pDeviceRenderAreas[0];
+    const VkRenderPassAttachmentBeginInfo *attachment_begin = NULL;
+    VkBool32 seen_group = VK_FALSE;
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
+         next; next = next->pNext) {
+        if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO && !seen_group) {
+            const VkDeviceGroupRenderPassBeginInfo *group =
+                (const VkDeviceGroupRenderPassBeginInfo *)next;
+            if (!c->pool->device->device_group_extension_enabled ||
+                group->deviceMask != 1 || group->deviceRenderAreaCount > 1 ||
+                (group->deviceRenderAreaCount && !group->pDeviceRenderAreas)) {
+                invalid(c); return;
+            }
+            if (group->deviceRenderAreaCount) area = group->pDeviceRenderAreas[0];
+            seen_group = VK_TRUE;
+        } else if (next->sType == VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO &&
+                   !attachment_begin) {
+            attachment_begin = (const VkRenderPassAttachmentBeginInfo *)next;
+        } else { invalid(c); return; }
     }
+    /* A compatible render pass may describe fewer attachments than the
+     * framebuffer. This implementation requires positional equality, and the
+     * view validator indexes pass->attachments by framebuffer slot. */
+    if (fb->attachment_count != pass->attachment_count) { invalid(c); return; }
+    if (fb->imageless) {
+        if (!attachment_begin || attachment_begin->attachmentCount != fb->attachment_count ||
+            (fb->attachment_count && !attachment_begin->pAttachments)) { invalid(c); return; }
+        for (uint32_t i = 0; i < fb->attachment_count; ++i)
+            if (!ps5vk_framebuffer_attachment_valid(fb, pass, i,
+                    attachment_begin->pAttachments[i])) { invalid(c); return; }
+    } else if (attachment_begin) { invalid(c); return; }
     /* Every colour role the subpass names must be the one the framebuffer
      * carries, in order, and the depth role after them. A subpass that names
      * no colour role at all - the DEPTH-ONLY shape - has an empty list on both
@@ -806,8 +826,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
      * the executing framebuffer contract too: when the subpass declares one,
      * the framebuffer has to carry it at the same index (DXVK262-T06). */
     const struct ps5vk_subpass *first=ps5vk_render_pass_subpass(pass, 0);
-    if (fb->attachment_count != pass->attachment_count ||
-        fb->color_count != first->color_count ||
+    if (fb->color_count != first->color_count ||
         fb->resolve_count != first->resolve_count ||
         (fb->resolve_count && fb->resolve_attachments[0] != first->resolve[0].attachment) ||
         fb->depth_attachment != first->depth.attachment ||
@@ -822,8 +841,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
         if (fb->formats[j] != a->format || fb->samples[j] != a->samples ||
             (a->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR && info->clearValueCount <= j)) { invalid(c); return; }
     }
-    struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_BEGIN_RENDER_PASS,
-        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
+    struct ps5vk_operation *op;
+    if (fb->imageless) {
+        struct VkFramebuffer_T snapshot = *fb;
+        snapshot.original = fb;
+        for (uint32_t i = 0; i < fb->attachment_count; ++i)
+            snapshot.attachments[i] = attachment_begin->pAttachments[i];
+        op = ps5vk_command_reserve_operation_with_payload(c, PS5VK_BEGIN_RENDER_PASS,
+            PS5VK_OPERATION_OUTSIDE_RENDER_PASS, &snapshot, sizeof(snapshot));
+        if (op) fb = (VkFramebuffer)op->owned_payload;
+    } else op = ps5vk_command_reserve_operations(c, PS5VK_BEGIN_RENDER_PASS,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS, 1);
     if(!op)return;
     op->render_pass=pass;op->framebuffer=fb;op->render_area=area;
     op->render_pass_contents=contents;
@@ -918,6 +946,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
         /* An INLINE pass carries its own draws and admits no secondaries. */
         (c->render_pass &&
          c->render_pass_contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
+        /* The backend resolves a secondary's inherited framebuffer itself;
+         * it cannot inherit a begin-time imageless view snapshot yet. */
+        (c->framebuffer && c->framebuffer->imageless) ||
         !count || !commands) { invalid(c); return; }
     VkDevice d = c->pool->device;
     for (uint32_t j = 0; j < count; ++j) {
@@ -951,7 +982,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdExecuteCommands(VkCommandBuffer c,
               * and its pipelines carry that identity. */
              child->inheritance.subpass != c->subpass ||
              (child->inheritance.framebuffer &&
-              child->inheritance.framebuffer != c->framebuffer)))
+              child->inheritance.framebuffer != ps5vk_framebuffer_original(c->framebuffer))))
             { invalid(c); return; }
         if (!simultaneous) {
             /* Without simultaneous use a child may not already be pending and

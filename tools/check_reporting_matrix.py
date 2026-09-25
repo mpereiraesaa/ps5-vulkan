@@ -236,6 +236,18 @@ ADVERTISED_FEATURES["occlusionQueryPrecise"] = {
     "detail": "precise occlusion counters complete on GPU and pass the original query oracle",
     "cts": ("dEQP-VK.query_pool.occlusion_query.basic_precise",),
 }
+ADVERTISED_FEATURES["hostQueryReset"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;"),
+        ("src/vk_query_pool.c", "VKAPI_ATTR void VKAPI_CALL vkResetQueryPoolEXT"),
+        ("src/vk_device.c", "VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME"),
+    ),
+    "detail": ("the Vulkan 1.0 EXT feature route exposes ordered host reset of "
+               "completed query slots; precise occlusion reset and reuse passed "
+               "a strict SDK-linked native witness"),
+    "cts": (),
+}
 ADVERTISED_FEATURES["shaderImageGatherExtended"] = {
     "profiles": ("graphics",),
     "citations": (
@@ -1257,7 +1269,8 @@ def main() -> int:
             features.append({"kind": "feature", "feature": name, "profile": profile,
                              "reported": value, "verdict": verdict, "detail": detail})
         for name in ("uniformBufferStandardLayout", "vulkanMemoryModel",
-                     "vulkanMemoryModelDeviceScope", "bufferDeviceAddress"):
+                     "vulkanMemoryModelDeviceScope", "bufferDeviceAddress",
+                     "hostQueryReset"):
             value = dump["extensionFeatures"][name]
             verdict, detail = evaluate_feature(name, value, profile)
             features.append({"kind": "extension-feature", "feature": name,
@@ -1345,10 +1358,12 @@ def main() -> int:
         },
         "profiles": {profile: {"deviceName": dump["deviceName"], "apiVersion": dump["apiVersion"],
                                "vendorID": dump["vendorID"], "deviceID": dump["deviceID"],
+                               "device_extensions": dump["extensions"],
                                "multiview_query": dump["multiviewQuery"],
                                "standard_ubo_query": dump["standardUBOQuery"],
                                "memory_model_query": dump["memoryModelQuery"],
-                               "buffer_device_address_query": dump["bufferDeviceAddressQuery"]}
+                               "buffer_device_address_query": dump["bufferDeviceAddressQuery"],
+                               "host_query_reset_query": dump["hostQueryResetQuery"]}
                      for profile, dump in dumps.items()},
         "limits": limits,
         "features": features,

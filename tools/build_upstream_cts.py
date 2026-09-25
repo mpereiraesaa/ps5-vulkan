@@ -47,6 +47,7 @@ def tessellation_build_profile(environment):
             # reported every selected leaf NotSupported for sampleRateShading.
             "PS5VK_SAMPLE_RATE_DIAGNOSTIC",
             "PS5VK_SHADER_INT16_DIAGNOSTIC",
+            "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
         )
     }
     return {
@@ -1015,6 +1016,8 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiObjectManagementTests.cpp",
         # Original compressed image sampling cases and upstream reference oracle.
         cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureCompressedFormatTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureFilteringTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/imageless_framebuffer/vktImagelessFramebufferTests.cpp",
         focused_sources / "vktApiCopiesAndBlittingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp",
         # Original UBO block-layout factory, shader bodies and result oracle.
@@ -1180,6 +1183,10 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineVertexUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineReferenceRenderer.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMakeUtil.cpp",
+        # Upstream sampler address-mode factory for the 8x8x8 3D W leaf.
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineSamplerTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineImageSamplingInstance.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineSamplerBorderSwizzleTests.cpp",
         # Genuine upstream blend factory, including the dual-source family.
         # The package registers the family under the monolithic construction
         # group and cases.txt selects the leaves, exactly as for the other

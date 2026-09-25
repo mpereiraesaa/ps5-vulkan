@@ -44,6 +44,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#ifndef PS5VK_SAMPLER_MIRROR_CASE
+#define PS5VK_SAMPLER_MIRROR_CASE -1
+#endif
 #if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY
 extern int32_t sceAgcDriverGetTFRing(uint64_t *,uint32_t *);
 extern int32_t sceAgcDriverSetTFRing(uint64_t,uint32_t);
@@ -87,6 +90,9 @@ int32_t __wrap_sceAgcInit(void *unused_state, uint32_t unused_size)
 #endif
 #ifndef PS5VK_OCCLUSION_QUERY_API_PROBE
 #define PS5VK_OCCLUSION_QUERY_API_PROBE 0
+#endif
+#ifndef PS5VK_HOST_QUERY_RESET_PROBE
+#define PS5VK_HOST_QUERY_RESET_PROBE 0
 #endif
 #ifndef PS5VK_GATHER_FORM
 #define PS5VK_GATHER_FORM 0
@@ -186,6 +192,10 @@ static uint64_t scene_now_ns(void)
 }
 static unsigned diagnostic_iterations(void)
 {
+#if PS5VK_SAMPLER_MIRROR_CASE >= PS5VK_SAMPLER_MIRROR_FIRST_CASE
+    /* Every mirror variant has its own SDK-linked executable. */
+    return 1;
+#endif
 #if PS5VK_OCCLUSION_QUERY_API_PROBE || PS5VK_GATHER_FORM
     /* These diagnostic modes each carry one artifact-bound transaction. */
     return 1;
@@ -248,6 +258,10 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     VkImageCreateFlags image_flags=0;
     if(PS5VK_IMAGE_TARGET) {
         width=height=64;slices=PS5VK_IMAGE_TARGET==2?6:3;
+#if PS5VK_SAMPLER_MIRROR_CASE >= 20
+        /* Two 2x2 slices make W the only varying sampled coordinate. */
+        width=height=slices=2;
+#endif
         if(PS5VK_IMAGE_TARGET>=4) {
             width=PS5VK_IMAGE_TARGET==4?192:64;height=1;
             slices=PS5VK_IMAGE_TARGET==4?1:3;
@@ -286,7 +300,10 @@ static struct texture_fixture texture_create(VkDevice d,VkDescriptorSetLayout la
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
         struct ps5vk_sampler_core_case c;
         if(ps5vk_sampler_core_case(probe_case,&c))fail("sampler-core-case",-1);
-        si.addressModeU=si.addressModeV=si.addressModeW=c.address_mode;
+        if(c.mirror_axis==1)si.addressModeU=c.address_mode;
+        else if(c.mirror_axis==2)si.addressModeV=c.address_mode;
+        else if(c.mirror_axis==3)si.addressModeW=c.address_mode;
+        else si.addressModeU=si.addressModeV=si.addressModeW=c.address_mode;
         si.borderColor=c.border_color;
         si.magFilter=c.mag_filter;
         si.minFilter=c.min_filter;
@@ -706,10 +723,15 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
                         scene_vertices[vertex].uv_angle[0]=u[vertex];
                         scene_vertices[vertex].uv_angle[1]=v[vertex];
                     }
-                } else for(unsigned vertex=0;vertex<3;++vertex)
-                    scene_vertices[vertex].uv_angle[0]=scene_vertices[vertex].uv_angle[1]=c.uv;
-                ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_INPUT case=%u name=%s uv_milli=%d minification=%u expected_bgra=%08x",
-                    witness_index,c.name,(int)(c.uv*1000.0f),c.minification,c.expected_bgra);
+                } else for(unsigned vertex=0;vertex<3;++vertex) {
+                    scene_vertices[vertex].uv_angle[0]=c.uv;
+                    scene_vertices[vertex].uv_angle[1]=c.mirror_axis?c.uv_v:c.uv;
+                }
+                ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_INPUT case=%u name=%s uv_milli=%d uv_v_milli=%d mirror_axis=%u filter=%s minification=%u expected_bgra=%08x",
+                    witness_index,c.name,(int)(c.uv*1000.0f),
+                    (int)((c.mirror_axis?c.uv_v:c.uv)*1000.0f),c.mirror_axis,
+                    c.mag_filter==VK_FILTER_LINEAR?"linear":"nearest",
+                    c.minification,c.expected_bgra);
             } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==11 ||
                       PS5VK_GRAPHICS_SCISSOR_PROBE==12) {
                 if(ps5vk_scene_probe_triangle_uv(scene_vertices))
@@ -810,6 +832,12 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     VkQueryPoolCreateInfo query_pool_info={.sType=VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
         .queryType=VK_QUERY_TYPE_OCCLUSION,.queryCount=3};
     CHECK(vkCreateQueryPool(d,&query_pool_info,NULL,&api_query_pool));
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    PFN_vkResetQueryPoolEXT host_reset=(PFN_vkResetQueryPoolEXT)
+        vkGetDeviceProcAddr(d,"vkResetQueryPoolEXT");
+    if(!host_reset)fail("host-query-reset-dispatch",-1);
+    host_reset(d,api_query_pool,0,3);
+#endif
     VkBufferCreateInfo query_buffer_info={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size=72,.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         .sharingMode=VK_SHARING_MODE_EXCLUSIVE};
@@ -825,7 +853,9 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     api_query_range=(VkMappedMemoryRange){.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
         .memory=api_query_memory,.size=VK_WHOLE_SIZE};
     CHECK(vkFlushMappedMemoryRanges(d,1,&api_query_range));
+#if !PS5VK_HOST_QUERY_RESET_PROBE
     vkCmdResetQueryPool(cb,api_query_pool,0,3);
+#endif
     VkCommandBufferAllocateInfo query_ai=ai;
     query_ai.level=VK_COMMAND_BUFFER_LEVEL_SECONDARY;
     CHECK(vkAllocateCommandBuffers(d,&query_ai,&query_cb));
@@ -974,7 +1004,9 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     unsigned recorded_draws=draw_count+(PS5VK_OCCLUSION_QUERY_API_PROBE?0u:0u);
     unsigned expected_primary_ops=prelude+2+recorded_draws+query_ops;
 #if PS5VK_OCCLUSION_QUERY_API_PROBE
-    expected_primary_ops=prelude+6u; /* reset, render-pass/execute/end, two copies */
+    /* Host reset is outside the command stream; the original variant has
+     * one extra recorded reset before render-pass/execute/end and copies. */
+    expected_primary_ops=prelude+(PS5VK_HOST_QUERY_RESET_PROBE?5u:6u);
     if(query_cb->operation_count!=10u)
         fail("secondary-query-operation-count",-1);
     if(query_cb->operations[0].type!=PS5VK_QUERY_BEGIN ||
@@ -1018,9 +1050,30 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
     CHECK(vkQueueWaitIdle(queue));
 #if PS5VK_OCCLUSION_QUERY_API_PROBE
-    /* Re-submit this exact command buffer after completion. Its recorded
-     * vkCmdResetQueryPool must make these same three query slots writable
-     * again before the second begin/end sequence. */
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    uint64_t host_before[6]={0};
+    CHECK(vkGetQueryPoolResults(d,api_query_pool,0,3,sizeof(host_before),
+        host_before,16,VK_QUERY_RESULT_64_BIT|
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT));
+    if(host_before[0]!=1 || host_before[1]!=1 || host_before[2]!=0 ||
+       host_before[3]!=1 || host_before[4]!=3 || host_before[5]!=1)
+        fail("host-query-reset-before",-1);
+    host_reset(d,api_query_pool,0,3);
+    uint64_t host_after[6]={1,UINT64_MAX,0,UINT64_MAX,3,UINT64_MAX};
+    VkResult host_status=vkGetQueryPoolResults(d,api_query_pool,0,3,
+        sizeof(host_after),host_after,16,VK_QUERY_RESULT_64_BIT|
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+    if(host_status!=VK_NOT_READY || host_after[0]!=1 || host_after[1]!=0 ||
+       host_after[2]!=0 || host_after[3]!=0 || host_after[4]!=3 ||
+       host_after[5]!=0)
+        fail("host-query-reset-unavailable",host_status);
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_HOST_QUERY_RESET phase=after_reset old=1,0,3 availability=0,0,0 status=not_ready");
+#endif
+    /* Re-submit this exact command buffer after completion. In the host
+     * variant it contains no reset command, so only vkResetQueryPoolEXT made
+     * these three slots available for the second begin/end sequence. The
+     * original variant retains its ordered command-buffer reset. */
     CHECK(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
     CHECK(vkQueueWaitIdle(queue));
     CHECK(vkInvalidateMappedMemoryRanges(d,1,&api_query_range));
@@ -1045,6 +1098,10 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
     if(copied32[0]!=1 || copied32[1]!=1 || copied32[2]!=0 || copied32[3]!=1 ||
        copied32[4]!=3 || copied32[5]!=1)
         fail("occlusion-query-api-copy32",-1);
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    ps5log_line(PS5LOG_MARK,
+        "PS5VK_HOST_QUERY_RESET phase=after_reuse values=1,0,3 availability=1,1,1 completed=1");
+#endif
     ps5log_printf(PS5LOG_MARK,
         "PS5VK_OCCLUSION_QUERY_API_RESULT passed_samples=%llu availability=%llu copied_samples=%llu copied_availability=%llu zero_samples=%llu zero_availability=%llu zero_copied_samples=%llu zero_copied_availability=%llu three_samples=%llu three_availability=%llu three_copied_samples=%llu three_copied_availability=%llu samples32=%u availability32=%u copied_samples32=%u copied_availability32=%u zero_samples32=%u zero_availability32=%u zero_copied_samples32=%u zero_copied_availability32=%u three_samples32=%u three_availability32=%u three_copied_samples32=%u three_copied_availability32=%u precise_enabled=1 secondary=1 get_wait=1 copy_wait=1 partial=1 same_pool_reset_repeat=1 valid=1",
         (unsigned long long)query_values[0],(unsigned long long)query_values[1],
@@ -1263,14 +1320,18 @@ static void prepare_recorded_draw(VkDevice d, VkPipeline pipeline,
             expected_bgra,expected,other,first_other,valid);
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==6) {
         struct ps5vk_sampler_core_case c;size_t expected=0,other=0;
+        uint32_t first_sample=0;
         if(ps5vk_sampler_core_case(witness_index,&c))fail("sampler-core-case",-1);
         for(size_t i=0;i<words;++i) {
-            if(pixels[i]==c.expected_bgra)++expected;
+            if(!first_sample && pixels[i]!=background)first_sample=pixels[i];
+            if(pixels[i]==c.expected_bgra ||
+               (witness_index>=PS5VK_SAMPLER_MIRROR_FIRST_CASE &&
+                ps5vk_sampler_core_color_near(pixels[i],c.expected_bgra,1)))++expected;
             else if(pixels[i]!=background)++other;
         }
         valid=expected==(c.minification?1u:373248u) && !other;
-        ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_READBACK case=%u name=%s expected_bgra=%08x expected=%zu other=%zu valid=%d",
-            witness_index,c.name,c.expected_bgra,expected,other,valid);
+        ps5log_printf(PS5LOG_MARK,"PS5VK_SAMPLER_CORE_READBACK case=%u name=%s expected_bgra=%08x actual_bgra=%08x expected=%zu other=%zu valid=%d",
+            witness_index,c.name,c.expected_bgra,first_sample,expected,other,valid);
     } else if(PS5VK_GRAPHICS_SCISSOR_PROBE)valid=stats.changed<=
         (uint64_t)pipeline->scissor.extent.width*pipeline->scissor.extent.height && !stats.bad_alpha && !stats.bad_sum;
 #if PS5VK_GATHER_FORM
@@ -4568,6 +4629,12 @@ int main(void)
         !PS5VK_EXIT_CONTROL && PS5VK_GRAPHICS_DRAW);
     VkInstance instance;
     VkInstanceCreateInfo ici = {.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    const char *host_query_instance_extensions[]={
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME};
+    ici.enabledExtensionCount=1;
+    ici.ppEnabledExtensionNames=host_query_instance_extensions;
+#endif
     CHECK(vkCreateInstance(&ici,NULL,&instance));
     uint32_t count=1; VkPhysicalDevice physical;
     CHECK(vkEnumeratePhysicalDevices(instance,&count,&physical));
@@ -4706,6 +4773,32 @@ int main(void)
     float priority=1;
     VkDeviceQueueCreateInfo qi = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueCount=1,.pQueuePriorities=&priority};
     VkDeviceCreateInfo di = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi};
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    VkPhysicalDeviceHostQueryResetFeaturesEXT host_query_features={
+        .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT};
+    VkPhysicalDeviceFeatures2KHR host_query_features2={
+        .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
+        .pNext=&host_query_features};
+    vkGetPhysicalDeviceFeatures2KHR(physical,&host_query_features2);
+    if(host_query_features.hostQueryReset!=VK_TRUE)
+        fail("host-query-reset-feature-query",-1);
+    const char *host_query_device_extensions[]={VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME};
+    di.enabledExtensionCount=1;
+    di.ppEnabledExtensionNames=host_query_device_extensions;
+    di.pNext=&host_query_features;
+#endif
+#if PS5VK_SAMPLER_MIRROR_CASE >= PS5VK_SAMPLER_MIRROR_FIRST_CASE
+#if PS5VK_HOST_QUERY_RESET_PROBE
+    const char *sampler_extensions[]={VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
+        VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME};
+    di.enabledExtensionCount=2;
+    di.ppEnabledExtensionNames=sampler_extensions;
+#else
+    const char *sampler_extension=VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME;
+    di.enabledExtensionCount=1;
+    di.ppEnabledExtensionNames=&sampler_extension;
+#endif
+#endif
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55 || PS5VK_FRAGMENT_STORE_PROBE || PS5VK_DUAL_SOURCE_PROBE || PS5VK_TWO_MRT_PROBE || PS5VK_SAMPLE_RATE_PROBE || PS5VK_OCCLUSION_QUERY_API_PROBE || (PS5VK_GATHER_FORM>=2 && PS5VK_GATHER_FORM<=4)
     VkPhysicalDeviceFeatures requested_features={0};
 #if PS5VK_TESS_VARIANT==25 || PS5VK_TESS_VARIANT==55
@@ -5255,6 +5348,9 @@ int main(void)
 #endif
     for (unsigned iteration=0;iteration<diagnostic_iterations();++iteration) {
         unsigned witness_index=PS5VK_GRAPHICS_WITNESSES==2 && iteration==3?5:iteration;
+#if PS5VK_SAMPLER_MIRROR_CASE >= PS5VK_SAMPLER_MIRROR_FIRST_CASE
+        witness_index=PS5VK_SAMPLER_MIRROR_CASE;
+#endif
 #if defined(PS5VK_RUNTIME_GRAPHICS) && PS5VK_RUNTIME_GRAPHICS
         if(PS5VK_GRAPHICS_SCISSOR_PROBE==13) {
             binding_mode=iteration%3;
@@ -5290,7 +5386,8 @@ int main(void)
             scissor=(VkRect2D){{(int32_t)ps5vk_scene_witnesses[witness_index].x,(int32_t)ps5vk_scene_witnesses[witness_index].y},{1,1}};
         } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==13 || ps5vk_scene_full_frame_probe(PS5VK_GRAPHICS_SCISSOR_PROBE)) {
             depth.depthTestEnable=VK_FALSE;
-            scissor=PS5VK_GRAPHICS_SCISSOR_PROBE==6 && witness_index>=6 ?
+            scissor=PS5VK_GRAPHICS_SCISSOR_PROBE==6 &&
+                witness_index>=6 && witness_index<PS5VK_SAMPLER_MIRROR_FIRST_CASE ?
                 (VkRect2D){{960,540},{1,1}}:(VkRect2D){{0,0},{1920,1080}};
         } else if(PS5VK_GRAPHICS_SCISSOR_PROBE==15 && PS5VK_OCCLUSION_DEPTH_PROBE) {
             /* Center of the deterministic planar triangle, after the

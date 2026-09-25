@@ -155,6 +155,53 @@ int main(void)
     }
 
 #if PS5VK_MULTIVIEW_DIAGNOSTIC
+    /* Both colour targets carry the mask, including target one. */
+    {
+        const VkAttachmentDescription attachments[2] = {
+            {.format=VK_FORMAT_R8G8B8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT,
+             .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,
+             .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+             .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+            {.format=VK_FORMAT_R8G8B8A8_UNORM, .samples=VK_SAMPLE_COUNT_1_BIT,
+             .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR,
+             .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
+             .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+        const VkAttachmentReference colors[2] = {
+            {0u, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+            {1u, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
+        const VkSubpassDescription subpass = {.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .colorAttachmentCount=2u, .pColorAttachments=colors};
+        const VkRenderPassMultiviewCreateInfo multiview = {
+            .sType=VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
+            .subpassCount=1u, .pViewMasks=six_views};
+        const VkRenderPassCreateInfo pass_info = {.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .pNext=&multiview, .attachmentCount=2u, .pAttachments=attachments,
+            .subpassCount=1u, .pSubpasses=&subpass};
+        VkRenderPass pass = VK_NULL_HANDLE;
+        assert(vkCreateRenderPass(&d, &pass_info, NULL, &pass) == VK_SUCCESS);
+        VkDeviceMemory memories[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+        VkImage images[2] = {
+            make_image(&d, VK_FORMAT_R8G8B8A8_UNORM, 6u, &memories[0]),
+            make_image(&d, VK_FORMAT_R8G8B8A8_UNORM, 6u, &memories[1])};
+        VkImageView first = make_view(&d, images[0], VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_VIEW_TYPE_2D_ARRAY, 0u, 6u, VK_SUCCESS);
+        VkImageView short_second = make_view(&d, images[1], VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_VIEW_TYPE_2D_ARRAY, 0u, 5u, VK_SUCCESS);
+        VkImageView full_second = make_view(&d, images[1], VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_VIEW_TYPE_2D_ARRAY, 0u, 6u, VK_SUCCESS);
+        assert(make_framebuffer(&d, pass, first, short_second, 1u,
+            VK_ERROR_FEATURE_NOT_PRESENT) == VK_NULL_HANDLE);
+        VkFramebuffer fb = make_framebuffer(&d, pass, first, full_second, 1u, VK_SUCCESS);
+        vkDestroyFramebuffer(&d, fb, NULL);
+        vkDestroyImageView(&d, short_second, NULL);
+        vkDestroyImageView(&d, full_second, NULL);
+        vkDestroyImageView(&d, first, NULL);
+        for (unsigned i = 0; i < 2; ++i) {
+            vkDestroyImage(&d, images[i], NULL);
+            vkFreeMemory(&d, memories[i], NULL);
+        }
+        vkDestroyRenderPass(&d, pass, NULL);
+    }
     /* The gate is ON: this is the pass D1b will measure, and the framebuffer
      * contract it needs. The pass really owns the six-view mask. */
     {
