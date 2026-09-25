@@ -337,6 +337,16 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * original stencil/depth leaves. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |
         PS5VK_T09_FEATURE_MAINTENANCE2 | PS5VK_T09_FEATURE_CREATE_RENDERPASS2;
+#if defined(PS5VK_SHADER_DEMOTE_DIAGNOSTIC) && PS5VK_SHADER_DEMOTE_DIAGNOSTIC
+    /* Private measurement build (DXVK262-T11): enumerate
+     * VK_EXT_shader_demote_to_helper_invocation and
+     * VK_KHR_shader_terminate_invocation so a witness can negotiate them.
+     * Removed pixels leave depth/stencil untouched (pixel-removal witness);
+     * the ordinary profile waits for the helper-derivative witness. */
+    platform->supported_features_t09 |=
+        PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION |
+        PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
+#endif
 
 #endif
 #else

@@ -343,6 +343,8 @@ def implemented_device_extensions() -> set[str]:
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
 
+        "PS5VK_SHADER_DEMOTE_DIAGNOSTIC",
+
     ):
         guard = f"#if defined({name}) && {name}"
         if guard in platform_source:
@@ -389,6 +391,10 @@ def implemented_device_extensions() -> set[str]:
         "VK_KHR_MAINTENANCE_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE2"},
         "VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_CREATE_RENDERPASS2"},
+        "VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION"},
+        "VK_KHR_SHADER_TERMINATE_INVOCATION_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION"},
 
     }
     unmapped = sorted(tokens - gates.keys())
