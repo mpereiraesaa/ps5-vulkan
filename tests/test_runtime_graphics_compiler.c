@@ -8,6 +8,7 @@
 #include "kill_export_ps5.h"
 #include "vk_descriptor.h"
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2610,6 +2611,31 @@ static void check_t08_compiler_options(void)
     assert(ps5vk_runtime_graphics_t08_options(all, &bad, &options) == VK_ERROR_UNKNOWN);
 }
 
+/* A pipeline compile from an application thread whose stack is far below
+ * what PSBC needs (host measurement: 160-192 KiB, src/compile_stack.h): the
+ * driver runs the compile on its own sized stack, or this thread overflows. */
+struct small_stack_graphics {
+    const struct ps5vk_graphics_key *key; const void *out; VkResult result;
+};
+static void *small_stack_graphics(void *opaque)
+{
+    struct small_stack_graphics *c=opaque;
+    c->result=ps5vk_runtime_graphics_compile(NULL,c->key,&c->out);
+    return NULL;
+}
+static void check_small_stack_graphics(const struct ps5vk_graphics_key *key)
+{
+    struct small_stack_graphics c={key,NULL,VK_ERROR_UNKNOWN};
+    pthread_attr_t attr;pthread_t thread;
+    assert(!pthread_attr_init(&attr));
+    assert(!pthread_attr_setstacksize(&attr,(size_t)64u<<10));
+    assert(!pthread_create(&thread,&attr,small_stack_graphics,&c));
+    assert(!pthread_join(thread,NULL));
+    pthread_attr_destroy(&attr);
+    assert(c.result==VK_SUCCESS && c.out);
+    ps5vk_runtime_graphics_free(NULL,c.out);
+}
+
 int main(void)
 {
     check_t08_compiler_options();
@@ -2649,6 +2675,7 @@ int main(void)
         .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
     const void *out=NULL;
     check_interfaces(&key);
+    check_small_stack_graphics(&key);
     assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     const struct ps5vk_runtime_graphics_program *p=out;
     assert(p->vertex.machine_code_size && p->fragment.machine_code_size);

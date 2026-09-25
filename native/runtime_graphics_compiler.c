@@ -8,6 +8,7 @@
  * commit 7f9bfabdddb187a11e4401058eba8c9e55194d0a (GPL-3.0-or-later).
  */
 #include "runtime_graphics_compiler.h"
+#include "compile_stack.h"
 #include "runtime_resource_use.h"
 #include "spirv_graphics_interface.h"
 #include "descriptor_table_layout.h"
@@ -802,9 +803,8 @@ static int push_metadata_supported(const PsbcShaderMetadata *metadata,
             VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:VK_SHADER_STAGE_VERTEX_BIT);
 }
 
-VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphics_key *key,const void **out)
+static VkResult runtime_graphics_compile(const struct ps5vk_graphics_key *key,const void **out)
 {
-    (void)context;
     if(!out)return VK_ERROR_UNKNOWN;
     *out=NULL;
     if(!ps5vk_runtime_graphics_supported(key))return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -1224,4 +1224,29 @@ failed:
     if(result==PSBC_RESULT_OUT_OF_MEMORY)failure=VK_ERROR_OUT_OF_HOST_MEMORY;
     ps5vk_runtime_graphics_free(NULL,p);
     return failure;
+}
+
+struct runtime_graphics_compile_call {
+    const struct ps5vk_graphics_key *key;
+    const void **out;
+    VkResult result;
+};
+
+static void runtime_graphics_compile_call(void *opaque)
+{
+    struct runtime_graphics_compile_call *call=opaque;
+    call->result=runtime_graphics_compile(call->key,call->out);
+}
+
+/* The compile runs on a driver-sized stack (compile_stack.h): the calling
+ * thread may be an application worker with a small default stack. */
+VkResult ps5vk_runtime_graphics_compile(void *context,const struct ps5vk_graphics_key *key,const void **out)
+{
+    (void)context;
+    if(!out)return VK_ERROR_UNKNOWN;
+    *out=NULL;
+    struct runtime_graphics_compile_call call={key,out,VK_ERROR_UNKNOWN};
+    if(ps5vk_compile_on_sized_stack(runtime_graphics_compile_call,&call))
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    return call.result;
 }
