@@ -566,6 +566,12 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_depth_kill.frag -o build/runtime-graphics/depth_kill.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.3 experiments/graphics/runtime_depth_kill.frag -o build/runtime-graphics/depth_terminate.frag.spv
 	$(GLSLANG) -V --target-env vulkan1.3 -DDEMOTE=1 experiments/graphics/runtime_depth_kill.frag -o build/runtime-graphics/depth_demote.frag.spv
+	$(GLSLANG) -V -DREMOVE=0 experiments/graphics/runtime_helper_derivative.frag -o build/runtime-graphics/helper_control.frag.spv
+	$(GLSLANG) -V experiments/graphics/runtime_helper_derivative.frag -o build/runtime-graphics/helper_kill.frag.spv
+	$(GLSLANG) -V --target-env vulkan1.3 -DDEMOTE=1 experiments/graphics/runtime_helper_derivative.frag -o build/runtime-graphics/helper_demote.frag.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DDEMOTE=1 experiments/graphics/runtime_helper_derivative.frag -o build/runtime-graphics/helper_demote_ext.frag.spv
+	$(GLSLANG) -V --target-env vulkan1.3 experiments/graphics/runtime_helper_derivative.frag -o build/runtime-graphics/helper_terminate.frag.spv
+	$(GLSLANG) -V -DTERMINATE_KHR=1 experiments/graphics/runtime_helper_derivative.frag -o build/runtime-graphics/helper_terminate_khr.frag.spv
 	$(GLSLANG) -V -DWITH_DISTANCES=1 experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_clip_cull_probe.vert -o build/runtime-graphics/clip_cull_control.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_probe.vert -o build/runtime-graphics/geometry_probe.vert.spv

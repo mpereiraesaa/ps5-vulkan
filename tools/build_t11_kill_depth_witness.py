@@ -71,7 +71,31 @@ def checked_spirv(payload: bytes, version: int, capabilities: set,
         raise ValueError("unexpected pixel-removal instruction")
 
 
-def main() -> None:
+def strip_extensions(payload: bytes) -> bytes:
+    """The module without its OpExtension instructions (DXVK's SPIR-V 1.6
+    spelling of core demote declares none)."""
+    words = struct.unpack(f"<{len(payload) // 4}I", payload)
+    kept = list(words[:5])
+    index = 5
+    while index < len(words):
+        size = words[index] >> 16
+        if not size or index + size > len(words):
+            raise ValueError("malformed SPIR-V instruction stream")
+        if words[index] & 0xffff != 10:
+            kept += words[index:index + size]
+        index += size
+    if len(kept) == len(words):
+        raise ValueError("module declares no extension to strip")
+    return struct.pack(f"<{len(kept)}I", *kept)
+
+
+def build_witness(*, name: str, shaders: dict, header: str, profile: str,
+                  content_id: str, title: str, extra: dict) -> Path:
+    """Compile and check the shaders, stage the ordinary SDK, link and sign
+    examples/<name>/main.c into dist-<name>/PPSA99994, and write its artifact.
+
+    shaders maps an array name to (source, glslang arguments, SPIR-V version,
+    capabilities, removal opcode, strip OpExtension)."""
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
@@ -82,28 +106,32 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    build = ROOT / "build/t11-kill-depth-witness"
-    dist = ROOT / "dist-t11-kill-depth-witness/PPSA99994"
+    slug = name.replace("_", "-")
+    build = ROOT / f"build/{slug}"
+    dist = ROOT / f"dist-{slug}/PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
 
     arrays = []
     shader_hashes = {}
-    for name, (source, arguments, version, capabilities, removal) in SHADERS.items():
-        target = build / f"{name}.spv"
-        run(glslang, "-V", *arguments, str(ROOT / source), "-o", str(target))
+    for array, (shader, arguments, version, capabilities, removal, strip) in shaders.items():
+        target = build / f"{array}.spv"
+        run(glslang, "-V", *arguments, str(ROOT / shader), "-o", str(target))
         payload = target.read_bytes()
+        if strip:
+            payload = strip_extensions(payload)
+            target.write_bytes(payload)
         checked_spirv(payload, version, capabilities, removal)
-        arrays.append(emit_array(name, payload))
-        shader_hashes[name] = hashlib.sha256(payload).hexdigest()
-    (build / "t11_kill_depth_shaders.h").write_text(
+        arrays.append(emit_array(array, payload))
+        shader_hashes[array] = hashlib.sha256(payload).hexdigest()
+    (build / header).write_text(
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
 
     # The ordinary staged SDK: the rule is part of the shipping draw path.
     sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
-    source = ROOT / "examples/t11_kill_depth_witness/main.c"
+    source = ROOT / f"examples/{name}/main.c"
     obj = build / "main.o"
     dep = build / "main.d"
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
@@ -147,18 +175,16 @@ def main() -> None:
 
     param = json.loads((lab / "projects/ps5-agc-gears/sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
-                 contentId="UP9000-PPSA99994_00-PS5VKKW000000001")
-    param["localizedParameters"]["en-US"]["titleName"] = (
-        "PS5 Vulkan Pixel Removal Witness")
+                 contentId=content_id)
+    param["localizedParameters"]["en-US"]["titleName"] = title
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": "t11-kill-depth-public-sdk-witness",
-        "extent": 64, "format": "D32_SFLOAT_S8_UINT",
-        "cases": ["control", "kill", "terminate", "demote"],
+        "profile": profile,
+        **extra,
         "diagnostic_switch": None,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
@@ -167,6 +193,19 @@ def main() -> None:
     artifact_path = dist.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")
     print(f"{artifact_path}: eboot {artifact['eboot_sha256']}")
+    return artifact_path
+
+
+def main() -> None:
+    build_witness(
+        name="t11_kill_depth_witness",
+        shaders={array: (*shape, False) for array, shape in SHADERS.items()},
+        header="t11_kill_depth_shaders.h",
+        profile="t11-kill-depth-public-sdk-witness",
+        content_id="UP9000-PPSA99994_00-PS5VKKW000000001",
+        title="PS5 Vulkan Pixel Removal Witness",
+        extra={"extent": 64, "format": "D32_SFLOAT_S8_UINT",
+               "cases": ["control", "kill", "terminate", "demote"]})
 
 
 if __name__ == "__main__":
