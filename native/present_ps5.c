@@ -29,7 +29,8 @@ static int flip(uint32_t **c,uint32_t capacity,uint32_t mode,int32_t handle,int3
 { return ps5_agc_writer_set_flip(c,capacity,mode,handle,index,fm,token,sceAgcDcbSetFlip); }
 static int compatible_image(VkImage image, VkDevice device)
 {
-    const VkImageUsageFlags scanout = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    const VkImageUsageFlags scanout = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     return image && image->device == device && !image->pending && !image->display_busy &&
         image->info.format == VK_FORMAT_B8G8R8A8_UNORM &&
         image->info.imageType == VK_IMAGE_TYPE_2D && !image->info.flags &&
@@ -37,8 +38,7 @@ static int compatible_image(VkImage image, VkDevice device)
         image->info.extent.width == 1920 && image->info.extent.height == 1080 &&
         image->info.extent.depth == 1 && image->info.mipLevels == 1 &&
         image->info.arrayLayers == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
-        (image->info.usage == scanout ||
-         image->info.usage == (scanout | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+        image->info.usage && !(image->info.usage & ~scanout);
 }
 /* Synchronous native interop, NOT a Vulkan surface/swapchain. Registration
  * retains both images until close. Each frame requires completed rendering;
