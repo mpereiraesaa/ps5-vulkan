@@ -910,6 +910,129 @@ static void separate_sampler_types(void)
     vkFreeMemory(&d, memory, NULL);
     assert(!d.descriptor_objects && !d.buffers && !d.buffer_views && !d.memories);
 }
+/* VK_EXT_robustness2 nullDescriptor (DXVK262-T13). DXVK writes VK_NULL_HANDLE
+ * for every unbound D3D11 slot: a null buffer (offset 0, VK_WHOLE_SIZE), a
+ * null texel buffer view, and a null image view with or without its sampler.
+ * Those writes are accepted only on a device that enabled the feature; input
+ * attachments never take a null view. */
+static void null_descriptors(void)
+{
+    struct VkDevice_T d={.graphics_enabled=VK_TRUE,.buffer_alignment=256,
+        .uniform_buffer_alignment=256};
+    struct VkSampler_T sampler={.device=&d,.words={1,2,3,4}};
+    VkDescriptorSetLayoutBinding bindings[]={
+        {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
+        {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
+        {2,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
+        {3,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
+        {4,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
+        {5,VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
+        {6,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
+        {7,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
+        {8,VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,NULL}};
+    VkDescriptorSetLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount=9,.pBindings=bindings};
+    VkDescriptorSetLayout layout;assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    VkDescriptorPoolSize sizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,2},{VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,2},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,2},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,2},
+        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,2},{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,2},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,2},{VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,2}};
+    VkDescriptorPoolCreateInfo pi={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets=2,.poolSizeCount=9,.pPoolSizes=sizes};VkDescriptorPool pool;
+    assert(vkCreateDescriptorPool(&d,&pi,NULL,&pool)==VK_SUCCESS);
+    VkDescriptorSetLayout layouts[]={layout,layout};
+    VkDescriptorSetAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool=pool,.descriptorSetCount=2,.pSetLayouts=layouts};VkDescriptorSet sets[2];
+    assert(vkAllocateDescriptorSets(&d,&ai,sets)==VK_SUCCESS);
+    VkDescriptorSet set=sets[0];
+    const VkDescriptorBufferInfo null_buffer={VK_NULL_HANDLE,0,VK_WHOLE_SIZE};
+    const VkBufferView null_view=VK_NULL_HANDLE;
+    const VkDescriptorImageInfo null_storage={(VkSampler)(uintptr_t)0x5a,VK_NULL_HANDLE,
+        VK_IMAGE_LAYOUT_UNDEFINED};
+    const VkDescriptorImageInfo null_combined={&sampler,VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};
+    VkWriteDescriptorSet writes[]={
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=0,.descriptorCount=1,
+         .descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,.pBufferInfo=&null_buffer},
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=1,.descriptorCount=1,
+         .descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,.pBufferInfo=&null_buffer},
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=2,.descriptorCount=1,
+         .descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,.pTexelBufferView=&null_view},
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=3,.descriptorCount=1,
+         .descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,.pImageInfo=&null_storage},
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=4,.descriptorCount=1,
+         .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.pImageInfo=&null_combined},
+        {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,.dstBinding=6,.descriptorCount=1,
+         .descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,.pBufferInfo=&null_buffer}};
+    const unsigned write_count=sizeof(writes)/sizeof(writes[0]);
+    /* Without the feature every null write is refused and nothing is defined. */
+    for(unsigned i=0;i<write_count;++i) {
+        d.lifetime_errors=0;
+        vkUpdateDescriptorSets(&d,1,&writes[i],0,NULL);
+        assert(d.lifetime_errors==1);
+    }
+    for(unsigned i=0;i<set->signature.count;++i)assert(!set->defined[i]);
+    d.enabled_features_t09|=PS5VK_T09_FEATURE_NULL_DESCRIPTOR;d.lifetime_errors=0;
+    vkUpdateDescriptorSets(&d,write_count,writes,0,NULL);
+    assert(!d.lifetime_errors);
+    /* Signature indices follow binding order: 0..6 one descriptor each. */
+    for(unsigned i=0;i<9;++i)assert(set->defined[i]==(i<7 && i!=5));
+    assert(!set->buffers[0].buffer && !set->buffers[0].offset &&
+        set->buffers[0].range==VK_WHOLE_SIZE);
+    assert(!set->buffers[1].buffer && !set->buffers[6].buffer);
+    assert(!set->texel_views[2]);
+    /* The storage image's ignored sampler is canonicalized; no resource. */
+    assert(!set->images[3].imageView && !set->images[3].sampler && !set->image_resources[3]);
+    /* The combined record keeps its live sampler beside the null view. */
+    assert(!set->images[4].imageView && set->images[4].sampler==&sampler &&
+        !set->image_resources[4]);
+    /* A copied null descriptor stays null and defined. */
+    VkCopyDescriptorSet copy={.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET,.srcSet=set,
+        .srcBinding=4,.dstSet=sets[1],.dstBinding=4,.descriptorCount=1};
+    vkUpdateDescriptorSets(&d,0,NULL,1,&copy);
+    assert(!d.lifetime_errors && sets[1]->defined[4] && !sets[1]->images[4].imageView &&
+        sets[1]->images[4].sampler==&sampler && !sets[1]->image_resources[4]);
+    /* Shapes the feature still refuses: a null buffer with an offset or an
+     * explicit range (VUID-VkDescriptorBufferInfo-buffer-02999), a combined
+     * record without a sampler, and a null input attachment. */
+    const VkDescriptorBufferInfo refused_buffers[]={{VK_NULL_HANDLE,256,VK_WHOLE_SIZE},
+        {VK_NULL_HANDLE,0,256}};
+    for(unsigned i=0;i<2;++i) {
+        VkWriteDescriptorSet w=writes[0];w.dstSet=sets[1];w.pBufferInfo=&refused_buffers[i];
+        d.lifetime_errors=0;vkUpdateDescriptorSets(&d,1,&w,0,NULL);
+        assert(d.lifetime_errors==1 && !sets[1]->defined[0]);
+    }
+    const VkDescriptorImageInfo no_sampler={VK_NULL_HANDLE,VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};
+    struct VkDevice_T other={0};
+    struct VkSampler_T foreign={.device=&other};
+    const VkDescriptorImageInfo foreign_sampler={&foreign,VK_NULL_HANDLE,VK_IMAGE_LAYOUT_UNDEFINED};
+    const VkDescriptorImageInfo *refused_images[]={&no_sampler,&foreign_sampler};
+    for(unsigned i=0;i<2;++i) {
+        VkWriteDescriptorSet w=writes[4];w.dstSet=sets[1];w.dstBinding=4;w.pImageInfo=refused_images[i];
+        sets[1]->defined[4]=VK_FALSE;
+        d.lifetime_errors=0;vkUpdateDescriptorSets(&d,1,&w,0,NULL);
+        assert(d.lifetime_errors==1 && !sets[1]->defined[4]);
+    }
+    const VkDescriptorImageInfo null_input={VK_NULL_HANDLE,VK_NULL_HANDLE,VK_IMAGE_LAYOUT_GENERAL};
+    VkWriteDescriptorSet input={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=set,
+        .dstBinding=5,.descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+        .pImageInfo=&null_input};
+    d.lifetime_errors=0;vkUpdateDescriptorSets(&d,1,&input,0,NULL);
+    assert(d.lifetime_errors==1 && !set->defined[5]);
+    /* Separate sampled images and storage texel buffers have no null encoder
+     * yet, so they keep refusing a null handle even with the feature. */
+    VkWriteDescriptorSet sampled=input;sampled.dstBinding=7;
+    sampled.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;sampled.pImageInfo=&null_combined;
+    d.lifetime_errors=0;vkUpdateDescriptorSets(&d,1,&sampled,0,NULL);
+    assert(d.lifetime_errors==1 && !set->defined[7]);
+    VkWriteDescriptorSet storage_texel={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet=set,.dstBinding=8,.descriptorCount=1,
+        .descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,.pTexelBufferView=&null_view};
+    d.lifetime_errors=0;vkUpdateDescriptorSets(&d,1,&storage_texel,0,NULL);
+    assert(d.lifetime_errors==1 && !set->defined[8]);
+    vkDestroyDescriptorPool(&d,pool,NULL);vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    assert(!d.descriptor_objects);
+}
 
 /* DXVK 2.6.2 builds one DESCRIPTOR_SET template per set layout
  * (dxvk_pipelayout.cpp): one entry per binding, descriptorCount 1,
@@ -1418,5 +1541,6 @@ int main(void)
     update_templates();
     inline_uniform_limits(); inline_uniform_layouts(); inline_uniform_pools();
     inline_uniform_updates(); inline_uniform_pipeline_layouts();
+    null_descriptors();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }

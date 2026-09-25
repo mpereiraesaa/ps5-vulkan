@@ -158,5 +158,88 @@ int main(void)
     storage.images[0].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
         image_table,16)!=VK_SUCCESS);
+    storage.images[0].imageLayout=VK_IMAGE_LAYOUT_GENERAL;
+
+    /* VK_EXT_robustness2 nullDescriptor. Without the device feature a null
+     * handle is refused before any word changes. With it, each null role is
+     * an all-zero record of its own width, and the live records beside it are
+     * encoded exactly as before. */
+    const VkDescriptorBufferInfo null_buffer={VK_NULL_HANDLE,0,VK_WHOLE_SIZE};
+    uint32_t record[4];
+    memset(record,0xab,sizeof(record));
+    assert(ps5vk_buffer_descriptor(&device,&null_buffer,0,record)!=VK_SUCCESS);
+    for(unsigned i=0;i<4;++i)assert(record[i]==0xabababab);
+    storage.images[0]=(VkDescriptorImageInfo){VK_NULL_HANDLE,VK_NULL_HANDLE,
+        VK_IMAGE_LAYOUT_UNDEFINED};
+    storage.image_resources[0]=VK_NULL_HANDLE;
+    storage.buffers[1]=null_buffer;
+    memset(image_table,0xab,sizeof(image_table));
+    assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
+        image_table,16)!=VK_SUCCESS);
+    for(unsigned i=0;i<16;++i)assert(image_table[i]==0xabababab);
+    device.enabled_features_t09|=PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    assert(ps5vk_buffer_descriptor(&device,&null_buffer,0,record)==VK_SUCCESS);
+    for(unsigned i=0;i<4;++i)assert(record[i]==0);
+    /* A dynamic offset bound for a null dynamic buffer is not in the record. */
+    memset(record,0xab,sizeof(record));
+    assert(ps5vk_buffer_descriptor(&device,&null_buffer,4096,record)==VK_SUCCESS);
+    for(unsigned i=0;i<4;++i)assert(record[i]==0);
+    /* VUID-VkDescriptorBufferInfo-buffer-02999: offset 0, VK_WHOLE_SIZE. */
+    const VkDescriptorBufferInfo null_offset={VK_NULL_HANDLE,256,VK_WHOLE_SIZE};
+    const VkDescriptorBufferInfo null_range={VK_NULL_HANDLE,0,256};
+    memset(record,0xab,sizeof(record));
+    assert(ps5vk_buffer_descriptor(&device,&null_offset,0,record)!=VK_SUCCESS);
+    assert(ps5vk_buffer_descriptor(&device,&null_range,0,record)!=VK_SUCCESS);
+    for(unsigned i=0;i<4;++i)assert(record[i]==0xabababab);
+    memset(image_table,0xab,sizeof(image_table));
+    assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
+        image_table,16)==VK_SUCCESS);
+    for(unsigned i=0;i<12;++i)assert(image_table[i]==0);
+    assert(image_table[12]==0xabababab);
+    /* A live storage image beside a null buffer keeps its exact T#. */
+    storage.images[0]=(VkDescriptorImageInfo){VK_NULL_HANDLE,&image_view,VK_IMAGE_LAYOUT_GENERAL};
+    storage.image_resources[0]=&image;
+    assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
+        image_table,16)==VK_SUCCESS);
+    assert(image_table[0]==0x2000010 && image_table[3]==0x90000204);
+    for(unsigned i=8;i<12;++i)assert(image_table[i]==0);
+    /* A view without its recorded resource is still a broken record, not a
+     * null one. */
+    storage.image_resources[0]=VK_NULL_HANDLE;
+    assert(ps5vk_descriptor_encode(&device,&storage_program,0,&storage,dynamic,
+        image_table,16)!=VK_SUCCESS);
+    texel.texel_views[0]=VK_NULL_HANDLE;
+    memset(table,0xab,sizeof(table));
+    assert(ps5vk_descriptor_encode(&device,&typed,1,&texel,dynamic,table,16)==VK_SUCCESS);
+    for(unsigned i=0;i<4;++i)assert(table[i]==0);
+    assert(table[4]==0xabababab);
+    device.enabled_features_t09&=~(uint32_t)PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    assert(ps5vk_descriptor_encode(&device,&typed,1,&texel,dynamic,table,16)!=VK_SUCCESS);
+
+    /* robustBufferAccess2: NUM_RECORDS is the descriptor range rounded up to
+     * the reported four-byte alignment, only on a device that enabled it;
+     * robustBufferAccess alone keeps the exact byte extent. */
+    const VkDescriptorBufferInfo ranged={(VkBuffer)(uintptr_t)0x100004000,64,4093};
+    assert(ps5vk_buffer_descriptor(&device,&ranged,0,record)==VK_SUCCESS);
+    assert(record[0]==0x4040 && record[1]==1 && record[2]==4093 &&
+        record[3]==0x31016fac);
+    device.enabled_features_t09|=PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2;
+    const VkDeviceSize ranges[][2]={{4093,4096},{4094,4096},{4095,4096},{4096,4096},
+        {1,4},{4097,4100}};
+    for(unsigned i=0;i<sizeof(ranges)/sizeof(ranges[0]);++i) {
+        const VkDescriptorBufferInfo r={(VkBuffer)(uintptr_t)0x100004000,64,ranges[i][0]};
+        assert(ps5vk_buffer_descriptor(&device,&r,0,record)==VK_SUCCESS);
+        assert(record[0]==0x4040 && record[1]==1 && record[2]==ranges[i][1] &&
+            record[3]==0x31016fac);
+    }
+    /* A dynamic offset moves the base, never the rounded extent. */
+    assert(ps5vk_buffer_descriptor(&device,&ranged,256,record)==VK_SUCCESS);
+    assert(record[0]==0x4140 && record[2]==4096);
+    /* The rounded extent is still bounded to 32 bits. */
+    const VkDescriptorBufferInfo huge={(VkBuffer)(uintptr_t)0x100004000,0,UINT32_MAX};
+    assert(ps5vk_buffer_descriptor(&device,&huge,0,record)!=VK_SUCCESS);
+    device.enabled_features_t09&=~(uint32_t)PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2;
+    assert(ps5vk_buffer_descriptor(&device,&huge,0,record)==VK_SUCCESS);
+    assert(record[2]==UINT32_MAX);
     puts("Compiler-ordered raw descriptor table: pass (host only)");
 }

@@ -189,7 +189,23 @@ enum ps5vk_t09_feature_bits {
      * with no extension alternative, so it stays unavailable while the
      * device reports Vulkan 1.0, whatever the platform reports. */
     PS5VK_T09_FEATURE_MAINTENANCE4 = 1u << 12,
+    /* VK_EXT_robustness2 (DXVK262-T13), one bit per implemented feature.
+     * robustBufferAccess2: uniform/storage buffer records bound the
+     * descriptor range rounded up to PS5VK_ROBUST_BUFFER_ACCESS_SIZE_ALIGNMENT.
+     * nullDescriptor: VK_NULL_HANDLE buffers, buffer views and image views are
+     * written as zeroed hardware records. robustImageAccess2 is not
+     * implemented. No platform reports either bit until the native witness
+     * measured it. Bits 20-21 are the range coordinated for this tranche. */
+    PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 = 1u << 20,
+    PS5VK_T09_FEATURE_NULL_DESCRIPTOR = 1u << 21,
 };
+
+/* robust{Storage,Uniform}BufferAccessSizeAlignment. GFX10 raw buffer records
+ * (stride 0, NUM_RECORDS in bytes) bounds-check each dword of a VMEM or SMEM
+ * access; with NUM_RECORDS a multiple of four no naturally aligned access can
+ * straddle the bound, which is the granularity RADV reports for the same
+ * hardware. The native witness measures it before any platform reports it. */
+enum { PS5VK_ROBUST_BUFFER_ACCESS_SIZE_ALIGNMENT = 4 };
 
 /* maxTimelineSemaphoreValueDifference, derived from the payload algorithm
  * rather than copied from a profile floor: every payload, wait value and

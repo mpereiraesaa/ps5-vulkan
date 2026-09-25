@@ -1,6 +1,7 @@
 #include "draw_prepare_ps5.h"
 #include "vertex_fetch.h"
 #include "graphics_pipeline_ps5.h"
+#include "vk_sampler.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -460,6 +461,32 @@ int main(void)
         mixed[2].buffers[0].buffer=NULL;
         assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,NULL,&prepared)!=
             VK_SUCCESS && allocations==mixed_allocated && !prepared.backing);
+        /* VK_EXT_robustness2 nullDescriptor: on a device that enabled it the
+         * null buffer reaches its encoder (which writes the zeroed record,
+         * pinned by test_descriptor_encode), and a combined record with a
+         * null view is a zeroed T# followed by the live sampler's own S#,
+         * never a call to the image encoder. */
+        {
+            struct VkSampler_T null_sampler={.device=&d,.words={0x51,0x52,0x53,0x54}};
+            VkImageView saved_view=mixed[2].images[1].imageView;
+            mixed[2].images[1].imageView=VK_NULL_HANDLE;
+            mixed[2].images[1].sampler=&null_sampler;
+            d.enabled_features_t09|=PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+            const unsigned null_texture_calls=texture_calls,null_buffer_calls=buffer_calls;
+            assert(ps5vk_native_prepare_resource_draw(&d,&mixed_op,&area,NULL,shader_address,NULL,
+                &prepared)==VK_SUCCESS);
+            assert(texture_calls==null_texture_calls+4*24-1 && buffer_calls==null_buffer_calls+4);
+            for(unsigned w=0;w<4;++w)assert(prepared.descriptor_tables[2][w]==200+w);
+            for(unsigned w=0;w<8;++w)assert(prepared.descriptor_tables[2][4+w]==0);
+            for(unsigned w=0;w<4;++w)assert(prepared.descriptor_tables[2][12+w]==0x51+w);
+            for(unsigned w=0;w<12;++w)
+                assert(prepared.descriptor_tables[2][16+w]==100+w+256*(1+24*2+1));
+            ps5vk_native_release_draw(&prepared);assert(allocations==releases);
+            mixed_allocated=allocations;
+            d.enabled_features_t09&=~(uint32_t)PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+            mixed[2].images[1].imageView=saved_view;
+            mixed[2].images[1].sampler=VK_NULL_HANDLE;
+        }
         mixed[2].buffers[0].buffer=(VkBuffer)(uintptr_t)3;
         /* A descriptor type outside the bounded profile stays unsupported
          * rather than being half-delivered. */

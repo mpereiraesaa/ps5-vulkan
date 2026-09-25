@@ -98,11 +98,13 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
             for(unsigned e=0;e<binding->count;++e) {
                 unsigned index=binding->first+e;
                 if(!set->defined[index])return VK_ERROR_UNKNOWN;
-                /* A null buffer never reaches the encoder. Ownership and the
+                /* A null buffer reaches the encoder only on a device that
+                 * enabled nullDescriptor (a zeroed record). Ownership and the
                  * resolved span are validated by ps5vk_buffer_descriptor,
                  * which is the only place that can read a buffer handle. */
                 if(graphics_buffer_type(set->signature.type[b]) &&
-                   !set->buffers[index].buffer)return VK_ERROR_UNKNOWN;
+                   !set->buffers[index].buffer && !(d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR))
+                    return VK_ERROR_UNKNOWN;
                 /* The recorded view and the layout it is consumed through are
                  * preconditions this path owns: the encoder receives a view
                  * and cannot see a VkDescriptorImageInfo. VkDescriptorImageInfo's
@@ -286,7 +288,15 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
                     rc=ps5vk_image_resource_descriptor(d,set->images[index].imageView,words);
                 } else {
                     const VkDescriptorImageInfo *image=&set->images[index];
-                    rc=ps5vk_texture_descriptor(d,image->imageView,image->sampler,words);
+                    if(!image->imageView && (d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR) && image->sampler &&
+                       image->sampler->device==d) {
+                        /* nullDescriptor combined record: a zeroed T# (no
+                         * image type, samples return zero) and the sampler's
+                         * own S#, which the write kept live. */
+                        ps5vk_null_descriptor_words(words,8);
+                        memcpy(words+8,image->sampler->words,16);
+                        rc=VK_SUCCESS;
+                    } else rc=ps5vk_texture_descriptor(d,image->imageView,image->sampler,words);
                 }
                 if(rc!=VK_SUCCESS){ps5vk_native_release_draw(&result);{ ps5vk_draw_prepare_site = __LINE__; return rc; }}
             }

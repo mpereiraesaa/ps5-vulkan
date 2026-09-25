@@ -51,8 +51,18 @@ static VkResult storage_image_descriptor(VkDevice device,
 VkResult ps5vk_buffer_descriptor(VkDevice device, const VkDescriptorBufferInfo *info,
                                  VkDeviceSize dynamic_offset, uint32_t out[4])
 {
-    if (!device || !info || !info->buffer || !out ||
-        dynamic_offset > UINT64_MAX - info->offset)
+    if (!device || !info || !out) return VK_ERROR_UNKNOWN;
+    if (!info->buffer) {
+        /* nullDescriptor: VUID-VkDescriptorBufferInfo-buffer-02999 fixes a
+         * null buffer's offset at zero and its range at VK_WHOLE_SIZE. A
+         * dynamic offset bound for it is not part of the record. */
+        if (!(device->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR) || info->offset ||
+            info->range != VK_WHOLE_SIZE)
+            return VK_ERROR_UNKNOWN;
+        ps5vk_null_descriptor_words(out, 4);
+        return VK_SUCCESS;
+    }
+    if (dynamic_offset > UINT64_MAX - info->offset)
         return VK_ERROR_UNKNOWN;
     void *address = NULL;
     VkDeviceSize bytes = 0;
@@ -61,6 +71,17 @@ VkResult ps5vk_buffer_descriptor(VkDevice device, const VkDescriptorBufferInfo *
                                         &address, &bytes);
     if (result != VK_SUCCESS) return result;
     uint64_t gpu = (uintptr_t)address;
+    /* robustBufferAccess2 bounds the descriptor range rounded up to the
+     * reported robust{Storage,Uniform}BufferAccessSizeAlignment of four bytes.
+     * With NUM_RECORDS a multiple of four, a naturally aligned access is
+     * either wholly inside or wholly outside the record, so the raw bounds
+     * check cannot split a dword. The rounded bytes stay inside the bound
+     * memory: offsets are multiples of the (>= 4) offset alignments and every
+     * buffer's required size is rounded to the storage alignment. */
+    const VkDeviceSize granule = PS5VK_ROBUST_BUFFER_ACCESS_SIZE_ALIGNMENT;
+    if ((device->enabled_features_t09 & PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2) &&
+        bytes <= UINT64_MAX - (granule - 1u))
+        bytes = (bytes + granule - 1u) & ~(granule - 1u);
     if (!bytes || bytes > UINT32_MAX || gpu >= (UINT64_C(1) << 48) ||
         bytes > (UINT64_C(1) << 48) - gpu)
         return VK_ERROR_UNKNOWN;
@@ -109,6 +130,14 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
             return VK_ERROR_UNKNOWN;
         if (p->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
             const VkDescriptorImageInfo *info = &set->images[index];
+            if (!info->imageView && !set->image_resources[index] &&
+                (device->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) {
+                /* nullDescriptor: a zeroed T# has no image type, so loads
+                 * and size queries return zero and stores are dropped. */
+                ps5vk_null_descriptor_words(scratch + p->table_dword, 8);
+                if (extent < p->table_dword + 8) extent = p->table_dword + 8;
+                continue;
+            }
             if (!set->image_resources[index] || !info->imageView ||
                 set->image_resources[index] != info->imageView->image ||
                 storage_image_descriptor(device, info,
@@ -119,6 +148,12 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
         }
         if (p->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
             VkBufferView view = set->texel_views[index];
+            if (!view && (device->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) {
+                /* nullDescriptor: NUM_RECORDS zero and every DST_SEL zero. */
+                ps5vk_null_descriptor_words(scratch + p->table_dword, 4);
+                if (extent < p->table_dword + 4) extent = p->table_dword + 4;
+                continue;
+            }
             if (!view || view->device != device || !view->buffer) return VK_ERROR_UNKNOWN;
             const struct ps5vk_texture_format *entry =
                 ps5vk_texture_format_lookup(view->format);
