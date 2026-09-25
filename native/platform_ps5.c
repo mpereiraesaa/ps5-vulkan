@@ -448,6 +448,17 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
     ps5vk_native_tess_profile(platform);
+#if defined(PS5VK_DXVK_ROUTES_DIAGNOSTIC) && PS5VK_DXVK_ROUTES_DIAGNOSTIC
+    /* Private measurement build only (DXVK262): report the memory-requirement
+     * and binding routes DXVK calls right after device creation
+     * (VK_KHR_get_memory_requirements2, VK_KHR_dedicated_allocation,
+     * VK_KHR_bind_memory2), so the native DXVK payload can reach its first
+     * draw before a witness promotes them. The render and format routes have
+     * their own switches (PS5VK_DXVK_RENDER_DIAGNOSTIC,
+     * PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC). */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_GET_MEMORY_REQUIREMENTS2 |
+        PS5VK_T09_FEATURE_DEDICATED_ALLOCATION | PS5VK_T09_FEATURE_BIND_MEMORY2;
+#endif
 #if defined(PS5VK_MAINTENANCE4_DIAGNOSTIC) && PS5VK_MAINTENANCE4_DIAGNOSTIC
     /* DIAGNOSTIC DXVK measurement only, never shipping: VK_KHR_maintenance4
      * requires a Vulkan 1.1 device, which this profile does not report. */

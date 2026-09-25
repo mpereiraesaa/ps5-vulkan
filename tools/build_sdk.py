@@ -288,7 +288,8 @@ def main():
                      # Enumerate VK_KHR_synchronization2 (DXVK262) for a
                      # witness before the converted route is promoted.
                      "PS5VK_SYNCHRONIZATION2_DIAGNOSTIC",
-                     "PS5VK_STORAGE_TEXEL_DIAGNOSTIC"):
+                     "PS5VK_STORAGE_TEXEL_DIAGNOSTIC",
+                     "PS5VK_DXVK_ROUTES_DIAGNOSTIC"):
             value = os.environ.get(name, "0")
             if value not in ("0", "1"):
                 raise SystemExit(f"{name} must be 0 or 1")
