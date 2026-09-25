@@ -178,12 +178,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
     }
     if (display_enabled && !surface_enabled) return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (info->pNext || info->flags) return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t api_version = VK_API_VERSION_1_0;
     if (info->pApplicationInfo) {
         const VkApplicationInfo *a = info->pApplicationInfo;
         if (a->sType != VK_STRUCTURE_TYPE_APPLICATION_INFO || a->pNext) return INVALID;
-        uint32_t version = a->apiVersion;
-        if (version && (VK_API_VERSION_VARIANT(version) || VK_API_VERSION_MAJOR(version) != 1 ||
-                        VK_API_VERSION_MINOR(version) != 0)) return VK_ERROR_INCOMPATIBLE_DRIVER;
+        /* A Vulkan 1.1 instance must not return VK_ERROR_INCOMPATIBLE_DRIVER
+         * for any apiVersion. Instance-level behaviour follows the lower of
+         * the request and the instance version. */
+        if (a->apiVersion >= PS5VK_INSTANCE_API_VERSION)
+            api_version = PS5VK_INSTANCE_API_VERSION;
     }
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkInstance i = ps5vk_object_alloc(NULL, allocator, sizeof(*i),
@@ -194,6 +197,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
     i->device_group_creation_enabled = device_group_creation_enabled;
     i->surface_extension_enabled = surface_enabled;
     i->display_extension_enabled = display_enabled;
+    i->api_version = api_version;
     VkResult result = ps5vk_platform_query(&i->physical.platform);
     if (result == VK_SUCCESS) {
         struct ps5vk_platform *p = &i->physical.platform;
@@ -437,10 +441,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices(VkInstance i, uint32_t
     out[0] = &i->physical; *count = 1;
     return VK_SUCCESS;
 }
-VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR(VkInstance i,
+static VkResult enumerate_physical_device_groups(VkInstance i,
     uint32_t *count, VkPhysicalDeviceGroupProperties *out)
 {
-    if (!i || !count || !i->device_group_creation_enabled) return INVALID;
+    if (!count) return INVALID;
     if (!out) { *count = 1; return VK_SUCCESS; }
     if (!*count) return VK_INCOMPLETE;
     if (out[0].sType != VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES)
@@ -451,6 +455,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR(VkInstance i,
         out[0].physicalDevices[n] = VK_NULL_HANDLE;
     out[0].subsetAllocation = VK_FALSE;
     *count = 1;
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR(VkInstance i,
+    uint32_t *count, VkPhysicalDeviceGroupProperties *out)
+{
+    if (!i || !i->device_group_creation_enabled) return INVALID;
+    return enumerate_physical_device_groups(i, count, out);
+}
+/* Core Vulkan 1.1 name: an instance-level command of a 1.1 instance. */
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups(VkInstance i,
+    uint32_t *count, VkPhysicalDeviceGroupProperties *out)
+{
+    if (!i || i->api_version < VK_API_VERSION_1_1) return INVALID;
+    return enumerate_physical_device_groups(i, count, out);
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceVersion(uint32_t *version)
+{
+    if (!version) return INVALID;
+    *version = PS5VK_INSTANCE_API_VERSION;
     return VK_SUCCESS;
 }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties(VkPhysicalDevice p,

@@ -11,6 +11,7 @@ static const struct entry entries[] = {
     ENTRY(vkCreateInstance, GLOBAL),
     ENTRY(vkEnumerateInstanceExtensionProperties, GLOBAL),
     ENTRY(vkEnumerateInstanceLayerProperties, GLOBAL),
+    ENTRY(vkEnumerateInstanceVersion, GLOBAL),
     ENTRY(vkDestroyInstance, INSTANCE),
     ENTRY(vkEnumeratePhysicalDevices, INSTANCE),
     ENTRY(vkGetPhysicalDeviceDisplayPropertiesKHR, INSTANCE),
@@ -26,6 +27,7 @@ static const struct entry entries[] = {
     ENTRY(vkGetPhysicalDeviceSurfaceFormatsKHR, INSTANCE),
     ENTRY(vkGetPhysicalDeviceSurfacePresentModesKHR, INSTANCE),
     ENTRY(vkEnumeratePhysicalDeviceGroupsKHR, INSTANCE),
+    ENTRY(vkEnumeratePhysicalDeviceGroups, INSTANCE),
     ENTRY(vkGetPhysicalDeviceProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceMemoryProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceFeatures, INSTANCE),
@@ -282,6 +284,12 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
         return NULL;
     if (surface_command(name) &&
         (!instance || !instance->surface_extension_enabled))
+        return NULL;
+    /* Instance-level core 1.1 command: only for an instance created with
+     * apiVersion 1.1 or later. Physical-device-level core 1.1 names stay
+     * absent because the device reports Vulkan 1.0. */
+    if (!strcmp(name, "vkEnumeratePhysicalDeviceGroups") &&
+        (!instance || instance->api_version < VK_API_VERSION_1_1))
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if ((instance || entries[j].scope == GLOBAL) && !strcmp(name, entries[j].name))

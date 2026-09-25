@@ -52,9 +52,9 @@
       "vkGetPhysicalDeviceExternalSemaphoreProperties"
     ],
     "current_public_prototypes": [],
-    "current_core_dispatch": [],
-    "current_implementations": [],
-    "note": "KHR-suffixed entry points do not provide the required core command names; implementing the names alone would not establish full Vulkan 1.1 conformance."
+    "current_core_dispatch": ["vkEnumerateInstanceVersion", "vkEnumeratePhysicalDeviceGroups"],
+    "current_implementations": ["vkEnumerateInstanceVersion", "vkEnumeratePhysicalDeviceGroups"],
+    "note": "The two instance-level commands implement the Vulkan 1.1 instance: vkEnumerateInstanceVersion is global and vkEnumeratePhysicalDeviceGroups resolves only for an instance created with apiVersion 1.1 or later. The physical device still reports 1.0, so the physical-device and device-level core names stay absent; KHR-suffixed entry points do not provide them. This is not a Vulkan 1.1 device claim."
   },
   "api12_command_gate": {
     "registry_feature": "VK_BASE_VERSION_1_2",

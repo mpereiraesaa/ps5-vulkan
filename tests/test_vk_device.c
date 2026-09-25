@@ -1137,9 +1137,9 @@ static void negative(void)
     ii.ppEnabledExtensionNames = &unknown_instance_extension;
     assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_EXTENSION_NOT_PRESENT);
     ii.enabledExtensionCount = 0; ii.ppEnabledExtensionNames = NULL;
-    VkApplicationInfo ai = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .apiVersion = VK_API_VERSION_1_1};
+    VkApplicationInfo ai = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pNext = &ai};
     ii.pApplicationInfo = &ai;
-    assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_INCOMPATIBLE_DRIVER); ii.pApplicationInfo = NULL;
+    assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_UNKNOWN && !i); ii.pApplicationInfo = NULL;
     i = instance(); VkPhysicalDevice p = physical(i);
     VkDeviceQueueCreateInfo q; float priority; VkDeviceCreateInfo info = device_info(&q, &priority);
     VkDevice d; unsigned before = opened;
@@ -2092,6 +2092,71 @@ static void single_device_group_creation(void)
     vkDestroyInstance(i, NULL);
 }
 
+/* A Vulkan 1.1 instance accepts every requested apiVersion (DXVK 2.6.2 asks
+ * for 1.3) and exposes only instance-level 1.1 additions. The physical device
+ * keeps reporting Vulkan 1.0 and its core 1.1 query names stay absent. */
+static void vulkan11_instance_version(void)
+{
+    uint32_t version = 0;
+    PFN_vkEnumerateInstanceVersion enumerate_version = (PFN_vkEnumerateInstanceVersion)
+        vkGetInstanceProcAddr(NULL, "vkEnumerateInstanceVersion");
+    assert(enumerate_version == vkEnumerateInstanceVersion);
+    assert(enumerate_version(&version) == VK_SUCCESS && version == VK_API_VERSION_1_1);
+    assert(enumerate_version(NULL) == VK_ERROR_UNKNOWN);
+    assert(!vkGetInstanceProcAddr(NULL, "vkEnumeratePhysicalDeviceGroups"));
+
+    const uint32_t requests[] = {
+        VK_API_VERSION_1_1, VK_API_VERSION_1_2, VK_API_VERSION_1_3,
+        VK_MAKE_API_VERSION(0, 1, 3, 204), VK_MAKE_API_VERSION(0, 2, 0, 0),
+        VK_MAKE_API_VERSION(1, 1, 0, 0)};
+    for (size_t n = 0; n < sizeof(requests) / sizeof(requests[0]); ++n) {
+        VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = requests[n]};
+        VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &app};
+        VkInstance i = VK_NULL_HANDLE;
+        assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS && i);
+        assert(i->api_version == VK_API_VERSION_1_1);
+        VkPhysicalDevice p = physical(i);
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(p, &properties);
+        assert(properties.apiVersion == VK_API_VERSION_1_0);
+        assert(vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroups") ==
+               (PFN_vkVoidFunction)vkEnumeratePhysicalDeviceGroups);
+        assert(!vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroupsKHR"));
+        assert(!vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceFeatures2"));
+        assert(!vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceProperties2"));
+        uint32_t count = 0;
+        assert(vkEnumeratePhysicalDeviceGroups(i, &count, NULL) == VK_SUCCESS && count == 1);
+        VkPhysicalDeviceGroupProperties group = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES};
+        assert(vkEnumeratePhysicalDeviceGroups(i, &count, &group) == VK_SUCCESS &&
+               count == 1 && group.physicalDeviceCount == 1 &&
+               group.physicalDevices[0] == p && !group.subsetAllocation);
+        assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, NULL) == VK_ERROR_UNKNOWN);
+        vkDestroyInstance(i, NULL);
+    }
+
+    const uint32_t legacy[] = {0, VK_API_VERSION_1_0, VK_MAKE_API_VERSION(0, 1, 0, 300),
+                               VK_MAKE_API_VERSION(0, 0, 9, 0)};
+    for (size_t n = 0; n < sizeof(legacy) / sizeof(legacy[0]); ++n) {
+        VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = legacy[n]};
+        VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &app};
+        VkInstance i = VK_NULL_HANDLE;
+        assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS);
+        assert(i->api_version == VK_API_VERSION_1_0);
+        assert(!vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroups"));
+        uint32_t count = 0;
+        assert(vkEnumeratePhysicalDeviceGroups(i, &count, NULL) == VK_ERROR_UNKNOWN);
+        vkDestroyInstance(i, NULL);
+    }
+    VkInstance i = instance();
+    assert(i->api_version == VK_API_VERSION_1_0);
+    vkDestroyInstance(i, NULL);
+}
+
 static void buffer_address_command_gate(void)
 {
     struct VkDevice_T d = {0};
@@ -2570,6 +2635,7 @@ int main(void)
     unadvertised_subgroup_properties();
     memory_model_feature_negotiation();
     single_device_group_creation();
+    vulkan11_instance_version();
     buffer_address_command_gate();
     device_group_dispatch_command_gate();
     create_renderpass2_command_gate();

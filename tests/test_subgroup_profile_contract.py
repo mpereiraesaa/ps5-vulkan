@@ -54,6 +54,10 @@ class SubgroupProfileContract(unittest.TestCase):
         implemented = set(self.contract["api12_command_gate"]["current_implementations"])
         self.assertEqual({"vkResetQueryPool"}, dispatched)
         self.assertEqual({"vkResetQueryPool"}, implemented)
+        # The Vulkan 1.1 instance-level implementations stay in place so the
+        # 1.1 census passes and only the 1.2 command under test changes.
+        base = "".join(f"VKAPI_ATTR void VKAPI_CALL {name}(void) {{}}\n" for name in
+                       self.contract["api11_command_gate"]["current_implementations"])
         for command in commands:
             with self.subTest(command=command, surface="dispatch"):
                 if command in dispatched:
@@ -65,10 +69,10 @@ class SubgroupProfileContract(unittest.TestCase):
             with self.subTest(command=command, surface="public"):
                 prototype = f"VKAPI_ATTR void VKAPI_CALL {command}(void);"
                 with self.assertRaisesRegex(AssertionError, "Vulkan 1.2 core public prototypes"):
-                    checker.check_core_sources(self.contract, prototype, "")
+                    checker.check_core_sources(self.contract, prototype, base)
             with self.subTest(command=command, surface="implementation"):
-                implementation = ("" if command in implemented else
-                                  f"VKAPI_ATTR void VKAPI_CALL {command}(void) {{}}")
+                implementation = base + ("" if command in implemented else
+                                         f"VKAPI_ATTR void VKAPI_CALL {command}(void) {{}}")
                 with self.assertRaisesRegex(AssertionError, "Vulkan 1.2 core implementations"):
                     checker.check_core_sources(self.contract, "", implementation)
 
