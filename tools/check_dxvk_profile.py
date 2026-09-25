@@ -407,6 +407,7 @@ def implemented_device_extensions() -> set[str]:
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 
         "PS5VK_SYNCHRONIZATION2_DIAGNOSTIC",
+        "PS5VK_HOST_COHERENT_DIAGNOSTIC",
 
     ):
         guard = f"#if defined({name}) && {name}"

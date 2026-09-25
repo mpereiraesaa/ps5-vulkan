@@ -203,6 +203,22 @@ static inline void ps5vk_physical_profile_init(
         (info->host_coherent ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0);
 }
 
+/* The optional second memory type: the same heap and backing as type 0, plus
+ * HOST_COHERENT. Coherence is maintained by the driver, not by a different
+ * mapping: every mapped allocation of this type is written back from the CPU
+ * caches before each GPU submission launches and invalidated after each
+ * observed completion, and on map/unmap (src/vk_memory.c); each GPU
+ * submission already starts with a full GPU cache invalidate and ends with an
+ * L2 writeback. It is appended after type 0, so a consumer that takes the
+ * first host-visible type keeps type 0. */
+static inline void ps5vk_profile_add_coherent_type(VkPhysicalDeviceMemoryProperties *memory)
+{
+    if (memory->memoryTypeCount != 1) return;
+    memory->memoryTypes[1] = memory->memoryTypes[0];
+    memory->memoryTypes[1].propertyFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    memory->memoryTypeCount = 2;
+}
+
 static inline int ps5vk_physical_profile_valid(
     const VkPhysicalDeviceProperties *properties,
     const VkPhysicalDeviceMemoryProperties *memory,
@@ -252,7 +268,15 @@ static inline int ps5vk_physical_profile_valid(
         if (!limits->maxComputeWorkGroupCount[i] ||
             !limits->maxComputeWorkGroupSize[i]) return 0;
 
-    if (memory->memoryTypeCount != 1 || memory->memoryHeapCount != 1 ||
+    /* A second type is only the coherent variant of type 0 on the same heap. */
+    if (memory->memoryTypeCount == 2 &&
+        (memory->memoryTypes[1].heapIndex != 0 ||
+         (memory->memoryTypes[0].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ||
+         memory->memoryTypes[1].propertyFlags !=
+            (memory->memoryTypes[0].propertyFlags | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)))
+        return 0;
+    if (memory->memoryTypeCount < 1 || memory->memoryTypeCount > 2 ||
+        memory->memoryHeapCount != 1 ||
         memory->memoryTypes[0].heapIndex != 0 ||
         !(memory->memoryTypes[0].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) ||
         !(memory->memoryTypes[0].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) ||

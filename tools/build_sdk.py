@@ -277,8 +277,6 @@ def main():
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")
         if shader_int16_diagnostic == "1":
             native_cflags.append("-DPS5VK_SHADER_INT16_DIAGNOSTIC=1")
-        # DXVK262-T13: the robustness2 witness negotiates robustBufferAccess2
-        # and nullDescriptor before any shipping platform reports them.
         for name in ("PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
                      "PS5VK_MAINTENANCE4_DIAGNOSTIC",
                      "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
@@ -289,7 +287,8 @@ def main():
                      # witness before the converted route is promoted.
                      "PS5VK_SYNCHRONIZATION2_DIAGNOSTIC",
                      "PS5VK_STORAGE_TEXEL_DIAGNOSTIC",
-                     "PS5VK_DXVK_ROUTES_DIAGNOSTIC"):
+                     "PS5VK_DXVK_ROUTES_DIAGNOSTIC",
+                     "PS5VK_HOST_COHERENT_DIAGNOSTIC"):
             value = os.environ.get(name, "0")
             if value not in ("0", "1"):
                 raise SystemExit(f"{name} must be 0 or 1")

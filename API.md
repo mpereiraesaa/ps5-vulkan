@@ -810,6 +810,16 @@ constants are refused). A default-off diagnostic build switch,
 `PS5VK_MAINTENANCE4_DIAGNOSTIC`, opens the route on the 1.0 device for
 diagnostic DXVK measurement only; such a build is knowingly non-conformant and
 never ships.
+A diagnostic build switch (`PS5VK_HOST_COHERENT_DIAGNOSTIC`, off by default)
+appends a second memory type: the same heap and backing as type 0 plus
+`HOST_COHERENT`. The driver keeps it coherent instead of the application:
+mapping invalidates and unmapping writes back the CPU caches for the mapped
+range, every mapped coherent range is written back before each GPU submission
+launches and invalidated after its completion is observed, and each GPU
+submission already starts with a full GPU cache invalidate and ends with an L2
+writeback. Buffers may use either type; images stay on type 0. The ordinary
+profile does not report the type until the bounded native witness
+(`tools/build_coherent_memory_witness.py`) passes on the console.
 
 ## Bookkeeping and core command surface
 
