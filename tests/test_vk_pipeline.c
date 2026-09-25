@@ -355,6 +355,58 @@ static void diagnostic_compute_broadcast_gate(void)
     vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
     assert(!device.pipeline_objects && !device.descriptor_objects);
 }
+static void diagnostic_compute_basic_gate(void)
+{
+    /* GroupNonUniform + OpGroupNonUniformElect, compute only. */
+    uint32_t words[22];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = (2u << 16) | 17u; /* OpCapability */
+    words[6] = 61u;              /* GroupNonUniform */
+    memcpy(words + 7, module_a + 5, 11 * sizeof(uint32_t));
+    words[18] = (4u << 16) | 333u; /* OpGroupNonUniformElect */
+    words[19] = words[20] = words[21] = 1u;
+    uint32_t code[] = {0x11111111};
+    struct ps5vk_compiled_program program = fixture(words, code);
+    program.spirv_words = sizeof(words) / sizeof(words[0]);
+    struct ps5vk_program_library library = {&program, 1};
+    struct VkPhysicalDevice_T physical = {0};
+    struct VkDevice_T device = {.compiler = {&library, ps5vk_program_resolve},
+                                .physical = &physical};
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    /* The Broadcast diagnostic does not admit Elect. */
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.platform_features = 0;
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    VkPipelineLayout pipeline_layout = layout(&device);
+    VkComputePipelineCreateInfo create = info(module, pipeline_layout);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&device, VK_NULL_HANDLE, 1, &create,
+                                    NULL, &pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(&device, pipeline, NULL);
+    vkDestroyShaderModule(&device, module, NULL);
+
+    words[18] = (4u << 16) | 334u; /* OpGroupNonUniformAll (VOTE) is not BASIC. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[18] = (4u << 16) | 333u;
+    words[6] = 64u; /* Ballot capability is outside the BASIC route. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    words[6] = 61u;
+    words[8] = 0u; /* Vertex is outside the compute route. */
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
+    assert(!device.pipeline_objects && !device.descriptor_objects);
+}
 static void diagnostic_compute_iadd_gate(void)
 {
     uint32_t words[25];
@@ -440,6 +492,7 @@ int main(void)
 {
     lifecycle(); legacy_offline_abi(); dispatch_base_flag(); negative(); graphics_entries();
     t08_capability_gates(); uniform_block_layout_gate(); unadvertised_subgroup_gate();
+    diagnostic_compute_basic_gate();
     int8_compute_probe_gate();
     diagnostic_compute_broadcast_gate(); diagnostic_compute_iadd_gate();
     unadvertised_int16_gate();

@@ -22,8 +22,13 @@ static int module_valid(const uint32_t *words, size_t count)
  * IAdd diagnostics. Each operation needs its own SPIR-V capability; no public
  * subgroup operation or feature follows from either internal switch. */
 static int subgroup_module_unsupported(const uint32_t *words, size_t count,
-                                       uint32_t platform_features)
+                                       uint32_t platform_features,
+                                       uint32_t platform_features_t09)
 {
+    /* A private build may also admit BASIC alone: OpGroupNonUniformElect,
+     * subgroup-scope barriers and the subgroup built-ins, compute only. */
+    const int basic_compute =
+        !!(platform_features_t09 & PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE);
     const int broadcast_compute =
         !!(platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE);
     const int iadd_compute =
@@ -56,13 +61,15 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
             opcode == 4431u || opcode == 5110u || opcode == 5111u ||
             opcode == 5296u) {
             subgroup = 1;
+            if (opcode == 333u && basic_compute) continue;
             if (opcode == 337u && broadcast_compute) broadcast = 1;
             else if (opcode == 349u && iadd_compute) iadd = 1;
             else return 1;
         }
     }
     return subgroup && (!basic || !compute_entry || other_entry ||
-                        (!broadcast && !iadd) || (broadcast != ballot) ||
+                        (!broadcast && !iadd && !(basic_compute && !ballot && !arithmetic)) ||
+                        (broadcast != ballot) ||
                         (iadd != arithmetic));
 }
 static int declares_int16_capability(const uint32_t *words, size_t count)
@@ -167,7 +174,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (!module_valid(info->pCode, info->codeSize / 4)) return INVALID;
     if (subgroup_module_unsupported(info->pCode, info->codeSize / 4,
-                                    d->platform_features))
+                                    d->platform_features,
+                                    d->physical ?
+                                    d->physical->platform.supported_features_t09 : 0u))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Shader modules may be shared across graphics and compute entries, so
      * the Int16 capability must require the logical-device opt-in before

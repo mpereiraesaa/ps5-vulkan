@@ -242,6 +242,10 @@ enum ps5vk_t09_feature_bits {
      * paths (src/vk_sync2.c). A platform sets it only once a native witness
      * measured the converted route. */
     PS5VK_T09_FEATURE_SYNCHRONIZATION2 = 1u << 27,
+    /* Internal compute subgroup BASIC route (Elect, subgroup barriers and the
+     * subgroup built-ins) for a private measurement build. Not a subgroup
+     * properties promise: VkPhysicalDeviceSubgroupProperties stays zero. */
+    PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE = 1u << 28,
 };
 
 /* robust{Storage,Uniform}BufferAccessSizeAlignment. GFX10 raw buffer records
