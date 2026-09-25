@@ -337,6 +337,13 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
         PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
 #endif
+#if defined(PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC) && PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC
+    /* Measurement only: VkFormatProperties3 and the RGBA8 UNORM <-> SRGB
+     * mutable views with VK_KHR_image_format_list, until the SDK-linked
+     * mutable-view witness passes on the console. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2 |
+        PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST;
+#endif
     /* Nearest/linear U, V and W SDK readback plus the compact original 3D
      * address-mode CTS leaf support the Vulkan 1.0 KHR extension route. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE;
