@@ -1,6 +1,7 @@
 #include "vk_internal.h"
 #include "compilation_cache.h"
 #include "physical_device_profile.h"
+#include "wsi_present_backend.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -233,6 +234,34 @@ static int surface_valid(VkPhysicalDevice p, VkSurfaceKHR surface)
         if (current == surface) return 1;
     return 0;
 }
+/* VK_KHR_swapchain is a device extension. The fixed surface route can be
+ * queried without it, but a physical device may offer presentation only when
+ * its native bridge and the exact two-image BGRA8 usage are both available. */
+static int swapchain_supported(VkPhysicalDevice p)
+{
+    if (!p || !p->instance || !p->instance->surface_extension_enabled ||
+        !(p->platform.queue_flags & VK_QUEUE_GRAPHICS_BIT) ||
+        !p->platform.configure || !p->platform.format_properties ||
+        !p->platform.image_properties ||
+        p->platform.max_allocation < UINT64_C(128) * 1024 * 1024 ||
+        !ps5vk_wsi_present_available())
+        return 0;
+    VkFormatProperties format = {0};
+    vkGetPhysicalDeviceFormatProperties(p, VK_FORMAT_B8G8R8A8_UNORM, &format);
+    const VkFormatFeatureFlags required = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                                          VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    if ((format.optimalTilingFeatures & required) != required) return 0;
+    VkImageFormatProperties image = {0};
+    if (vkGetPhysicalDeviceImageFormatProperties(p, VK_FORMAT_B8G8R8A8_UNORM,
+            VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            0, &image) != VK_SUCCESS)
+        return 0;
+    return image.maxExtent.width >= WSI_WIDTH &&
+           image.maxExtent.height >= WSI_HEIGHT && image.maxExtent.depth >= 1 &&
+           image.maxMipLevels >= 1 && image.maxArrayLayers >= 1 &&
+           (image.sampleCounts & VK_SAMPLE_COUNT_1_BIT);
+}
 static VkResult enumerate_one(const void *value, size_t size, uint32_t *count, void *out)
 {
     if (!count) return INVALID;
@@ -362,8 +391,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceSupportKHR(
     *out = VK_FALSE;
     if (!surface_valid(p, surface)) return VK_ERROR_SURFACE_LOST_KHR;
     if (family) return VK_ERROR_INITIALIZATION_FAILED;
-    /* The display object route is public before the native swapchain bridge.
-     * A queue cannot present until that backend is available and negotiated. */
+    *out = swapchain_supported(p) ? VK_TRUE : VK_FALSE;
     return VK_SUCCESS;
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
@@ -380,7 +408,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         .supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
         .currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
         .supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .supportedUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
+        .supportedUsageFlags = swapchain_supported(p) ?
+            (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT) :
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
     return VK_SUCCESS;
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormatsKHR(
@@ -697,19 +727,23 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Fifteen conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Sixteen conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
-     * create_renderpass2, separate
-     * depth/stencil layouts). Keep headroom so a new entry cannot overflow
+     * create_renderpass2, separate depth/stencil layouts, swapchain).
+     * Keep headroom so a new entry cannot overflow
      * the array before this bound is revisited; each push site must stay
      * below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 15, DEVICE_EXTENSION_SLOTS = 16 };
+    enum { DEVICE_EXTENSION_PUSHES = 16, DEVICE_EXTENSION_SLOTS = 17 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
 
     uint32_t total = 0;
+    if (swapchain_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_SPEC_VERSION};
+    }
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
         properties[total++] = (VkExtensionProperties){
@@ -818,6 +852,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 timeline_extension = VK_FALSE;
     VkBool32 separate_depth_stencil_extension = VK_FALSE;
     VkBool32 maintenance2_extension = VK_FALSE, create_renderpass2_extension = VK_FALSE;
+    VkBool32 swapchain_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -855,6 +890,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &maintenance2_extension;
         else if (!strcmp(name, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME))
             seen = &create_renderpass2_extension;
+        else if (!strcmp(name, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+            seen = &swapchain_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -868,6 +905,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
          !(p->platform.supported_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS)) ||
         ((extension8 || extension16) &&
          (!storage_class || !p->instance->features2_extension_enabled)))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+
+    if (swapchain_extension && !swapchain_supported(p))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     if (multiview_extension &&
@@ -1198,6 +1238,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->timeline_extension_enabled = timeline_extension;
     d->maintenance2_extension_enabled = maintenance2_extension;
     d->create_renderpass2_extension_enabled = create_renderpass2_extension;
+    d->swapchain_extension_enabled = swapchain_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;
@@ -1209,6 +1250,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->pipeline_cache = ps5vk_compilation_cache_create(64, 4 * 1024 * 1024);
     if (p->platform.configure) {
         p->platform.configure(d);
+    }
+    if (swapchain_extension && (!d->graphics_enabled || !d->graphics_submit_enabled ||
+                                !d->image_requirements)) {
+        if (d->pipeline_cache) ps5vk_compilation_cache_destroy(d->pipeline_cache);
+        pthread_mutex_destroy(&d->queue_lock);
+        p->platform.close(&d->memory);
+        ps5vk_object_free(d, &saved, custom);
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
     ++i->devices; *out = d;
     return VK_SUCCESS;
@@ -1231,7 +1280,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
     if (!d) return;
     /* Valid usage requires children destroyed and work completed first. Defend
      * against invalid destruction by retaining ownership, not implicit frees. */
-    if (d->memories || d->buffers || d->buffer_views || d->descriptor_objects ||
+    if (d->swapchains || d->memories || d->buffers || d->buffer_views || d->descriptor_objects ||
         d->pipeline_objects || d->graphics_objects || d->command_pools ||
         d->fences || d->pipeline_caches || d->query_pools || d->semaphores ||
         d->events || d->submission ||

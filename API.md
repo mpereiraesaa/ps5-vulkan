@@ -727,9 +727,36 @@ encoder bounds and validated fail-closed during instance creation. The exact
 values, query semantics, format matrix and known Vulkan 1.0 deficits are in
 [PHYSICAL_DEVICE_REPORTING.md](PHYSICAL_DEVICE_REPORTING.md).
 
-Presentation uses a project-native VideoOut adapter with two registered BGRA8
-1920x1080 images, matching flip tokens and completion fences. This is not Vulkan
-WSI: `VkSurfaceKHR`, `VkSwapchainKHR` and `PRESENT_SRC_KHR` are not implemented.
+The public display route exposes one 1920×1080, 60 Hz display and one plane
+through instance-enabled `VK_KHR_surface` and `VK_KHR_display`. A display-plane
+surface owns the fixed extent and identity transform. Surface queries report
+one `VK_FORMAT_B8G8R8A8_UNORM` / `VK_COLOR_SPACE_SRGB_NONLINEAR_KHR` format,
+FIFO present mode, two images, one layer and opaque composite alpha. These
+instance extensions can be enabled without a present-capable device.
+
+`VK_KHR_swapchain` is a separate device opt-in. It is enumerated only when the
+instance has enabled `VK_KHR_surface`, the graphics queue and native VideoOut
+bridge are available, and BGRA8 optimal images support both color attachment
+and transfer destination usage within the allocation limit. Surface present
+support and its transfer-destination usage bit follow the same availability
+gate. The host-only bridge reports unavailable unless a test supplies an
+explicit mock. A successful host mock test establishes the API contract, not
+native presentation.
+
+The bounded swapchain creates exactly two 1920×1080 BGRA8 UNORM images with
+FIFO presentation, exclusive sharing, one layer, identity transform and opaque
+alpha. Each image may be used as a color attachment, transfer destination, or
+both. The pair uses one 128 MiB allocation, with the second image at 64 MiB.
+`vkAcquireNextImageKHR` accepts a binary semaphore and/or fence and observes
+image availability; `vkQueuePresentKHR` accepts one acquired image, drains
+pending work with a bounded wait, consumes signaled binary wait semaphores and
+presents an image in `VK_IMAGE_LAYOUT_PRESENT_SRC_KHR`. Destroy the swapchain
+before its surface and device. Other display modes, extents, formats, present
+modes, sharing modes and swapchain replacement remain outside this profile.
+The device API version remains Vulkan 1.0; any higher instance loader version
+reported by `vkEnumerateInstanceVersion` does not promote device core features.
+Native acquire/present/close evidence and a DXVK run are separate acceptance
+results; the host contract alone does not establish either.
 
 ## Bookkeeping and core command surface
 
