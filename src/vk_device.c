@@ -508,6 +508,23 @@ static VkBool32 separate_depth_stencil_route(VkPhysicalDevice p)
 {
     return create_renderpass2_supported(p);
 }
+/* VK_KHR_get_memory_requirements2 and VK_KHR_bind_memory2 have no registry
+ * dependency on Vulkan 1.0; VK_KHR_dedicated_allocation depends on
+ * VK_KHR_get_memory_requirements2, so it is reported only with it. */
+static VkBool32 memory_requirements2_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 &
+            PS5VK_T09_FEATURE_GET_MEMORY_REQUIREMENTS2) != 0;
+}
+static VkBool32 dedicated_allocation_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_DEDICATED_ALLOCATION) &&
+        memory_requirements2_supported(p);
+}
+static VkBool32 bind_memory2_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_BIND_MEMORY2) != 0;
+}
 static VkBool32 separate_depth_stencil_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 &
@@ -762,14 +779,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Eighteen conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Twenty-one conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
-     * helper invocation, terminate invocation). Keep headroom so a new entry
-     * cannot overflow the array before this bound is revisited; each push site
-     * must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 18, DEVICE_EXTENSION_SLOTS = 20 };
+     * helper invocation, terminate invocation, get_memory_requirements2,
+     * dedicated_allocation, bind_memory2). Keep headroom so a new entry cannot
+     * overflow the array before this bound is revisited; each push site must
+     * stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 21, DEVICE_EXTENSION_SLOTS = 24 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -863,6 +881,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_SHADER_TERMINATE_INVOCATION_EXTENSION_NAME,
             VK_KHR_SHADER_TERMINATE_INVOCATION_SPEC_VERSION};
     }
+    if (memory_requirements2_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+            VK_KHR_GET_MEMORY_REQUIREMENTS_2_SPEC_VERSION};
+    }
+    if (dedicated_allocation_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
+            VK_KHR_DEDICATED_ALLOCATION_SPEC_VERSION};
+    }
+    if (bind_memory2_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_KHR_BIND_MEMORY_2_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -900,6 +932,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 maintenance2_extension = VK_FALSE, create_renderpass2_extension = VK_FALSE;
     VkBool32 swapchain_extension = VK_FALSE;
     VkBool32 demote_extension = VK_FALSE, terminate_extension = VK_FALSE;
+    VkBool32 memory_requirements2_extension = VK_FALSE;
+    VkBool32 dedicated_allocation_extension = VK_FALSE, bind_memory2_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -943,6 +977,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &demote_extension;
         else if (!strcmp(name, VK_KHR_SHADER_TERMINATE_INVOCATION_EXTENSION_NAME))
             seen = &terminate_extension;
+        else if (!strcmp(name, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME))
+            seen = &memory_requirements2_extension;
+        else if (!strcmp(name, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME))
+            seen = &dedicated_allocation_extension;
+        else if (!strcmp(name, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME))
+            seen = &bind_memory2_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1023,6 +1063,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!(p->platform.supported_features_t09 &
            PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION) ||
          !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if ((memory_requirements2_extension && !memory_requirements2_supported(p)) ||
+        (dedicated_allocation_extension &&
+         (!dedicated_allocation_supported(p) || !memory_requirements2_extension)) ||
+        (bind_memory2_extension && !bind_memory2_supported(p)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
@@ -1327,6 +1372,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->maintenance2_extension_enabled = maintenance2_extension;
     d->create_renderpass2_extension_enabled = create_renderpass2_extension;
     d->swapchain_extension_enabled = swapchain_extension;
+    d->memory_requirements2_extension_enabled = memory_requirements2_extension;
+    d->dedicated_allocation_extension_enabled = dedicated_allocation_extension;
+    d->bind_memory2_extension_enabled = bind_memory2_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

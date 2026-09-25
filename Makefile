@@ -197,6 +197,8 @@ check-sanitize: check-thread-sanitize
 	./build/tests/test_timeline_device_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_renderpass2_route.c -o build/tests/test_renderpass2_route_sanitized
 	./build/tests/test_renderpass2_route_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_memory_requirements2_route.c -o build/tests/test_memory_requirements2_route_sanitized
+	./build/tests/test_memory_requirements2_route_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tools/dump_device_reporting.c -o build/tests/dump_device_reporting_sanitized
 	./build/tests/dump_device_reporting_sanitized > /dev/null
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_pipeline_cache.c -o build/tests/test_pipeline_cache_sanitized
@@ -412,6 +414,8 @@ check:
 	./build/tests/test_timeline_device
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_renderpass2_route.c -o build/tests/test_renderpass2_route
 	./build/tests/test_renderpass2_route
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_memory_requirements2_route.c -o build/tests/test_memory_requirements2_route
+	./build/tests/test_memory_requirements2_route
 
 	# Reporting audit: dump what the public query paths report and check it
 	# against the pinned specification tables and the pinned CTS consumer rules.
