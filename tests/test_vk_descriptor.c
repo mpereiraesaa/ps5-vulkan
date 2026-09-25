@@ -695,8 +695,7 @@ static void input_attachments(void)
 
 /* The separate sampler, sampled image and storage texel buffer types DXVK
  * 2.6.2 sizes every descriptor pool with and declares for D3D11 samplers,
- * SRVs and typed UAV buffers. Descriptor bookkeeping only: the shader-table
- * layout still has no record for them, so every consumer refuses. */
+ * SRVs and typed UAV buffers. Each has its own shader-table record. */
 static void separate_sampler_types(void)
 {
     struct VkDevice_T d = {.memory = {NULL, backing_alloc, backing_free, cache, cache},
@@ -714,10 +713,12 @@ static void separate_sampler_types(void)
            layout->signature.type[0] == VK_DESCRIPTOR_TYPE_SAMPLER &&
            layout->signature.type[1] == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
            layout->signature.type[2] == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER);
-    /* No shader-table record exists yet: the consumer-side layout refuses. */
+    /* Each role has its own shader-table record: S# 16 bytes, T# 32, V# 16. */
     struct ps5vk_descriptor_table_layout table;
-    assert(ps5vk_descriptor_table_layout_build(1, &layout->signature, &table) ==
-           VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(ps5vk_descriptor_table_layout_build(1, &layout->signature, &table) == VK_SUCCESS);
+    assert(table.binding[0][0].byte_stride == 16 && table.binding[0][1].byte_offset == 32 &&
+           table.binding[0][1].byte_stride == 32 && table.binding[0][2].byte_offset == 64 &&
+           table.binding[0][2].byte_stride == 16 && table.set_bytes[0] == 80);
     VkDescriptorSetLayout refused = VK_NULL_HANDLE;
     /* Image roles need the graphics backend; the texel role does not. */
     d.graphics_enabled = VK_FALSE; li.bindingCount = 1;

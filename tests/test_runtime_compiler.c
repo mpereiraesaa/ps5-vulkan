@@ -169,6 +169,40 @@ int main(void)
         resources.descriptors[3].type==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
     free(resource_code);free(resource_spv);
 
+    /* DXVK's DXBC resource forms: separate SAMPLER + SAMPLED_IMAGE combined in
+     * the shader, a uniform texel buffer and a storage texel buffer. Each
+     * record sits at its canonical offset: S# 16 bytes at 0, T# 32 bytes at
+     * 16, the two texel V#s 16 bytes each at 48 and 64. */
+    size_t separate_bytes=0;
+    uint32_t *separate_spv=read_file("build/test-shaders/separate_sampler.spv",&separate_bytes);
+    assert(separate_spv);
+    struct VkPipelineLayout_T separate_layout={.set_count=1};
+    const VkDescriptorType separate_types[4]={VK_DESCRIPTOR_TYPE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+        VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER};
+    for(uint32_t b=0;b<4;++b) {
+        separate_layout.sets[0].binding[b]=(struct ps5vk_binding){1,b,VK_SHADER_STAGE_COMPUTE_BIT};
+        separate_layout.sets[0].type[b]=separate_types[b];
+    }
+    separate_layout.sets[0].count=4;
+    struct ps5vk_compiled_program separate={0};uint32_t *separate_code=NULL;
+    assert(ps5vk_runtime_compile_compute(separate_spv,separate_bytes/4,"main",&separate_layout,
+        NULL,&separate,&separate_code)==VK_SUCCESS);
+    assert(separate.descriptor_set_mask==1 && separate.descriptor_count==4);
+    const uint32_t separate_dwords[4]={0,4,12,16};
+    for(uint32_t b=0;b<4;++b)
+        assert(separate.descriptors[b].set==0 && separate.descriptors[b].binding==b &&
+            separate.descriptors[b].element==0 && separate.descriptors[b].type==separate_types[b] &&
+            separate.descriptors[b].table_dword==separate_dwords[b]);
+    free(separate_code);
+    /* A layout that names the sampler slot as a combined image sampler is a
+     * different record; the compiler refuses the mismatched declaration. */
+    separate_layout.sets[0].type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    separate_code=NULL;
+    assert(ps5vk_runtime_compile_compute(separate_spv,separate_bytes/4,"main",&separate_layout,
+        NULL,&separate,&separate_code)!=VK_SUCCESS && !separate_code);
+    free(separate_spv);
+
     /* 3. Runtime compile shader 2 (previously unregistered shader) */
     size_t spv2_bytes = 0;
     uint32_t *spv2 = read_file("build/test-shaders/xor.spv", &spv2_bytes);

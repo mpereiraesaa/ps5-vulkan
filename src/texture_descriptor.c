@@ -144,13 +144,19 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }
 
+/* The sampled-image usage rule both sampled records share. */
+static VkBool32 sampled_image_usage(VkImage image)
+{
+    const VkImageUsageFlags usage=image->info.usage;
+    return (usage&VK_IMAGE_USAGE_SAMPLED_BIT) &&
+        (!(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) ||
+         ps5vk_tiled_cube_sampled_image(image));
+}
+
 VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,uint32_t out[12])
 {
     if(!d || !view || !sampler || !out || view->device!=d || sampler->device!=d || !view->image)return VK_ERROR_UNKNOWN;
-    const VkImageUsageFlags usage=view->image->info.usage;
-    if(!(usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
-       ((usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) &&
-        !ps5vk_tiled_cube_sampled_image(view->image)))
+    if(!sampled_image_usage(view->image))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if(ps5vk_d32_gather_image(view->image)!=sampler->compare_enable)
         return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -162,6 +168,18 @@ VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,
     VkResult rc=image_resource_words(d,view,words);
     if(rc!=VK_SUCCESS)return rc;
     memcpy(words+8,sampler->words,16);memcpy(out,words,sizeof(words));return VK_SUCCESS;
+}
+
+VkResult ps5vk_sampled_image_descriptor(VkDevice d,VkImageView view,uint32_t out[8])
+{
+    if(!d || !view || !out || view->device!=d || !view->image || view->image->device!=d)
+        return VK_ERROR_UNKNOWN;
+    if(!sampled_image_usage(view->image) || ps5vk_d32_gather_image(view->image))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t words[8];
+    VkResult rc=image_resource_words(d,view,words);
+    if(rc!=VK_SUCCESS)return rc;
+    memcpy(out,words,sizeof(words));return VK_SUCCESS;
 }
 
 VkResult ps5vk_image_resource_descriptor(VkDevice d,VkImageView view,uint32_t out[8])

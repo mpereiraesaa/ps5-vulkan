@@ -18,4 +18,10 @@ VkResult ps5vk_texture_descriptor(VkDevice,VkImageView,VkSampler,uint32_t out[12
  * write and by native consumption, not here. Output is unchanged on failure and
  * no sampler is read or written. */
 VkResult ps5vk_image_resource_descriptor(VkDevice,VkImageView,uint32_t out[8]);
+/* A separate SAMPLED_IMAGE record: exactly the combined record's first eight
+ * DWORDs under the combined record's image rules, with no sampler read. The
+ * depth-compare gather image is refused: its descriptor is valid only with a
+ * compare sampler, a pairing a separate record cannot check. Output is
+ * unchanged on failure. */
+VkResult ps5vk_sampled_image_descriptor(VkDevice,VkImageView,uint32_t out[8]);
 #endif
