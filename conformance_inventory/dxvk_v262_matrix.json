@@ -3007,7 +3007,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
       "implementation": {
-        "detail": "The base model and DeviceScope are independently gated; compute and graphics compiler options follow each SPIR-V module's memory model.",
+        "detail": "Reviewed public KHR query and device-creation opt-in; DeviceScope is independently gated in compute and graphics compilation.",
         "refs": [
           "src/vk_device.c",
           "src/vk_pipeline.c",
