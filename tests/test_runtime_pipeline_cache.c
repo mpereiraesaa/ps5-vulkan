@@ -272,10 +272,11 @@ int main(void)
                                         &with_all) == VK_SUCCESS);
         vkDestroyPipeline(device, with_all, NULL);
 
-        /* A bit the adapter does not know is still refused, and no pipeline
-         * object is published for it. */
+        /* Device scope without the base memory model is refused, and no
+         * pipeline object is published for the invalid mask. */
         VkPipeline unknown_bit = (VkPipeline)(uintptr_t)1;
-        device->enabled_features = all_declared | (1u << 31);
+        device->enabled_features = all_declared |
+                                   PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
         assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
                                         &unknown_bit) == VK_ERROR_UNKNOWN);
         assert(unknown_bit == VK_NULL_HANDLE);

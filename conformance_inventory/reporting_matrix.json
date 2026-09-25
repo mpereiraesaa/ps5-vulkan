@@ -27728,6 +27728,22 @@
       "verdict": "satisfied"
     },
     {
+      "action": "requires-private-compute-probe",
+      "advertised": false,
+      "applicable_cts": {
+        "cases": [],
+        "note": "no original CTS case for this capability is selected here",
+        "status": "not-selected"
+      },
+      "capability": "Int8",
+      "detail": "private compute compiler probe; shaderInt8 remains false and this gate supplies no public feature credit",
+      "file": "src/vk_pipeline.c",
+      "kind": "shader-capability",
+      "number": 39,
+      "profile": "graphics",
+      "verdict": "satisfied"
+    },
+    {
       "action": "requires-extension-feature",
       "advertised": false,
       "applicable_cts": {
@@ -27751,11 +27767,11 @@
         "note": "no original CTS case for this capability is selected here",
         "status": "not-selected"
       },
-      "capability": "Int8",
+      "capability": "UniformAndStorageBuffer16BitAccess",
       "detail": "frontend rejects (no feature required); advertised=False",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
-      "number": 39,
+      "number": 4434,
       "profile": "graphics",
       "verdict": "satisfied"
     },
@@ -27896,6 +27912,22 @@
       "verdict": "satisfied"
     },
     {
+      "action": "requires-private-compute-probe",
+      "advertised": false,
+      "applicable_cts": {
+        "cases": [],
+        "note": "no original CTS case for this capability is selected here",
+        "status": "not-selected"
+      },
+      "capability": "Int8",
+      "detail": "private compute compiler probe; shaderInt8 remains false and this gate supplies no public feature credit",
+      "file": "src/vk_pipeline.c",
+      "kind": "shader-capability",
+      "number": 39,
+      "profile": "compute",
+      "verdict": "satisfied"
+    },
+    {
       "action": "requires-extension-feature",
       "advertised": false,
       "applicable_cts": {
@@ -27919,11 +27951,11 @@
         "note": "no original CTS case for this capability is selected here",
         "status": "not-selected"
       },
-      "capability": "Int8",
+      "capability": "UniformAndStorageBuffer16BitAccess",
       "detail": "frontend rejects (no feature required); advertised=False",
       "file": "src/vk_pipeline.c",
       "kind": "shader-capability",
-      "number": 39,
+      "number": 4434,
       "profile": "compute",
       "verdict": "satisfied"
     },
@@ -28003,7 +28035,7 @@
     },
     "shader_capabilities": {
       "not-audited": 2,
-      "satisfied": 20
+      "satisfied": 22
     }
   }
 }

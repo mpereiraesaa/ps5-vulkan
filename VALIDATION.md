@@ -4740,6 +4740,16 @@ vertex and fragment Broadcast draws remain unproven on hardware. These
 diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
 
+The next default-off Int8 compute prerequisite uses an internal platform mask
+and a separate PSBC `enable_int8` option. A compute pipeline with `OpCapability
+Int8` is refused unless that private mask is set; an application cannot enable
+it through `VkPhysicalDeviceFeatures`. The owned scalar Int8 `subgroupAdd`
+shader is compiled by the host test with that mask and refused without it.
+This test is compiler evidence only. The shipping module gate still refuses
+subgroup operations, and the public `shaderInt8`, subgroup bits, subgroup
+properties and API version remain unchanged. GPU readback and applicable
+original CTS remain requirements before any promotion.
+
 A default-off native diagnostic gate now admits only compute
 `OpGroupNonUniformBroadcast` with both `GroupNonUniform` and
 `GroupNonUniformBallot` capabilities through shader-module and pipeline

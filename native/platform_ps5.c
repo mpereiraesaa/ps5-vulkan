@@ -366,6 +366,10 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * public ARITHMETIC operation bit and reports no subgroup properties. */
     platform->supported_features |= PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
 #endif
+#if defined(PS5VK_SHADER_INT8_DIAGNOSTIC) && PS5VK_SHADER_INT8_DIAGNOSTIC
+    /* Compiler-only probe; public shaderInt8 and subgroup features stay false. */
+    platform->supported_features |= PS5VK_FEATURE_SHADER_INT8_COMPUTE;
+#endif
     /* Vulkan 1.0 exposes the KHR route through device-group creation and
      * properties2. The bounded address witness and two unchanged original
      * buffer-address compute leaves execute through the R32_UINT output. */
