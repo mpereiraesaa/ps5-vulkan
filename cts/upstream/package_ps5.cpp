@@ -12,6 +12,7 @@
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktSynchronizationBasicEventTests.hpp"
 #include "vktSynchronizationBasicSemaphoreTests.hpp"
+#include "vktSynchronizationTimelineSemaphoreTests.hpp"
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
 #include "vktComputeIndirectComputeDispatchTests.hpp"
@@ -19,6 +20,8 @@
 #include "vktPipelineCacheTests.hpp"
 #include "vktPipelineBlendTests.hpp"
 #include "vktPipelineMultisampleTests.hpp"
+#include "vktPipelineStencilTests.hpp"
+#include "vktPipelineDepthTests.hpp"
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktSpvAsmIndexingTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
@@ -131,6 +134,10 @@ void FocusedVkTestPackage::init(void)
     // variants live in other modules and stay out, and only the selected leaves
     // below execute.
     addChild(vkt::createRenderPassTests(m_testCtx, "renderpass"));
+    // renderpass2: the same original module through VK_KHR_create_renderpass2
+    // (DXVK262-T09). Registering it only makes the leaves addressable;
+    // cases.txt remains the execution filter.
+    addChild(vkt::createRenderPass2Tests(m_testCtx, "renderpass2"));
 
     // info group: original upstream enumeration and physical-device query
     // bodies. cases.txt remains the execution filter; registering these
@@ -195,7 +202,12 @@ void FocusedVkTestPackage::init(void)
         syncBasicGroup->addChild(vkt::synchronization::createBasicFenceTests(m_testCtx, 0));
         syncBasicGroup->addChild(vkt::synchronization::createBasicBinarySemaphoreTests(
             m_testCtx, vkt::synchronization::SynchronizationType::LEGACY, 0));
+        // DXVK262-T09 timelineSemaphore: the original legacy timeline bodies,
+        // basic and full families. cases.txt remains the leaf filter.
+        syncBasicGroup->addChild(vkt::synchronization::createBasicTimelineSemaphoreTests(
+            m_testCtx, vkt::synchronization::SynchronizationType::LEGACY, 0));
         syncGroup->addChild(syncBasicGroup.release());
+        syncGroup->addChild(vkt::synchronization::createTimelineSemaphoreTests(m_testCtx));
         addChild(syncGroup.release());
     }
 
@@ -407,6 +419,14 @@ void FocusedVkTestPackage::init(void)
                  * so registering the false form is what makes the selected
                  * names addressable. */
                 false));
+            /* pipeline.monolithic.stencil and .depth (DXVK262-T09): the
+             * d32_sfloat_s8_uint and d32_sfloat_s8_uint_separate_layouts
+             * families are the upstream oracle for the combined attachment and
+             * separateDepthStencilLayouts. cases.txt remains the filter. */
+            monolithicGroup->addChild(vkt::pipeline::createStencilTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
+            monolithicGroup->addChild(vkt::pipeline::createDepthTests(
+                m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
             pipelineGroup->addChild(monolithicGroup.release());
         }
         addChild(pipelineGroup.release());
