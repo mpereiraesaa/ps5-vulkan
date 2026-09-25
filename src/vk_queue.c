@@ -738,7 +738,9 @@ static int frontend_operation(int type)
  * render-target readback and the sampled upload keep their GPU path. */
 static int frontend_record(const struct ps5vk_operation *op)
 {
-    if(op->type==PS5VK_CLEAR_COLOR_IMAGE && ps5vk_array_color_image(op->image_destination))
+    if(op->type==PS5VK_CLEAR_COLOR_IMAGE &&
+       (ps5vk_array_color_image(op->image_destination) ||
+        ps5vk_bgra8_transfer_target(op->image_destination)))
         return 0;
     return frontend_operation(op->type) || ps5vk_image_linear_operation(op);
 }
