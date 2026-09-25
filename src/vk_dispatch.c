@@ -84,6 +84,11 @@ static const struct entry entries[] = {
     ENTRY(vkGetImageMemoryRequirements, DEVICE),
     ENTRY(vkGetImageSubresourceLayout, DEVICE),
     ENTRY(vkBindImageMemory, DEVICE),
+    ENTRY(vkGetBufferMemoryRequirements2KHR, DEVICE),
+    ENTRY(vkGetImageMemoryRequirements2KHR, DEVICE),
+    ENTRY(vkGetImageSparseMemoryRequirements2KHR, DEVICE),
+    ENTRY(vkBindBufferMemory2KHR, DEVICE),
+    ENTRY(vkBindImageMemory2KHR, DEVICE),
     ENTRY(vkCreateImageView, DEVICE),
     ENTRY(vkDestroyImageView, DEVICE),
     ENTRY(vkCreateSampler, DEVICE),
@@ -290,6 +295,22 @@ static int buffer_device_address_command(const char *name)
            !strcmp(name, "vkGetDeviceMemoryOpaqueCaptureAddressKHR");
 }
 
+/* VK_KHR_get_memory_requirements2 and VK_KHR_bind_memory2, visible only on a
+ * device that enabled them. The core-1.1 names without the suffix are not
+ * entries: this device reports Vulkan 1.0. VK_KHR_dedicated_allocation adds
+ * structures, no commands. */
+static int memory_requirements2_command(const char *name)
+{
+    return !strcmp(name, "vkGetBufferMemoryRequirements2KHR") ||
+           !strcmp(name, "vkGetImageMemoryRequirements2KHR") ||
+           !strcmp(name, "vkGetImageSparseMemoryRequirements2KHR");
+}
+static int bind_memory2_command(const char *name)
+{
+    return !strcmp(name, "vkBindBufferMemory2KHR") ||
+           !strcmp(name, "vkBindImageMemory2KHR");
+}
+
 /* VK_KHR_timeline_semaphore host commands, reachable only on a device that
  * enabled the extension. Vulkan 1.0 has no core names for them. */
 static int timeline_semaphore_command(const char *name)
@@ -343,6 +364,10 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
     if (create_renderpass2_command(name) && !device->create_renderpass2_extension_enabled)
         return NULL;
     if (swapchain_command(name) && !device->swapchain_extension_enabled)
+        return NULL;
+    if (memory_requirements2_command(name) && !device->memory_requirements2_extension_enabled)
+        return NULL;
+    if (bind_memory2_command(name) && !device->bind_memory2_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;

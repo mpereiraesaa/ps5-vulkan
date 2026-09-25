@@ -167,6 +167,17 @@ enum ps5vk_t09_feature_bits {
     /* VK_KHR_create_renderpass2 (no feature structure). Enumerated only with
      * its registry dependencies, VK_KHR_multiview and VK_KHR_maintenance2. */
     PS5VK_T09_FEATURE_CREATE_RENDERPASS2 = 1u << 6,
+    /* Memory-requirement and binding routes DXVK calls right after device
+     * creation. Each is a Vulkan 1.0 KHR extension with no feature structure;
+     * the platform reports none of them until the native run confirms them. */
+    /* VK_KHR_get_memory_requirements2: vkGet{Buffer,Image,ImageSparse}
+     * MemoryRequirements2KHR. */
+    PS5VK_T09_FEATURE_GET_MEMORY_REQUIREMENTS2 = 1u << 9,
+    /* VK_KHR_dedicated_allocation (requires get_memory_requirements2):
+     * VkMemoryDedicatedRequirements and VkMemoryDedicatedAllocateInfo. */
+    PS5VK_T09_FEATURE_DEDICATED_ALLOCATION = 1u << 10,
+    /* VK_KHR_bind_memory2: vkBind{Buffer,Image}Memory2KHR. */
+    PS5VK_T09_FEATURE_BIND_MEMORY2 = 1u << 11,
 };
 
 /* maxTimelineSemaphoreValueDifference, derived from the payload algorithm
@@ -340,6 +351,12 @@ struct VkDevice_T {
     /* VK_KHR_maintenance2 was enabled on this device: the structures it
      * defines are accepted only then. */
     VkBool32 maintenance2_extension_enabled;
+    /* VK_KHR_get_memory_requirements2, VK_KHR_dedicated_allocation and
+     * VK_KHR_bind_memory2 were enabled on this device: their KHR commands and
+     * structures are reachable only then. */
+    VkBool32 memory_requirements2_extension_enabled;
+    VkBool32 dedicated_allocation_extension_enabled;
+    VkBool32 bind_memory2_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the

@@ -29,6 +29,12 @@ struct VkDeviceMemory_T {
     VkDeviceAddress gpu_address;
     VkBool32 device_address_allocation;
     VkBool32 mapped;
+    /* VK_KHR_dedicated_allocation: the one resource this allocation was made
+     * for, or none. Such memory binds only that resource, at offset 0; it stays
+     * dedicated (and unbindable) after that resource is destroyed. */
+    VkBool32 dedicated;
+    VkImage dedicated_image;
+    struct VkBuffer_T *dedicated_buffer;
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
     struct VkDeviceMemory_T *next;
@@ -90,7 +96,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO ||
         !info->allocationSize || info->memoryTypeIndex != 0) return INVALID;
     VkBool32 device_address_allocation = VK_FALSE;
-    VkBool32 saw_flags = VK_FALSE, saw_capture = VK_FALSE;
+    VkBool32 saw_flags = VK_FALSE, saw_capture = VK_FALSE, saw_dedicated = VK_FALSE;
+    VkImage dedicated_image = VK_NULL_HANDLE;
+    VkBuffer dedicated_buffer = VK_NULL_HANDLE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO) {
@@ -119,6 +127,30 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
             saw_capture = VK_TRUE;
             if (((const VkMemoryOpaqueCaptureAddressAllocateInfo *)next)->opaqueCaptureAddress)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
+        } else if (next->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO) {
+            if (!d->dedicated_allocation_extension_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (saw_dedicated) return INVALID;
+            saw_dedicated = VK_TRUE;
+            const VkMemoryDedicatedAllocateInfo *dedicated =
+                (const VkMemoryDedicatedAllocateInfo *)next;
+            dedicated_image = dedicated->image;
+            dedicated_buffer = dedicated->buffer;
+            /* VUID-VkMemoryDedicatedAllocateInfo-image-01432 and -02964/-02965:
+             * at most one resource, live on this device, and the allocation is
+             * exactly that resource's reported size. */
+            if (dedicated_image && dedicated_buffer) return INVALID;
+            if (dedicated_image) {
+                VkImage live = d->images;
+                while (live && live != dedicated_image) live = live->next;
+                if (!live || live->ever_bound ||
+                    info->allocationSize != live->requirements.size) return INVALID;
+            }
+            if (dedicated_buffer) {
+                VkBuffer live = d->buffers;
+                while (live && live != dedicated_buffer) live = live->next;
+                if (!live || live->ever_bound ||
+                    info->allocationSize != live->required_size) return INVALID;
+            }
         } else return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     if (saw_capture && !device_address_allocation)
@@ -155,6 +187,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d,
     }
     m->device = d; m->size = info->allocationSize;
     m->device_address_allocation = device_address_allocation;
+    m->dedicated = dedicated_image || dedicated_buffer;
+    m->dedicated_image = dedicated_image; m->dedicated_buffer = dedicated_buffer;
     m->next = d->memories; d->memories = m; *out = m;
     return VK_SUCCESS;
 }
@@ -346,6 +380,8 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyBuffer(VkDevice d, VkBuffer b,
     while (*p && *p != b) p = &(*p)->next;
     if (!*p) return;
     *p = b->next;
+    for (VkDeviceMemory m = d->memories; m; m = m->next)
+        if (m->dedicated_buffer == b) m->dedicated_buffer = VK_NULL_HANDLE;
     VkAllocationCallbacks a = b->allocator; VkBool32 custom = b->custom_allocator;
     object_free(b, &a, custom);
 }
@@ -357,14 +393,23 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements(VkDevice d, VkBuffer b,
     if (d && b && b->device == d)
         *out = (VkMemoryRequirements){b->required_size, d->buffer_alignment, 1};
 }
-VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory(VkDevice d, VkBuffer b,
-                                                VkDeviceMemory m, VkDeviceSize offset)
+static VkResult buffer_bind_check(VkDevice d, VkBuffer b, VkDeviceMemory m, VkDeviceSize offset)
 {
     if (!d || !b || !m || b->device != d || m->device != d || b->ever_bound ||
         offset % d->buffer_alignment || offset > m->size ||
         b->required_size > m->size - offset) return INVALID;
+    /* VUID-vkBindBufferMemory-memory-01508: dedicated memory binds only its
+     * own buffer, at offset 0. */
+    if (m->dedicated && (m->dedicated_buffer != b || offset)) return INVALID;
     if ((b->usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) &&
         !m->device_address_allocation) return VK_ERROR_FEATURE_NOT_PRESENT;
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory(VkDevice d, VkBuffer b,
+                                                VkDeviceMemory m, VkDeviceSize offset)
+{
+    VkResult result = buffer_bind_check(d, b, m, offset);
+    if (result != VK_SUCCESS) return result;
     b->memory = m; b->offset = offset; b->ever_bound = VK_TRUE;
     return VK_SUCCESS;
 }
@@ -603,6 +648,16 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(VkDevice d, VkImage image
     pLayout->size = bytes;
 }
 
+static VkResult image_bind_check(VkDevice d, VkImage image, VkDeviceMemory m, VkDeviceSize offset)
+{
+    if (!d || !image || image->device != d || !m || m->device != d || image->ever_bound ||
+        offset % image->requirements.alignment || offset > m->size ||
+        image->requirements.size > m->size - offset) return INVALID;
+    /* VUID-vkBindImageMemory-memory-01509: dedicated memory binds only its
+     * own image, at offset 0. */
+    if (m->dedicated && (m->dedicated_image != image || offset)) return INVALID;
+    return VK_SUCCESS;
+}
 VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(VkDevice d, VkImage image, VkDeviceMemory m, VkDeviceSize offset)
 {
     IMAGE_MARK("PS5VK_IMAGE_BIND samples=%u usage=%08x extent=%ux%u",
@@ -610,9 +665,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(VkDevice d, VkImage image, VkDe
         image && image->device == d ? (unsigned)image->info.usage : 0u,
         image && image->device == d ? image->info.extent.width : 0u,
         image && image->device == d ? image->info.extent.height : 0u);
-    if (!d || !image || image->device != d || !m || m->device != d || image->ever_bound ||
-        offset % image->requirements.alignment || offset > m->size ||
-        image->requirements.size > m->size - offset) return INVALID;
+    VkResult result = image_bind_check(d, image, m, offset);
+    if (result != VK_SUCCESS) return result;
     image->memory = m; image->offset = offset; image->ever_bound = VK_TRUE;
     return VK_SUCCESS;
 }
@@ -630,6 +684,8 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyImage(VkDevice d, VkImage image, const VkAll
     while (*p && *p != image) p = &(*p)->next;
     if (!*p) return;
     *p = image->next; --d->graphics_objects;
+    for (VkDeviceMemory m = d->memories; m; m = m->next)
+        if (m->dedicated_image == image) m->dedicated_image = VK_NULL_HANDLE;
     VkAllocationCallbacks saved = image->allocator; VkBool32 custom = image->custom_allocator;
     object_free(image, &saved, custom);
 }
@@ -660,3 +716,124 @@ VkResult ps5vk_image_span(VkDevice d, VkImage image, void **address, VkDeviceSiz
  * attachment role and a transfer destination declared, which is exactly the
  * image the pinned upstream draw tests create; every other combination stays
  * fail-closed, and the transfer-only predicate above is unchanged. */
+
+/* VK_KHR_get_memory_requirements2 / VK_KHR_dedicated_allocation. The 2KHR
+ * queries report exactly the Vulkan 1.0 requirements; the only output chain
+ * structure is VkMemoryDedicatedRequirements, which this profile answers with
+ * neither a preference nor a requirement: every buffer and image is placed by
+ * offset in ordinary memory, and nothing in the backend benefits from, or
+ * depends on, one allocation per resource. */
+static void dedicated_requirements(VkDevice d, void *chain)
+{
+    for (VkBaseOutStructure *next = chain; next; next = next->pNext)
+        if (next->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS &&
+            d->dedicated_allocation_extension_enabled) {
+            VkMemoryDedicatedRequirements *dedicated = (VkMemoryDedicatedRequirements *)next;
+            dedicated->prefersDedicatedAllocation = VK_FALSE;
+            dedicated->requiresDedicatedAllocation = VK_FALSE;
+        }
+}
+VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2KHR(VkDevice d,
+    const VkBufferMemoryRequirementsInfo2 *info, VkMemoryRequirements2 *out)
+{
+    if (!out || out->sType != VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2) return;
+    out->memoryRequirements = (VkMemoryRequirements){0};
+    if (!d || !d->memory_requirements2_extension_enabled || !info ||
+        info->sType != VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2 || info->pNext)
+        return;
+    vkGetBufferMemoryRequirements(d, info->buffer, &out->memoryRequirements);
+    dedicated_requirements(d, out->pNext);
+}
+VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2KHR(VkDevice d,
+    const VkImageMemoryRequirementsInfo2 *info, VkMemoryRequirements2 *out)
+{
+    if (!out || out->sType != VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2) return;
+    out->memoryRequirements = (VkMemoryRequirements){0};
+    /* VkImagePlaneMemoryRequirementsInfo is for disjoint multi-planar images,
+     * which this profile cannot create. */
+    if (!d || !d->memory_requirements2_extension_enabled || !info ||
+        info->sType != VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2 || info->pNext)
+        return;
+    vkGetImageMemoryRequirements(d, info->image, &out->memoryRequirements);
+    dedicated_requirements(d, out->pNext);
+}
+VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2KHR(VkDevice d,
+    const VkImageSparseMemoryRequirementsInfo2 *info, uint32_t *count,
+    VkSparseImageMemoryRequirements2 *out)
+{
+    (void)out;
+    if (!count) return;
+    /* No image is created with sparse binding (sparseBinding is not reported),
+     * so, as for the 1.0 query, every valid image has no sparse requirements. */
+    *count = 0;
+    (void)d; (void)info;
+}
+
+/* VK_KHR_bind_memory2. Every element is validated before any binding
+ * changes, so a refused call leaves every resource as it was (stronger than
+ * the extension requires). The single-device group forms are the only chained
+ * structures accepted: one physical device, index 0, no split-instance
+ * regions (images cannot be created with SPLIT_INSTANCE_BIND_REGIONS). */
+static VkResult bind_group_chain(VkDevice d, const void *chain, VkStructureType type)
+{
+    VkBool32 seen = VK_FALSE;
+    for (const VkBaseInStructure *next = chain; next; next = next->pNext) {
+        if (next->sType != type || !d->device_group_extension_enabled)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        if (seen) return INVALID;
+        seen = VK_TRUE;
+        uint32_t count; const uint32_t *indices;
+        if (type == VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO) {
+            const VkBindBufferMemoryDeviceGroupInfo *group = (const void *)next;
+            count = group->deviceIndexCount; indices = group->pDeviceIndices;
+        } else {
+            const VkBindImageMemoryDeviceGroupInfo *group = (const void *)next;
+            if (group->splitInstanceBindRegionCount) return INVALID;
+            count = group->deviceIndexCount; indices = group->pDeviceIndices;
+        }
+        if (count > 1 || (count == 1 && (!indices || indices[0] != 0))) return INVALID;
+    }
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory2KHR(VkDevice d, uint32_t count,
+    const VkBindBufferMemoryInfo *infos)
+{
+    if (!d || !d->bind_memory2_extension_enabled || !count || !infos) return INVALID;
+    for (uint32_t n = 0; n < count; ++n) {
+        const VkBindBufferMemoryInfo *info = &infos[n];
+        if (info->sType != VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO) return INVALID;
+        VkResult result = bind_group_chain(d, info->pNext,
+            VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO);
+        if (result == VK_SUCCESS)
+            result = buffer_bind_check(d, info->buffer, info->memory, info->memoryOffset);
+        if (result != VK_SUCCESS) return result;
+        for (uint32_t k = 0; k < n; ++k)
+            if (infos[k].buffer == info->buffer) return INVALID;
+    }
+    for (uint32_t n = 0; n < count; ++n)
+        (void)vkBindBufferMemory(d, infos[n].buffer, infos[n].memory, infos[n].memoryOffset);
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory2KHR(VkDevice d, uint32_t count,
+    const VkBindImageMemoryInfo *infos)
+{
+    if (!d || !d->bind_memory2_extension_enabled || !count || !infos) return INVALID;
+    for (uint32_t n = 0; n < count; ++n) {
+        const VkBindImageMemoryInfo *info = &infos[n];
+        if (info->sType != VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO) return INVALID;
+        /* VkBindImagePlaneMemoryInfo (disjoint planes) and
+         * VkBindImageMemorySwapchainInfoKHR (swapchain-backed binding) are
+         * refused: neither kind of image is created by this profile's
+         * vkCreateImage. */
+        VkResult result = bind_group_chain(d, info->pNext,
+            VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO);
+        if (result == VK_SUCCESS)
+            result = image_bind_check(d, info->image, info->memory, info->memoryOffset);
+        if (result != VK_SUCCESS) return result;
+        for (uint32_t k = 0; k < n; ++k)
+            if (infos[k].image == info->image) return INVALID;
+    }
+    for (uint32_t n = 0; n < count; ++n)
+        (void)vkBindImageMemory(d, infos[n].image, infos[n].memory, infos[n].memoryOffset);
+    return VK_SUCCESS;
+}
