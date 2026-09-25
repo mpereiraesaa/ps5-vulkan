@@ -357,6 +357,18 @@ smaller incompatible layer pitches. The graphics profile reports
   `uniformAndStorageBuffer8BitAccess`, `storagePushConstant8`,
   `uniformAndStorageBuffer16BitAccess`, `storagePushConstant16` and
   `storageInputOutput16` remain false.
+- The Vulkan 1.0 profile exposes bounded `bufferDeviceAddress` through
+  `VK_KHR_buffer_device_address`, and `vulkanMemoryModel` plus
+  `vulkanMemoryModelDeviceScope` through `VK_KHR_vulkan_memory_model`. Each
+  requires its KHR feature structure and explicit device opt-in; DeviceScope
+  additionally requires the base memory model. The Vulkan 1.2 aggregate
+  feature structure is not exposed. Address use is limited to live, bound
+  shader-address buffers, including nonzero bind offsets; capture replay,
+  multi-device addressing and memory-model availability/visibility chains
+  remain unsupported. The DeviceScope witness covers bounded same-dispatch
+  producer/consumer ordering, not every synchronization pattern. See the
+  [memory-model and address evidence](VALIDATION.md#vulkan-memory-model-and-device-address-accounting-2026-09-23)
+  and [reporting matrix](conformance_inventory/reporting_matrix.json).
 - `shaderInt8`, `shaderInt16` and float16 arithmetic are not advertised. The
   supported shaders may load, convert and store narrow scalar/vector values in
   storage buffers, but this does not expose general narrow arithmetic.
