@@ -111,6 +111,28 @@ FILTER_DIAGNOSTIC = """    if (properties.apiVersion < VK_MAKE_API_VERSION(0, 1,
 """
 
 
+# The measurement switches the native DXVK DIAGNOSTIC runs use: every
+# default-off route DXVK 2.6.2 reaches before its first readback. Only the
+# ones tools/build_sdk.py knows are applied; the rest are recorded as absent.
+DXVK_DIAGNOSTIC_SWITCHES = (
+    "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC", "PS5VK_MAINTENANCE4_DIAGNOSTIC",
+    "PS5VK_ROBUSTNESS2_DIAGNOSTIC", "PS5VK_DXVK_RENDER_DIAGNOSTIC",
+    "PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC", "PS5VK_STORAGE_TEXEL_DIAGNOSTIC",
+    "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC", "PS5VK_SHADER_DEMOTE_DIAGNOSTIC",
+    "PS5VK_HOST_COHERENT_DIAGNOSTIC", "PS5VK_DXVK_ROUTES_DIAGNOSTIC",
+    "PS5VK_SYNCHRONIZATION2_DIAGNOSTIC",
+)
+
+
+def diagnostic_integration_switches(build_sdk_source: str) -> tuple[list[str], list[str]]:
+    """Split the DXVK measurement switches into those the SDK build knows
+    and those it does not (not merged yet)."""
+    known = set(re.findall(r'"(PS5VK_[A-Z0-9_]+)"', build_sdk_source))
+    present = [name for name in DXVK_DIAGNOSTIC_SWITCHES if name in known]
+    absent = [name for name in DXVK_DIAGNOSTIC_SWITCHES if name not in known]
+    return present, absent
+
+
 def run(argv: list, **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run([str(arg) for arg in argv], check=True, text=True,
                           capture_output=True, **kwargs)
@@ -168,7 +190,8 @@ def c_string(value: str) -> str:
 
 
 def identity_header(variant: str, dxvk_commit: str, ps5vk_commit: str,
-                    ps5vk_dirty: bool, vs_sha: str, ps_sha: str) -> str:
+                    ps5vk_dirty: bool, vs_sha: str, ps_sha: str,
+                    integration: str = "none", sdk_switches: str = "none") -> str:
     if variant not in VARIANTS:
         raise ValueError(f"unknown variant {variant}")
     config = VARIANTS[variant]
@@ -186,6 +209,8 @@ def identity_header(variant: str, dxvk_commit: str, ps5vk_commit: str,
         f"#define DXVK_NATIVE_PATCHES {c_string(patches)}",
         f"#define DXVK_NATIVE_VS_SHA256_BUILD {c_string(vs_sha)}",
         f"#define DXVK_NATIVE_PS_SHA256_BUILD {c_string(ps_sha)}",
+        f"#define DXVK_NATIVE_INTEGRATION {c_string(integration)}",
+        f"#define DXVK_NATIVE_SDK_SWITCHES {c_string(sdk_switches)}",
         "#endif", ""))
 
 
@@ -387,8 +412,14 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
     shutil.rmtree(work, ignore_errors=True)
     for directory in (work, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
+    switches = sorted(set(args.sdk_switch or ()))
+    absent: list[str] = []
+    if args.diagnostic_integration:
+        present, absent = diagnostic_integration_switches(
+            (ROOT / "tools/build_sdk.py").read_text())
+        switches = sorted(set(switches) | set(present))
     if not args.skip_sdk:
-        env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
+        env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **{name: "1" for name in switches})
         subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")], cwd=ROOT, env=env,
                        check=True)
     staged = ROOT / "dist-sdk"
@@ -401,7 +432,8 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
 
     (work / "build_identity.h").write_text(identity_header(
         variant, dxvk_commit, ps5vk_commit, ps5vk_dirty,
-        sha256_bytes(shaders["vs"]), sha256_bytes(shaders["ps"])))
+        sha256_bytes(shaders["vs"]), sha256_bytes(shaders["ps"]),
+        integration_label(args), ",".join(switches) or "none"))
     logger = lab / "projects/logging_server/client"
     payload_objects = []
     for source in ("ps5_main.cpp", "workload.cpp", "vk_trace.cpp", "compat_layer.cpp"):
@@ -455,7 +487,13 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
     artifact = {
         "profile": PROFILE,
         "variant": variant,
-        "label": "DIAGNOSTIC" if config["diagnostic"] else "UNMODIFIED",
+        "label": ("DIAGNOSTIC-INTEGRATION" if integration_label(args) != "none" else
+                  "DIAGNOSTIC" if config["diagnostic"] else "UNMODIFIED"),
+        "integration": None if integration_label(args) == "none" else integration_label(args),
+        "sdk_switches": switches,
+        "sdk_switches_unavailable": absent,
+        "patch_list_sha256": sha256_bytes("\n".join(
+            list(config["patches"]) + list(PLATFORM_OVERLAYS)).encode()),
         "diagnostic": config["diagnostic"],
         "dxvk_commit": dxvk_commit,
         "dxvk_source_patches": list(config["patches"]),
@@ -477,6 +515,16 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
     }
     (work / "artifact.json").write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n")
     return artifact
+
+
+def integration_label(args: argparse.Namespace) -> str:
+    """The DIAGNOSTIC-INTEGRATION description: explicit, or the ps5vk commit
+    when --diagnostic-integration builds from one tree."""
+    if args.integration:
+        return args.integration
+    if args.diagnostic_integration:
+        return "tree@" + git_identity()[0][:10]
+    return "none"
 
 
 def host_check(args: argparse.Namespace) -> dict:
@@ -522,6 +570,14 @@ def main() -> int:
                         help="Configured native Meson build (default: <dxvk-dir>/build-native)")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "build/dxvk-ps5-native")
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
+    parser.add_argument("--sdk-switch", action="append", metavar="NAME",
+                        help="Build the SDK with this diagnostic switch set to 1 (recorded)")
+    parser.add_argument("--integration", help="DIAGNOSTIC-INTEGRATION description "
+                        "(merged driver heads); labels the payload and receipt")
+    parser.add_argument("--diagnostic-integration", action="store_true",
+                        help="One-command DIAGNOSTIC recipe: build the SDK with every DXVK "
+                             "measurement switch it knows, label the payload "
+                             "DIAGNOSTIC-INTEGRATION and record the switches")
     parser.add_argument("--skip-sdk", action="store_true",
                         help="Reuse the staged dist-sdk instead of rebuilding it")
     parser.add_argument("--host-check", action="store_true",
