@@ -51,6 +51,7 @@ def tessellation_build_profile(environment):
             "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
             "PS5VK_SHADER_INT16_DIAGNOSTIC",
             "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
+            "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
         )
     }
     return {

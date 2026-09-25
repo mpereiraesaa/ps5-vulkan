@@ -2488,6 +2488,124 @@ static void uniform_buffer_standard_layout_route(void)
     vkDestroyInstance(plain_instance, NULL);
 }
 
+/* VK_EXT_robustness2 (DXVK262-T13): unreported by the host platform; with the
+ * two platform bits the extension, the feature and property structures and
+ * device creation follow the pinned DXVK request exactly. */
+static int has_robustness2(VkPhysicalDevice p)
+{
+    VkExtensionProperties extensions[24]; uint32_t count = 24;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, extensions) == VK_SUCCESS);
+    int found = 0;
+    for (uint32_t n = 0; n < count; ++n)
+        found |= !strcmp(extensions[n].extensionName, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+    return found;
+}
+static void robustness2_route(void)
+{
+    VkInstance instance_with_features2 = features2_instance();
+    VkPhysicalDevice p = physical(instance_with_features2);
+    VkPhysicalDeviceRobustness2FeaturesEXT reported = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+        .robustBufferAccess2 = 7, .robustImageAccess2 = 7, .nullDescriptor = 7};
+    VkPhysicalDeviceFeatures2 features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &reported};
+    vkGetPhysicalDeviceFeatures2KHR(p, &features);
+    assert(!reported.robustBufferAccess2 && !reported.robustImageAccess2 &&
+           !reported.nullDescriptor && !has_robustness2(p));
+    VkPhysicalDeviceRobustness2PropertiesEXT limits = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT,
+        .robustStorageBufferAccessSizeAlignment = 99,
+        .robustUniformBufferAccessSizeAlignment = 99};
+    VkPhysicalDeviceProperties2 properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &limits};
+    vkGetPhysicalDeviceProperties2KHR(p, &properties);
+    assert(!limits.robustStorageBufferAccessSizeAlignment &&
+           !limits.robustUniformBufferAccessSizeAlignment);
+    const char *name = VK_EXT_ROBUSTNESS_2_EXTENSION_NAME;
+    VkDeviceQueueCreateInfo queue; float priority;
+    VkDeviceCreateInfo info = device_info(&queue, &priority);
+    info.enabledExtensionCount = 1; info.ppEnabledExtensionNames = &name;
+    VkDevice device = VK_NULL_HANDLE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_EXTENSION_NOT_PRESENT && !device);
+
+    /* A capable platform: both implemented features, never robustImageAccess2. */
+    p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
+        PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    vkGetPhysicalDeviceFeatures2KHR(p, &features);
+    assert(reported.robustBufferAccess2 == VK_TRUE && reported.nullDescriptor == VK_TRUE &&
+           reported.robustImageAccess2 == VK_FALSE && has_robustness2(p));
+    vkGetPhysicalDeviceProperties2KHR(p, &properties);
+    assert(limits.robustStorageBufferAccessSizeAlignment == 4 &&
+           limits.robustUniformBufferAccessSizeAlignment == 4);
+
+    /* The pinned DXVK request: core robustBufferAccess in Features2 plus
+     * robustBufferAccess2 and nullDescriptor in the extension structure. */
+    VkPhysicalDeviceRobustness2FeaturesEXT requested = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+        .robustBufferAccess2 = VK_TRUE, .nullDescriptor = VK_TRUE};
+    VkPhysicalDeviceFeatures2 enabled = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &requested, .features = {.robustBufferAccess = VK_TRUE}};
+    info.pNext = &enabled;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert((device->enabled_features_t09 & (PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
+            PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) ==
+           (PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 | PS5VK_T09_FEATURE_NULL_DESCRIPTOR));
+    vkDestroyDevice(device, NULL);
+    /* The extension alone enables neither feature. */
+    info.pNext = NULL;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert(!(device->enabled_features_t09 & (PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
+             PS5VK_T09_FEATURE_NULL_DESCRIPTOR)));
+    vkDestroyDevice(device, NULL);
+    info.pNext = &enabled;
+    /* VUID-...-robustBufferAccess2-04000: robustBufferAccess must be enabled. */
+    enabled.features.robustBufferAccess = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+    /* nullDescriptor alone does not need robustBufferAccess. */
+    requested.robustBufferAccess2 = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
+    assert((device->enabled_features_t09 & (PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
+            PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) == PS5VK_T09_FEATURE_NULL_DESCRIPTOR);
+    vkDestroyDevice(device, NULL);
+    enabled.features.robustBufferAccess = VK_TRUE; requested.robustBufferAccess2 = VK_TRUE;
+    /* robustImageAccess2 is not implemented; non-boolean values are invalid. */
+    requested.robustImageAccess2 = VK_TRUE;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    requested.robustImageAccess2 = 2;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN && !device);
+    requested.robustImageAccess2 = VK_FALSE;
+    /* Duplicate structure, and the structure without the extension. */
+    VkPhysicalDeviceRobustness2FeaturesEXT duplicate = requested;
+    requested.pNext = &duplicate;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    requested.pNext = NULL;
+    info.enabledExtensionCount = 0;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    info.enabledExtensionCount = 1;
+    /* Each feature follows its own platform bit. */
+    p->platform.supported_features_t09 &= ~(uint32_t)PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    vkGetPhysicalDeviceFeatures2KHR(p, &features);
+    assert(reported.robustBufferAccess2 && !reported.nullDescriptor && has_robustness2(p));
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    /* robustBufferAccess2 relies on offset alignments that are multiples of four. */
+    p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    const VkDeviceSize saved_alignment =
+        p->platform.properties.limits.minUniformBufferOffsetAlignment;
+    p->platform.properties.limits.minUniformBufferOffsetAlignment = 2;
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT && !device);
+    p->platform.properties.limits.minUniformBufferOffsetAlignment = saved_alignment;
+    vkDestroyInstance(instance_with_features2, NULL);
+
+    /* Registry dependency: the Features2 instance extension on a 1.0 device. */
+    VkInstance plain_instance = instance();
+    VkPhysicalDevice plain = physical(plain_instance);
+    plain->platform.supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
+        PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    info.pNext = NULL;
+    assert(vkCreateDevice(plain, &info, NULL, &device) == VK_ERROR_EXTENSION_NOT_PRESENT && !device);
+    vkDestroyInstance(plain_instance, NULL);
+}
+
 static void wsi_display_surface_contract(void)
 {
     const char *names[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_DISPLAY_EXTENSION_NAME};
@@ -2729,5 +2847,6 @@ int main(void)
     create_renderpass2_command_gate(); descriptor_update_template_command_gate();
     buffer_address_khr_device_route();
     uniform_buffer_standard_layout_route();
+    robustness2_route();
     puts("Vulkan device lifecycle: pass (host backend only)");
 }

@@ -124,6 +124,7 @@ def main():
     t09_diagnostics = {}
     for name in (
         "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
+        "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
     ):
         value = os.environ.get(name, "0")
         if value not in ("0", "1") or (value == "1" and not graphics_api):

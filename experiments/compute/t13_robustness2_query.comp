@@ -1,0 +1,15 @@
+#version 450
+// DXVK262-T13 robustness2 witness, phase 2: size queries on null views.
+layout(local_size_x = 1) in;
+layout(std430, set = 0, binding = 0) buffer Out { uint v[]; } result;
+layout(set = 0, binding = 5) uniform usamplerBuffer null_texel;
+layout(set = 0, binding = 6, r32ui) uniform uimage2D null_image;
+
+void main()
+{
+    ivec2 size = imageSize(null_image);
+    result.v[32] = uint(size.x);
+    result.v[33] = uint(size.y);
+    result.v[34] = uint(textureSize(null_texel));
+    result.v[35] = 0xc0de0014u;
+}
