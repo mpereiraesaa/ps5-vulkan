@@ -8274,6 +8274,556 @@
       "path": "dEQP-VK.api.object_management.single.image_view_cube_arr",
       "rationale": "Original pinned object-management leaf creates a cube-compatible 12-layer RGBA8 image and VK_IMAGE_VIEW_TYPE_CUBE_ARRAY view; the measured native GPU cube-array witness separately covers all-face sampling.",
       "source": "external/vulkancts/modules/vulkan/api/vktApiObjectManagementTests.cpp:3680"
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint.compare_ops.triangle_list_equal_less_never_always",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp:1136",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream depth compare-op leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint.compare_ops.triangle_list_greater_less_equal_never",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp:1136",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream depth compare-op leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint.compare_ops.triangle_list_greater_or_equal_less_or_equal_always_less",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp:1136",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream depth compare-op leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint.compare_ops.triangle_list_not_equal_not_equal_not_equal_not_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp:1136",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream depth compare-op leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_equal_less_never_always",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp:1136",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream depth compare-op leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_greater_less_equal_never",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp:1136",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream depth compare-op leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_greater_or_equal_less_or_equal_always_less",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp:1136",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream depth compare-op leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_not_equal_not_equal_not_equal_not_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp:1136",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream depth compare-op leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_decc.pass_inv.dfail_zero.comp_not_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_inv.pass_wrap.dfail_decw.comp_less",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_keep.pass_keep.dfail_keep.comp_always",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_keep.pass_keep.dfail_keep.comp_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_keep.pass_keep.dfail_keep.comp_greater",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_keep.pass_keep.dfail_keep.comp_greater_or_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_keep.pass_keep.dfail_keep.comp_less",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_keep.pass_keep.dfail_keep.comp_less_or_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_keep.pass_keep.dfail_keep.comp_never",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_keep.pass_keep.dfail_keep.comp_not_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_repl.pass_incc.dfail_decc.comp_greater_or_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_zero.pass_repl.dfail_incc.comp_always",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-d32s8-combined",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on the combined D32_SFLOAT_S8_UINT attachment; the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_decc.pass_inv.dfail_zero.comp_not_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_inv.pass_wrap.dfail_decw.comp_less",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_always",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_greater",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_greater_or_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_less",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_less_or_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_never",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_not_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_repl.pass_incc.dfail_decc.comp_greater_or_equal",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_zero.pass_repl.dfail_incc.comp_always",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp:903",
+      "category": "t09-separate-depth-stencil-layouts",
+      "expected_status": "Pass",
+      "features_required": [
+        "format:VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "extension:VK_KHR_separate_depth_stencil_layouts",
+        "feature:separateDepthStencilLayouts"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream stencil-state leaf on D32_SFLOAT_S8_UINT with separate depth and stencil attachment layouts (VkAttachmentReferenceStencilLayout / VkAttachmentDescriptionStencilLayout); the image oracle compares the rendered quads against the reference renderer."
+    },
+    {
+      "path": "dEQP-VK.renderpass2.suballocation.attachment_write_mask.attachment_count_2.start_index_0",
+      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
+      "category": "t09-renderpass2",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:independentBlend",
+        "extension:VK_KHR_create_renderpass2"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. The unchanged upstream two-attachment write-mask leaf built through vkCreateRenderPass2 (createRenderPass2Tests); same oracle as the frozen renderpass twin, exercising the VK_KHR_create_renderpass2 route."
+    },
+    {
+      "path": "dEQP-VK.renderpass2.suballocation.attachment_write_mask.attachment_count_2.start_index_1",
+      "source": "external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp:6504",
+      "category": "t09-renderpass2",
+      "expected_status": "Pass",
+      "features_required": [
+        "core:independentBlend",
+        "extension:VK_KHR_create_renderpass2"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. The unchanged upstream two-attachment write-mask leaf built through vkCreateRenderPass2 (createRenderPass2Tests); same oracle as the frozen renderpass twin, exercising the VK_KHR_create_renderpass2 route."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.timeline_semaphore.chain",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:960",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream legacy timeline-semaphore body (createBasicTimelineSemaphoreTests); its oracle requires monotonic 64-bit counter signal/wait semantics through VkTimelineSemaphoreSubmitInfo and vkWaitSemaphores."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.timeline_semaphore.one_queue",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:955",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream legacy timeline-semaphore body (createBasicTimelineSemaphoreTests); its oracle requires monotonic 64-bit counter signal/wait semantics through VkTimelineSemaphoreSubmitInfo and vkWaitSemaphores."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.timeline_semaphore.two_threads",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:966",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream legacy timeline-semaphore body (createBasicTimelineSemaphoreTests); its oracle requires monotonic 64-bit counter signal/wait semantics through VkTimelineSemaphoreSubmitInfo and vkWaitSemaphores."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_current_value",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:974",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream legacy timeline-semaphore body (createBasicTimelineSemaphoreTests); its oracle requires monotonic 64-bit counter signal/wait semantics through VkTimelineSemaphoreSubmitInfo and vkWaitSemaphores."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_lesser_value",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:977",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream legacy timeline-semaphore body (createBasicTimelineSemaphoreTests); its oracle requires monotonic 64-bit counter signal/wait semantics through VkTimelineSemaphoreSubmitInfo and vkWaitSemaphores."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_current_value",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:968",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream legacy timeline-semaphore body (createBasicTimelineSemaphoreTests); its oracle requires monotonic 64-bit counter signal/wait semantics through VkTimelineSemaphoreSubmitInfo and vkWaitSemaphores."
+    },
+    {
+      "path": "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_lesser_value",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp:971",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream legacy timeline-semaphore body (createBasicTimelineSemaphoreTests); its oracle requires monotonic 64-bit counter signal/wait semantics through VkTimelineSemaphoreSubmitInfo and vkWaitSemaphores."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:1239",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:1237",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_device",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:745",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_host",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:747",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.wait.host_wait_before_signal",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:754",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_device",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:746",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_host",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:748",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_device",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:755",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
+    },
+    {
+      "path": "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_host",
+      "source": "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp:756",
+      "category": "t09-timeline",
+      "expected_status": "Pass",
+      "features_required": [
+        "extension:VK_KHR_timeline_semaphore",
+        "feature:timelineSemaphore"
+      ],
+      "rationale": "PROMOTED 2026-09-25: measured Pass on the physical console in run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f on payload eboot 7f9bba150da8241d. Original upstream timeline-semaphore module (createTimelineSemaphoreTests, legacy synchronization); its oracle checks device and host signal/wait, polling and the reported maxTimelineSemaphoreValueDifference."
     }
   ],
   "diagnostics": [

@@ -1119,6 +1119,95 @@ def _attachment_write_mask_generated_segments(text: str) -> set[str]:
     return names
 
 
+def _factory_slice(text: str, signature: str) -> str:
+    """The body of one top-level factory, from its signature to the next one."""
+    start = text.find(signature)
+    if start < 0:
+        return ""
+    end = text.find("\ntcu::TestCaseGroup *", start + 1)
+    return text[start:end if end > 0 else len(text)]
+
+
+def _separate_layouts_format_segments(factory: str, table: str) -> set[str]:
+    """Format groups of the pipeline stencil and depth factories.
+
+    Both factories name one group per entry of their own format table with
+    getFormatCaseName(format), and a second "<format>_separate_layouts" group
+    for each format that has both a depth and a stencil aspect. The plain names
+    are already generated from the VK_FORMAT_ literals; this adds the combined
+    formats' "_separate_layouts" twins only while that exact construction and
+    table are present in the cited factory.
+    """
+    if '((useSeparateDepthStencilLayouts) ? "_separate_layouts" : "")' not in factory:
+        return set()
+    formats = re.search(rf"const VkFormat {table}\[\]\s*=\s*\{{([^}}]*)\}}", factory)
+    if not formats:
+        return set()
+    return {token[len("VK_FORMAT_"):].lower() + "_separate_layouts"
+            for token in re.findall(r"\bVK_FORMAT_[A-Z0-9_]+\b", formats.group(1))
+            if re.fullmatch(r"VK_FORMAT_D[0-9]+_[A-Z0-9_]*S8_UINT", token)}
+
+
+@_memoized
+def _stencil_generated_segments(text: str) -> set[str]:
+    """Derive the pinned stencil factory's generated group names.
+
+    createStencilTests names its op groups "fail_", "pass_" and "dfail_" plus
+    getShortName(op) for every entry of its stencil-op table (a full product,
+    so every combination exists), and its format groups from stencilFormats[].
+    Bounded to those exact construction expressions and to getShortName's own
+    return table.
+    """
+    factory = _factory_slice(text, "tcu::TestCaseGroup *createStencilTests(")
+    short = re.search(r"const char \*getShortName\(VkStencilOp stencilOp\)\s*\{(.*?)\n\}", text,
+                      re.DOTALL)
+    if not factory or not short:
+        return set()
+    names = set(re.findall(r'return "([a-z]+)";', short.group(1)))
+    segments = _separate_layouts_format_segments(factory, "stencilFormats")
+    for prefix, index in (("fail_", "failOpNdx"), ("pass_", "passOpNdx"),
+                          ("dfail_", "dFailOpNdx")):
+        if re.search(rf'std::string\("{prefix}"\)\s*\+\s*getShortName\(stencilOps\[{index}\]\)',
+                     factory):
+            segments |= {prefix + name for name in names}
+    return segments
+
+
+@_memoized
+def _depth_generated_segments(text: str) -> set[str]:
+    """The pinned depth factory's "<format>_separate_layouts" group names."""
+    return _separate_layouts_format_segments(
+        _factory_slice(text, "tcu::TestCaseGroup *createDepthTests("), "depthFormats")
+
+
+@_memoized
+def _depth_compare_ops_leaf_names(text: str) -> set[str]:
+    """Leaves of the pinned depth factory's compare_ops groups.
+
+    Each leaf is getTopologyName(topology) + "_" + getCompareOpsName(row): the
+    lowercased topology without its prefix, then the row's four compare ops
+    lowercased without "VK_COMPARE_OP_" and joined by "_". Derived from the
+    factory's own primitiveTopologies[] and depthOps[][] tables, and only while
+    that exact construction expression is present.
+    """
+    factory = _factory_slice(text, "tcu::TestCaseGroup *createDepthTests(")
+    if not re.search(r"topologyName\s*\+\s*getCompareOpsName\(depthOps\[opsNdx\]\)", factory):
+        return set()
+    if 'getTopologyName(primitiveTopologies[topologyNdx]) + "_"' not in factory:
+        return set()
+    topologies = re.search(r"const VkPrimitiveTopology primitiveTopologies\[\]\s*=\s*\{([^}]*)\}",
+                           factory)
+    ops = re.search(r"const VkCompareOp depthOps\[\]\[DepthTest::QUAD_COUNT\]\s*=\s*\{(.*?)\n\s*\};",
+                    factory, re.DOTALL)
+    if not topologies or not ops:
+        return set()
+    topology_names = [t.lower() for t in
+                      re.findall(r"\bVK_PRIMITIVE_TOPOLOGY_([A-Z_]+)\b", topologies.group(1))]
+    rows = ["_".join(op.lower() for op in re.findall(r"\bVK_COMPARE_OP_([A-Z_]+)\b", row))
+            for row in re.findall(r"\{([^{}]*)\}", ops.group(1))]
+    return {f"{topology}_{row}" for topology in topology_names for row in rows if row}
+
+
 @_memoized
 def _indirect_draw_generated_segments(text: str) -> set[str]:
     """Derive the draw-type group names of the pinned indirect-draw factory.
@@ -1933,6 +2022,10 @@ def main() -> int:
             generated_segments |= _multisample_generated_segments(text)
         if source_path.name == "vktRenderPassTests.cpp":
             generated_segments |= _attachment_write_mask_generated_segments(text)
+        if source_path.name == "vktPipelineStencilTests.cpp":
+            generated_segments |= _stencil_generated_segments(text)
+        if source_path.name == "vktPipelineDepthTests.cpp":
+            generated_segments |= _depth_generated_segments(text)
         if volatile_atomic_leaves:
             generated_segments |= {"opatomic_storage_buffer_volatile"}
         if source_path.name == "vktUniformBlockTests.cpp" and (
@@ -2127,6 +2220,11 @@ def main() -> int:
         # DXVK262-T06 oracle for it.
         if (source_path.name == "vktRenderPassTests.cpp" and
                 leaf in _two_attachment_write_mask_leaf_names(text, leaf)):
+            continue
+        # The depth factory's compare_ops leaves join the topology name and one
+        # row of its depthOps table. Bounded to that module's exact tables.
+        if (source_path.name == "vktPipelineDepthTests.cpp" and
+                leaf in _depth_compare_ops_leaf_names(text)):
             continue
         # The geometry input factory names its triangle-strip-adjacency leaves
         # after the vertex count it iterates, so only the prefix is a literal.

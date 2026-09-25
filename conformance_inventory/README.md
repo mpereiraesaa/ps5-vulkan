@@ -351,8 +351,8 @@ draw witnesses, two passing shipping draws, and one compact 3D W CTS PASS.
 Its public KHR extension was also observed by the ordinary SDK probe. The two
 larger 3D filtering CTS leaves remain `Fail` at image upload before sampling;
 those verdicts do not measure W sampling.
-The timeline and separate depth/stencil rows have public SDK witnesses and
-focused original CTS receipts. A probe of the combined build observed 32/62
+The timeline and separate depth/stencil rows have public SDK witnesses, and
+their 50 focused original CTS leaves are now in the frozen 879-case selection. A probe of the combined build observed 32/62
 requested query values; query success alone does not establish GPU execution.
 
 T04's implementation and focused native validation are

@@ -59,8 +59,18 @@ were the same thing:
   payload, including the reference rasterizer and image-comparison machinery
   (`rrRenderer`, `tcuImageCompare`, `tcuRasterizationVerifier`, ...). The link
   map proves they are present, not that they run.
-* **Selected**: the 829 original upstream acceptance cases frozen in
-  `cts/upstream/manifest.json`. T07 adds 250 BC sampling, blit and copy cases,
+* **Selected**: the 879 original upstream acceptance cases frozen in
+  `cts/upstream/manifest.json`. T09 adds 50 leaves that first passed a focused
+  shipping run: 16 legacy timeline-semaphore leaves, the two `renderpass2`
+  attachment write-mask leaves, and 24 stencil and 8 depth leaves on
+  `d32_sfloat_s8_uint` with and without separate layouts. The 879-case
+  selection passed 879/879 in the strict shipping run
+  `20260925T050215847Z_PPSA99994_upstream-cts_0x25ac92fe5a27` on eboot SHA-256
+  `a2790d6d8c83ddaf38951ba553a53e1f41026b53eae5780f489a120be14f3973`
+  and selection SHA-256
+  `31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28`;
+  see [the evidence](VALIDATION.md#t09-focused-leaves-frozen-into-acceptance-2026-09-25).
+  Before that, T07 adds 250 BC sampling, blit and copy cases,
   70 gather cases, one precise-query case and one cube-array image-view case to
   the prior 507-case selection. This also includes four standard UBO layout
   vertex oracles, seven VulkanKHR volatile storage-buffer atomic oracles and
