@@ -82,6 +82,11 @@ static VkResult runtime_compile_compute_features(
     opts.entrypoint = entry_name;
     opts.optimise = true;
     opts.address32_hi = 2;
+    /* VK_EXT_robustness2 robustBufferAccess2 load handling on every compile:
+     * SSBO/UBO loads whose combined offset could wrap stay separate, so each
+     * is bounds-checked on its own. It is valid for robustBufferAccess (1.0)
+     * too, and the pinned DXVK always enables robustBufferAccess2. */
+    opts.robust_buffer_access2 = true;
     opts.force_indirect_push_constants = layout->push_constant_size != 0;
     /* EXPERIMENT: ask the compiler for honest static descriptor use. */
     opts.static_descriptor_use = true;

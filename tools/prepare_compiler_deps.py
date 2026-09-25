@@ -34,7 +34,10 @@ DEPS = [
         # options to enable for each negotiated logical-device feature.
         # PR 25 fixes compute subgroup-ID lowering and the fixed wave32
         # compiler contract. Public subgroup reporting remains disabled.
-        "pin": "ee8959186cfb1f5c0a574d1e2ee329aad1fe2747",
+        # PR 27 adds separate sampler, sampled image and storage texel buffer
+        # descriptors; PR 28 adds PsbcCompileOptions::robust_buffer_access2
+        # (VK_EXT_robustness2 load handling), which both driver compilers set.
+        "pin": "7c794f7c9e0a16f2bc79351317818fd311cb6fbc",
     },
     {
         "name": "opengnm",

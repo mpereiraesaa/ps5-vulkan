@@ -1,0 +1,15 @@
+#version 450
+// Two loads whose offsets differ by one element, (i - 1) and i, from an
+// SSBO and from a UBO. With i == 0 the low offset wraps: robustBufferAccess2
+// must bounds-check each load on its own, so they may not be combined.
+layout(local_size_x = 1) in;
+layout(std430, set = 0, binding = 0) buffer Src { uint v[]; } src;
+layout(std430, set = 0, binding = 1) buffer Dst { uint v[]; } dst;
+layout(std140, set = 0, binding = 2) uniform Ubo { uvec4 v[64]; } ubo;
+void main()
+{
+    uint i = src.v[0];
+    dst.v[0] = src.v[i - 1u] + src.v[i];
+    uvec4 a = ubo.v[i - 1u] + ubo.v[i];
+    dst.v[1] = a.x + a.y + a.z + a.w;
+}
