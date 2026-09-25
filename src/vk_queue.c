@@ -195,6 +195,11 @@ static VkResult start_submission(VkDevice d)
                     return VK_ERROR_DEVICE_LOST;
                 }
             }
+            /* HOST_COHERENT: host writes reach memory before the GPU runs. */
+            if (ps5vk_coherent_host_writeback(d) != VK_SUCCESS) {
+                d->lost = VK_TRUE;
+                return VK_ERROR_DEVICE_LOST;
+            }
             VkResult result = d->submit_backend.launch(d, s->backend_job);
             if (result != VK_SUCCESS) {
                 QUEUE_DIAG("PS5VK_QUEUE_BACKEND_LAUNCH_FAILED serial=%llu rc=%d",
@@ -231,6 +236,11 @@ static VkResult poll_locked(VkDevice d)
     if (result != VK_SUCCESS) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
     if (!completed) return VK_SUCCESS;
     if (completed != s->serial) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
+    /* HOST_COHERENT: no stale CPU line survives the observed completion. */
+    if (ps5vk_coherent_host_invalidate(d) != VK_SUCCESS) {
+        d->lost = VK_TRUE;
+        return VK_ERROR_DEVICE_LOST;
+    }
     /* The backend contract includes visibility and exact completion. */
     d->submit_backend.release(d, s->backend_job);
     pin(s, 0);
