@@ -84,11 +84,37 @@ static inline int ps5vk_attachment_initialization_handover_barrier(const VkImage
         b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT &&
         (b->dstAccessMask & (VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                              VK_ACCESS_SHADER_WRITE_BIT)) &&
+        /* DXVK262-T10: a D3D11 runtime hands its cleared render target over
+         * with the image's whole access scope, which also names the transfer
+         * write a later copy into it performs (DXVK: 0x1980). */
         !(b->dstAccessMask &
           ~(ps5vk_attachment_initialization_read_mask() |
             (VkAccessFlags)(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                            VK_ACCESS_SHADER_WRITE_BIT)));
+                            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)));
+}
+/* DXVK262-T10: the readback hand-over and hand-back a D3D11 runtime records
+ * with srcAccessMask 0, because a preceding global memory barrier already made
+ * the attachment writes (or the copy's reads) available (DXVK 2.6.2:
+ * COLOR_ATTACHMENT -> TRANSFER_SRC dst TRANSFER_READ, and TRANSFER_SRC ->
+ * COLOR_ATTACHMENT dst COLOR_READ|COLOR_WRITE|TRANSFER_READ|TRANSFER_WRITE).
+ * Only the layout moves; the destination scope stays bounded to what the
+ * next use performs. */
+static inline int ps5vk_colour_readback_dependency_barrier(const VkImageMemoryBarrier *b)
+{
+    const VkAccessFlags handback = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+        VK_ACCESS_TRANSFER_WRITE_BIT;
+    return b && b->image && !b->srcAccessMask &&
+        (b->image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
+        (b->image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+        ((b->oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+          b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+          b->dstAccessMask == VK_ACCESS_TRANSFER_READ_BIT) ||
+         (b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+          b->newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+          (b->dstAccessMask & VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) &&
+          !(b->dstAccessMask & ~handback)));
 }
 
 /* Initial discard transition. Access masks select a scope, not a prescribed

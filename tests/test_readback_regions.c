@@ -211,6 +211,34 @@ int main(void)
     assert(ps5vk_readback_region_bytes(&image, &tight) == (8u * 20u + 11u) * 4u);
     tight.imageExtent.width = 0;
     assert(!ps5vk_readback_region_bytes(&image, &tight));
+    /* The three image barriers DXVK's first frame records (host trace,
+     * sync2 converted to 1.0 masks), admitted by the shared predicates the
+     * recorder and the native prelude use. */
+    {
+        VkImageMemoryBarrier b = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .image = &image,
+            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = 0x1980u};
+        assert(ps5vk_attachment_initialization_handover_barrier(&b));        /* (1) */
+        b.dstAccessMask = 0x1980u | VK_ACCESS_HOST_WRITE_BIT;
+        assert(!ps5vk_attachment_initialization_handover_barrier(&b));
+        b = (VkImageMemoryBarrier){.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .image = &image,
+            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
+        assert(ps5vk_colour_readback_dependency_barrier(&b));                /* (2) */
+        b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        assert(!ps5vk_colour_readback_dependency_barrier(&b));
+        b = (VkImageMemoryBarrier){.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .image = &image,
+            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcAccessMask = 0, .dstAccessMask = 0x1980u};
+        assert(ps5vk_colour_readback_dependency_barrier(&b));                /* (3) */
+        b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        assert(!ps5vk_colour_readback_dependency_barrier(&b));
+        b.srcAccessMask = 0; b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        assert(!ps5vk_colour_readback_dependency_barrier(&b));
+    }
     puts("readback regions: pass (host tiled surface, no GPU execution)");
     return 0;
 }

@@ -1561,6 +1561,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
         !b->srcAccessMask &&
         b->dstAccessMask==VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     if(readback)return
+        ps5vk_colour_readback_dependency_barrier(b) ||
         ps5vk_precise_query_colour_barrier(b,src_stage,dst_stage) ||
         ps5vk_color_discard_barrier(b) ||
         ps5vk_color_readback_reuse_barrier(b) ||
@@ -1590,7 +1591,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
          * the same three barriers are accepted here, and only when the image
          * really declares the transfer-source role. */
         ((usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
-         (ps5vk_color_discard_barrier(b) ||
+         (ps5vk_color_discard_barrier(b) || ps5vk_colour_readback_dependency_barrier(b) ||
           ps5vk_color_readback_reuse_barrier(b) ||
           (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
            b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
