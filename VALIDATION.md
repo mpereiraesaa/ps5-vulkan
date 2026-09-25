@@ -5803,8 +5803,25 @@ semaphores and separate depth/stencil layouts. The title closed cleanly and
 the ordinary acceptance eboot was restored by exact-self readback. Firmware
 was not independently queried in this run.
 
-The checked four-axis matrix is 30/62 ready with 32 blockers. This combined
-probe validates public reporting only; the per-capability GPU witnesses and
-focused CTS receipts remain bound to the separate signed artifacts documented
-above. A combined runtime GPU regression and execution of the real DXVK 2.6.2
-build remain open.
+The checked four-axis matrix is 30/62 ready with 32 blockers. The public probe
+validates reporting; two additional SDK witnesses built from the same combined
+source tree executed GPU work:
+
+* Timeline: signed eboot SHA-256
+  `6263a45790b002cf152f06f9f1d272f0cffdc060d41bbf0e52f8727584a89a41`,
+  run `20260925T013419733Z_PPSA99994_ps5vk_0x1a53cacfc908`, log SHA-256
+  `ef8b8bc259d20f9e3e1ffe0063b5886f641ef3857399b8e5b48d075339ad2939`.
+  Strict verification observed both expected phase digests, a signal above
+  2^32, `maxTimelineSemaphoreValueDifference=UINT64_MAX` and clean closure.
+* Separate depth/stencil: signed eboot SHA-256
+  `3151e1d86bb8d0a1abe764ba93b73d8a4030278ca4f40b36eef707fe9ec95d8a`,
+  run `20260925T013437345Z_PPSA99994_ps5vk_0x1a57e466ec0c`, log SHA-256
+  `3bef166a4e1b7f2b62f7578db1ae13bda9d37b7f4d83a666dbfdad46c19fa0dd`.
+  Strict verification found zero mismatches in all four depth/stencil checks
+  and clean closure. `D24_UNORM_S8_UINT` remained unreported.
+
+Each window restored the ordinary acceptance eboot by exact-self readback and
+left the title stopped. The host-reset and mirror-clamp GPU witnesses and
+focused CTS receipts remain bound to their separately documented artifacts;
+they were not rerun on this combined source tree. Execution of the real DXVK
+2.6.2 build remains open.
