@@ -69,6 +69,38 @@ class SubgroupBasicWitness(unittest.TestCase):
             with self.assertRaises(ValueError):
                 build.checked_spirv(b"\0" * 28)
 
+    def test_pinned_compiler_does_not_read_tg_size(self):
+        """The PS5 compute dispatch leaves TG_SIZE unset, so LocalInvocationIndex,
+        SubgroupID and NumSubgroups must not be lowered from a scalar argument
+        (the first native run read garbage wave IDs from it)."""
+        glslang = shutil.which("glslangValidator")
+        archive = ROOT / "build/libpsbc.host.a"
+        if not glslang or not archive.is_file():
+            self.skipTest("host PSBC archive and glslangValidator required")
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            spirv, probe = temp / "basic.spv", temp / "probe"
+            subprocess.run([glslang, "-V", "--target-env", "vulkan1.1", str(SHADER),
+                            "-o", str(spirv)], check=True, capture_output=True)
+            subprocess.run(["cc", "-std=c11", "-Ithird_party/psbc-reference/libpsbc",
+                            "tests/t08_compile_probe.c", str(archive), "-lstdc++", "-lm",
+                            "-lpthread", "-o", str(probe)], cwd=ROOT, check=True,
+                           capture_output=True)
+            result = subprocess.run([str(probe), "subgroup", str(spirv), "none"],
+                                    env={"PSBC_DEBUG_NIR": "1"}, capture_output=True,
+                                    text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("result=0", result.stdout)
+            final = result.stderr.split("shader: MESA_SHADER_COMPUTE")[-1]
+            for name in ("load_local_invocation_index", "load_num_subgroups",
+                         "load_subgroup_id"):
+                self.assertNotIn(name, final)
+            # The index math must come from the local invocation ID VGPRs.
+            # The TG_SIZE lowering reads no vector argument at all (wave ID
+            # from a scalar argument plus mbcnt), which is what the first
+            # native run executed.
+            self.assertIn("load_vector_arg_amd", final)
+
     def test_diagnostic_switch_is_private_and_default_off(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
         self.assertIn("#if defined(PS5VK_SUBGROUP_BASIC_DIAGNOSTIC) && "

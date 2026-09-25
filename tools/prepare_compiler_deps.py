@@ -37,7 +37,10 @@ DEPS = [
         # PR 27 adds separate sampler, sampled image and storage texel buffer
         # descriptors; PR 28 adds PsbcCompileOptions::robust_buffer_access2
         # (VK_EXT_robustness2 load handling), which both driver compilers set.
-        "pin": "7c794f7c9e0a16f2bc79351317818fd311cb6fbc",
+        # PR 29 lowers compute LocalInvocationIndex and NumSubgroups from the
+        # local invocation IDs: TG_SIZE, which ACO read them from, is not
+        # populated by the PS5 compute dispatch.
+        "pin": "bc2be980a151acec1a30fde6d9e2508ec5eef9b7",
     },
     {
         "name": "opengnm",
