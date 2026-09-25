@@ -140,6 +140,13 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_TEXTURE_COMPRESSION_BC = 1u << 24,
     /* Core Vulkan 1.0 narrow shader arithmetic; diagnostic only. */
     PS5VK_FEATURE_SHADER_INT16 = 1u << 28,
+    /* Internal compute Broadcast route. The shipping platform leaves this
+     * unset; a private measurement build may exercise the runtime path. It
+     * is not a public Vulkan feature or subgroup-properties promise. */
+    PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE = 1u << 29,
+    /* Independent private compute IAdd route; never a public ARITHMETIC
+     * operation or extended-types feature promise. */
+    PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE = 1u << 30,
 };
 
 /* The original 32-bit feature mask is full once the T08 shader gates land.

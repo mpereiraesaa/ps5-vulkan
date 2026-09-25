@@ -4740,6 +4740,105 @@ vertex and fragment Broadcast draws remain unproven on hardware. These
 diagnostics establish neither original CTS eligibility nor a public subgroup
 feature route.
 
+A default-off native diagnostic gate now admits only compute
+`OpGroupNonUniformBroadcast` with both `GroupNonUniform` and
+`GroupNonUniformBallot` capabilities through shader-module and pipeline
+creation. The host contract verifies the shipping rejection and rejects an
+unmeasured Shuffle operation, a missing Ballot capability and a vertex entry
+even in the diagnostic build. An SDK-linked diagnostic witness then compiled
+the actual compute shader, loaded four different source lane IDs from a GPU
+buffer and read back 128 exact Broadcast values, with zero value and guard
+mismatches, digest `a4d88c85`, bounded fence completion, and clean resource
+retirement. Both runs used signed eboot SHA-256
+`57bf96fc6c01eec081178e3b41b775b91492089633ef724108fbe0b4e3e2be4b`:
+`20260924T114110339Z_PPSA99994_ps5vk_0x2393d9689c7a3` (log SHA-256
+`29eb5e268601d1f23c614c099b5ffbcc4878cbda42f4e0faab16a3dfdcbb140b`)
+and `20260924T114129742Z_PPSA99994_ps5vk_0x239421af4a690` (log SHA-256
+`a82a5479fa71b9376f073ad3e2fb79dabbbc9ca9e698e4266b381a345e8b3cd8`).
+Each run verified artifact identity, closed the title and restored the prior
+payload. Firmware was not recorded in these receipts. This proves one bounded
+32-bit compute Broadcast path with runtime IDs. It does not prove 8-bit or
+16-bit subgroup types, other stages or operations, original CTS, either public
+T08 feature bit, or a higher public `apiVersion`.
+
+An independent default-off diagnostic gate now admits compute
+`OpGroupNonUniformIAdd` only with `GroupNonUniform` and
+`GroupNonUniformArithmetic` capabilities. The host frontend accepts that
+single operation through pipeline creation and rejects it in the ordinary
+profile, under the Broadcast-only switch, without Arithmetic capability,
+outside compute, or when replaced by an unmeasured operation. The pinned
+compiler's separate typed arithmetic tests establish code generation, but
+the SDK-linked IAdd witness now builds as signed eboot SHA-256
+`2c9c39aa085ed628af1e1c809d394d6cf6ccc9b5139a93ad509673a7b7ad0f7a`.
+The exact witness SPIR-V also compiles through the host PSBC/ACO runtime path
+to nonempty GFX1013 wave32 code with one storage-buffer descriptor and a
+64-invocation workgroup.
+Its shader reads four host-provided seeds, reduces each 32-lane subgroup,
+and checks 128 output words plus untouched guards after a bounded fence. Two
+strict ps5log/1 runs of that exact signed eboot passed: 128/128 outputs,
+zero guard mismatches, digest `30acadc5`, completed fence and clean resource
+retirement each time. Runs
+`20260924T155206843Z_PPSA99994_ps5vk_0x246ef27b691a7` (log SHA-256
+`b9b0ebae49b541726a19877223b5fabadd9da2497a576914f12d4b01a6abe77e`)
+and `20260924T155235072Z_PPSA99994_ps5vk_0x246f5ba4a4168` (log SHA-256
+`9ef1e59972788bb9186124debe73db51df04df20f958f8535a1f07ed3374ae9a`)
+both verified artifact identity, closed the title and restored the previous
+payload. Firmware was not recorded in these receipts. This establishes one
+bounded 32-bit compute IAdd GPU path, not original CTS or broader subgroup
+operation/type/stage coverage. It does not report the public `ARITHMETIC`
+operation bit or either T08 feature.
+
+The earlier default-off Broadcast-only build passed its unchanged frozen
+upstream acceptance selection: **507 Pass, zero Fail, zero NotSupported, zero
+missing or unexpected** in strict run `run-626719354771127`. Signed eboot
+SHA-256 `3f86fcea1ccc275720ff73605722dc1ee0e03955b5fb7f3d17e70cc4964b1ccd`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+QPA SHA-256 `de2a135debe7effbe381f7b83812db0d5995f4a940ce9b003039616cceb43955`,
+and log SHA-256 `66c5d6a48c932ca2b71b5b48f24f953287516feea8e2b63aaa55a6d1671072ea`
+bind that run to the default-off profile. The title closed and the previous
+payload was restored. This selection contains no applicable subgroup leaf;
+its result proves neutral acceptance, not subgroup conformance.
+The ordinary build of the later IAdd-witness source at `33ca70f` did pass the
+same frozen selection in strict run `run-641358420703191`: **507 Pass, zero
+Fail, zero NotSupported, zero missing or unexpected**. Signed eboot SHA-256
+`33349dec94197bd4c883bfa1a76e86965f5e4d90dec4fe260ff5bb7d60ed045b`,
+selection SHA-256
+`d93a2cb2ea282924c57c63f1412cddd8c22cd799b549fb4cdcbbecd6ce73c321`,
+QPA SHA-256 `96e37fd5ae00ab7a6e3d63203bdebb6851611381c17519b6a4e2cd5665310449`,
+and log SHA-256 `6e496f7ecb9095ad38c699f9fe5f46bcc1e163fe82323889a0e2dbbfecd98025`
+bind the result. The build recorded 507 selected cases, no measurement
+manifest, both subgroup diagnostic switches off, and no experimental build
+switch. The title closed and the previous payload was restored. This is a
+neutrality check: no subgroup leaf belongs to that selection.
+
+On the later combined T07 and Int16 source, the independent diagnostic
+Broadcast and IAdd gates still reported no public subgroup feature, stage or
+operation and kept `apiVersion` at 1.0. The Broadcast witness signed eboot
+SHA-256 was `bef277e1345d149e4ef8b34bb7d232e7c003025fc44e1b60871772b2048c0337`.
+Strict runs `20260924T223918841Z_PPSA99994_ps5vk_0x10c6e5728ecb` (log
+SHA-256 `6ab0b1d9ff1acb8666c672a5b40a85a7789efa505e02cd965883c6bb911e2a27`)
+and `20260924T224026995Z_PPSA99994_ps5vk_0x10d6c3adccc7` (log SHA-256
+`c3ce8e34a1e8c03eedd33a1f8aeb069b23cbc004aacfaad5cccccfa195c17f25`)
+each verified 128/128 exact 32-bit values, zero guard mismatches, digest
+`a4d88c85`, bounded fence completion and clean retirement. The IAdd witness
+signed eboot SHA-256 was
+`3201f183ce2f105a9a0a234133c7c3a53ab419d44742c69e8526057218adb7ed`.
+Strict runs `20260924T224005918Z_PPSA99994_ps5vk_0x10d1db6abf61` (log
+SHA-256 `780d0731e041cc1950734caed7a5c2f50c490e1b667107f6c101e708efcd84a2`)
+and `20260924T224045986Z_PPSA99994_ps5vk_0x10db2fa10d3d` (log SHA-256
+`f9a3b3d219e5ba03c45846c4448bdd7a8dbd24ece958f87d268c9b52e462535f`)
+each verified 128/128 exact 32-bit values, zero guard mismatches, digest
+`30acadc5`, bounded fence completion and clean retirement. All four runs
+verified deployed artifact identity and restored the prior payload. Firmware
+was not independently recorded. The current 829-case CTS package was built
+with selection SHA-256
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`
+and signed eboot SHA-256
+`2485e0e765c17a745517a54a042bd7d92300f40e5d54797466fcfe02e84ef9f7`;
+it was not deployed in this measurement. These readbacks confirm only the
+bounded 32-bit compute paths, not the public subgroup profile or original CTS.
+
 The host `VkPhysicalDeviceProperties2KHR` contract now writes zero to all four
 `VkPhysicalDeviceSubgroupProperties` fields for this Vulkan 1.0 profile, even
 when the caller supplied nonzero prior values. This closes an ambiguous public

@@ -355,6 +355,17 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * shader feature for the ordinary profile. Subgroup bits stay separate. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_INT16;
 #endif
+#if defined(PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC) && PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC
+    /* Private Vulkan 1.0 measurement only: admit compute Ballot Broadcast
+     * through the runtime pipeline without reporting subgroup properties or
+     * either T08 subgroup feature. Public API eligibility remains blocked. */
+    platform->supported_features |= PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+#endif
+#if defined(PS5VK_SUBGROUP_IADD_DIAGNOSTIC) && PS5VK_SUBGROUP_IADD_DIAGNOSTIC
+    /* Private compute IAdd measurement only. This is narrower than the
+     * public ARITHMETIC operation bit and reports no subgroup properties. */
+    platform->supported_features |= PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
+#endif
     /* Vulkan 1.0 exposes the KHR route through device-group creation and
      * properties2. The bounded address witness and two unchanged original
      * buffer-address compute leaves execute through the R32_UINT output. */
