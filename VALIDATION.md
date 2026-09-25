@@ -6156,3 +6156,42 @@ executes no GPU work. The payload was launched and closed with
 artifact profile by design; the captured log is verified with
 `tools/verify_dxvk_probe.py <run> --manifest <artifact.json> --artifact
 <eboot.bin> --matrix-snapshot <build-time matrix>`.
+
+## DXVK 2.6.2 D3D11 diagnostic render on PS5 (2026-09-25)
+
+**Scope.** The pinned DXVK `9d6f54a1ade20d1d27dd421024717a636f3d8c68`
+D3D11/DXGI libraries are statically linked with the SDK-linked ps5vk from
+`main` `9c133ef8b0f1071edddca011f42f2c696ebe9096`, built by
+`tools/build_dxvk_ps5_native.py --diagnostic-integration` and run by
+`tools/run_dxvk_ps5_native.py`. The workload creates a feature-level 11_0
+device and immediate context with no swapchain, a 64x64 `R8G8B8A8_UNORM`
+render target and view, a staging texture, a vertex and pixel shader (DXBC
+committed in `examples/dxvk_native/dxvk_shaders.h`), clears, draws a
+full-screen triangle with a per-pixel pattern, copies to staging, maps, and
+compares all 4096 pixels with the CPU oracle, then releases everything.
+
+**Driver configuration (both variants).** Default-off measurement switches:
+`PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC`,
+`PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC`, `PS5VK_DXVK_RENDER_DIAGNOSTIC`,
+`PS5VK_DXVK_ROUTES_DIAGNOSTIC`, `PS5VK_HOST_COHERENT_DIAGNOSTIC`,
+`PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC`, `PS5VK_MAINTENANCE4_DIAGNOSTIC`,
+`PS5VK_ROBUSTNESS2_DIAGNOSTIC`, `PS5VK_STORAGE_TEXEL_DIAGNOSTIC`,
+`PS5VK_SYNCHRONIZATION2_DIAGNOSTIC`. None of these is in the shipping build;
+the public device still reports Vulkan 1.0.
+
+| Variant | DXVK changes | Eboot SHA-256 | Run | Result |
+|---|---|---|---|---|
+| unmodified | none | `39e7b0fa7930d6682a7e7696bbb46dff0bdd47e79360111c6a8eaaf2fe926cb6` | `20260925T201717096Z_PPSA99994_ps5vk_0x579b16abdf0e` | `Skipping Vulkan 1.0 adapter` after `vkEnumeratePhysicalDevices` (no Vulkan error); `D3D11CreateDevice` fails; clean close |
+| diagnostic-compat | 1.3 adapter filter bypassed; transform-feedback terms of the FL gate required only if reported; payload translation of core names and Vulkan 1.1–1.3 structures onto ps5vk extension routes (patch list SHA-256 `042b72b4b441d50ad78e78bfef128457fc15d6e3aa1ada0f7a8b219784820823`) | `07f43473a7826e32829d7706928b43d52355b4803bf51e9bb456a809b0c8e113` | `20260925T201724777Z_PPSA99994_ps5vk_0x579ce0d447bb` | rendered, 0/4096 mismatches, checksum `6e17a4c5` |
+| diagnostic-compat, relaunch 1 | same | same | `20260925T201728163Z_PPSA99994_ps5vk_0x579daa86ee2f` | rendered, 0/4096, `6e17a4c5` |
+| diagnostic-compat, relaunch 2 | same | same | `20260925T201731180Z_PPSA99994_ps5vk_0x579e5e8839a1` | rendered, 0/4096, `6e17a4c5` |
+
+Every run ended with device and context reference counts 0, a finalized
+`ps5log/1` stream, the title closed and no GPU hang. The expected checksum is
+the same workload's result on a host Vulkan driver. The translation layer
+never reports a bit that ps5vk does not report through its own extension
+structure; it only renames. This is evidence that the Vulkan paths DXVK
+executes for this workload work on hardware. It is **not** an unmodified DXVK
+result and does not change any public claim; the contracts still missing are
+listed in [docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md).
+

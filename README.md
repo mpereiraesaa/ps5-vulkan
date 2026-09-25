@@ -46,13 +46,21 @@ the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 
 The Vulkan 1.0 profile exposes selected newer features through their EXT/KHR
 routes, including shader demote and terminate invocation. A native
-surface/swapchain adapter has completed acquire, graphics
-submit and presentation on PS5; it is not yet proof of a frame rendered by
-DXVK. An unmodified DXVK 2.6.2 build has reached physical-device enumeration
-on the console, then rejected the advertised Vulkan 1.0 version. Diagnostic
-variants have identified further feature and extension requirements without
-advertising unverified support. See [API.md](API.md) for the current public
-contract and [VALIDATION.md](VALIDATION.md) for the exact run evidence.
+surface/swapchain adapter has completed acquire, graphics submit and
+presentation on PS5.
+
+Our pinned DXVK 2.6.2 D3D11/DXGI now renders on PS5 in a labelled
+**diagnostic** configuration: `D3D11CreateDevice` at feature level 11_0 and its
+immediate context, a render target, shaders, a clear, a draw, a staging copy
+and `Map`, with every one of 4096 pixels matching the oracle, then a clean
+shutdown and relaunch. That configuration turns on default-off driver
+measurement switches, patches DXVK in two places (its Vulkan 1.3 adapter
+filter and the transform-feedback terms of its feature-level check) and adds a
+payload translation layer. It is **not** an unmodified DXVK run: an unmodified
+build still stops at DXVK's adapter filter because the device reports Vulkan
+1.0. See [VALIDATION.md](VALIDATION.md#dxvk-262-d3d11-diagnostic-render-on-ps5-2026-09-25)
+for the receipts and [docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md) for
+the contracts a truthful route still needs.
 
 The historical DXVK requirement matrix remains available for auditing with
 `make check-dxvk-ledger`; its counts are not a build or promotion gate.
