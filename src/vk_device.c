@@ -3,6 +3,7 @@
 #include "physical_device_profile.h"
 #include "wsi_present_backend.h"
 #include "texture_format.h"
+#include "vk_core_version.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -699,6 +700,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES) {
             ((VkPhysicalDeviceDynamicRenderingFeatures *)next)->dynamicRendering =
                 dynamic_rendering_supported(p);
+        } else {
+            /* Core Vulkan 1.1-1.3 aggregates: answered only on a device that
+             * reports their version (src/vk_core_version.c). */
+            (void)ps5vk_core_version_features(p, next);
         }
     }
 }
@@ -780,6 +785,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
             properties->supportedStencilResolveModes = modes;
             properties->independentResolveNone = VK_FALSE;
             properties->independentResolve = VK_FALSE;
+        } else {
+            (void)ps5vk_core_version_properties(p, next);
         }
     }
 }
@@ -1377,6 +1384,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_robustness2 = VK_FALSE;
     VkBool32 saw_extended_dynamic_state = VK_FALSE, extended_dynamic_state = VK_FALSE;
     VkBool32 saw_synchronization2 = VK_FALSE;
+    uint32_t core_version_structs = 0;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO) {
@@ -1680,7 +1688,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 enabled_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;
             }
         } else {
-            return VK_ERROR_FEATURE_NOT_PRESENT;
+            /* Vulkan1{1,2,3}Features, only above the effective version. */
+            VkResult core = ps5vk_core_version_enable(p, next, &core_version_structs,
+                &enabled_features, &enabled_features_t09);
+            if (core != VK_SUCCESS) return core;
         }
     }
     VkResult core_result = enable_core_features(info->pEnabledFeatures,
@@ -1746,6 +1757,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->image_format_list_extension_enabled = image_format_list_extension;
     d->mutable_format_views = (p->platform.supported_features_t09 &
                                PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST) != 0;
+    /* A core version includes its promoted extensions' behaviour. */
+    ps5vk_core_version_promote(d);
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

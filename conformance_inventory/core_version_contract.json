@@ -193,22 +193,22 @@
      "id": "query:VkPhysicalDeviceIDProperties",
      "kind": "query",
      "requirement": "deviceUUID, driverUUID, deviceLUID, deviceNodeMask, deviceLUIDValid answered",
-     "status": "missing",
-     "note": "not answered"
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)"
     },
     {
      "id": "query:VkPhysicalDeviceProtectedMemoryProperties",
      "kind": "query",
      "requirement": "protectedNoFault answered (false)",
-     "status": "missing",
-     "note": "not answered"
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)"
     },
     {
      "id": "query:VkPhysicalDeviceMaintenance3Properties",
      "kind": "query",
      "requirement": "maxPerSetDescriptors and maxMemoryAllocationSize answered",
-     "status": "missing",
-     "note": "not answered"
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)"
     },
     {
      "id": "limit:maxPerSetDescriptors",
@@ -285,8 +285,8 @@
      "id": "behaviour:core-names-without-extension",
      "kind": "behaviour",
      "requirement": "core-named commands and promoted structures work without enabling the extension",
-     "status": "missing",
-     "note": "device-group, create_renderpass2 and maintenance2 paths test *_extension_enabled flags"
+     "status": "satisfied",
+     "evidence": "core aliases in src/vk_dispatch.c; ps5vk_core_version_promote opens the per-extension gates for the effective version (tests/test_vk_core_version.c)"
     },
     {
      "id": "extension:VK_KHR_16bit_storage",
@@ -683,28 +683,32 @@
      "id": "query:VkPhysicalDeviceVulkan11Features",
      "kind": "query",
      "requirement": "answered and accepted by vkCreateDevice",
-     "status": "missing",
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)",
      "dxvk": true
     },
     {
      "id": "query:VkPhysicalDeviceVulkan11Properties",
      "kind": "query",
      "requirement": "answered",
-     "status": "missing",
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)",
      "dxvk": true
     },
     {
      "id": "query:VkPhysicalDeviceVulkan12Features",
      "kind": "query",
      "requirement": "answered and accepted by vkCreateDevice",
-     "status": "missing",
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)",
      "dxvk": true
     },
     {
      "id": "query:VkPhysicalDeviceVulkan12Properties",
      "kind": "query",
      "requirement": "answered",
-     "status": "missing",
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)",
      "dxvk": true
     },
     {
@@ -1416,14 +1420,16 @@
      "id": "query:VkPhysicalDeviceVulkan13Features",
      "kind": "query",
      "requirement": "answered and accepted by vkCreateDevice",
-     "status": "missing",
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)",
      "dxvk": true
     },
     {
      "id": "query:VkPhysicalDeviceVulkan13Properties",
      "kind": "query",
      "requirement": "answered",
-     "status": "missing",
+     "status": "satisfied",
+     "evidence": "answered by src/vk_core_version.c once the device reports the version (tests/test_vk_core_version.c)",
      "dxvk": true
     },
     {

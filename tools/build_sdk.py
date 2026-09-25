@@ -138,6 +138,7 @@ def main():
             (ROOT / "src/texture_layout.c", []),
             (ROOT / "src/vk_device.c", []),
             (ROOT / "src/vk_dispatch.c", []),
+            (ROOT / "src/vk_core_version.c", []),
             (ROOT / "native/platform_ps5.c", []),
             (ROOT / "native/memory_ps5.c", []),
             (ROOT / "native/queue_ps5.c", []),
@@ -412,7 +413,7 @@ def main():
         "src/vk_image_view.c", "src/vk_swapchain.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/vk_transform_feedback.c", "src/graphics_program.c",
         "src/vk_transfer.c", "src/vk_copy_commands2.c", "src/vk_dynamic_rendering.c", "src/texture_copy.c", "src/texture_format.c", "src/texture_layout.c", "src/color_clear.c",
-        "src/vk_device.c", "src/vk_dispatch.c", "src/platform_host.c",
+        "src/vk_device.c", "src/vk_dispatch.c", "src/vk_core_version.c", "src/platform_host.c",
         "src/ps5vk_present.c", "native/wsi_present_ps5.c"
     ]
     host_obj_dir = ROOT / "build/sdk-objs-host"

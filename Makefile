@@ -65,7 +65,7 @@ VK_COMMAND_TEST_SOURCES = $(VK_COMMAND_SOURCES) src/color_attachment_contract.c 
 # copies use the same mip-layout contract without entering the RGBA8 row path.
 VK_QUEUE_SOURCES = $(VK_COMMAND_SOURCES) src/vk_fence.c src/vk_sync.c src/vk_buffer_transfer.c src/vk_image_transfer.c src/color_clear.c src/color_detile.c src/depth_detile.c src/texture_copy.c src/texture_layout.c src/vk_query_pool.c src/vk_queue.c src/vk_queue_router.c src/vk_sync2.c
 VK_GRAPHICS_SOURCES = src/color_attachment_contract.c src/vk_image_view.c src/vk_sampler.c src/vk_render_pass.c src/vk_framebuffer.c src/vk_graphics_pipeline.c src/vk_transform_feedback.c src/graphics_program.c src/vk_transfer.c src/vk_copy_commands2.c src/vk_dynamic_rendering.c
-VK_DEVICE_SOURCES = $(VK_QUEUE_SOURCES) $(VK_GRAPHICS_SOURCES) src/vk_device.c src/vk_dispatch.c src/vk_swapchain.c native/wsi_present_ps5.c
+VK_DEVICE_SOURCES = $(VK_QUEUE_SOURCES) $(VK_GRAPHICS_SOURCES) src/vk_device.c src/vk_dispatch.c src/vk_core_version.c src/vk_swapchain.c native/wsi_present_ps5.c
 NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/include -I$(LAB_SIBLINGS)/logging_server/client native/queue_ps5.c src/vk_indirect.c src/descriptor_encode.c src/texture_format.c src/texture_descriptor.c src/texture_layout.c src/depth_layout.c src/dispatch_encode.c src/compute_commands.c tests/test_native_prepare.c
 # graphics_pair.c reads the canonical topology -> primitive mapping from
 # src/graphics_program.h, so this host rule needs the pinned Vulkan headers the
@@ -206,6 +206,8 @@ check-sanitize: check-thread-sanitize
 	./build/tests/test_memory_requirements2_route_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/texture_descriptor.c src/depth_layout.c native/image_ps5.c tests/test_dxvk_format_routes.c -o build/tests/test_dxvk_format_routes_sanitized
 	./build/tests/test_dxvk_format_routes_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_core_version.c -o build/tests/test_vk_core_version_sanitized
+	./build/tests/test_vk_core_version_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tools/dump_device_reporting.c -o build/tests/dump_device_reporting_sanitized
 	./build/tests/dump_device_reporting_sanitized > /dev/null
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_pipeline_cache.c -o build/tests/test_pipeline_cache_sanitized
@@ -439,6 +441,8 @@ check:
 	./build/tests/test_memory_requirements2_route
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/texture_descriptor.c src/depth_layout.c native/image_ps5.c tests/test_dxvk_format_routes.c -o build/tests/test_dxvk_format_routes
 	./build/tests/test_dxvk_format_routes
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_core_version.c -o build/tests/test_vk_core_version
+	./build/tests/test_vk_core_version
 
 	# Reporting audit: dump what the public query paths report and check it
 	# against the pinned specification tables and the pinned CTS consumer rules.
