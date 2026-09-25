@@ -15,6 +15,7 @@
 #include <string.h>
 
 static uint32_t platform_features_t09;
+static VkBool32 maintenance4_diagnostic;
 static VkResult alloc_memory(void *ctx, VkDeviceSize size, void **address, void **backing)
 {
     (void)ctx; *address = calloc(1, size); *backing = *address;
@@ -34,7 +35,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
         .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT,
-        .supported_features_t09 = platform_features_t09};
+        .supported_features_t09 = platform_features_t09,
+        .maintenance4_diagnostic_on_vulkan_1_0 = maintenance4_diagnostic};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU", .heap_size = 65536,
         .allocation_granularity = 1, .buffer_image_granularity = 1,
@@ -464,6 +466,36 @@ static void maintenance4_closed_on_1_0(void)
     vkDestroyInstance(i, NULL);
 }
 
+/* The DIAGNOSTIC platform switch alone opens the route on the 1.0 device. */
+static void maintenance4_diagnostic_route(void)
+{
+    platform_features_t09 = PS5VK_T09_FEATURE_MAINTENANCE4;
+    maintenance4_diagnostic = VK_TRUE;
+    VkInstance i; VkPhysicalDevice p = physical(&i);
+    VkPhysicalDeviceMaintenance4Features feature = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES};
+    VkPhysicalDeviceFeatures2 features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                          .pNext = &feature};
+    vkGetPhysicalDeviceFeatures2KHR(p, &features);
+    assert(feature.maintenance4 == VK_TRUE);
+    const char *const m4 = VK_KHR_MAINTENANCE_4_EXTENSION_NAME;
+    float priority = 1.0f;
+    VkDeviceQueueCreateInfo q = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueCount = 1, .pQueuePriorities = &priority};
+    VkDeviceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &feature, .queueCreateInfoCount = 1, .pQueueCreateInfos = &q,
+        .enabledExtensionCount = 1, .ppEnabledExtensionNames = &m4};
+    VkDevice d;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d->maintenance4_extension_enabled &&
+           d->enabled_features_t09 == PS5VK_T09_FEATURE_MAINTENANCE4);
+    assert(vkGetDeviceProcAddr(d, "vkGetDeviceBufferMemoryRequirementsKHR") ==
+           (PFN_vkVoidFunction)vkGetDeviceBufferMemoryRequirementsKHR);
+    vkDestroyDevice(d, NULL);
+    vkDestroyInstance(i, NULL);
+    maintenance4_diagnostic = VK_FALSE;
+}
+
 /* The description queries equal create-then-query and leave no object. */
 static void maintenance4_queries(void)
 {
@@ -548,6 +580,7 @@ int main(void)
     bind_memory2();
     maintenance4_closed_on_1_0();
     maintenance4_queries();
+    maintenance4_diagnostic_route();
     puts("memory requirements2 route: get_memory_requirements2, dedicated_allocation and "
          "bind_memory2 follow the registry and the 1.0 contracts; maintenance4 stays closed on the 1.0 device (host only)");
     return 0;

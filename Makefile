@@ -531,6 +531,8 @@ test-compiler: build/libpsbc.host.a test-shaders
 	./build/tests/test_runtime_compiler
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_pipeline_cache.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_pipeline_cache
 	./build/tests/test_runtime_pipeline_cache
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_local_size_id.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_local_size_id
+	./build/tests/test_local_size_id
 doctor:
 	$(PYTHON) tools/lab.py doctor
 compiler-control:

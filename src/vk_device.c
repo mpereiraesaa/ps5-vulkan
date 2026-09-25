@@ -531,7 +531,8 @@ static VkBool32 bind_memory2_supported(VkPhysicalDevice p)
 static VkBool32 maintenance4_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE4) &&
-        p->platform.properties.apiVersion >= VK_API_VERSION_1_1;
+        (p->platform.properties.apiVersion >= VK_API_VERSION_1_1 ||
+         p->platform.maintenance4_diagnostic_on_vulkan_1_0);
 }
 static VkBool32 separate_depth_stencil_supported(VkPhysicalDevice p)
 {

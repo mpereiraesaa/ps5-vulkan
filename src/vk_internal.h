@@ -293,6 +293,11 @@ struct ps5vk_platform {
      * to advertise a Vulkan feature without a native backend contract. */
     uint32_t supported_features;
     uint32_t supported_features_t09;
+    /* DIAGNOSTIC ONLY, never set by a shipping build: open the
+     * VK_KHR_maintenance4 route although the device reports Vulkan 1.0, so a
+     * diagnostic DXVK run can be measured past it. The registry requires
+     * Vulkan 1.1; with this set the route is knowingly non-conformant. */
+    VkBool32 maintenance4_diagnostic_on_vulkan_1_0;
     void *context;
     VkResult (*open)(void *, struct ps5vk_memory_backend *);
     void (*close)(struct ps5vk_memory_backend *);
