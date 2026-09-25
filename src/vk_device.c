@@ -10,6 +10,8 @@ static const VkExtensionProperties instance_extensions[] = {
      VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION},
     {VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME,
      VK_KHR_DEVICE_GROUP_CREATION_SPEC_VERSION},
+    {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_SURFACE_SPEC_VERSION},
+    {VK_KHR_DISPLAY_EXTENSION_NAME, VK_KHR_DISPLAY_SPEC_VERSION},
 };
 
 static VkResult enumerate_extensions(const VkExtensionProperties *properties,
@@ -154,6 +156,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
     if (!info || info->sType != VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO) return INVALID;
     if (info->enabledLayerCount) return VK_ERROR_LAYER_NOT_PRESENT;
     VkBool32 features2_enabled = VK_FALSE, device_group_creation_enabled = VK_FALSE;
+    VkBool32 surface_enabled = VK_FALSE, display_enabled = VK_FALSE;
     if (info->enabledExtensionCount && !info->ppEnabledExtensionNames) return INVALID;
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -164,8 +167,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
         } else if (!strcmp(name, VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME)) {
             if (device_group_creation_enabled) return INVALID;
             device_group_creation_enabled = VK_TRUE;
+        } else if (!strcmp(name, VK_KHR_SURFACE_EXTENSION_NAME)) {
+            if (surface_enabled) return INVALID;
+            surface_enabled = VK_TRUE;
+        } else if (!strcmp(name, VK_KHR_DISPLAY_EXTENSION_NAME)) {
+            if (display_enabled) return INVALID;
+            display_enabled = VK_TRUE;
         } else return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
+    if (display_enabled && !surface_enabled) return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (info->pNext || info->flags) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (info->pApplicationInfo) {
         const VkApplicationInfo *a = info->pApplicationInfo;
@@ -181,6 +191,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
     i->allocator = saved; i->custom_allocator = custom;
     i->features2_extension_enabled = features2_enabled;
     i->device_group_creation_enabled = device_group_creation_enabled;
+    i->surface_extension_enabled = surface_enabled;
+    i->display_extension_enabled = display_enabled;
     VkResult result = ps5vk_platform_query(&i->physical.platform);
     if (result == VK_SUCCESS) {
         struct ps5vk_platform *p = &i->physical.platform;
@@ -198,9 +210,193 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyInstance(VkInstance i, const VkAllocationCal
 {
     (void)allocator;
     if (!i) return;
-    if (i->devices) { ++i->lifetime_errors; return; }
+    if (i->devices || i->surfaces) { ++i->lifetime_errors; return; }
     VkAllocationCallbacks a = i->allocator; VkBool32 custom = i->custom_allocator;
     ps5vk_object_free(i, &a, custom);
+}
+
+/* One fixed VideoOut display and mode. These handles identify the route; a
+ * mode creation request can select only the existing fixed timing. */
+enum { WSI_WIDTH = 1920, WSI_HEIGHT = 1080, WSI_REFRESH_MILLIHZ = 60000 };
+static VkDisplayKHR wsi_display(void) { return (VkDisplayKHR)(uintptr_t)1; }
+static VkDisplayModeKHR wsi_mode(void) { return (VkDisplayModeKHR)(uintptr_t)2; }
+static int display_ready(VkPhysicalDevice p)
+{
+    return p && p->instance && p->instance->display_extension_enabled &&
+           (p->platform.queue_flags & VK_QUEUE_GRAPHICS_BIT);
+}
+static int surface_valid(VkPhysicalDevice p, VkSurfaceKHR surface)
+{
+    if (!p || !p->instance || !p->instance->surface_extension_enabled || !surface)
+        return 0;
+    for (VkSurfaceKHR current = p->instance->surfaces; current; current = current->next)
+        if (current == surface) return 1;
+    return 0;
+}
+static VkResult enumerate_one(const void *value, size_t size, uint32_t *count, void *out)
+{
+    if (!count) return INVALID;
+    if (!out) { *count = 1; return VK_SUCCESS; }
+    if (!*count) return VK_INCOMPLETE;
+    memcpy(out, value, size);
+    *count = 1;
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPropertiesKHR(
+    VkPhysicalDevice p, uint32_t *count, VkDisplayPropertiesKHR *out)
+{
+    if (!display_ready(p)) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    const VkDisplayPropertiesKHR value = {
+        .display = wsi_display(), .displayName = "PS5 VideoOut",
+        .physicalResolution = {WSI_WIDTH, WSI_HEIGHT},
+        .supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR};
+    return enumerate_one(&value, sizeof(value), count, out);
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayModePropertiesKHR(
+    VkPhysicalDevice p, VkDisplayKHR display, uint32_t *count,
+    VkDisplayModePropertiesKHR *out)
+{
+    if (!display_ready(p)) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (display != wsi_display()) return VK_ERROR_INITIALIZATION_FAILED;
+    const VkDisplayModePropertiesKHR value = {
+        .displayMode = wsi_mode(),
+        .parameters = {{WSI_WIDTH, WSI_HEIGHT}, WSI_REFRESH_MILLIHZ}};
+    return enumerate_one(&value, sizeof(value), count, out);
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayModeKHR(
+    VkPhysicalDevice p, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR *info,
+    const VkAllocationCallbacks *allocator, VkDisplayModeKHR *out)
+{
+    (void)allocator;
+    if (!out) return INVALID;
+    *out = VK_NULL_HANDLE;
+    if (!display_ready(p)) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (display != wsi_display() || !info ||
+        info->sType != VK_STRUCTURE_TYPE_DISPLAY_MODE_CREATE_INFO_KHR ||
+        info->pNext || info->flags ||
+        info->parameters.visibleRegion.width != WSI_WIDTH ||
+        info->parameters.visibleRegion.height != WSI_HEIGHT ||
+        info->parameters.refreshRate != WSI_REFRESH_MILLIHZ)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    *out = wsi_mode();
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
+    VkPhysicalDevice p, uint32_t *count, VkDisplayPlanePropertiesKHR *out)
+{
+    if (!display_ready(p)) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    const VkDisplayPlanePropertiesKHR value = {wsi_display(), 0};
+    return enumerate_one(&value, sizeof(value), count, out);
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneSupportedDisplaysKHR(
+    VkPhysicalDevice p, uint32_t plane, uint32_t *count, VkDisplayKHR *out)
+{
+    if (!display_ready(p)) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (plane) return VK_ERROR_INITIALIZATION_FAILED;
+    const VkDisplayKHR value = wsi_display();
+    return enumerate_one(&value, sizeof(value), count, out);
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilitiesKHR(
+    VkPhysicalDevice p, VkDisplayModeKHR mode, uint32_t plane,
+    VkDisplayPlaneCapabilitiesKHR *out)
+{
+    if (!display_ready(p)) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (!out) return INVALID;
+    if (mode != wsi_mode() || plane) return VK_ERROR_INITIALIZATION_FAILED;
+    *out = (VkDisplayPlaneCapabilitiesKHR){
+        .supportedAlpha = VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR,
+        .minSrcExtent = {WSI_WIDTH, WSI_HEIGHT},
+        .maxSrcExtent = {WSI_WIDTH, WSI_HEIGHT},
+        .minDstExtent = {WSI_WIDTH, WSI_HEIGHT},
+        .maxDstExtent = {WSI_WIDTH, WSI_HEIGHT}};
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayPlaneSurfaceKHR(
+    VkInstance i, const VkDisplaySurfaceCreateInfoKHR *info,
+    const VkAllocationCallbacks *allocator, VkSurfaceKHR *out)
+{
+    if (!out) return INVALID;
+    *out = VK_NULL_HANDLE;
+    if (!i || !i->surface_extension_enabled || !i->display_extension_enabled)
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (!(i->physical.platform.queue_flags & VK_QUEUE_GRAPHICS_BIT))
+        return VK_ERROR_INITIALIZATION_FAILED;
+    if (!info || info->sType != VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR ||
+        info->pNext || info->flags || info->displayMode != wsi_mode() ||
+        info->planeIndex || info->planeStackIndex ||
+        info->transform != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR ||
+        info->alphaMode != VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR ||
+        info->imageExtent.width != WSI_WIDTH || info->imageExtent.height != WSI_HEIGHT)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
+    VkSurfaceKHR surface = ps5vk_object_alloc(i->custom_allocator ? &i->allocator : NULL,
+        allocator, sizeof(*surface), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, &saved, &custom);
+    if (!surface) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    surface->instance = i;
+    surface->extent = info->imageExtent;
+    surface->allocator = saved;
+    surface->custom_allocator = custom;
+    surface->next = i->surfaces;
+    i->surfaces = surface;
+    *out = surface;
+    return VK_SUCCESS;
+}
+VKAPI_ATTR void VKAPI_CALL vkDestroySurfaceKHR(VkInstance i, VkSurfaceKHR surface,
+    const VkAllocationCallbacks *allocator)
+{
+    (void)allocator;
+    if (!i || !surface) return;
+    VkSurfaceKHR *link = &i->surfaces;
+    while (*link && *link != surface) link = &(*link)->next;
+    if (!*link) { ++i->lifetime_errors; return; }
+    if (surface->swapchains) { ++i->lifetime_errors; return; }
+    *link = surface->next;
+    VkAllocationCallbacks saved = surface->allocator;
+    VkBool32 custom = surface->custom_allocator;
+    ps5vk_object_free(surface, &saved, custom);
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceSupportKHR(
+    VkPhysicalDevice p, uint32_t family, VkSurfaceKHR surface, VkBool32 *out)
+{
+    if (!out) return INVALID;
+    *out = VK_FALSE;
+    if (!surface_valid(p, surface)) return VK_ERROR_SURFACE_LOST_KHR;
+    if (family) return VK_ERROR_INITIALIZATION_FAILED;
+    /* The display object route is public before the native swapchain bridge.
+     * A queue cannot present until that backend is available and negotiated. */
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+    VkPhysicalDevice p, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR *out)
+{
+    if (!out) return INVALID;
+    if (!surface_valid(p, surface)) return VK_ERROR_SURFACE_LOST_KHR;
+    *out = (VkSurfaceCapabilitiesKHR){
+        .minImageCount = 2, .maxImageCount = 2,
+        .currentExtent = {WSI_WIDTH, WSI_HEIGHT},
+        .minImageExtent = {WSI_WIDTH, WSI_HEIGHT},
+        .maxImageExtent = {WSI_WIDTH, WSI_HEIGHT},
+        .maxImageArrayLayers = 1,
+        .supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+        .currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+        .supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .supportedUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
+    return VK_SUCCESS;
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormatsKHR(
+    VkPhysicalDevice p, VkSurfaceKHR surface, uint32_t *count, VkSurfaceFormatKHR *out)
+{
+    if (!surface_valid(p, surface)) return VK_ERROR_SURFACE_LOST_KHR;
+    const VkSurfaceFormatKHR value = {VK_FORMAT_B8G8R8A8_UNORM,
+                                      VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+    return enumerate_one(&value, sizeof(value), count, out);
+}
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfacePresentModesKHR(
+    VkPhysicalDevice p, VkSurfaceKHR surface, uint32_t *count, VkPresentModeKHR *out)
+{
+    if (!surface_valid(p, surface)) return VK_ERROR_SURFACE_LOST_KHR;
+    const VkPresentModeKHR value = VK_PRESENT_MODE_FIFO_KHR;
+    return enumerate_one(&value, sizeof(value), count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices(VkInstance i, uint32_t *count,
                                                          VkPhysicalDevice *out)

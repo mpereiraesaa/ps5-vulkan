@@ -54,6 +54,45 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices(
     uint32_t* pPhysicalDeviceCount,
     VkPhysicalDevice* pPhysicalDevices);
 
+/* VK_KHR_surface and VK_KHR_display: one fixed VideoOut display route. */
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPropertiesKHR(
+    VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount,
+    VkDisplayPropertiesKHR* pProperties);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayModePropertiesKHR(
+    VkPhysicalDevice physicalDevice, VkDisplayKHR display,
+    uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties);
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayModeKHR(
+    VkPhysicalDevice physicalDevice, VkDisplayKHR display,
+    const VkDisplayModeCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
+    VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount,
+    VkDisplayPlanePropertiesKHR* pProperties);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneSupportedDisplaysKHR(
+    VkPhysicalDevice physicalDevice, uint32_t planeIndex,
+    uint32_t* pDisplayCount, VkDisplayKHR* pDisplays);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilitiesKHR(
+    VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex,
+    VkDisplayPlaneCapabilitiesKHR* pCapabilities);
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayPlaneSurfaceKHR(
+    VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
+VKAPI_ATTR void VKAPI_CALL vkDestroySurfaceKHR(
+    VkInstance instance, VkSurfaceKHR surface,
+    const VkAllocationCallbacks* pAllocator);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceSupportKHR(
+    VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+    VkSurfaceKHR surface, VkBool32* pSupported);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+    VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+    VkSurfaceCapabilitiesKHR* pSurfaceCapabilities);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormatsKHR(
+    VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+    uint32_t* pSurfaceFormatCount, VkSurfaceFormatKHR* pSurfaceFormats);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfacePresentModesKHR(
+    VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+    uint32_t* pPresentModeCount, VkPresentModeKHR* pPresentModes);
+
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties(
     VkPhysicalDevice physicalDevice,
     VkPhysicalDeviceProperties* pProperties);

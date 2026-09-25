@@ -13,6 +13,18 @@ static const struct entry entries[] = {
     ENTRY(vkEnumerateInstanceLayerProperties, GLOBAL),
     ENTRY(vkDestroyInstance, INSTANCE),
     ENTRY(vkEnumeratePhysicalDevices, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceDisplayPropertiesKHR, INSTANCE),
+    ENTRY(vkGetDisplayModePropertiesKHR, INSTANCE),
+    ENTRY(vkCreateDisplayModeKHR, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceDisplayPlanePropertiesKHR, INSTANCE),
+    ENTRY(vkGetDisplayPlaneSupportedDisplaysKHR, INSTANCE),
+    ENTRY(vkGetDisplayPlaneCapabilitiesKHR, INSTANCE),
+    ENTRY(vkCreateDisplayPlaneSurfaceKHR, INSTANCE),
+    ENTRY(vkDestroySurfaceKHR, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceSurfaceSupportKHR, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceSurfaceCapabilitiesKHR, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceSurfaceFormatsKHR, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceSurfacePresentModesKHR, INSTANCE),
     ENTRY(vkEnumeratePhysicalDeviceGroupsKHR, INSTANCE),
     ENTRY(vkGetPhysicalDeviceProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceMemoryProperties, INSTANCE),
@@ -189,6 +201,25 @@ static int gpdp2_command(const char *name)
 static int group_creation_command(const char *name)
 { return !strcmp(name, "vkEnumeratePhysicalDeviceGroupsKHR"); }
 
+static int display_command(const char *name)
+{
+    return !strcmp(name, "vkGetPhysicalDeviceDisplayPropertiesKHR") ||
+           !strcmp(name, "vkGetDisplayModePropertiesKHR") ||
+           !strcmp(name, "vkCreateDisplayModeKHR") ||
+           !strcmp(name, "vkGetPhysicalDeviceDisplayPlanePropertiesKHR") ||
+           !strcmp(name, "vkGetDisplayPlaneSupportedDisplaysKHR") ||
+           !strcmp(name, "vkGetDisplayPlaneCapabilitiesKHR") ||
+           !strcmp(name, "vkCreateDisplayPlaneSurfaceKHR");
+}
+static int surface_command(const char *name)
+{
+    return !strcmp(name, "vkDestroySurfaceKHR") ||
+           !strcmp(name, "vkGetPhysicalDeviceSurfaceSupportKHR") ||
+           !strcmp(name, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR") ||
+           !strcmp(name, "vkGetPhysicalDeviceSurfaceFormatsKHR") ||
+           !strcmp(name, "vkGetPhysicalDeviceSurfacePresentModesKHR");
+}
+
 static int device_group_command(const char *name)
 {
     return !strcmp(name, "vkCmdDispatchBaseKHR") ||
@@ -231,6 +262,12 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
         return NULL;
     if (group_creation_command(name) &&
         (!instance || !instance->device_group_creation_enabled))
+        return NULL;
+    if (display_command(name) &&
+        (!instance || !instance->display_extension_enabled))
+        return NULL;
+    if (surface_command(name) &&
+        (!instance || !instance->surface_extension_enabled))
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if ((instance || entries[j].scope == GLOBAL) && !strcmp(name, entries[j].name))
