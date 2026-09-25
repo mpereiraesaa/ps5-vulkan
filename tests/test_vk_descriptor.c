@@ -911,9 +911,179 @@ static void separate_sampler_types(void)
     assert(!d.descriptor_objects && !d.buffers && !d.buffer_views && !d.memories);
 }
 
+/* DXVK 2.6.2 builds one DESCRIPTOR_SET template per set layout
+ * (dxvk_pipelayout.cpp): one entry per binding, descriptorCount 1,
+ * offset = i * sizeof(DxvkDescriptorInfo), stride = that size, where
+ * DxvkDescriptorInfo is this union. */
+union dxvk_descriptor_info {
+    VkDescriptorImageInfo image;
+    VkDescriptorBufferInfo buffer;
+    VkBufferView texelBuffer;
+};
+static void update_templates(void)
+{
+    struct counts counts = {0, -1};
+    VkAllocationCallbacks callbacks = {.pUserData = &counts, .pfnAllocation = allocate,
+        .pfnReallocation = reallocate, .pfnFree = release};
+    struct VkDevice_T d = {.memory = {NULL, backing_alloc, backing_free, cache, cache},
+        .buffer_alignment = 256, .uniform_buffer_alignment = 256, .noncoherent_atom = 64,
+        .max_allocation = 4096}, other = {0};
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 2048,
+        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                 VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT};
+    VkBuffer buffer; assert(vkCreateBuffer(&d, &bi, NULL, &buffer) == VK_SUCCESS);
+    VkMemoryAllocateInfo mi = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = 2048};
+    VkDeviceMemory memory; assert(vkAllocateMemory(&d, &mi, NULL, &memory) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, buffer, memory, 0) == VK_SUCCESS);
+    VkBufferViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+        .buffer = buffer, .format = VK_FORMAT_R32_UINT, .offset = 1024, .range = 256};
+    VkBufferView view; assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_SUCCESS);
+
+    VkDescriptorSetLayoutBinding bindings[] = {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {2, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+    VkDescriptorSetLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 3, .pBindings = bindings};
+    VkDescriptorSetLayout dxvk_layout, wide_layout;
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &dxvk_layout) == VK_SUCCESS);
+    li.bindingCount = 5;
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &wide_layout) == VK_SUCCESS);
+
+    VkDescriptorUpdateTemplateEntry entries[3];
+    for (uint32_t i = 0; i < 3; ++i)
+        entries[i] = (VkDescriptorUpdateTemplateEntry){.dstBinding = i, .dstArrayElement = 0,
+            .descriptorCount = 1, .descriptorType = bindings[i].descriptorType,
+            .offset = sizeof(union dxvk_descriptor_info) * i,
+            .stride = sizeof(union dxvk_descriptor_info)};
+    VkDescriptorUpdateTemplateCreateInfo ti = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO,
+        .descriptorUpdateEntryCount = 3, .pDescriptorUpdateEntries = entries,
+        .templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET,
+        .descriptorSetLayout = dxvk_layout};
+    VkDescriptorUpdateTemplate tpl = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, &callbacks, &tpl) == VK_SUCCESS && tpl);
+    assert(counts.live == 1 && tpl->entry_count == 3 && d.descriptor_objects == 3);
+    /* The template keeps a value copy of the layout signature. */
+    vkDestroyDescriptorSetLayout(&d, dxvk_layout, NULL);
+    li.bindingCount = 3;
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &dxvk_layout) == VK_SUCCESS);
+
+    VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 16}, {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 4}};
+    VkDescriptorPoolCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 4, .poolSizeCount = 3, .pPoolSizes = sizes};
+    VkDescriptorPool pool; assert(vkCreateDescriptorPool(&d, &pi, NULL, &pool) == VK_SUCCESS);
+    VkDescriptorSetLayout set_layouts[] = {dxvk_layout, wide_layout};
+    VkDescriptorSetAllocateInfo ai = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = pool, .descriptorSetCount = 2, .pSetLayouts = set_layouts};
+    VkDescriptorSet sets[2]; assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_SUCCESS);
+    VkDescriptorSet set = sets[0], wide = sets[1];
+
+    /* pData is DXVK's descriptor array, deliberately misaligned by one byte:
+     * the update copies elements and never dereferences them in place. */
+    union dxvk_descriptor_info infos[3];
+    memset(infos, 0, sizeof(infos));
+    infos[0].buffer = (VkDescriptorBufferInfo){buffer, 0, 256};
+    infos[1].buffer = (VkDescriptorBufferInfo){buffer, 512, 256};
+    infos[2].texelBuffer = view;
+    unsigned char raw[sizeof(infos) + 1];
+    memcpy(raw + 1, infos, sizeof(infos));
+    uint64_t generation = set->generation;
+    vkUpdateDescriptorSetWithTemplateKHR(&d, set, tpl, raw + 1);
+    assert(!d.lifetime_errors && set->generation == generation + 3);
+    assert(set->defined[0] && set->defined[1] && set->defined[2]);
+    assert(set->buffers[0].buffer == buffer && set->buffers[0].offset == 0 &&
+           set->buffers[0].range == 256);
+    assert(set->buffers[1].offset == 512 && set->texel_views[2] == view);
+
+    /* An incompatible set (a different layout signature) is refused whole. */
+    generation = wide->generation;
+    vkUpdateDescriptorSetWithTemplateKHR(&d, wide, tpl, raw + 1);
+    assert(d.lifetime_errors == 1 && wide->generation == generation && !wide->defined[0]);
+    vkUpdateDescriptorSetWithTemplateKHR(&d, set, tpl, NULL);
+    assert(d.lifetime_errors == 2);
+    vkUpdateDescriptorSetWithTemplateKHR(&d, set, VK_NULL_HANDLE, raw + 1);
+    assert(d.lifetime_errors == 3);
+    /* An invalid entry stops the update; earlier entries stay applied. */
+    infos[0].buffer.offset = 256; infos[1].buffer.offset = 3;   /* misaligned storage offset */
+    infos[2].texelBuffer = view;
+    generation = set->generation;
+    vkUpdateDescriptorSetWithTemplateKHR(&d, set, tpl, infos);
+    assert(d.lifetime_errors == 4 && set->generation == generation + 1);
+    assert(set->buffers[0].offset == 256 && set->buffers[1].offset == 512);
+
+    /* Rollover and arbitrary strides: one entry covers binding 3 (two
+     * elements) and rolls into binding 4, reading every other record. */
+    VkDescriptorUpdateTemplateEntry rollover = {.dstBinding = 3, .dstArrayElement = 1,
+        .descriptorCount = 2, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .offset = 8, .stride = 2 * sizeof(VkDescriptorBufferInfo)};
+    ti.descriptorUpdateEntryCount = 1; ti.pDescriptorUpdateEntries = &rollover;
+    ti.descriptorSetLayout = wide_layout;
+    VkDescriptorUpdateTemplate wide_tpl;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &wide_tpl) == VK_SUCCESS);
+    unsigned char packed[8 + 4 * sizeof(VkDescriptorBufferInfo)];
+    memset(packed, 0xcd, sizeof(packed));
+    VkDescriptorBufferInfo first = {buffer, 768, 128}, second = {buffer, 1280, 64};
+    memcpy(packed + 8, &first, sizeof(first));
+    memcpy(packed + 8 + 2 * sizeof(VkDescriptorBufferInfo), &second, sizeof(second));
+    vkUpdateDescriptorSetWithTemplateKHR(&d, wide, wide_tpl, packed);
+    const uint32_t b3 = wide->signature.binding[3].first, b4 = wide->signature.binding[4].first;
+    assert(d.lifetime_errors == 4 && !wide->defined[b3] && wide->defined[b3 + 1] && wide->defined[b4]);
+    assert(wide->buffers[b3 + 1].offset == 768 && wide->buffers[b4].offset == 1280 &&
+           wide->buffers[b4].range == 64);
+
+    /* Creation refusals. */
+    VkDescriptorUpdateTemplate bad = VK_NULL_HANDLE;
+    rollover.descriptorCount = 3;                                  /* past the last binding */
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_UNKNOWN && !bad);
+    rollover.descriptorCount = 1; rollover.dstArrayElement = 0;
+    rollover.dstBinding = 2;                                       /* type differs from layout */
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_UNKNOWN && !bad);
+    rollover.dstBinding = 1; rollover.dstArrayElement = 1;         /* element past the binding */
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_UNKNOWN && !bad);
+    rollover.dstArrayElement = 0;
+    rollover.dstBinding = 7;                                       /* no such binding */
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_UNKNOWN && !bad);
+    rollover.dstBinding = 3; rollover.descriptorCount = 0;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_UNKNOWN && !bad);
+    rollover.descriptorCount = 1;
+    ti.descriptorUpdateEntryCount = 0;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_UNKNOWN && !bad);
+    ti.descriptorUpdateEntryCount = 1;
+    ti.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS_KHR;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_FEATURE_NOT_PRESENT && !bad);
+    ti.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET; ti.pNext = &ti;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_FEATURE_NOT_PRESENT && !bad);
+    ti.pNext = NULL;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&other, &ti, NULL, &bad) == VK_ERROR_UNKNOWN && !bad);
+    ti.descriptorSetLayout = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &bad) == VK_ERROR_UNKNOWN && !bad);
+    /* Allocation failure leaves nothing behind. */
+    ti.descriptorSetLayout = wide_layout; counts.remaining = 0;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, &callbacks, &bad) ==
+           VK_ERROR_OUT_OF_HOST_MEMORY && !bad);
+    counts.remaining = -1;
+
+    /* Destruction: foreign device ignored, then freed through the callbacks. */
+    vkDestroyDescriptorUpdateTemplateKHR(&other, tpl, NULL);
+    assert(counts.live == 1);
+    vkDestroyDescriptorUpdateTemplateKHR(&d, tpl, &callbacks);
+    vkDestroyDescriptorUpdateTemplateKHR(&d, wide_tpl, NULL);
+    assert(counts.live == 0);
+    vkDestroyDescriptorPool(&d, pool, NULL);
+    vkDestroyDescriptorSetLayout(&d, dxvk_layout, NULL);
+    vkDestroyDescriptorSetLayout(&d, wide_layout, NULL);
+    vkDestroyBufferView(&d, view, NULL); vkDestroyBuffer(&d, buffer, NULL); vkFreeMemory(&d, memory, NULL);
+    assert(!d.descriptor_objects && !d.buffers && !d.buffer_views && !d.memories);
+}
+
 int main(void)
 {
     lifecycle(); rollback(); negative(); bda_cts_output_layout(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources(); input_attachments();
     separate_sampler_types();
+    update_templates();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }

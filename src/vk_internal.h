@@ -344,6 +344,11 @@ struct VkDevice_T {
      * pass 2 entry points refuse, and the proc-address lookup hides them,
      * unless it was. */
     VkBool32 create_renderpass2_extension_enabled;
+    /* VK_KHR_descriptor_update_template was enabled on this device; its
+     * three KHR commands are visible only then. vkCreateDevice does not
+     * enumerate or accept the extension until the native capability probe
+     * is re-measured with it. */
+    VkBool32 descriptor_update_template_extension_enabled;
     /* VK_KHR_maintenance2 was enabled on this device: the structures it
      * defines are accepted only then. */
     VkBool32 maintenance2_extension_enabled;

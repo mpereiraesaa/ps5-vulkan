@@ -168,6 +168,9 @@ static const struct entry entries[] = {
     ENTRY(vkGetSemaphoreCounterValueKHR, DEVICE),
     ENTRY(vkWaitSemaphoresKHR, DEVICE),
     ENTRY(vkSignalSemaphoreKHR, DEVICE),
+    ENTRY(vkCreateDescriptorUpdateTemplateKHR, DEVICE),
+    ENTRY(vkDestroyDescriptorUpdateTemplateKHR, DEVICE),
+    ENTRY(vkUpdateDescriptorSetWithTemplateKHR, DEVICE),
     ENTRY(vkCreateEvent, DEVICE),
     ENTRY(vkDestroyEvent, DEVICE),
     ENTRY(vkGetEventStatus, DEVICE),
@@ -292,6 +295,16 @@ static int buffer_device_address_command(const char *name)
 
 /* VK_KHR_timeline_semaphore host commands, reachable only on a device that
  * enabled the extension. Vulkan 1.0 has no core names for them. */
+static int descriptor_update_template_command(const char *name)
+{
+    /* VK_KHR_descriptor_update_template; the core-1.1 names arrive only with
+     * an apiVersion promotion. Push-descriptor template commands belong to
+     * VK_KHR_push_descriptor and are not implemented. */
+    return !strcmp(name, "vkCreateDescriptorUpdateTemplateKHR") ||
+           !strcmp(name, "vkDestroyDescriptorUpdateTemplateKHR") ||
+           !strcmp(name, "vkUpdateDescriptorSetWithTemplateKHR");
+}
+
 static int timeline_semaphore_command(const char *name)
 {
     return !strcmp(name, "vkGetSemaphoreCounterValueKHR") ||
@@ -339,6 +352,9 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
     if (device_group_command(name) && !device->device_group_extension_enabled)
         return NULL;
     if (timeline_semaphore_command(name) && !device->timeline_extension_enabled)
+        return NULL;
+    if (descriptor_update_template_command(name) &&
+        !device->descriptor_update_template_extension_enabled)
         return NULL;
     if (create_renderpass2_command(name) && !device->create_renderpass2_extension_enabled)
         return NULL;
