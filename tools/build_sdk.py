@@ -122,6 +122,7 @@ def main():
             (ROOT / "src/vk_queue.c", []),
             (ROOT / "src/vk_queue_router.c", []),
             (ROOT / "src/vk_image_view.c", []),
+            (ROOT / "src/vk_swapchain.c", []),
             (ROOT / "src/vk_sampler.c", []),
             (ROOT / "src/vk_render_pass.c", []),
             (ROOT / "src/vk_framebuffer.c", []),
@@ -137,6 +138,7 @@ def main():
             (ROOT / "native/memory_ps5.c", []),
             (ROOT / "native/queue_ps5.c", []),
             (ROOT / "native/present_ps5.c", []),
+            (ROOT / "native/wsi_present_ps5.c", []),
             (ROOT / "native/command_arena_ps5.c", []),
             (ROOT / "native/draw_batch_ps5.c", []),
             (ROOT / "src/ps5vk_present.c", []),
@@ -387,11 +389,11 @@ def main():
         # reads its own surface through the 64KB_Z_X one.
         "src/color_detile.c", "src/depth_detile.c",
         "src/color_attachment_contract.c",
-        "src/vk_image_view.c", "src/vk_sampler.c", "src/vk_render_pass.c",
+        "src/vk_image_view.c", "src/vk_swapchain.c", "src/vk_sampler.c", "src/vk_render_pass.c",
         "src/vk_framebuffer.c", "src/vk_graphics_pipeline.c", "src/graphics_program.c",
         "src/vk_transfer.c", "src/texture_copy.c", "src/texture_format.c", "src/texture_layout.c", "src/color_clear.c",
         "src/vk_device.c", "src/vk_dispatch.c", "src/platform_host.c",
-        "src/ps5vk_present.c"
+        "src/ps5vk_present.c", "native/wsi_present_ps5.c"
     ]
     host_obj_dir = ROOT / "build/sdk-objs-host"
     host_obj_dir.mkdir(parents=True, exist_ok=True)

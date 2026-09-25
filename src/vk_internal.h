@@ -315,6 +315,9 @@ struct VkDevice_T {
     struct ps5vk_memory_backend memory;
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
+    /* Enabled only for a device with a native presentation backend. */
+    VkBool32 swapchain_extension_enabled;
+    struct VkSwapchainKHR_T *swapchains;
     VkDeviceSize buffer_alignment;
     VkDeviceSize uniform_buffer_alignment;
     VkDeviceSize noncoherent_atom;

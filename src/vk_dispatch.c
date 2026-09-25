@@ -45,6 +45,11 @@ static const struct entry entries[] = {
     ENTRY(vkGetDeviceProcAddr, DEVICE),
     ENTRY(vkDestroyDevice, DEVICE),
     ENTRY(vkGetDeviceQueue, DEVICE),
+    ENTRY(vkCreateSwapchainKHR, DEVICE),
+    ENTRY(vkDestroySwapchainKHR, DEVICE),
+    ENTRY(vkGetSwapchainImagesKHR, DEVICE),
+    ENTRY(vkAcquireNextImageKHR, DEVICE),
+    ENTRY(vkQueuePresentKHR, DEVICE),
     ENTRY(vkGetDeviceGroupPeerMemoryFeaturesKHR, DEVICE),
     ENTRY(vkAllocateMemory, DEVICE),
     ENTRY(vkFreeMemory, DEVICE),
@@ -220,6 +225,15 @@ static int surface_command(const char *name)
            !strcmp(name, "vkGetPhysicalDeviceSurfacePresentModesKHR");
 }
 
+static int swapchain_command(const char *name)
+{
+    return !strcmp(name, "vkCreateSwapchainKHR") ||
+           !strcmp(name, "vkDestroySwapchainKHR") ||
+           !strcmp(name, "vkGetSwapchainImagesKHR") ||
+           !strcmp(name, "vkAcquireNextImageKHR") ||
+           !strcmp(name, "vkQueuePresentKHR");
+}
+
 static int device_group_command(const char *name)
 {
     return !strcmp(name, "vkCmdDispatchBaseKHR") ||
@@ -289,6 +303,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
     if (timeline_semaphore_command(name) && !device->timeline_extension_enabled)
         return NULL;
     if (create_renderpass2_command(name) && !device->create_renderpass2_extension_enabled)
+        return NULL;
+    if (swapchain_command(name) && !device->swapchain_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;
