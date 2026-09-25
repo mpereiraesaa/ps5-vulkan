@@ -1,0 +1,29 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+// Subgroup BASIC in compute: built-ins, Elect (uniform and divergent) and a
+// subgroup barrier with a shared-memory exchange. A 16x4 workgroup checks the
+// subgroup ID in two dimensions; two workgroups give four wave32 subgroups.
+layout(local_size_x = 16, local_size_y = 4) in;
+layout(std430, set = 0, binding = 0) buffer Words { uint words[]; };
+shared uint exchange[64];
+const uint OUTPUT_OFFSET = 16u;
+const uint FIELDS = 7u;
+void main()
+{
+    uint local = gl_LocalInvocationIndex;
+    uint global = gl_WorkGroupID.x * 64u + local;
+    uint base = OUTPUT_OFFSET + global * FIELDS;
+    words[base + 0u] = gl_SubgroupSize;
+    words[base + 1u] = gl_SubgroupInvocationID;
+    words[base + 2u] = gl_SubgroupID;
+    words[base + 3u] = gl_NumSubgroups;
+    words[base + 4u] = subgroupElect() ? 1u : 0u;
+    uint odd = 2u;
+    if ((gl_SubgroupInvocationID & 1u) != 0u)
+        odd = subgroupElect() ? 1u : 0u;
+    words[base + 5u] = odd;
+    exchange[local] = local * 3u + words[gl_WorkGroupID.x];
+    subgroupMemoryBarrierShared();
+    subgroupBarrier();
+    words[base + 6u] = exchange[local ^ 1u];
+}

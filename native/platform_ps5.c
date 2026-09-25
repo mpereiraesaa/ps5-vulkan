@@ -411,6 +411,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * public ARITHMETIC operation bit and reports no subgroup properties. */
     platform->supported_features |= PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
 #endif
+#if defined(PS5VK_SUBGROUP_BASIC_DIAGNOSTIC) && PS5VK_SUBGROUP_BASIC_DIAGNOSTIC
+    /* Private compute subgroup BASIC measurement only (Elect, barriers,
+     * built-ins); subgroup properties and features stay unreported. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+#endif
 #if defined(PS5VK_SHADER_INT8_DIAGNOSTIC) && PS5VK_SHADER_INT8_DIAGNOSTIC
     /* Compiler-only probe; public shaderInt8 and subgroup features stay false. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_INT8_COMPUTE;

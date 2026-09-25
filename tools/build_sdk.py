@@ -266,6 +266,11 @@ def main():
             raise SystemExit("PS5VK_SUBGROUP_IADD_DIAGNOSTIC must be 0 or 1")
         if subgroup_iadd_diagnostic == "1":
             native_cflags.append("-DPS5VK_SUBGROUP_IADD_DIAGNOSTIC=1")
+        subgroup_basic_diagnostic = os.environ.get("PS5VK_SUBGROUP_BASIC_DIAGNOSTIC", "0")
+        if subgroup_basic_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_SUBGROUP_BASIC_DIAGNOSTIC must be 0 or 1")
+        if subgroup_basic_diagnostic == "1":
+            native_cflags.append("-DPS5VK_SUBGROUP_BASIC_DIAGNOSTIC=1")
         shader_int16_diagnostic = os.environ.get("PS5VK_SHADER_INT16_DIAGNOSTIC", "0")
         if shader_int16_diagnostic not in ("0", "1"):
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")
