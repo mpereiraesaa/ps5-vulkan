@@ -12,7 +12,7 @@ leaves within a 165/165 regression; the indirect and indexed draws (T03)
 have all three requirements satisfied by core feature reports, the
 per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
 leaves within a 211/211 regression and the public-SDK indirect witness; the
-the four DXVK262-T05 rasterization and viewport features were promoted on
+four DXVK262-T05 rasterization and viewport features were promoted on
 2026-09-21; and DXVK262-T06 is complete, with all four of its requirements
 satisfied: `fragmentStoresAndAtomics` and `dualSrcBlend` with their four axes,
 `independentBlend` promoted on 2026-09-22, and `sampleRateShading` promoted on
@@ -24,10 +24,11 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 25/62 ready with 37 blockers after T07's four resource and
-precise-query features passed the ordinary 829-case selection twice and T08
-DeviceScope passed its ordinary SDK KHR witness and public query. The ordered table preserves the
-original tranche membership.
+checked matrix is **30/62 ready with 32 blockers**. T07's four resource and
+precise-query features, T08 DeviceScope, and five T09 requirements have public
+routes and artifact-bound witnesses. The combined public SDK probe observed
+32/62 requested values on API 1.0.0. The ordered table preserves the original
+tranche membership.
 
 T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
 `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` disabled. A
@@ -161,6 +162,51 @@ a baseline requirement is missing, duplicated or unknown, or if the initially
 satisfied `robustBufferAccess` regresses. It also enforces dependency order and
 the final API promotion gate.
 
+### T09 timeline semaphores and separate depth/stencil layouts (2026-09-25)
+
+Three T09 rows are now ready on all four axes, through Vulkan 1.0 KHR
+extensions. `apiVersion` stays 1.0.
+
+* `timelineSemaphore` and `maxTimelineSemaphoreValueDifference` use
+  `VK_KHR_timeline_semaphore`. The reported difference is `UINT64_MAX`, because
+  payloads are compared at full width.
+* `separateDepthStencilLayouts` uses `VK_KHR_separate_depth_stencil_layouts`
+  over `VK_KHR_create_renderpass2`, `VK_KHR_maintenance2` and
+  `VK_KHR_multiview`.
+
+The public `D32_SFLOAT_S8_UINT` format carries only its witnessed attachment
+and readback roles. Evidence on the promoted shipping build:
+
+* two strict public-SDK witness runs per capability;
+* 50/50 focused original CTS leaves: timeline, renderpass2, and D32S8
+  stencil/depth with and without separate layouts;
+* 829/829 frozen acceptance;
+* a re-measured capability probe (30/62 query values, 13 extensions).
+
+Run IDs and hashes are in
+[VALIDATION.md](../VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25).
+DXVK 2.6.2 renders through dynamic rendering, not `vkCreateRenderPass*`. The
+render pass 2 route exists because the registry requires it for the separate
+layouts. It is not a claim that dynamic rendering is available.
+
+The following are still missing for D32S8:
+
+* sampled or single-aspect views;
+* `vkCmdClearDepthStencilImage`;
+* transfer-destination uploads;
+* mip levels and array layers;
+* HTILE compression.
+
+`D24_UNORM_S8_UINT` is not reported.
+
+**Open blocker: fragment discard does not suppress depth/stencil writes.** On
+gfx1013, through this driver's path, a fragment shader that executes
+`discard`/kill still lets the DB write depth and stencil. The compiled shader
+enables kill (`DB_SHADER_CONTROL=0x50`), yet the T09 depth/stencil witness saw
+all 4096 texels written. The root cause is open. This breaks alpha-tested
+depth in DXVK. It needs an owner and a native witness in a later tranche. It
+does not change the three T09 rows above, which do not depend on discard.
+
 ### T08 subgroup profile prerequisites
 
 The pinned registry and original CTS impose different routes for the two T08
@@ -179,6 +225,58 @@ The current Vulkan 1.0 KHR query explicitly returns zero for all four fields.
 Compute subgroup support is required by the original CTS;
 other stages depend on their reported masks. The quad field does not establish
 broadcast support. Neither subgroup bit nor `apiVersion` changes in this slice.
+
+### T09 diagnostic status (2026-09-24)
+
+The codex T09 slice has default-off implementations and artifact-bound native
+measurements for `hostQueryReset` and bounded `imagelessFramebuffer` use. The
+sampler mirror-clamp path passed eight U/V nearest and linear draw witnesses;
+two focused original W CTS leaves stopped in 3D image upload before sampling.
+The ordinary public device reports all three features false, and the DXVK
+matrix remains **25/62 ready with 37 blockers**. The full run identities,
+artifact hashes and remaining KHR dependency and W coverage limits are in
+[VALIDATION.md](../VALIDATION.md#t09-diagnostic-measurements-2026-09-24).
+This tranche does not claim that DXVK itself runs yet.
+
+### T09 public host query reset (2026-09-25)
+
+The ordinary Vulkan 1.0 graphics build exposes `VK_EXT_host_query_reset` and
+reports `hostQueryReset=1` through `VkPhysicalDeviceHostQueryResetFeaturesEXT`.
+A public SDK capability probe strictly verified the EXT route and ten device
+extensions; a separate shipping SDK graphics run completed precise occlusion
+queries, reset them on the host, observed availability zero with preserved old
+result words, and reused the same command buffer for new 1/0/3 results. The
+four-axis row is satisfied and the checked matrix is **26/62 ready with 36
+blockers**. The exact original CTS leaf is identified but has not run; the
+Vulkan 1.2 aggregate and API 1.3 requirement remain unadvertised. Run IDs,
+hashes and lifecycle evidence are in
+[VALIDATION.md](../VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25).
+
+### T09 sampler W native evidence (2026-09-25)
+
+Six strict SDK draws exercised 3D W mirror clamp with nearest and linear
+filtering at negative, inside and positive-edge coordinates. Each matched
+373,248 CPU/readback pixels with a clean lifecycle. Together with the eight
+earlier U/V draws, they move the DXVK sampler row's native axis to
+`native-evidence`. The two focused original 3D CTS leaves still reported
+`Fail` during image upload before W sampling; neither leaf has a PASS. The
+ordinary public sampler feature and KHR extension remain disabled, so the
+requirement is still an API blocker and the matrix remains **26/62 ready with
+36 blockers**. Exact run IDs and hashes are in
+[VALIDATION.md](../VALIDATION.md#t09-sampler-mirror-clamp-diagnostic-measurement-2026-09-24).
+
+### T09 sampler mirror-clamp public KHR promotion (2026-09-25)
+
+The ordinary Vulkan 1.0 SDK probe enumerated
+`VK_KHR_sampler_mirror_clamp_to_edge` and observed the mirror-clamp capability.
+With the public route enabled, separate SDK draws for U nearest and 3D W
+linear each matched all 373,248 pixels against the CPU reference and closed
+cleanly. The compact upstream 3D W address-mode CTS leaf remains a strict 1/1
+PASS. The two larger filtering leaves retain their pre-sampling image-upload
+`Fail` verdicts. At that promotion, the checked matrix was **27/62 ready with 35 blockers**;
+the ordinary capability probe observed 29/62 requested values. Exact current
+artifact, run and receipt hashes are in
+[VALIDATION.md](../VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
 
 ## Readiness versus profile completion
 

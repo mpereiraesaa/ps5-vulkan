@@ -69,6 +69,28 @@ int main(void)
     BAD(mipLodBias,-2.01f);BAD(minLod,NAN);BAD(maxLod,INFINITY);
     BAD(magFilter,VK_FILTER_CUBIC_EXT);BAD(minFilter,VK_FILTER_CUBIC_EXT);
     BAD(addressModeW,VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE);
+    d.enabled_features_t09=PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE;
+    /* Each axis has an independent three-bit S# clamp field, and nearest and
+     * linear filtering use the same address modes. */
+    for(unsigned axis=0;axis<3;++axis)for(unsigned filter=0;filter<2;++filter) {
+        VkSamplerCreateInfo mirror=info;
+        mirror.addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        mirror.addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        mirror.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        if(axis==0)mirror.addressModeU=VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+        if(axis==1)mirror.addressModeV=VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+        if(axis==2)mirror.addressModeW=VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+        mirror.magFilter=filter?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+        mirror.minFilter=mirror.magFilter;
+        assert(vkCreateSampler(&d,&mirror,NULL,&sampler)==VK_SUCCESS);
+        assert(sampler->words[0]==((uint32_t)(axis==0?3:2)|
+            ((uint32_t)(axis==1?3:2)<<3)|((uint32_t)(axis==2?3:2)<<6)));
+        assert(((sampler->words[2]>>20)&1u)==filter &&
+            ((sampler->words[2]>>22)&1u)==filter);
+        vkDestroySampler(&d,sampler,NULL);
+    }
+    BAD(addressModeW,(VkSamplerAddressMode)99);
+    d.enabled_features_t09=0;
     BAD(borderColor,(VkBorderColor)99);
     BAD(mipmapMode,(VkSamplerMipmapMode)99);BAD(maxLod,-1.0f);
     BAD(minLod,1.0f); /* maxLod remains zero. */

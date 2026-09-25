@@ -236,6 +236,18 @@ ADVERTISED_FEATURES["occlusionQueryPrecise"] = {
     "detail": "precise occlusion counters complete on GPU and pass the original query oracle",
     "cts": ("dEQP-VK.query_pool.occlusion_query.basic_precise",),
 }
+ADVERTISED_FEATURES["hostQueryReset"] = {
+    "profiles": ("graphics",),
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;"),
+        ("src/vk_query_pool.c", "VKAPI_ATTR void VKAPI_CALL vkResetQueryPoolEXT"),
+        ("src/vk_device.c", "VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME"),
+    ),
+    "detail": ("the Vulkan 1.0 EXT feature route exposes ordered host reset of "
+               "completed query slots; precise occlusion reset and reuse passed "
+               "a strict SDK-linked native witness"),
+    "cts": (),
+}
 ADVERTISED_FEATURES["shaderImageGatherExtended"] = {
     "profiles": ("graphics",),
     "citations": (
@@ -309,6 +321,38 @@ ADVERTISED_FEATURES["bufferDeviceAddress"] = {
         "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp",
         "dEQP-VK.binding_model.buffer_device_address.set0.depth1.basessbo.load.nostore.single.std140.comp_offset_nonzero",
     ),
+}
+
+# DXVK262-T09. Both extension features ship through their Vulkan 1.0 KHR
+# routes. Their original CTS leaves ran as a focused selection outside the
+# frozen acceptance package (conformance_inventory/dxvk_v262_evidence.json), so
+# no acceptance case is claimed here.
+ADVERTISED_FEATURES["timelineSemaphore"] = {
+    "citations": (
+        ("native/platform_ps5.c",
+         "platform->supported_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;"),
+        ("src/vk_device.c", "VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME"),
+        ("src/vk_internal.h", "PS5VK_TIMELINE_MAX_VALUE_DIFFERENCE"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query and opt-in route enables timeline "
+               "semaphores with full 64-bit payload comparisons; the public-SDK "
+               "witness and the focused original timeline leaves passed"),
+    "cts": (),
+}
+ADVERTISED_FEATURES["separateDepthStencilLayouts"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |"),
+        ("src/vk_device.c", "VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME"),
+        ("src/vk_device.c", "VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME"),
+        ("src/vk_render_pass.c", "VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT"),
+        ("src/image_layout_state.c", "ps5vk_layout_is_separate_aspect"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR route (maintenance2, create_renderpass2) enables "
+               "per-aspect D32_SFLOAT_S8_UINT layouts, barriers, load/store and "
+               "readback; the public-SDK witness and the focused original "
+               "stencil/depth leaves passed"),
+    "profiles": ("graphics",),
+    "cts": (),
 }
 
 # DXVK262-T04. The applicable upstream oracle for both distance features is the
@@ -1257,7 +1301,10 @@ def main() -> int:
             features.append({"kind": "feature", "feature": name, "profile": profile,
                              "reported": value, "verdict": verdict, "detail": detail})
         for name in ("uniformBufferStandardLayout", "vulkanMemoryModel",
-                     "vulkanMemoryModelDeviceScope", "bufferDeviceAddress"):
+                     "vulkanMemoryModelDeviceScope", "bufferDeviceAddress",
+                     "hostQueryReset", "timelineSemaphore",
+                     "separateDepthStencilLayouts"):
+
             value = dump["extensionFeatures"][name]
             verdict, detail = evaluate_feature(name, value, profile)
             features.append({"kind": "extension-feature", "feature": name,
@@ -1345,10 +1392,16 @@ def main() -> int:
         },
         "profiles": {profile: {"deviceName": dump["deviceName"], "apiVersion": dump["apiVersion"],
                                "vendorID": dump["vendorID"], "deviceID": dump["deviceID"],
+                               "device_extensions": dump["extensions"],
                                "multiview_query": dump["multiviewQuery"],
                                "standard_ubo_query": dump["standardUBOQuery"],
                                "memory_model_query": dump["memoryModelQuery"],
-                               "buffer_device_address_query": dump["bufferDeviceAddressQuery"]}
+                               "buffer_device_address_query": dump["bufferDeviceAddressQuery"],
+                               "host_query_reset_query": dump["hostQueryResetQuery"],
+                               "timeline_semaphore_query": dump["timelineSemaphoreQuery"],
+                               "separate_depth_stencil_layouts_query":
+                                   dump["separateDepthStencilLayoutsQuery"]}
+
                      for profile, dump in dumps.items()},
         "limits": limits,
         "features": features,

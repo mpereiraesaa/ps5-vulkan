@@ -3,6 +3,7 @@
 
 #include <vulkan/vulkan_core.h>
 #include <stddef.h>
+#include <pthread.h>
 #include "graphics_limits.h"
 #include "sample_rate_contract.h"
 
@@ -148,6 +149,34 @@ enum ps5vk_feature_bits {
     PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE = 1u << 30,
 };
 
+/* The original 32-bit feature mask is full once the T08 shader gates land.
+ * Keep the independent T09 extension capabilities in a separate mask. */
+enum ps5vk_t09_feature_bits {
+    PS5VK_T09_FEATURE_HOST_QUERY_RESET = 1u << 0,
+    PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER = 1u << 1,
+    PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE = 1u << 2,
+    PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE = 1u << 3,
+    PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS = 1u << 4,
+
+    /* VK_KHR_maintenance2 (no feature structure): image view usage, input
+     * attachment aspects, point clipping, tessellation domain origin and the
+     * mixed depth/stencil layouts. */
+    PS5VK_T09_FEATURE_MAINTENANCE2 = 1u << 5,
+    /* VK_KHR_create_renderpass2 (no feature structure). Enumerated only with
+     * its registry dependencies, VK_KHR_multiview and VK_KHR_maintenance2. */
+    PS5VK_T09_FEATURE_CREATE_RENDERPASS2 = 1u << 6,
+};
+
+/* maxTimelineSemaphoreValueDifference, derived from the payload algorithm
+ * rather than copied from a profile floor: every payload, wait value and
+ * signal value is a full uint64_t, and the frontend only ever orders them with
+ * full-width comparisons (value >= wait, signal > current, max() on
+ * retirement). No difference, modular window or narrower hardware label is
+ * computed from them, so any two representable values stay correctly ordered
+ * and the largest representable difference is supported. */
+#define PS5VK_TIMELINE_MAX_VALUE_DIFFERENCE UINT64_MAX
+
+
 /* The maxDrawIndirectCount a platform mask commits to: the pinned core table
  * requires 2^16-1 once multiDrawIndirect is supported and exactly 1 otherwise.
  * One helper decides it so the physical limit, the recording bound and the
@@ -239,6 +268,7 @@ struct ps5vk_platform {
     /* Platform opt-in only. A frontend symbol or compiler path is not enough
      * to advertise a Vulkan feature without a native backend contract. */
     uint32_t supported_features;
+    uint32_t supported_features_t09;
     void *context;
     VkResult (*open)(void *, struct ps5vk_memory_backend *);
     void (*close)(struct ps5vk_memory_backend *);
@@ -277,7 +307,15 @@ struct VkDevice_T {
     VkDeviceSize noncoherent_atom;
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
+    uint32_t enabled_features_t09;
     VkBool32 device_group_extension_enabled;
+    /* VK_KHR_create_renderpass2 was enabled on this device. The KHR render
+     * pass 2 entry points refuse, and the proc-address lookup hides them,
+     * unless it was. */
+    VkBool32 create_renderpass2_extension_enabled;
+    /* VK_KHR_maintenance2 was enabled on this device: the structures it
+     * defines are accepted only then. */
+    VkBool32 maintenance2_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the
@@ -329,9 +367,30 @@ struct VkDevice_T {
     struct ps5vk_queue_backend compute_backend, graphics_backend;
     struct ps5vk_submission *submission;
     VkBool32 lost;
+    /* VK_KHR_timeline_semaphore was enabled on this device. */
+    VkBool32 timeline_extension_enabled;
+    /* Serializes queue progression, submission, timeline payloads and fence
+     * state between threads: vkSignalSemaphoreKHR, vkWaitSemaphoresKHR and
+     * vkGetSemaphoreCounterValueKHR may run concurrently with the queue.
+     * vkCreateDevice initializes it and vkDestroyDevice destroys it. Host
+     * tests that hand-build a zeroed device rely on the host C library, where
+     * an all-zero mutex is the default static initializer. */
+    pthread_mutex_t queue_lock;
 };
 
 void ps5vk_device_enable_runtime_compiler(VkDevice device);
+
+/* A blocking mutex, not a spin lock. The locked regions can be long: they
+ * start queue work, which runs native prepare and launch (the native launch
+ * waits for GPU completion and may sleep for up to its timeout), frontend
+ * copies, diagnostic logging and allocator callbacks. Waiters therefore sleep
+ * in the kernel instead of spinning against a fixed-priority holder. Queue
+ * waits release it around every progress pause. It is not recursive: no
+ * locked region calls back into a locking entry point. */
+static inline void ps5vk_device_lock(VkDevice device)
+{ (void)pthread_mutex_lock(&device->queue_lock); }
+static inline void ps5vk_device_unlock(VkDevice device)
+{ (void)pthread_mutex_unlock(&device->queue_lock); }
 
 void *ps5vk_object_alloc(const VkAllocationCallbacks *fallback,
     const VkAllocationCallbacks *given, size_t size, VkSystemAllocationScope scope,

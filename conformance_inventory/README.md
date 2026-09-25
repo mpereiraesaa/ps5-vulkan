@@ -333,19 +333,27 @@ four evidence axes:
 A row is satisfied when the API, implementation and native axes are positive
 and no applicable CTS leaf was observed failing. CTS is regression evidence: a
 missing or unrun leaf does not block, an observed failure does. Unknown or
-absent API, implementation or native evidence is a blocker. The checked
-matrix currently records 25/62 satisfied (`robustBufferAccess`, three multiview requirements, the three indirect and
-indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
-`fullDrawIndexUint32`, the `shaderClipDistance`/`shaderCullDistance` pair,
-`fragmentStoresAndAtomics`, `dualSrcBlend`, `independentBlend`,
-`sampleRateShading`, `uniformBufferStandardLayout`, base `vulkanMemoryModel`,
-`vulkanMemoryModelDeviceScope`
-and bounded `bufferDeviceAddress`
-through their Vulkan 1.0 KHR routes, and the four rasterization and viewport features
-`depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`, plus
-`imageCubeArray`, `textureCompressionBC`, `shaderImageGatherExtended` and
-`occlusionQueryPrecise`) and 37
-blockers.
+absent API, implementation or native evidence is a blocker. The checked matrix
+records **30/62 satisfied and 32 blockers**. T09 contributes five satisfied
+requirements: `hostQueryReset` through EXT, and `samplerMirrorClampToEdge`,
+`timelineSemaphore`, `maxTimelineSemaphoreValueDifference` and
+`separateDepthStencilLayouts` through KHR routes on Vulkan 1.0. The other
+satisfied rows include T07's four resource and query requirements, T08's four
+KHR requirements, and the earlier graphics and draw capabilities. The exact
+per-row evidence is in `dxvk_v262_matrix.json`.
+
+The T09 `hostQueryReset` row is public through `VK_EXT_host_query_reset` with
+an ordinary SDK probe and shipping native reset/reuse witness. The
+`imagelessFramebuffer` row has a bounded, default-off implementation and native
+witness but remains an API blocker.
+`samplerMirrorClampToEdge` has eight passing U/V and six passing W diagnostic
+draw witnesses, two passing shipping draws, and one compact 3D W CTS PASS.
+Its public KHR extension was also observed by the ordinary SDK probe. The two
+larger 3D filtering CTS leaves remain `Fail` at image upload before sampling;
+those verdicts do not measure W sampling.
+The timeline and separate depth/stencil rows have public SDK witnesses and
+focused original CTS receipts. A probe of the combined build observed 32/62
+requested query values; query success alone does not establish GPU execution.
 
 T04's implementation and focused native validation are
 complete and merged (PR #158), but its `geometryShader` and

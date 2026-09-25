@@ -164,6 +164,48 @@ int main(void)
     assert(ps5vk_depth_64k_zx_gather_mip_offset(7,0,0)==SIZE_MAX);
     assert(ps5vk_depth_64k_zx_gather_mip_offset(0,64,0)==SIZE_MAX);
 
+    /* 8. The stencil plane of D32_SFLOAT_S8_UINT. Addresses are Mesa AddrLib
+     *    Addr2ComputeSurfaceAddrFromCoord (Gfx10, 16 pipes, 64KB_Z_X,
+     *    flags.stencil, bpp 8) for a 300x200 surface: two 256-wide tiles per
+     *    row, so the second tile starts at 64 KiB. */
+    {
+        static const struct { uint32_t x,y; size_t offset; } addr[]={
+            {43,101,5479},{287,133,82807},{165,81,37523},{106,58,10956},
+            {79,30,9981},{199,40,41237},{90,189,24806},{244,147,60570},
+            {121,1,12099},{272,73,72450},{250,109,45670},{90,101,15206},
+            {0,0,0},{256,0,65536},{0,199,22570},{299,199,86383}};
+        for(size_t i=0;i<sizeof(addr)/sizeof(addr[0]);++i)
+            assert(ps5vk_stencil_64k_zx_offset(addr[i].x,addr[i].y,300)==addr[i].offset);
+        assert(ps5vk_stencil_64k_zx_surface_size(300,200)==2u*BLOCK);
+        assert(ps5vk_stencil_64k_zx_surface_size(256,256)==BLOCK);
+        assert(ps5vk_stencil_64k_zx_surface_size(257,1)==2u*BLOCK);
+        /* One 256x256 tile fills its 64 KiB block exactly once. */
+        unsigned char *seen=calloc(BLOCK,1);
+        assert(seen);
+        for(uint32_t y=0;y<256;++y)for(uint32_t x=0;x<256;++x) {
+            size_t off=ps5vk_stencil_64k_zx_offset(x,y,256);
+            assert(off<BLOCK && !seen[off]);
+            seen[off]=1;
+        }
+        free(seen);
+        /* The 1-byte equation is not the 4-byte depth one read per byte. */
+        assert(ps5vk_stencil_64k_zx_offset(1,0,256)!=ps5vk_depth_64k_zx_offset(1,0,256));
+        const uint32_t w=64,h=48;
+        size_t surface=ps5vk_stencil_64k_zx_surface_size(w,h);
+        unsigned char *tiled=calloc(surface,1),*linear=calloc((size_t)w*h,1);
+        assert(tiled&&linear);
+        for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x)
+            tiled[ps5vk_stencil_64k_zx_offset(x,y,w)]=(unsigned char)(x*7u+y*13u);
+        assert(!ps5vk_stencil_64k_zx_detile(linear,(size_t)w*h,tiled,surface,w,h));
+        for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x)
+            assert(linear[(size_t)y*w+x]==(unsigned char)(x*7u+y*13u));
+        assert(ps5vk_stencil_64k_zx_detile(linear,(size_t)w*h-1u,tiled,surface,w,h));
+        assert(ps5vk_stencil_64k_zx_detile(linear,(size_t)w*h,tiled,surface-1u,w,h));
+        assert(ps5vk_stencil_64k_zx_detile(NULL,(size_t)w*h,tiled,surface,w,h));
+        assert(ps5vk_stencil_64k_zx_offset(w,0,w)==SIZE_MAX);
+        assert(ps5vk_stencil_64k_zx_surface_size(0,1)==SIZE_MAX);
+        free(tiled);free(linear);
+    }
     puts("Depth detile: SW_64K_Z_X is a bijection of the tile, affine, matches the published pattern, and differs from the colour swizzle");
     return 0;
 }

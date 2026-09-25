@@ -49,6 +49,7 @@ def tessellation_build_profile(environment):
             "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC",
             "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
             "PS5VK_SHADER_INT16_DIAGNOSTIC",
+            "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
         )
     }
     return {
@@ -1017,6 +1018,8 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiObjectManagementTests.cpp",
         # Original compressed image sampling cases and upstream reference oracle.
         cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureCompressedFormatTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureFilteringTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/imageless_framebuffer/vktImagelessFramebufferTests.cpp",
         focused_sources / "vktApiCopiesAndBlittingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/api/vktApiFillBufferTests.cpp",
         # Original UBO block-layout factory, shader bodies and result oracle.
@@ -1041,6 +1044,10 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationUtil.cpp",
+        # DXVK262-T09 timelineSemaphore: the original timeline family and the
+        # operation helpers its device/host cases are built from.
+        cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationOperation.cpp",
         cts_root / "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
@@ -1182,6 +1189,10 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineVertexUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineReferenceRenderer.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMakeUtil.cpp",
+        # Upstream sampler address-mode factory for the 8x8x8 3D W leaf.
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineSamplerTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineImageSamplingInstance.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineSamplerBorderSwizzleTests.cpp",
         # Genuine upstream blend factory, including the dual-source family.
         # The package registers the family under the monolithic construction
         # group and cases.txt selects the leaves, exactly as for the other
@@ -1195,6 +1206,10 @@ def main(argv=None):
         # multisampled-render-to-single-sampled groups), so all of them have to
         # be compiled or the factory links against factories that do not exist.
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp",
+        # DXVK262-T09 separateDepthStencilLayouts: original stencil and depth
+        # families (d32_sfloat_s8_uint and its _separate_layouts twin).
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleImageTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleShaderFragmentMaskTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampledRenderToSingleSampledTests.cpp",

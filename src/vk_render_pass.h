@@ -60,6 +60,69 @@ VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info
     const VkRenderPassMultiviewCreateInfo *multiview, VkBool32 multiview_enabled,
     uint32_t max_multiview_view_count, struct ps5vk_render_pass_multiview *out);
 
+/* VK_KHR_create_renderpass2: a VkRenderPassCreateInfo2 translated into the
+ * version-1 description vkCreateRenderPass consumes, with every array it
+ * points at owned by this structure. The version-2 obligations that have no
+ * version-1 equivalent - structure types, the extension chains and the input
+ * aspect masks - are checked by the translation; everything else is left to
+ * the version-1 path, so both entry points share one model and one set of
+ * profile rules. `info.pNext` names `multiview` only when the pass declares a
+ * view mask, a view offset, a view-local dependency or a correlated mask. */
+/* One translated subpass's references. A preserve list names distinct
+ * attachments of the pass, so the pass's attachment bound bounds it. */
+struct ps5vk_render_pass2_refs {
+    VkAttachmentReference color[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkAttachmentReference resolve[PS5VK_MAX_COLOR_ATTACHMENTS];
+    VkAttachmentReference input[PS5VK_MAX_INPUT_ATTACHMENTS];
+    VkAttachmentReference depth;
+    uint32_t preserve[PS5VK_MAX_ATTACHMENTS];
+};
+/* The STENCIL aspect's layouts of a pass (VK_KHR_separate_depth_stencil_layouts).
+ * A render pass created through vkCreateRenderPass uses one layout for both
+ * aspects of a combined depth/stencil attachment, so this table repeats the
+ * attachment's own initial/final layouts and the depth reference's layout.
+ * A version-2 pass that chains VkAttachmentDescriptionStencilLayout or
+ * VkAttachmentReferenceStencilLayout supplies them explicitly through
+ * ps5vk_render_pass_create. The table is owned by value: no caller pointer is
+ * retained. Entries for attachments without a stencil aspect are unused. */
+struct ps5vk_render_pass_stencil_layouts {
+    VkImageLayout initial[PS5VK_MAX_ATTACHMENTS];
+    VkImageLayout final[PS5VK_MAX_ATTACHMENTS];
+    /* Stencil layout of each subpass's depth/stencil reference. */
+    VkImageLayout reference[PS5VK_MAX_SUBPASSES];
+};
+
+struct ps5vk_render_pass2_translation {
+    VkRenderPassCreateInfo info;
+    VkRenderPassMultiviewCreateInfo multiview;
+    VkAttachmentDescription attachments[PS5VK_MAX_ATTACHMENTS];
+    VkSubpassDescription subpasses[PS5VK_MAX_SUBPASSES];
+    struct ps5vk_render_pass2_refs refs[PS5VK_MAX_SUBPASSES];
+    VkSubpassDependency dependencies[PS5VK_MAX_DEPENDENCIES];
+    uint32_t view_masks[PS5VK_MAX_SUBPASSES];
+    int32_t view_offsets[PS5VK_MAX_DEPENDENCIES];
+    uint32_t correlation_masks[PS5VK_MAX_CORRELATION_MASKS];
+    /* VK_KHR_separate_depth_stencil_layouts: set when any attachment chains
+     * VkAttachmentDescriptionStencilLayout or the depth/stencil reference of
+     * any subpass chains VkAttachmentReferenceStencilLayout. The table then
+     * holds every combined attachment's stencil layouts: the chained ones, or
+     * the stencil projection of the combined layout where nothing is
+     * chained. */
+    VkBool32 stencil_layouts;
+    struct ps5vk_render_pass_stencil_layouts stencil;
+};
+VkResult ps5vk_render_pass2_translate(const VkRenderPassCreateInfo2 *info,
+    struct ps5vk_render_pass2_translation *out);
+
+/* The aspect mask an input reference declares, against the format of the
+ * attachment it names: never empty, never METADATA or a memory plane, only
+ * aspects the format has (VK_ERROR_UNKNOWN otherwise), and every aspect the
+ * format has, because the owned input reference reads them all
+ * (VK_ERROR_FEATURE_NOT_PRESENT for a strict subset). Shared by the version-2
+ * reference and VkRenderPassInputAttachmentAspectCreateInfo. */
+VkResult ps5vk_render_pass_input_aspect_valid(VkFormat format, VkImageAspectFlags aspect);
+
+
 /* One subpass: the roles this profile executes.
  *
  * There is no preserve list here, and that is a statement about the profile
@@ -146,7 +209,41 @@ struct VkRenderPass_T {
     uint32_t *preserves;
     uint32_t preserve_count;
     struct ps5vk_render_pass_multiview multiview;
+    /* Per-aspect stencil layouts; always filled (see above). */
+    struct ps5vk_render_pass_stencil_layouts stencil;
 };
+
+/* vkCreateRenderPass with an optional explicit stencil-layout table. NULL is
+ * the version-1 meaning: every stencil layout equals the combined layout. A
+ * table is only meaningful for attachments whose format has a stencil aspect;
+ * each entry must name a layout that means something for the stencil aspect
+ * (STENCIL_* or an aspect-neutral layout, never a combined or DEPTH_* one),
+ * and a final layout is never UNDEFINED. With a table present, the depth
+ * layouts of a combined attachment may be the separate DEPTH_* ones, since
+ * the stencil half no longer rides on them. */
+VkResult ps5vk_render_pass_create(VkDevice d, const VkRenderPassCreateInfo *info,
+    const struct ps5vk_render_pass_stencil_layouts *stencil,
+    const VkAllocationCallbacks *allocator, VkRenderPass *out);
+
+/* The per-aspect layouts of a depth/stencil attachment in one subpass. The
+ * depth half is the attachment description's and the depth reference's; the
+ * stencil half comes from the pass's stencil table. */
+static inline int ps5vk_render_pass_depth_stencil_layouts(VkRenderPass pass,
+    uint32_t subpass, uint32_t attachment,
+    VkImageLayout *initial_depth, VkImageLayout *initial_stencil,
+    VkImageLayout *reference_depth, VkImageLayout *reference_stencil,
+    VkImageLayout *final_depth, VkImageLayout *final_stencil)
+{
+    if (!pass || subpass >= pass->subpass_count || attachment >= pass->attachment_count ||
+        pass->subpasses[subpass].depth.attachment != attachment) return 0;
+    *initial_depth = pass->attachments[attachment].initialLayout;
+    *final_depth = pass->attachments[attachment].finalLayout;
+    *reference_depth = pass->subpasses[subpass].depth.layout;
+    *initial_stencil = pass->stencil.initial[attachment];
+    *final_stencil = pass->stencil.final[attachment];
+    *reference_stencil = pass->stencil.reference[subpass];
+    return 1;
+}
 
 /* The references of one subpass. Callers that only handle the single-subpass
  * profile pass 0 and say so, rather than reaching for fields that no longer

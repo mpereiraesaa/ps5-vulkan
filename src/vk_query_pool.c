@@ -99,6 +99,63 @@ static VkBool32 query_range_available(VkQueryPool pool, uint32_t first,
     return VK_TRUE;
 }
 
+static VkBool32 query_ranges_overlap(uint32_t first, uint32_t count,
+    uint32_t other_first, uint32_t other_count)
+{
+    /* Both ranges were already bounded against the same query pool. */
+    return count && other_count && first < other_first + other_count &&
+        other_first < first + count;
+}
+
+static VkBool32 query_range_in_use(VkDevice d, VkQueryPool pool,
+    uint32_t first, uint32_t count)
+{
+    for (VkCommandPool command_pool = d->command_pools; command_pool;
+         command_pool = command_pool->next) {
+        for (VkCommandBuffer command = command_pool->buffers; command;
+             command = command->next) {
+            if (command->state == PS5VK_RECORDING &&
+                command->active_occlusion_query_pool == pool &&
+                query_ranges_overlap(first, count,
+                    command->active_occlusion_query, 1))
+                return VK_TRUE;
+            if (!command->pending_count) continue;
+            /* A command buffer stays pending across all of its queue
+             * segments. Checking its complete immutable recording is
+             * conservative and prevents a host reset from overtaking a
+             * backend query write or a later frontend query operation. */
+            for (uint32_t i = 0; i < command->operation_count; ++i) {
+                const struct ps5vk_operation *op = &command->operations[i];
+                if (op->query_pool == pool && ps5vk_query_operation(op->type) &&
+                    query_ranges_overlap(first, count,
+                        op->query_first, op->query_count))
+                    return VK_TRUE;
+            }
+        }
+    }
+    return VK_FALSE;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkResetQueryPool(VkDevice d, VkQueryPool pool,
+    uint32_t first, uint32_t count)
+{
+    if (!query_range(d, pool, first, count) || d->lost ||
+        !(d->enabled_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET) ||
+        query_range_in_use(d, pool, first, count)) {
+        if (d) ++d->lifetime_errors;
+        return;
+    }
+    memset(&pool->states[first], PS5VK_QUERY_UNAVAILABLE,
+        count * sizeof(pool->states[0]));
+    memset(&pool->values[first], 0, count * sizeof(pool->values[0]));
+}
+
+VKAPI_ATTR void VKAPI_CALL vkResetQueryPoolEXT(VkDevice d, VkQueryPool pool,
+    uint32_t first, uint32_t count)
+{
+    vkResetQueryPool(d, pool, first, count);
+}
+
 VkBool32 ps5vk_query_operation(enum ps5vk_operation_type type)
 {
     return type == PS5VK_QUERY_RESET || type == PS5VK_QUERY_BEGIN ||

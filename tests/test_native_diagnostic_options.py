@@ -41,6 +41,31 @@ class NativeDiagnosticOptions(unittest.TestCase):
             self.assertNotIn(name, sdk)
             self.assertNotIn(name, (ROOT / "native/platform_ps5.c").read_text())
 
+    def test_t09_promoted_switches_are_retired(self):
+        """timelineSemaphore and separateDepthStencilLayouts (with the
+        maintenance2/create_renderpass2 route and the D32S8 row) are shipping
+        capabilities; their measurement switches must not return."""
+        from tools.build_upstream_cts import tessellation_build_profile
+
+        names = ("PS5VK_TIMELINE_" + "DIAGNOSTIC", "PS5VK_DEPTH_STENCIL_" + "DIAGNOSTIC")
+        profile = tessellation_build_profile({name: "1" for name in names})
+        self.assertFalse(profile["experimental"])
+        for relative in ("tools/build_sdk.py", "tools/build_upstream_cts.py",
+                         "tools/check_dxvk_profile.py", "tools/build_t09_timeline_witness.py",
+                         "tools/build_t09_depth_stencil_witness.py", "native/platform_ps5.c",
+                         "src/vk_command.c", "src/texture_format.c", "src/vk_device.c",
+                         "Makefile"):
+            text = (ROOT / relative).read_text()
+            for name in names:
+                with self.subTest(relative=relative, name=name):
+                    self.assertNotIn(name, text)
+        platform = (ROOT / "native/platform_ps5.c").read_text()
+        self.assertIn("platform->supported_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;",
+                      platform)
+        self.assertIn("PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |\n"
+                      "        PS5VK_T09_FEATURE_MAINTENANCE2 | PS5VK_T09_FEATURE_CREATE_RENDERPASS2;",
+                      platform)
+
     def test_promoted_fragment_feature_has_no_diagnostic_switch(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
         builder = (ROOT / "tools/build_sdk.py").read_text()
@@ -222,6 +247,12 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertNotIn("PS5VK_OCCLUSION_PRECISE_DIAGNOSTIC", sdk_build)
         self.assertIn('scissor_probe in ("8", "13", "15") and use_runtime_graphics', build)
 
+    def test_host_query_reset_probe_requires_sdk_query_witness(self):
+        self.rejected({"PS5VK_HOST_QUERY_RESET_PROBE": "2"},
+                      "requires SDK-linked occlusion query API probe")
+        self.rejected({"PS5VK_HOST_QUERY_RESET_PROBE": "1"},
+                      "requires SDK-linked occlusion query API probe")
+
     def test_gather_probe_is_sdk_linked(self):
         self.rejected({"PS5VK_GRAPHICS_API": "build/graphics/control-gxn440da",
                        "PS5VK_RUNTIME_GRAPHICS": "1",
@@ -304,6 +335,39 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.rejected({"PS5VK_GRAPHICS_API": "unused",
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
+
+    def test_t09_diagnostics_are_bounded_and_graphics_only(self):
+        from tools.build_upstream_cts import tessellation_build_profile
+
+        for name in ("PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",):
+            with self.subTest(name=name):
+                self.rejected({name: "1"}, "requires the graphics profile API")
+                self.rejected({"PS5VK_GRAPHICS_API": "unused", name: "2"},
+                              "must be 0 or 1")
+                profile = tessellation_build_profile({name: "1"})
+                self.assertTrue(profile["experimental"])
+                self.assertEqual(profile["switches"][name], "1")
+        for path in ("native/platform_ps5.c", "tools/build_native.py",
+                     "tools/build_sdk.py", "tools/build_upstream_cts.py",
+                     "tools/verify_sampler_mirror.py"):
+            self.assertNotIn("PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
+                             (ROOT / path).read_text(), path)
+        self.assertIn("platform->supported_features_t09 |= "
+                      "PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE;",
+                      (ROOT / "native/platform_ps5.c").read_text())
+        self.rejected({"PS5VK_SAMPLER_MIRROR_CASE": "8"},
+                      "requires an SDK-linked graphics build")
+        self.rejected({"PS5VK_GRAPHICS_API": "unused",
+                       "PS5VK_SAMPLER_MIRROR_CASE": "26"},
+                      "must be -1 or 8..25")
+        sdk_case = {"PS5VK_GRAPHICS_API": "unused", "PS5VK_USE_SDK": "1",
+                    "PS5VK_SAMPLER_MIRROR_CASE": "11"}
+        self.rejected(sdk_case, "requires scissor probe 6, draw and no presentation")
+        self.rejected({**sdk_case, "PS5VK_GRAPHICS_SCISSOR_PROBE": "6"},
+                      "requires scissor probe 6, draw and no presentation")
+        self.rejected({**sdk_case, "PS5VK_GRAPHICS_SCISSOR_PROBE": "6",
+                       "PS5VK_GRAPHICS_DRAW": "1", "PS5VK_GRAPHICS_PRESENT": "1"},
+                      "requires scissor probe 6, draw and no presentation")
 
     def test_sample_rate_diagnostic_is_graphics_only(self):
         """The sampleRateShading bit is SHIPPING; the switch is not its gate.

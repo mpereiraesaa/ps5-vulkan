@@ -17,6 +17,8 @@ struct ps5vk_submission {
     VkBool32 deferred_prepare;
     uint32_t wait_count, signal_count;
     VkSemaphore *waits, *signals;
+    /* Timeline values parallel to waits/signals; unused for binary ones. */
+    uint64_t *wait_values, *signal_values;
     struct ps5vk_submission *next;
     void *backend_job;
     VkAllocationCallbacks allocator;

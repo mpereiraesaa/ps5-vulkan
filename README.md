@@ -43,11 +43,17 @@ the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 
 ## In progress
 
-Current work adds host query reset, imageless framebuffers, mirror-clamp
-sampling, timeline semaphores and separate depth/stencil layouts. These are
-**not** claims of public support until implementation and an artifact-bound
-native witness pass. Additional synchronization and descriptor capabilities
-will follow as needed by real consumers.
+
+The Vulkan 1.0 profile exposes `hostQueryReset`, `samplerMirrorClampToEdge`,
+`timelineSemaphore`, `maxTimelineSemaphoreValueDifference` and
+`separateDepthStencilLayouts` through their EXT/KHR routes. The checked DXVK
+2.6.2 matrix has **30/62** requirements ready; a public SDK capability probe
+of the combined build observed 32/62 requested values. `imagelessFramebuffer`
+has a bounded default-off witness but no public route yet. Two larger sampler
+CTS leaves still fail during image upload before sampling. A real DXVK build
+has not yet run on PS5. See [the T09 measurements](VALIDATION.md#t09-combined-public-query-2026-09-25)
+and [the DXVK backlog](docs/DXVK_V262_BACKLOG.md).
+
 
 There is no Vulkan loader/ICD or Vulkan WSI/swapchain implementation. The
 native VideoOut path is separate from WSI. Format, shader, queue and resource

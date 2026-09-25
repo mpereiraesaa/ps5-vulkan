@@ -157,6 +157,46 @@ int main(void)
     assert(vkCreateImageView(&d, &vi, NULL, &min_lod_view) ==
            VK_ERROR_FEATURE_NOT_PRESENT && !min_lod_view);
     vi.pNext = NULL;
+    /* VkImageViewUsageCreateInfo (VK_KHR_maintenance2): refused on a device
+     * that did not enable the extension, then accepted once, alone or next to
+     * the min-LOD structure, narrowing the view to a non-empty subset of the
+     * image's own usage. */
+    VkImageViewUsageCreateInfo view_usage = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT};
+    VkImageView narrowed = VK_NULL_HANDLE;
+    vi.pNext = &view_usage;
+    assert(vkCreateImageView(&d, &vi, NULL, &narrowed) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !narrowed && image->views == 1);
+    d.maintenance2_extension_enabled = VK_TRUE;
+    assert(vkCreateImageView(&d, &vi, NULL, &narrowed) == VK_SUCCESS);
+    assert(narrowed->usage == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT &&
+           ps5vk_image_view_usage(narrowed) == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    vkDestroyImageView(&d, narrowed, NULL);
+    /* Without the structure a view inherits its image's usage. */
+    assert(!view->usage && ps5vk_image_view_usage(view) == info.usage);
+    view_usage.pNext = &min_lod;
+    assert(vkCreateImageView(&d, &vi, NULL, &narrowed) == VK_SUCCESS);
+    vkDestroyImageView(&d, narrowed, NULL);
+    view_usage.pNext = NULL;
+    /* Invalid: empty (requiredbitmask), a bit the image lacks (02662), a bit
+     * outside the core flags. */
+    const VkImageUsageFlags invalid_usage[] = {0, VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 0x100u};
+    for (unsigned i = 0; i < sizeof(invalid_usage) / sizeof(invalid_usage[0]); ++i) {
+        view_usage.usage = invalid_usage[i];
+        assert(vkCreateImageView(&d, &vi, NULL, &narrowed) == VK_ERROR_UNKNOWN &&
+               !narrowed && image->views == 1);
+    }
+    view_usage.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    /* A second copy of the structure stays fail-closed. */
+    VkImageViewUsageCreateInfo second_usage = view_usage;
+    second_usage.pNext = &view_usage;
+    vi.pNext = &second_usage;
+    assert(vkCreateImageView(&d, &vi, NULL, &narrowed) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !narrowed && image->views == 1);
+    d.maintenance2_extension_enabled = VK_FALSE;
+    vi.pNext = NULL;
     VkAttachmentDescription attachment = {.format=info.format, .samples=VK_SAMPLE_COUNT_1_BIT,
         .loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp=VK_ATTACHMENT_STORE_OP_STORE,
         .finalLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
@@ -170,7 +210,14 @@ int main(void)
         .renderPass=pass, .attachmentCount=1, .pAttachments=&view, .width=18, .height=19, .layers=1};
     VkFramebuffer fb;
     assert(vkCreateFramebuffer(&d, &fi, NULL, &fb) == VK_ERROR_UNKNOWN && !fb);
-    fi.width=17; assert(vkCreateFramebuffer(&d, &fi, NULL, &fb) == VK_SUCCESS);
+    fi.width=17;
+    /* The framebuffer holds the VIEW to its role: a view narrowed to a usage
+     * without the colour-attachment role is refused although its image has
+     * it. */
+    view->usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    assert(vkCreateFramebuffer(&d, &fi, NULL, &fb) == VK_ERROR_UNKNOWN && !fb);
+    view->usage = 0;
+    assert(vkCreateFramebuffer(&d, &fi, NULL, &fb) == VK_SUCCESS);
     assert(ps5vk_framebuffer_compatible(fb, pass));
     pass->attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     assert(ps5vk_framebuffer_compatible(fb, pass));

@@ -189,6 +189,41 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
      * readable; the detile itself is SW_64K_Z_X (src/depth_detile.c). The
      * pinned dEQP-VK.draw.renderpass.depth_clamp.d32_sfloat* family reads its
      * depth attachment back exactly this way (vktDrawDepthClampTests.cpp:554). */
+    /* One aspect of the combined depth/stencil attachment: DEPTH copies the
+     * Z_32_FLOAT plane as 4-byte texels, STENCIL the STENCIL_8 plane as
+     * tightly packed bytes (the VK_FORMAT_S8_UINT buffer layout), each from
+     * its own tiled plane after the GPU completes. A copy names exactly one
+     * aspect and the whole surface. */
+    if(ps5vk_depth_stencil_attachment_image(image)) {
+        const VkBufferImageCopy *r=&regions[0];
+        const VkImageAspectFlags aspect=r->imageSubresource.aspectMask;
+        const uint64_t texel=aspect==VK_IMAGE_ASPECT_STENCIL_BIT?1u:4u;
+        const uint64_t pixels=(uint64_t)image->info.extent.width*image->info.extent.height;
+        void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
+        if(!d->graphics_enabled || layout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+           !(image->info.usage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+           !ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
+           (aspect!=VK_IMAGE_ASPECT_DEPTH_BIT && aspect!=VK_IMAGE_ASPECT_STENCIL_BIT) ||
+           r->bufferOffset ||
+           (r->bufferRowLength && r->bufferRowLength!=image->info.extent.width) ||
+           (r->bufferImageHeight && r->bufferImageHeight!=image->info.extent.height) ||
+           r->imageSubresource.mipLevel || r->imageSubresource.baseArrayLayer ||
+           r->imageSubresource.layerCount!=1 ||
+           r->imageOffset.x || r->imageOffset.y || r->imageOffset.z ||
+           r->imageExtent.width!=image->info.extent.width ||
+           r->imageExtent.height!=image->info.extent.height || r->imageExtent.depth!=1 ||
+           !pixels || pixels>UINT64_MAX/texel ||
+           ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
+           ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS ||
+           dst_bytes<pixels*texel ||
+           overlaps((uintptr_t)src,src_bytes,(uintptr_t)dst,pixels*texel)) {invalid(c);return;}
+        struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
+            PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
+        if(!op)return;
+        op->copy_destination=destination;op->copy_image=image;
+        op->copy_layout=layout;op->copy_region=*r;
+        return;
+    }
     if(ps5vk_depth_readback_image(image)) {
         const VkBufferImageCopy *dr=&regions[0];
         void *dsrc,*ddst;VkDeviceSize dsrc_bytes,ddst_bytes;

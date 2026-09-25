@@ -205,6 +205,66 @@ static int run_dxvk262_capability_probe(void)
             "DXVK262_BUFFER_DEVICE_ADDRESS_QUERY route=VK_KHR_buffer_device_address "
             "bufferDeviceAddress=%u", device_address.bufferDeviceAddress);
     }
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+
+            VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME)) {
+        VkPhysicalDeviceHostQueryResetFeaturesEXT host_query_reset = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &host_query_reset};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features12.hostQueryReset = host_query_reset.hostQueryReset;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_HOST_QUERY_RESET_QUERY route=VK_EXT_host_query_reset "
+            "hostQueryReset=%u", host_query_reset.hostQueryReset);
+    }
+    /* Vulkan 1.0 exposes mirror clamp through a KHR device extension. There
+     * is no separate extension feature query: enumeration is the public route. */
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME)) {
+        features12.samplerMirrorClampToEdge = VK_TRUE;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_SAMPLER_MIRROR_CLAMP_QUERY "
+            "route=VK_KHR_sampler_mirror_clamp_to_edge samplerMirrorClampToEdge=1");
+    }
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)) {
+        VkPhysicalDeviceTimelineSemaphoreFeatures timeline = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &timeline};
+        VkPhysicalDeviceTimelineSemaphoreProperties timeline_limits = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES};
+        VkPhysicalDeviceProperties2 properties_query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &timeline_limits};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        vkGetPhysicalDeviceProperties2KHR(physical, &properties_query);
+        features12.timelineSemaphore = timeline.timelineSemaphore;
+        properties12.maxTimelineSemaphoreValueDifference =
+            timeline_limits.maxTimelineSemaphoreValueDifference;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_TIMELINE_SEMAPHORE_QUERY route=VK_KHR_timeline_semaphore "
+            "timelineSemaphore=%u maxTimelineSemaphoreValueDifference=%llu",
+            timeline.timelineSemaphore,
+            (unsigned long long)timeline_limits.maxTimelineSemaphoreValueDifference);
+    }
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME)) {
+        VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures separate = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &separate};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features12.separateDepthStencilLayouts = separate.separateDepthStencilLayouts;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_SEPARATE_DEPTH_STENCIL_LAYOUTS_QUERY "
+            "route=VK_KHR_separate_depth_stencil_layouts separateDepthStencilLayouts=%u",
+            separate.separateDepthStencilLayouts);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",

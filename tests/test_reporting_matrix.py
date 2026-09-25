@@ -30,8 +30,10 @@ UNASSIGNED_FORMAT_TABLES = {
 }
 UNASSIGNED_FORMAT_TABLE_DIGEST = (
     # T07 qualifies BC sample/filter/transfer, RGBA8 blit destinations and the
-    # bounded D16/D32 roles across the audited format tables.
-    "fb9bebc979b41d80f0872e8f1eeff71c174422431788d58ad4933b86bc88f7d8")
+    # bounded D16/D32 roles across the audited format tables. T09 publishes the
+    # witnessed D32_SFLOAT_S8_UINT attachment and readback roles, which now
+    # satisfy the depth/stencil table's combined-format attachment rule.
+    "0ba43c36bb2d78ee66e1f435bf8c2330b22b35c1158c05c503a4d07824f214ff")
 
 
 def unassigned_format_table_digest(rows):
@@ -40,6 +42,15 @@ def unassigned_format_table_digest(rows):
 
 
 class TestReportingMatrix(unittest.TestCase):
+    def test_sampler_mirror_clamp_khr_is_graphics_only(self):
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        extension = "VK_KHR_sampler_mirror_clamp_to_edge"
+        graphics = data["profiles"]["graphics"]
+        compute = data["profiles"]["compute"]
+        self.assertEqual(4194304, graphics["apiVersion"])
+        self.assertIn(extension, graphics["device_extensions"])
+        self.assertNotIn(extension, compute["device_extensions"])
+
     def test_device_scope_uses_public_khr_query_without_core_version_change(self):
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         for profile in ("graphics", "compute"):

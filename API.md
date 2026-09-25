@@ -28,6 +28,19 @@ records. Current Vulkan 1.1+ structures being queryable as C types does not
 mean the driver advertises them; the reported device version remains Vulkan
 1.0 until their contracts are implemented and validated.
 
+The ordinary Vulkan 1.0 build exposes `VK_EXT_host_query_reset` and its
+`VkPhysicalDeviceHostQueryResetFeaturesEXT` opt-in, backed by a completed
+precise-query reset/reuse witness. It also exposes
+`VK_KHR_sampler_mirror_clamp_to_edge` through device extension enumeration and
+opt-in, backed by U/V/W native pixel witnesses and one compact 3D W CTS PASS.
+The Vulkan 1.2 aggregate remains unadvertised. A T09 diagnostic build can
+enable `imagelessFramebuffer` for its bounded native API witness. Two larger
+3D filtering CTS leaves failed during image upload before sampling and remain
+recorded as failures. `VK_KHR_imageless_framebuffer` also requires
+the Vulkan 1.0 extension dependency chain before it can be advertised. These
+measurements do not claim that DXVK can create a device or run yet; see
+[the sampler T09 evidence](VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
+
 ## Core feature negotiation
 
 - `robustBufferAccess` is reported true. Device creation accepts it through
@@ -71,6 +84,21 @@ mean the driver advertises them; the reported device version remains Vulkan
   1-, 3-, 4- and 32-byte descriptor ranges. Two exact 106/106 hardware runs
   passed. Wider scalar/vector formats and vertex-fetch robustness remain
   separate coverage work; they are not inferred from these cases.
+- `separateDepthStencilLayouts` is reported true by the graphics build through
+  `VK_KHR_separate_depth_stencil_layouts`. The pinned registry requires
+  `VK_KHR_create_renderpass2`, which requires `VK_KHR_multiview` and
+  `VK_KHR_maintenance2`. All four are enumerated together, and `vkCreateDevice`
+  refuses any of them without its enabled dependencies. With the feature,
+  barriers may name DEPTH or STENCIL alone and the DEPTH_*/STENCIL_* layouts.
+  `vkCreateRenderPass2KHR` accepts `VkAttachmentDescriptionStencilLayout` and
+  the depth/stencil reference's `VkAttachmentReferenceStencilLayout`. The
+  combined attachment keeps one layout per aspect through barriers, render
+  pass load/store and readback. With `VK_KHR_maintenance2` alone, the two mixed
+  depth/stencil layouts are accepted on both aspects. `VK_KHR_maintenance2`
+  also covers image view usage, input attachment aspects, point clipping
+  (`ALL_CLIP_PLANES`) and upper-left tessellation domain origin. Open issue:
+  fragment `discard` does not suppress depth/stencil writes on this path (see
+  [the DXVK backlog](docs/DXVK_V262_BACKLOG.md)).
 - Multiple logical devices share one serialized process-level AGC session and
   direct-memory budget. The module and shared graphics compiler cache are
   released only after the final device closes; each device still owns and must
@@ -208,6 +236,7 @@ readback. Each format query exposes only the operations actually established.
 | `VK_FORMAT_B8G8R8A8_UNORM` | Color attachment and native presentation |
 | `VK_FORMAT_D32_SFLOAT` | Depth attachment (depth aspect only), whole-subresource transfer-destination clear and transfer-source readback over the depth aspect, plus bounded 64×64 sampled depth for Dref gather |
 | `VK_FORMAT_D16_UNORM` | One 128×128 depth attachment with no sampled, transfer or stencil role |
+| `VK_FORMAT_D32_SFLOAT_S8_UINT` | Single-level, single-layer 2D depth/stencil attachment (both aspects, two 64KB_Z_X planes) with per-aspect transfer-source readback. There is no sampled or single-aspect view, no transfer destination and no `vkCmdClearDepthStencilImage`; render pass load ops clear. HTILE is not used |
 | Vulkan 1.0 BC1–BC7 formats (16 variants) | Sampled/upload images with nearest/linear filtering, compatible blit sources and bounded mip/layer transfers |
 | `VK_FORMAT_R8_UNORM`, `VK_FORMAT_R8_SNORM`, `VK_FORMAT_R8G8_UNORM`, `VK_FORMAT_R8G8_SNORM` | Sampled/upload image with nearest/linear filtering and Vulkan completion of missing components |
 | `VK_FORMAT_R8G8B8A8_UNORM` | Sampled/upload image with nearest/linear filtering and hardware-validated explicit mip LOD, off-screen color attachment plus transfer-source readback, or transfer-only image (`TRANSFER_SRC` and/or `TRANSFER_DST`) |
@@ -289,8 +318,8 @@ per axis. Two byte-identical hardware runs deterministically verified mirrored
 repeat, transparent-black, opaque-black and opaque-white border results, then
 separate nearest-versus-linear magnification and minification discriminators;
 both float and integer variants of the six fixed `VkBorderColor` enums map to
-those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
-unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
+those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` is enumerated
+and accepted by device creation when enabled. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
 is advertised only for the 40 validated filterable rows. Valid sampled
 images can carry complete mip chains up to the per-type query limit. A
 public-SDK-linked 2D RGBA8 witness uploaded three levels and selected all three
@@ -364,7 +393,28 @@ smaller incompatible layer pitches. The graphics profile reports
   classes and the physical device conservatively reports the Vulkan 1.0 floor
   of two discrete priorities. Because the family exposes one queue, the two
   classes cannot compete and do not imply a multi-queue scheduler.
-  Multi-queue, timeline semaphore and synchronization2 contracts are absent.
+  Multi-queue and synchronization2 contracts are absent.
+- `VK_KHR_timeline_semaphore` is implemented in the queue frontend: 64-bit
+  payloads, `VkTimelineSemaphoreSubmitInfo`, and the KHR host commands
+  (`vkGetSemaphoreCounterValueKHR`, `vkWaitSemaphoresKHR` with ALL/ANY and
+  zero, finite or unbounded timeouts, `vkSignalSemaphoreKHR`). A payload
+  advances only when a host signal executes or a record retires after the
+  backend's exact completion. A submission whose head waits on a value no
+  queued work signals does not block `vkQueueSubmit`; later records queue
+  behind it and native jobs are prepared only when they reach the head.
+  A host signal starts the work it releases before returning, so an
+  application that only polls mapped memory afterwards still sees it run.
+  Known limit: because such a job is prepared at the head rather than inside
+  `vkQueueSubmit`, a preparation failure there (for example exhausted native
+  command memory) cannot be returned by the submit call. It marks the device
+  lost and is reported as `VK_ERROR_DEVICE_LOST` by the next wait, poll or
+  submission; the timeline payload and fence of the failed work never
+  advance.
+  `maxTimelineSemaphoreValueDifference` is `UINT64_MAX` because every value is
+  ordered with full-width comparisons. The extension and its feature are
+  reported by the shipping build on Vulkan 1.0 through
+  `VK_KHR_get_physical_device_properties2`; `vkCreateDevice` refuses the
+  extension without that instance extension.
 - Vulkan 1.0 events support host and recorded device set/reset plus waits inside
   or across primary command buffers. Event transitions are segmented from GPU
   jobs, and `vkCmdWaitEvents` preserves its validated memory dependency without

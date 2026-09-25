@@ -4,6 +4,7 @@
 #include "color_attachment_contract.h"
 #include "texture_format.h"
 #include "texture_layout.h"
+#include "depth_stencil_layout.h"
 struct VkImage_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
@@ -13,8 +14,13 @@ struct VkImage_T {
     VkDeviceMemory memory;
     VkDeviceSize offset;
     unsigned pending, views;
-    /* Committed only after confirmed completion; calloc initializes UNDEFINED. */
+    /* Committed only after confirmed completion; calloc initializes UNDEFINED.
+     * For a combined depth/stencil format this is the DEPTH aspect's layout
+     * and stencil_layout carries the STENCIL aspect's, so a barrier naming one
+     * aspect never moves the other (src/depth_stencil_layout.h). Every other
+     * format has one aspect and leaves stencil_layout UNDEFINED. */
     VkImageLayout layout;
+    VkImageLayout stencil_layout;
     /* Optional mip-major committed layouts. MAX_ENUM marks a mixed image. */
     VkImageLayout *subresource_layouts;
     /* Native display ownership is independent of queued rendering references. */
@@ -43,8 +49,22 @@ struct VkImageView_T {
     VkImageViewType view_type;
     VkImageSubresourceRange range;
     VkFormat format;
+    /* The usage VkImageViewUsageCreateInfo narrowed this view to, or zero when
+     * the view was created without it and inherits its image's usage. The
+     * structure cannot name an empty usage, so zero is unambiguous. */
+    VkImageUsageFlags usage;
     unsigned pending, framebuffers;
 };
+/* The eight VkImageUsageFlagBits of Vulkan 1.0, the only ones this device
+ * knows. */
+#define PS5VK_IMAGE_USAGE_CORE_BITS ((VkImageUsageFlags)0xFFu)
+/* What a view may be used for: its own narrowed usage when it has one, its
+ * image's otherwise. Every check of a VIEW's role goes through this, while
+ * image-level role and layout decisions keep reading the image's usage. */
+static inline VkImageUsageFlags ps5vk_image_view_usage(VkImageView view)
+{
+    return view->usage ? view->usage : view->image->info.usage;
+}
 VkResult ps5vk_image_span(VkDevice, VkImage, void **address, VkDeviceSize *bytes);
 /* Resolve counts by subtraction, so oversized ranges cannot wrap. */
 static inline int ps5vk_image_range_resolve(VkImage image,
@@ -296,6 +316,76 @@ static inline VkBool32 ps5vk_depth_readback_image(VkImage image)
           ~(VkImageUsageFlags)(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+}
+
+/* The combined depth/stencil attachment: D32_SFLOAT_S8_UINT, one 2D mip,
+ * layer and sample, optimal tiling, the attachment role plus optionally its
+ * readback. Exactly the shape whose two planes the target builder programmes
+ * and the readback detiles (src/depth_layout.h, src/depth_detile.c). */
+static inline VkBool32 ps5vk_depth_stencil_attachment_image(VkImage image)
+{
+    const VkImageUsageFlags allowed = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    return image && image->info.format == VK_FORMAT_D32_SFLOAT_S8_UINT &&
+        image->info.imageType == VK_IMAGE_TYPE_2D && image->info.mipLevels == 1 &&
+        image->info.arrayLayers == 1 && image->info.extent.depth == 1 &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL && !image->info.flags &&
+        (image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) &&
+        !(image->info.usage & ~allowed);
+}
+
+/* One layout of a barrier on that image, for one aspect: the attachment,
+ * read-only and GENERAL states, and the readback source when the image
+ * declares it. UNDEFINED only as the old layout. */
+static inline int ps5vk_depth_stencil_barrier_layout(VkImage image, VkImageLayout layout,
+    VkImageAspectFlags aspect, int old)
+{
+    VkImageLayout p;
+    if (layout == VK_IMAGE_LAYOUT_UNDEFINED) return old;
+    if (!ps5vk_layout_for_aspect(layout, aspect, &p)) return 0;
+    return p == VK_IMAGE_LAYOUT_GENERAL ||
+        p == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL ||
+        (p == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+         (image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+}
+
+/* A whole-subresource barrier on the combined attachment. Without
+ * separateDepthStencilLayouts the aspect mask names both aspects and the
+ * layouts are the combined ones (Vulkan 1.0 VUID-VkImageMemoryBarrier-image-
+ * 03320); with it, DEPTH or STENCIL alone and the separate and mixed layouts
+ * are valid, and each named aspect is checked through its own projection.
+ * VK_KHR_maintenance2 (`mixed`) adds only the two mixed layouts, still with
+ * both aspects named. The accesses are the ones the attachment and its
+ * readback perform. */
+static inline int ps5vk_depth_stencil_barrier(const VkImageMemoryBarrier *b, VkBool32 separate,
+    VkBool32 mixed)
+{
+    const VkAccessFlags access = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+    if (!b || !ps5vk_depth_stencil_attachment_image(b->image)) return 0;
+    const VkImageAspectFlags aspects = b->subresourceRange.aspectMask;
+    if (aspects != PS5VK_DEPTH_STENCIL_ASPECTS &&
+        !(separate && (aspects == VK_IMAGE_ASPECT_DEPTH_BIT ||
+                       aspects == VK_IMAGE_ASPECT_STENCIL_BIT))) return 0;
+    if (!separate && (ps5vk_layout_is_separate_aspect(b->oldLayout) ||
+                      ps5vk_layout_is_separate_aspect(b->newLayout))) return 0;
+    if (!separate && !mixed && (ps5vk_layout_is_mixed_depth_stencil(b->oldLayout) ||
+                                ps5vk_layout_is_mixed_depth_stencil(b->newLayout))) return 0;
+    if ((b->srcAccessMask | b->dstAccessMask) & ~access) return 0;
+    if ((b->srcAccessMask | b->dstAccessMask) & VK_ACCESS_TRANSFER_READ_BIT &&
+        !(b->image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return 0;
+    for (unsigned k = 0; k < 2; ++k) {
+        const VkImageAspectFlags aspect = k ? VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (!(aspects & aspect)) continue;
+        if (!ps5vk_depth_stencil_barrier_layout(b->image, b->oldLayout, aspect, 1) ||
+            !ps5vk_depth_stencil_barrier_layout(b->image, b->newLayout, aspect, 0)) return 0;
+    }
+    return 1;
 }
 
 static inline VkBool32 ps5vk_basic_colour_readback_image(VkImage image)

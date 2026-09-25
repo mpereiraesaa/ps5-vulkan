@@ -30,6 +30,68 @@ static VkResult color_target_samples(ps5_agc_register registers[PS5_COLOR_REGIST
     return VK_SUCCESS;
 }
 
+/* The stencil plane of D32_SFLOAT_S8_UINT (src/depth_layout.h). The shared
+ * D32 builder programmes the depth plane and leaves the stencil plane
+ * invalid - DB_STENCIL_INFO.FORMAT = STENCIL_INVALID and zero stencil bases -
+ * which is exactly what a depth-only target needs. A combined target keeps
+ * every word of that plan and changes only the public GFX10 stencil fields:
+ * DB_STENCIL_INFO.FORMAT = STENCIL_8 (the register already carries SW_MODE
+ * 64KB_Z_X and TILE_STENCIL_DISABLE, since there is no HTILE), and the
+ * stencil read/write bases, split 40-bit >> 8 like the depth ones, pointing
+ * at the stencil plane. Registers are found by offset, not position. */
+static int configure_stencil_plane(ps5_agc_register *registers, unsigned count,
+    uintptr_t stencil)
+{
+    if (!stencil || (stencil & 0xffffu)) return -1;
+    const uint32_t lo = (uint32_t)(stencil >> 8);
+    const uint32_t hi = (uint32_t)(stencil >> 40) & 0xffu;
+    unsigned patched = 0;
+    for (unsigned i = 0; i < count; ++i) {
+        switch (registers[i].offset) {
+        case 0x011: /* DB_STENCIL_INFO */
+            if ((registers[i].value & 1u) || ((registers[i].value >> 4) & 0x1fu) != 24u)
+                return -1;
+            registers[i].value |= 1u; ++patched; break;
+        case 0x013: case 0x015: /* DB_STENCIL_READ_BASE, _WRITE_BASE */
+            if (registers[i].value) return -1;
+            registers[i].value = lo; ++patched; break;
+        case 0x01b: case 0x01d: /* ..._HI */
+            if (registers[i].value) return -1;
+            registers[i].value = hi; ++patched; break;
+        default: break;
+        }
+    }
+    return patched == 5u ? 0 : -1;
+}
+
+/* The depth target of a view: D32 (and its combined stencil plane) or the
+ * diagnostic D16. */
+static VkResult depth_target(VkImageView view, VkImage image, uintptr_t base,
+    uint32_t width, uint32_t height, struct ps5vk_target_registers *result)
+{
+    if (!(image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
+    /* No multisampled depth target exists on this path yet, so a depth
+     * surface this profile creates is single-sample; the colour role is the
+     * only one that carries a count (DXVK262-T06). */
+    if (image->info.samples != VK_SAMPLE_COUNT_1_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (ps5_depth_build_d32_no_htile(result->registers, base, width, height)) return VK_ERROR_UNKNOWN;
+    /* Public GFX10 DB_Z_INFO.FORMAT: Z_16=1, Z_32_FLOAT=3. Keep the measured
+     * no-HTILE target plan and alter only its documented format field for the
+     * single 128x128 diagnostic shape. */
+    if (view->format == VK_FORMAT_D16_UNORM)
+        result->registers[20].value = (result->registers[20].value & ~UINT32_C(3)) | UINT32_C(1);
+    if (view->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+        struct ps5vk_depth_stencil_layout planes;
+        if (ps5vk_depth_stencil_layout(width, height, &planes) ||
+            planes.stencil_offset > UINT64_MAX - base ||
+            configure_stencil_plane(result->registers, PS5_DEPTH_REGISTER_COUNT,
+                base + (uintptr_t)planes.stencil_offset))
+            return VK_ERROR_UNKNOWN;
+    }
+    result->count = PS5_DEPTH_REGISTER_COUNT;
+    return VK_SUCCESS;
+}
+
 VkResult ps5vk_native_target(VkDevice d, VkImageView view,
     const ps5_agc_register color_defaults[PS5_COLOR_REGISTER_COUNT], struct ps5vk_target_registers *out)
 {
@@ -56,19 +118,10 @@ VkResult ps5vk_native_target(VkDevice d, VkImageView view,
         base >= (UINT64_C(1) << 48) || bytes > (UINT64_C(1) << 48) - base) return VK_ERROR_UNKNOWN;
     struct ps5vk_target_registers result = {0};
     uint32_t width = image->info.extent.width, height = image->info.extent.height;
-    if (view->format == VK_FORMAT_D32_SFLOAT || view->format == VK_FORMAT_D16_UNORM) {
-        if (!(image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
-        /* No multisampled depth target exists on this path yet, so a depth
-         * surface this profile creates is single-sample; the colour role is
-         * the only one that carries a count (DXVK262-T06). */
-        if (image->info.samples != VK_SAMPLE_COUNT_1_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
-        if (ps5_depth_build_d32_no_htile(result.registers, base, width, height)) return VK_ERROR_UNKNOWN;
-        /* Public GFX10 DB_Z_INFO.FORMAT: Z_16=1, Z_32_FLOAT=3. Keep the
-         * measured no-HTILE target plan and alter only its documented format
-         * field for the single 128x128 diagnostic shape. */
-        if (view->format == VK_FORMAT_D16_UNORM)
-            result.registers[20].value = (result.registers[20].value & ~UINT32_C(3)) | UINT32_C(1);
-        result.count = PS5_DEPTH_REGISTER_COUNT;
+    if (view->format == VK_FORMAT_D32_SFLOAT || view->format == VK_FORMAT_D16_UNORM ||
+        view->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+        rc = depth_target(view, image, base, width, height, &result);
+        if (rc != VK_SUCCESS) return rc;
     } else if (view->format == VK_FORMAT_B8G8R8A8_UNORM ||
                view->format == VK_FORMAT_R8G8B8A8_UNORM ||
                ps5vk_color_target_integer_served(view->format)) {
@@ -148,14 +201,10 @@ VkResult ps5vk_native_layer_target(VkDevice d, VkImageView view, uint32_t layer,
         return VK_ERROR_UNKNOWN;
     struct ps5vk_target_registers result = {0};
     const uint32_t width = image->info.extent.width, height = image->info.extent.height;
-    if (view->format == VK_FORMAT_D32_SFLOAT || view->format == VK_FORMAT_D16_UNORM) {
-        if (!(image->info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) return VK_ERROR_UNKNOWN;
-        /* No multisampled depth target exists on this path yet. */
-        if (image->info.samples != VK_SAMPLE_COUNT_1_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
-        if (ps5_depth_build_d32_no_htile(result.registers, base, width, height)) return VK_ERROR_UNKNOWN;
-        if (view->format == VK_FORMAT_D16_UNORM)
-            result.registers[20].value = (result.registers[20].value & ~UINT32_C(3)) | UINT32_C(1);
-        result.count = PS5_DEPTH_REGISTER_COUNT;
+    if (view->format == VK_FORMAT_D32_SFLOAT || view->format == VK_FORMAT_D16_UNORM ||
+        view->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+        rc = depth_target(view, image, base, width, height, &result);
+        if (rc != VK_SUCCESS) return rc;
     } else if (view->format == VK_FORMAT_B8G8R8A8_UNORM ||
                view->format == VK_FORMAT_R8G8B8A8_UNORM ||
                ps5vk_color_target_integer_served(view->format)) {
