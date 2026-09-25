@@ -200,6 +200,41 @@ int main(void)
     assert(vkAllocateCommandBuffers(device, &command_info, &command) == VK_SUCCESS);
     VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+    /* DXVK's command-buffer split (host trace): InitBarriers takes the new
+     * image UNDEFINED -> TRANSFER_DST; InitBuffer clears it to zero and hands
+     * it over TRANSFER_DST -> COLOR_ATTACHMENT (stages 0x1000 -> 0x1400,
+     * access 0x1000 -> 0x1980); Exec renders. All three go in one submit. */
+    VkCommandBuffer init_barriers = VK_NULL_HANDLE, init_buffer = VK_NULL_HANDLE;
+    {
+        VkCommandBufferAllocateInfo init_info = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = pool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+        assert(VK_SUCCESS == vkAllocateCommandBuffers(device, &init_info, &init_barriers));
+        assert(VK_SUCCESS == vkAllocateCommandBuffers(device, &init_info, &init_buffer));
+        const VkImageSubresourceRange all = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkImageMemoryBarrier to_transfer = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = image, .subresourceRange = all};
+        assert(VK_SUCCESS == vkBeginCommandBuffer(init_barriers, &begin));
+        vkCmdPipelineBarrier(init_barriers, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &to_transfer);
+        assert(VK_SUCCESS == vkEndCommandBuffer(init_barriers));
+        assert(VK_SUCCESS == vkBeginCommandBuffer(init_buffer, &begin));
+        const VkClearColorValue zero = {{0.0f, 0.0f, 0.0f, 0.0f}};
+        vkCmdClearColorImage(init_buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &all);
+        VkImageMemoryBarrier to_attachment = to_transfer;
+        to_attachment.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        to_attachment.dstAccessMask = 0x1980u;
+        to_attachment.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        to_attachment.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        vkCmdPipelineBarrier(init_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, 0x1400u,
+            0, 0, NULL, 0, NULL, 1, &to_attachment);
+        assert(VK_SUCCESS == vkEndCommandBuffer(init_buffer));
+    }
+    assert(init_barriers->state == PS5VK_EXECUTABLE && init_buffer->state == PS5VK_EXECUTABLE);
+    assert(init_buffer->operations[init_buffer->operation_count - 1].type == PS5VK_IMAGE_BARRIER);
     assert(vkBeginCommandBuffer(command, &begin) == VK_SUCCESS);
 
     /* The witness's calls, in its order (examples/dxvk_render_witness). */
@@ -232,27 +267,21 @@ int main(void)
     vkCmdDraw(command, 6, 1, 12, 0);
     vkCmdEndRenderingKHR(command);
     assert(command->state == PS5VK_RECORDING);
+    /* DXVK's exact global dependency from the attachment writes (host
+     * trace: src COLOR_ATTACHMENT_OUTPUT/COLOR_WRITE, dst 0x1400/0x1980). */
     VkMemoryBarrier attachment_writes = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                         VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT};
-    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, .dstAccessMask = 0x1980u};
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0x1400u,
         0, 1, &attachment_writes, 0, NULL, 0, NULL);
     assert(command->state == PS5VK_RECORDING);
+    /* DXVK's exact hand-over: no source access, TRANSFER -> TRANSFER. */
     VkImageMemoryBarrier handover = to_color;
-    /* DXVK's own hand-over names no source access (the global dependency
-     * above made the writes available); the Vulkan 1.0 barrier profile of this
-     * device admits the hand-over with the attachment write named, which
-     * orders the same writes. */
-    /* DXVK's exact masks: no source access (the global dependency above
-     * made the writes available). */
     handover.srcAccessMask = 0;
     handover.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     handover.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     handover.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &handover);
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, NULL, 0, NULL, 1, &handover);
     assert(command->state == PS5VK_RECORDING);
     VkBufferImageCopy2 full = {.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
         .bufferOffset = FULL_OFFSET, .bufferRowLength = EXTENT, .bufferImageHeight = EXTENT,
@@ -268,17 +297,18 @@ int main(void)
     copy.pRegions = &sub;
     vkCmdCopyImageToBuffer2KHR(command, &copy);
     assert(command->state == PS5VK_RECORDING);
+    /* DXVK's exact finalize barrier: the global publication (src
+     * TRANSFER/TRANSFER_WRITE, dst 0x5880/0x3860 including HOST/HOST_READ)
+     * and the hand-back with no source access (dst 0x1400/0x1980). One 1.0
+     * call carries both, so its destination stage mask is their union. */
     VkMemoryBarrier publish = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_HOST_READ_BIT};
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = 0x3860u};
     VkImageMemoryBarrier handback = handover;
     handback.srcAccessMask = 0;
-    handback.dstAccessMask = 0x1980u; /* DXVK: COLOR_READ|COLOR_WRITE|TRANSFER_READ|TRANSFER_WRITE */
+    handback.dstAccessMask = 0x1980u;
     handback.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     handback.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT |
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 1, &publish, 0, NULL,
+    vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, 0x5880u | 0x1400u, 0, 1, &publish, 0, NULL,
         1, &handback);
     assert(command->state == PS5VK_RECORDING);
     assert(vkEndCommandBuffer(command) == VK_SUCCESS);
@@ -354,6 +384,8 @@ int main(void)
     for (uint32_t b = 0; b < FULL_OFFSET; ++b) assert(bytes[b] == 0xcd);
 
     vkFreeCommandBuffers(device, pool, 1, &command);
+    vkFreeCommandBuffers(device, pool, 1, &init_barriers);
+    vkFreeCommandBuffers(device, pool, 1, &init_buffer);
     vkDestroyCommandPool(device, pool, NULL);
     vkDestroyPipeline(device, pipeline, NULL);
     vkDestroyPipelineLayout(device, layout, NULL);

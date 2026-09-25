@@ -13,6 +13,18 @@
 /* Shared by a render prelude and an independent transfer submission. Prepare
  * only emits commands and records tentative layouts: it never copies pixels
  * or commits resource state before the GPU completion label. */
+/* DXVK262-T10: the stage scopes a D3D11 runtime names around its render
+ * targets: some of the transfer, colour-output, fragment and whole-pipeline
+ * stages, nothing else, and never empty. */
+static inline int ps5vk_dxvk_attachment_stages(VkPipelineStageFlags stages)
+{
+    const VkPipelineStageFlags allowed = VK_PIPELINE_STAGE_TRANSFER_BIT |
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT |
+        VK_PIPELINE_STAGE_HOST_BIT;
+    return stages && !(stages & ~allowed);
+}
 static inline VkResult ps5vk_upload_commands(VkDevice d,
     const struct ps5vk_operation *ops, unsigned count, VkImage color,
     struct ps5vk_layout_state *layouts, uint32_t **cursor, uint32_t *end,
@@ -217,7 +229,23 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                     ps5vk_attachment_initialization_handover_barrier(b)) &&
                    op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
                    op->dst_stage==(VkPipelineStageFlags)(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|
-                                                         VK_PIPELINE_STAGE_HOST_BIT)))) ||
+                                                         VK_PIPELINE_STAGE_HOST_BIT)) ||
+                  /* DXVK262-T10: a D3D11 runtime's cleared render target is
+                   * handed to its attachment layout from the transfer stage
+                   * to the stages that next use it - DXVK 2.6.2 names
+                   * COLOR_ATTACHMENT_OUTPUT|TRANSFER (0x1400) with access
+                   * 0x1980, in a submission of its own. The executor runs
+                   * jobs serially and flushes the transfer write before the
+                   * next job, so only the layout moves. */
+                  (ps5vk_attachment_initialization_handover_barrier(b) &&
+                   op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+                   ps5vk_dxvk_attachment_stages(op->dst_stage)))) ||
+                /* DXVK262-T10: the readback hand-over and hand-back with no
+                 * source access, ordered by the global dependency DXVK records
+                 * before them (src/color_barrier.h). */
+                (ps5vk_colour_readback_dependency_barrier(b) &&
+                 ps5vk_dxvk_attachment_stages(op->src_stage) &&
+                 ps5vk_dxvk_attachment_stages(op->dst_stage)) ||
                 /* The rendered colour surface handed to its readback. When the
                  * copy shares the submission this is part of the four-operation
                  * readback shape; when the readback is submitted separately the
