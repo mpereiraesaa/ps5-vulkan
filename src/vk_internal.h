@@ -171,7 +171,7 @@ enum ps5vk_t09_feature_bits {
      * VK_EXT_shader_demote_to_helper_invocation: OpDemoteToHelperInvocation
      * keeps the invocation running as a helper for its quad's derivatives.
      * VK_KHR_shader_terminate_invocation: OpTerminateInvocation. A platform
-     * sets them only once a native pixel witness measured the behaviour. */
+     * sets them only once native pixel witnesses measured the behaviour. */
     PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION = 1u << 7,
     PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION = 1u << 8,
     /* Memory-requirement and binding routes DXVK calls right after device

@@ -2181,6 +2181,32 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
+      "detail": "the Vulkan 1.0 EXT query and opt-in route; demoted pixels leave colour, depth and stencil untouched and keep running as helpers, measured by the public-SDK pixel-removal and helper-derivative witnesses",
+      "feature": "shaderDemoteToHelperInvocation",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the Vulkan 1.0 KHR query and opt-in route; terminated pixels leave depth and stencil untouched, measured by the public-SDK pixel-removal witness",
+      "feature": "shaderTerminateInvocation",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
       "detail": "alphaToOneEnable is rejected (src/vk_graphics_pipeline.c)",
       "feature": "alphaToOne",
       "kind": "feature",
@@ -3392,6 +3418,32 @@
       },
       "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "separateDepthStencilLayouts",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "shaderDemoteToHelperInvocation",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "shaderTerminateInvocation",
       "kind": "extension-feature",
       "profile": "compute",
       "reported": false,
@@ -27605,6 +27657,14 @@
         "VK_KHR_uniform_buffer_standard_layout",
         "VK_KHR_timeline_semaphore"
       ],
+      "extension_route_queries": {
+        "VK_EXT_shader_demote_to_helper_invocation": {
+          "shaderDemoteToHelperInvocation": false
+        },
+        "VK_KHR_shader_terminate_invocation": {
+          "shaderTerminateInvocation": false
+        }
+      },
       "host_query_reset_query": {
         "hostQueryReset": false,
         "route": "VK_EXT_host_query_reset"
@@ -27656,8 +27716,18 @@
         "VK_KHR_timeline_semaphore",
         "VK_KHR_maintenance2",
         "VK_KHR_create_renderpass2",
-        "VK_KHR_separate_depth_stencil_layouts"
+        "VK_KHR_separate_depth_stencil_layouts",
+        "VK_EXT_shader_demote_to_helper_invocation",
+        "VK_KHR_shader_terminate_invocation"
       ],
+      "extension_route_queries": {
+        "VK_EXT_shader_demote_to_helper_invocation": {
+          "shaderDemoteToHelperInvocation": true
+        },
+        "VK_KHR_shader_terminate_invocation": {
+          "shaderTerminateInvocation": true
+        }
+      },
       "host_query_reset_query": {
         "hostQueryReset": true,
         "route": "VK_EXT_host_query_reset"
@@ -28068,7 +28138,7 @@
   ],
   "summary": {
     "features": {
-      "satisfied": 124
+      "satisfied": 128
     },
     "format_query_consistency": {
       "satisfied": 60

@@ -44,6 +44,32 @@ DEVICE_SCOPE_ID = "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDev
 TIMELINE_ID = "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore"
 TIMELINE_DIFFERENCE_ID = "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
 SEPARATE_DEPTH_STENCIL_ID = "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts"
+# Single-feature extension routes: a promoted Vulkan 1.2/1.3 feature that this
+# Vulkan 1.0 device carries through one extension and that extension's own
+# feature structure. The reporting dump publishes every route's queried value
+# under extension_route_queries, the capability probe logs it as
+# DXVK262_EXTENSION_ROUTE_QUERY, and one table drives both joins. A new route
+# is one entry here, one in tools/verify_dxvk_probe.py and one query in the
+# probe and the dump.
+EXTENSION_ROUTES = {
+    "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation": {
+        "extension": "VK_EXT_shader_demote_to_helper_invocation",
+        "field": "shaderDemoteToHelperInvocation",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "native/draw_state_ps5.c",
+                 "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed EXT feature query and opt-in; the pinned compiler lowers every "
+                   "demote spelling to a helper-preserving demote and the draw gives "
+                   "export-free removing programs their export memory."),
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation": {
+        "extension": "VK_KHR_shader_terminate_invocation",
+        "field": "shaderTerminateInvocation",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "native/draw_state_ps5.c",
+                 "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed KHR feature query and opt-in; OpTerminateInvocation compiles "
+                   "to a terminating program whose removed pixels write no depth or stencil."),
+    },
+}
 DIAGNOSTIC_IMPLEMENTATIONS = {
     "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": (
         ("src/vk_device.c", "PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER"),
@@ -188,6 +214,32 @@ def host_query_reset_axes(row: dict, query: dict, extensions: set[str],
              "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_query_pool.c",
                       "conformance_inventory/reporting_matrix.json"],
              "detail": "Reviewed EXT feature query, opt-in, range and pending-use validation."})
+
+
+def extension_route_axes(row: dict, queries: dict, extensions: set[str],
+                         feature_reports: dict[str, dict]) -> tuple[dict, dict] | None:
+    """The api and implementation axes of a row in EXTENSION_ROUTES."""
+    route = EXTENSION_ROUTES.get(row["id"])
+    if route is None:
+        return None
+    extension, field = route["extension"], route["field"]
+    query = queries.get(extension)
+    if not isinstance(query, dict) or set(query) != {field}:
+        raise ValueError(f"{extension} public query route is absent")
+    value = query[field]
+    if not isinstance(value, bool):
+        raise ValueError(f"invalid {extension} public query value")
+    enumerated = extension in extensions
+    report = feature_reports.get(field, {})
+    implemented = (value and enumerated and report.get("kind") == "extension-feature" and
+                   report.get("reported") is True and report.get("verdict") == "satisfied")
+    return ({"state": "satisfied" if value and enumerated else "blocker",
+             "observed": value and enumerated, "expected": row["expected"],
+             "via": extension if enumerated else None,
+             "detail": (f"{extension} feature query on Vulkan 1.0; the "
+                        f"{row['container']} aggregate is unadvertised.")},
+            {"state": "implemented" if implemented else "missing",
+             "refs": route["refs"], "detail": route["detail"]})
 
 
 def sampler_mirror_clamp_axes(row: dict, extensions: set[str]) -> tuple[dict, dict] | None:
@@ -343,7 +395,6 @@ def implemented_device_extensions() -> set[str]:
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
 
-        "PS5VK_SHADER_DEMOTE_DIAGNOSTIC",
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 
     ):
@@ -672,6 +723,11 @@ def generate() -> dict:
             extensions, feature_reports)
         if separate is not None:
             api, implementation = separate
+        routed = extension_route_axes(requirement,
+            reporting["profiles"]["graphics"].get("extension_route_queries", {}),
+            extensions, feature_reports)
+        if routed is not None:
+            api, implementation = routed
 
         diagnostic = diagnostic_implementation(identifier)
         if diagnostic is not None and sampler_mirror_clamp is None:

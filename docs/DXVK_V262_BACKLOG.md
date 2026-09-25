@@ -12,10 +12,10 @@ DXVK execution.
 
 ## Verified baseline on `main` (2026-09-25)
 
-At commit `7885ec6`, `tools/check_dxvk_profile.py --check` reports **30/62
-ready, 32 blockers**. This is an implementation-evidence score, not a DXVK
-runtime result. `tools/check_dxvk_backlog.py --check` reports 30 implementation-
-ready original blockers and 29 profile-satisfied ones (the 62-row score also
+After the T11 demote/terminate promotion, `tools/check_dxvk_profile.py --check`
+reports **32/62 ready, 30 blockers**. This is an implementation-evidence score,
+not a DXVK runtime result. `tools/check_dxvk_backlog.py --check` reports 32
+implementation-ready original blockers and 31 profile-satisfied ones (the 62-row score also
 includes the initially satisfied `robustBufferAccess`). The public device
 still reports Vulkan **1.0.0**. The matrix counts geometry and tessellation as
 blockers because their completed T04 native receipts have not been admitted
@@ -27,7 +27,8 @@ via the Vulkan 1.0 KHR route; multiview; indirect/indexed draws; geometry,
 tessellation and clip/cull distances; raster, blend and multisample features;
 and cube arrays, BC textures, extended gather and precise occlusion. T08 has
 buffer device address, uniform-buffer standard layout and the base/DeviceScope
-memory model through KHR routes. T09 has host query reset, mirror-clamp
+memory model through KHR routes. T11 has demote to helper invocation and
+terminate invocation through EXT/KHR routes. T09 has host query reset, mirror-clamp
 samplers, timeline semaphores and their limit, and separate depth/stencil
 layouts through EXT/KHR routes. `imagelessFramebuffer` is diagnostic only;
 the two T08 subgroup bits remain off. The public API details and restrictions
@@ -81,10 +82,11 @@ identities. Do not call the cross-link result `runtime_ready`.
    failing Vulkan call and its requested shape. Implement that dependency even
    when it falls outside the old T08–T15 grouping; repeat until the workload
    renders. Keep feature queries, accepted device-create chains and actual
-   execution aligned. The known fragment-discard bug is a concrete graphics
-   blocker: kill currently fails to suppress depth/stencil writes and can
-   corrupt alpha-tested depth. Give it a bounded native pixel witness and fix
-   it when the DXVK workload reaches that behavior.
+   execution aligned. The fragment-discard defect (kill did not suppress
+   depth/stencil writes) is fixed: a removing pixel program that exports
+   nothing now gets MRT0 export memory, measured by the public-SDK
+   pixel-removal witness (see
+   [VALIDATION.md](../VALIDATION.md#t11-demote-and-terminate-public-extension-promotion-2026-09-25)).
 4. **Broaden real use, then stabilize.** Exercise the D3D11 resources and
    shader forms selected by the running workload, especially the remaining
    subgroup operations/types, dynamic rendering, synchronization2, descriptor
@@ -106,10 +108,10 @@ public query and native behavior agree.
 
 ## What remains in the old profile inventory
 
-The 32 current matrix blockers are useful leads, not the ordered execution
+The 30 current matrix blockers are useful leads, not the ordered execution
 queue. Besides the two T04 receipt-reconciliation rows, they comprise the
 Vulkan 1.1 aggregate draw-parameters query, two T08 subgroup features,
-T09 imageless framebuffer, the T10–T14 sync/render/shader/descriptor/
+T09 imageless framebuffer, the remaining T10–T14 sync/render/shader/descriptor/
 robustness/transform-feedback families and the API-version row. The exact
 row IDs and axis states are generated in
 `conformance_inventory/dxvk_v262_matrix.json`; do not copy a row's old

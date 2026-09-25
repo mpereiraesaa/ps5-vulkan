@@ -334,7 +334,9 @@ A row is satisfied when the API, implementation and native axes are positive
 and no applicable CTS leaf was observed failing. CTS is regression evidence: a
 missing or unrun leaf does not block, an observed failure does. Unknown or
 absent API, implementation or native evidence is a blocker. The checked matrix
-records **30/62 satisfied and 32 blockers**. T09 contributes five satisfied
+records **32/62 satisfied and 30 blockers**. T11 contributes
+`shaderDemoteToHelperInvocation` and `shaderTerminateInvocation` through the
+EXT/KHR routes. T09 contributes five satisfied
 requirements: `hostQueryReset` through EXT, and `samplerMirrorClampToEdge`,
 `timelineSemaphore`, `maxTimelineSemaphoreValueDifference` and
 `separateDepthStencilLayouts` through KHR routes on Vulkan 1.0. The other
@@ -352,7 +354,7 @@ Its public KHR extension was also observed by the ordinary SDK probe. The two
 larger 3D filtering CTS leaves remain `Fail` at image upload before sampling;
 those verdicts do not measure W sampling.
 The timeline and separate depth/stencil rows have public SDK witnesses, and
-their 50 focused original CTS leaves are now in the frozen 879-case selection. A probe of the combined build observed 32/62
+their 50 focused original CTS leaves are now in the frozen 879-case selection. A probe of the combined build observed 34/62
 requested query values; query success alone does not establish GPU execution.
 
 T04's implementation and focused native validation are

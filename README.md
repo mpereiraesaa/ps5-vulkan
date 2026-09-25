@@ -46,10 +46,11 @@ the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 
 
 The Vulkan 1.0 profile exposes `hostQueryReset`, `samplerMirrorClampToEdge`,
-`timelineSemaphore`, `maxTimelineSemaphoreValueDifference` and
-`separateDepthStencilLayouts` through their EXT/KHR routes. The checked DXVK
-2.6.2 matrix has **30/62** requirements ready; a public SDK capability probe
-of the combined build observed 32/62 requested values. `imagelessFramebuffer`
+`timelineSemaphore`, `maxTimelineSemaphoreValueDifference`,
+`separateDepthStencilLayouts`, `shaderDemoteToHelperInvocation` and
+`shaderTerminateInvocation` through their EXT/KHR routes. The checked DXVK
+2.6.2 matrix has **32/62** requirements ready; a public SDK capability probe
+of the combined build observed 34/62 requested values. `imagelessFramebuffer`
 has a bounded default-off witness but no public route yet. Two larger sampler
 CTS leaves still fail during image upload before sampling. A real DXVK build
 has not yet run on PS5. See [the T09 measurements](VALIDATION.md#t09-combined-public-query-2026-09-25)
