@@ -43,10 +43,16 @@ the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 
 ## In progress
 
-Current work adds host query reset, imageless framebuffers, mirror-clamp
-sampling, timeline semaphores and separate depth/stencil layouts. These are
-**not** claims of public support until implementation and an artifact-bound
-native witness pass. Additional synchronization and descriptor capabilities
+Timeline semaphores (`VK_KHR_timeline_semaphore`) and separate depth/stencil
+layouts are now part of the public profile. The separate layouts use
+`VK_KHR_separate_depth_stencil_layouts` over `VK_KHR_create_renderpass2` and
+`VK_KHR_maintenance2`, with a bounded `D32_SFLOAT_S8_UINT` attachment. Both are
+exposed through Vulkan 1.0 KHR extensions, and `apiVersion` stays 1.0.
+Artifact-bound native witnesses and focused upstream CTS passed on the shipping
+build; see [VALIDATION.md](VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25).
+Current work adds host query reset, imageless framebuffers and mirror-clamp
+sampling. These are **not** claims of public support until implementation and
+an artifact-bound native witness pass. Additional synchronization and descriptor capabilities
 will follow as needed by real consumers.
 
 There is no Vulkan loader/ICD or Vulkan WSI/swapchain implementation. The
