@@ -21,6 +21,11 @@
  * driver's export-memory measurement switch; each build is its own executable
  * and says in its first line which one it is. Every submission waits on a
  * bounded fence and no shader loops.
+ *
+ * Each case is three submissions, the route the T09 depth/stencil witness
+ * measured: the render pass alone, then each aspect handed to TRANSFER_SRC and
+ * copied in a submission of its own. A render-pass postlude carries one
+ * readback, so both aspects cannot follow the pass in one command buffer.
  */
 #define _DEFAULT_SOURCE 1
 #include <ps5vk/ps5vk.h>
@@ -37,7 +42,7 @@
 #error "the builder names the driver's export-memory switch"
 #endif
 
-enum { EXTENT = 64, PIXELS = EXTENT * EXTENT, CASES = 4,
+enum { EXTENT = 64, PIXELS = EXTENT * EXTENT, CASES = 4, SUBMISSIONS_PER_CASE = 3,
        STENCIL_CLEAR = 0xa5, STENCIL_REFERENCE = 0x5a };
 static const float depth_clear = 1.0f;
 static const uint64_t fence_timeout = UINT64_C(300000000);
@@ -209,7 +214,7 @@ static int run_witness(void)
     VkShaderModule vertex = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkCommandPool pool = VK_NULL_HANDLE;
-    VkCommandBuffer commands[CASES] = {VK_NULL_HANDLE};
+    VkCommandBuffer commands[CASES * SUBMISSIONS_PER_CASE] = {VK_NULL_HANDLE};
     VkFence fence = VK_NULL_HANDLE;
     struct readback depth[CASES] = {{0}}, stencil[CASES] = {{0}};
     unsigned completed = 0;
@@ -376,7 +381,8 @@ static int run_witness(void)
     TRY(vkCreateCommandPool(device, &pool_info, NULL, &pool));
     VkCommandBufferAllocateInfo command_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = CASES,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = CASES * SUBMISSIONS_PER_CASE,
     };
     TRY(vkAllocateCommandBuffers(device, &command_info, commands));
     VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
@@ -387,31 +393,41 @@ static int run_witness(void)
     };
     VkClearValue clear = {.depthStencil = {depth_clear, STENCIL_CLEAR}};
     for (unsigned c = 0; c < CASES; ++c) {
-        TRY(vkBeginCommandBuffer(commands[c], &begin));
+        VkCommandBuffer *case_commands = &commands[c * SUBMISSIONS_PER_CASE];
+        TRY(vkBeginCommandBuffer(case_commands[0], &begin));
         VkRenderPassBeginInfo pass_begin = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = pass,
             .framebuffer = framebuffers[c], .renderArea = {{0, 0}, {EXTENT, EXTENT}},
             .clearValueCount = 1, .pClearValues = &clear,
         };
-        vkCmdBeginRenderPass(commands[c], &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commands[c], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[c]);
-        vkCmdDraw(commands[c], 6, 1, 0, 0);
-        vkCmdEndRenderPass(commands[c]);
-        copy_aspect(commands[c], images[c], VK_IMAGE_ASPECT_DEPTH_BIT,
+        vkCmdBeginRenderPass(case_commands[0], &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(case_commands[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[c]);
+        vkCmdDraw(case_commands[0], 6, 1, 0, 0);
+        vkCmdEndRenderPass(case_commands[0]);
+        TRY(vkEndCommandBuffer(case_commands[0]));
+        TRY(vkBeginCommandBuffer(case_commands[1], &begin));
+        copy_aspect(case_commands[1], images[c], VK_IMAGE_ASPECT_DEPTH_BIT,
                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, &depth[c]);
-        copy_aspect(commands[c], images[c], VK_IMAGE_ASPECT_STENCIL_BIT,
+        TRY(vkEndCommandBuffer(case_commands[1]));
+        TRY(vkBeginCommandBuffer(case_commands[2], &begin));
+        copy_aspect(case_commands[2], images[c], VK_IMAGE_ASPECT_STENCIL_BIT,
                     VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL, &stencil[c]);
-        TRY(vkEndCommandBuffer(commands[c]));
+        TRY(vkEndCommandBuffer(case_commands[2]));
     }
     for (unsigned c = 0; c < CASES; ++c) {
-        VkSubmitInfo submit = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .commandBufferCount = 1, .pCommandBuffers = &commands[c],
-        };
-        TRY(vkQueueSubmit(queue, 1, &submit, fence));
-        TRY(vkWaitForFences(device, 1, &fence, VK_TRUE, fence_timeout));
-        TRY(vkResetFences(device, 1, &fence));
-        ++completed;
+        for (unsigned s = 0; s < SUBMISSIONS_PER_CASE; ++s) {
+            VkSubmitInfo submit = {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &commands[c * SUBMISSIONS_PER_CASE + s],
+            };
+            TRY(vkQueueSubmit(queue, 1, &submit, fence));
+            TRY(vkWaitForFences(device, 1, &fence, VK_TRUE, fence_timeout));
+            TRY(vkResetFences(device, 1, &fence));
+            ++completed;
+            ps5log_printf(PS5LOG_MARK, "T11_KILL_WITNESS_STEP form=%s index=%u fence=complete",
+                cases[c].name, s);
+        }
         TRY(invalidate(device, &depth[c]));
         TRY(invalidate(device, &stencil[c]));
         const struct tally t = score(depth[c].host, stencil[c].host, cases[c].removes);

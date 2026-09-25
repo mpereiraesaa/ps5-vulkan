@@ -21,6 +21,8 @@ from run_consumer import close_and_confirm, control, running, wait_for_log  # no
 PROFILE = "t11-kill-depth-public-sdk-witness"
 EXTENT = 64
 CASES = ("control", "kill", "terminate", "demote")
+# The pass, then each aspect's readback in its own submission.
+SUBMISSIONS_PER_CASE = 3
 # (x ^ y) & 1 over a 64x64 target: exactly half the pixels are removed.
 REMOVED = EXTENT * EXTENT // 2
 
@@ -49,6 +51,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     text = log.decode("utf-8", errors="replace")
     start = re.findall(r"T11_KILL_WITNESS_START extent=(\d+) export_memory=(\d)", text)
     pipelines = re.findall(r"T11_KILL_WITNESS_PIPELINE form=(\w+) created=1", text)
+    steps = re.findall(r"T11_KILL_WITNESS_STEP form=(\w+) index=(\d+) fence=complete", text)
     cases = CASE.findall(text)
     result = re.findall(r"T11_KILL_WITNESS_RESULT cases=(\d+) submissions=(\d+) "
                         r"fence=(\w+)", text)
@@ -57,7 +60,9 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             tuple(c[0] for c in cases) != CASES or
             [c[1] for c in cases] != ["0", "1", "1", "1"] or
             any(c[12] != "complete" for c in cases) or
-            result != [(str(len(CASES)), str(len(CASES)), "complete")] or
+            steps != [(form, str(i)) for form in CASES for i in range(SUBMISSIONS_PER_CASE)] or
+            result != [(str(len(CASES)), str(len(CASES) * SUBMISSIONS_PER_CASE),
+                        "complete")] or
             retired != ["clean"] or "T11_KILL_WITNESS_FAILURE" in text or
             text.index("T11_KILL_WITNESS_START") >= text.index("T11_KILL_WITNESS_RESULT") or
             text.index("T11_KILL_WITNESS_RESULT") >= text.index("T11_KILL_WITNESS_RETIRED")):

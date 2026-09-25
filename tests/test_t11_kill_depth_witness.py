@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_t11_kill_depth_witness import (  # noqa: E402
     SHADERS, checked_spirv, export_memory_switch)
-from run_t11_kill_depth_witness import CASES, REMOVED, verify  # noqa: E402
+from run_t11_kill_depth_witness import (  # noqa: E402
+    CASES, REMOVED, SUBMISSIONS_PER_CASE, verify)
 
 CLEAN = dict(depth=0, stencil=0, written=0, missing=0)
 
@@ -25,14 +26,17 @@ def case_line(form, removes, depth=0, stencil=0, written=0, missing=0, fence="co
             f"depth_digest=0badf00d stencil_digest=feedface fence={fence}")
 
 
-def fixture_log(switch="1", tallies=None, retired=True, failure=False, forms=CASES):
+def fixture_log(switch="1", tallies=None, retired=True, failure=False, forms=CASES,
+                steps=SUBMISSIONS_PER_CASE):
     tallies = tallies or {}
     lines = [f"T11_KILL_WITNESS_START extent=64 export_memory={switch}"]
     lines += [f"T11_KILL_WITNESS_PIPELINE form={form} created=1" for form in forms]
-    lines += [case_line(form, int(form != "control"), **tallies.get(form, CLEAN))
-              for form in forms]
-    lines.append(f"T11_KILL_WITNESS_RESULT cases={len(forms)} submissions={len(forms)} "
-                 "fence=complete")
+    for form in forms:
+        lines += [f"T11_KILL_WITNESS_STEP form={form} index={i} fence=complete"
+                  for i in range(steps)]
+        lines.append(case_line(form, int(form != "control"), **tallies.get(form, CLEAN)))
+    lines.append(f"T11_KILL_WITNESS_RESULT cases={len(forms)} "
+                 f"submissions={len(forms) * steps} fence=complete")
     if failure:
         lines.append("T11_KILL_WITNESS_FAILURE result=-3 step=x completed=4")
     if retired:
@@ -87,6 +91,7 @@ class Verifier(unittest.TestCase):
             (fixture_log(retired=False), artifact()),
             (fixture_log(failure=True), artifact()),
             (fixture_log(forms=CASES[:3]), artifact()),
+            (fixture_log(steps=1), artifact()),
             (fixture_log(), dict(artifact(), cases=["kill"])),
             (fixture_log(), dict(artifact(), diagnostic_switch={})),
         ]
@@ -137,6 +142,9 @@ class Builder(unittest.TestCase):
         source = (ROOT / "examples/t11_kill_depth_witness/main.c").read_text()
         self.assertIn("fence_timeout = UINT64_C(300000000)", source)
         self.assertNotIn("vkQueueWaitIdle", source)
+        # One readback per submission: the pass, then each aspect on its own.
+        self.assertIn("SUBMISSIONS_PER_CASE = 3", source)
+        self.assertEqual(source.count("copy_aspect(case_commands["), 2)
         self.assertNotIn('#include "vk_', source)
         self.assertIn("#include <ps5vk/ps5vk.h>", source)
 
