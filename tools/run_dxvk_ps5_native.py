@@ -30,6 +30,125 @@ STAGE = re.compile(r"^DXVK_NATIVE_STAGE stage=(\S+) state=(\S+) ?(.*)$")
 LIMIT = 40
 
 
+# VkBool32 members in declaration order; DXVK_VK_FEATURES masks index them.
+FEATURE_MEMBERS = {
+    "core": (
+        "robustBufferAccess fullDrawIndexUint32 imageCubeArray independentBlend geometryShader "
+        "tessellationShader sampleRateShading dualSrcBlend logicOp multiDrawIndirect "
+        "drawIndirectFirstInstance depthClamp depthBiasClamp fillModeNonSolid depthBounds "
+        "wideLines largePoints alphaToOne multiViewport samplerAnisotropy textureCompressionETC2 "
+        "textureCompressionASTC_LDR textureCompressionBC occlusionQueryPrecise "
+        "pipelineStatisticsQuery vertexPipelineStoresAndAtomics fragmentStoresAndAtomics "
+        "shaderTessellationAndGeometryPointSize shaderImageGatherExtended "
+        "shaderStorageImageExtendedFormats shaderStorageImageMultisample "
+        "shaderStorageImageReadWithoutFormat shaderStorageImageWriteWithoutFormat "
+        "shaderUniformBufferArrayDynamicIndexing shaderSampledImageArrayDynamicIndexing "
+        "shaderStorageBufferArrayDynamicIndexing shaderStorageImageArrayDynamicIndexing "
+        "shaderClipDistance shaderCullDistance shaderFloat64 shaderInt64 shaderInt16 "
+        "shaderResourceResidency shaderResourceMinLod sparseBinding sparseResidencyBuffer "
+        "sparseResidencyImage2D sparseResidencyImage3D sparseResidency2Samples "
+        "sparseResidency4Samples sparseResidency8Samples sparseResidency16Samples "
+        "sparseResidencyAliased variableMultisampleRate inheritedQueries").split(),
+    "vk11": (
+        "storageBuffer16BitAccess uniformAndStorageBuffer16BitAccess storagePushConstant16 "
+        "storageInputOutput16 multiview multiviewGeometryShader multiviewTessellationShader "
+        "variablePointersStorageBuffer variablePointers protectedMemory samplerYcbcrConversion "
+        "shaderDrawParameters").split(),
+    "vk12": (
+        "samplerMirrorClampToEdge drawIndirectCount storageBuffer8BitAccess "
+        "uniformAndStorageBuffer8BitAccess storagePushConstant8 shaderBufferInt64Atomics "
+        "shaderSharedInt64Atomics shaderFloat16 shaderInt8 descriptorIndexing "
+        "shaderInputAttachmentArrayDynamicIndexing shaderUniformTexelBufferArrayDynamicIndexing "
+        "shaderStorageTexelBufferArrayDynamicIndexing shaderUniformBufferArrayNonUniformIndexing "
+        "shaderSampledImageArrayNonUniformIndexing shaderStorageBufferArrayNonUniformIndexing "
+        "shaderStorageImageArrayNonUniformIndexing shaderInputAttachmentArrayNonUniformIndexing "
+        "shaderUniformTexelBufferArrayNonUniformIndexing "
+        "shaderStorageTexelBufferArrayNonUniformIndexing "
+        "descriptorBindingUniformBufferUpdateAfterBind descriptorBindingSampledImageUpdateAfterBind "
+        "descriptorBindingStorageImageUpdateAfterBind descriptorBindingStorageBufferUpdateAfterBind "
+        "descriptorBindingUniformTexelBufferUpdateAfterBind "
+        "descriptorBindingStorageTexelBufferUpdateAfterBind "
+        "descriptorBindingUpdateUnusedWhilePending descriptorBindingPartiallyBound "
+        "descriptorBindingVariableDescriptorCount runtimeDescriptorArray samplerFilterMinmax "
+        "scalarBlockLayout imagelessFramebuffer uniformBufferStandardLayout "
+        "shaderSubgroupExtendedTypes separateDepthStencilLayouts hostQueryReset timelineSemaphore "
+        "bufferDeviceAddress bufferDeviceAddressCaptureReplay bufferDeviceAddressMultiDevice "
+        "vulkanMemoryModel vulkanMemoryModelDeviceScope "
+        "vulkanMemoryModelAvailabilityVisibilityChains shaderOutputViewportIndex "
+        "shaderOutputLayer subgroupBroadcastDynamicId").split(),
+    "vk13": (
+        "robustImageAccess inlineUniformBlock descriptorBindingInlineUniformBlockUpdateAfterBind "
+        "pipelineCreationCacheControl privateData shaderDemoteToHelperInvocation "
+        "shaderTerminateInvocation subgroupSizeControl computeFullSubgroups synchronization2 "
+        "textureCompressionASTC_HDR shaderZeroInitializeWorkgroupMemory dynamicRendering "
+        "shaderIntegerDotProduct maintenance4").split(),
+}
+# DXVK 2.6.2 D3D11 feature-level gate. Every feature level needs the baseline
+# terms (D3D11Device::GetDeviceFeatures, d3d11_device.cpp:1941-1968, checked by
+# DxvkAdapter::checkFeatureSupport); 11_0 additionally needs the fl11_0 terms
+# (D3D11DeviceFeatures::GetMaxFeatureLevel, d3d11_features.cpp:377-380).
+FL_GATE = {
+    "baseline": (
+        "core.depthBiasClamp core.depthClamp core.dualSrcBlend core.fillModeNonSolid "
+        "core.fullDrawIndexUint32 core.geometryShader core.imageCubeArray core.independentBlend "
+        "core.multiViewport core.occlusionQueryPrecise core.sampleRateShading "
+        "core.shaderClipDistance core.shaderCullDistance core.shaderImageGatherExtended "
+        "core.textureCompressionBC vk12.samplerMirrorClampToEdge "
+        "vk13.shaderDemoteToHelperInvocation xfb.transformFeedback xfb.geometryStreams").split(),
+    "fl11_0": ("core.drawIndirectFirstInstance core.fragmentStoresAndAtomics "
+               "core.multiDrawIndirect core.tessellationShader").split(),
+}
+# Terms a DIAGNOSTIC source patch removes from the gate.
+FL_GATE_RELAXATIONS = {
+    "src/d3d11/d3d11_device.cpp:fl-gate-transform-feedback-relaxed":
+        ("xfb.transformFeedback", "xfb.geometryStreams"),
+    "src/d3d11/d3d11_device.cpp:fl-gate-demote-to-helper-relaxed":
+        ("vk13.shaderDemoteToHelperInvocation",),
+}
+
+
+def decode_features(records: list[dict]) -> dict[str, dict[str, bool]]:
+    """Decode the first report of each DXVK_VK_FEATURES struct."""
+    decoded: dict[str, dict[str, bool]] = {}
+    for record in records:
+        struct = record.get("struct")
+        if struct not in FEATURE_MEMBERS or struct in decoded or "mask" not in record:
+            continue
+        mask = int(record["mask"], 16)
+        decoded[struct] = {name: bool(mask >> index & 1)
+                           for index, name in enumerate(FEATURE_MEMBERS[struct])}
+    return decoded
+
+
+def feature_level_gate(summary: dict, patches: list[str]) -> dict | None:
+    """Every FL-gate boolean as ps5vk reported it to DXVK (after any DIAGNOSTIC
+    translation), which terms a patch relaxed, and which still fail."""
+    decoded = decode_features(summary.get("features", []))
+    if "core" not in decoded:
+        return None
+    extensions = {item.split(":")[0] for item in
+                  summary.get("extensions", {}).get("vkEnumerateDeviceExtensionProperties", [])}
+    relaxed = sorted({term for patch in patches for term in FL_GATE_RELAXATIONS.get(patch, ())})
+    gate: dict = {"relaxed_by_diagnostic_patch": relaxed}
+    failing = []
+    for level, terms in FL_GATE.items():
+        values = {}
+        for term in terms:
+            struct, member = term.split(".")
+            if struct == "xfb":
+                # DXVK chains the transform feedback struct only when the
+                # extension is enumerated; the payload does not decode it.
+                value = None if "VK_EXT_transform_feedback" in extensions else False
+            else:
+                value = decoded.get(struct, {}).get(member, False)
+            values[term] = value
+            if value is False and term not in relaxed:
+                failing.append(term)
+        gate[level] = values
+    gate["failing"] = failing
+    return gate
+
+
 def fields(text: str) -> dict[str, str]:
     return dict(FIELD.findall(text))
 
@@ -73,7 +192,8 @@ def parse_log(log: str) -> dict:
         "vk_refusals": [], "vk_missing": [], "vk_calls_logged": 0, "vk_properties": None,
         "extensions": {}, "loader": [], "ps5vk_diagnostics": [], "first_refusal": None,
         "first_refusal_candidate": None, "oracle": None, "result": None, "crash": None,
-        "trace": None, "gpu_hang_suspected": False,
+        "trace": None, "gpu_hang_suspected": False, "features": [],
+        "compat": {"refusals": [], "translations": []},
     }
     for seq, level, text in records:
         if text.startswith("DXVK_NATIVE_IDENTITY "):
@@ -136,6 +256,13 @@ def parse_log(log: str) -> dict:
             summary["result"] = fields(text)
         elif text.startswith("DXVK_NATIVE_CRASH "):
             summary["crash"] = text[len("DXVK_NATIVE_CRASH "):]
+        elif text.startswith("DXVK_COMPAT_REFUSAL "):
+            summary["compat"]["refusals"].append(fields(text).get("feature"))
+        elif text.startswith("DXVK_COMPAT_"):
+            if len(summary["compat"]["translations"]) < LIMIT:
+                summary["compat"]["translations"].append(text)
+        elif text.startswith("DXVK_VK_FEATURES "):
+            summary["features"].append(fields(text))
         elif text.startswith("DXVK_VK_TRACE "):
             summary["trace"] = {key: int(value) for key, value in fields(text).items()}
         elif ("site=" in text or text.startswith("PS5VK_")) and \
@@ -177,6 +304,7 @@ def receipt_for(summary: dict, artifact: dict, run_receipt: dict | None,
         # Innermost stage that began, including DXVK-internal stages.
         "last_stage": summary["last_stage"] or result.get("last_stage"),
         "first_refusal": summary["first_refusal"] or summary["first_refusal_candidate"],
+        "fl_gate": feature_level_gate(summary, list(artifact.get("dxvk_source_patches", []))),
         "oracle": summary["oracle"],
         "crash": summary["crash"],
         "gpu_hang_suspected": summary["gpu_hang_suspected"],
@@ -250,6 +378,8 @@ def main() -> int:
     brief = {key: receipt.get(key) for key in (
         "variant", "label", "run_id", "outcome", "last_stage", "first_refusal",
         "oracle", "crash", "gpu_hang_suspected", "lifecycle_ok", "identity_mismatches")}
+    if receipt.get("fl_gate"):
+        brief["fl_gate_failing"] = receipt["fl_gate"]["failing"]
     print(json.dumps(brief, indent=2))
     if not lifecycle_ok:
         raise RuntimeError("payload title did not stop")

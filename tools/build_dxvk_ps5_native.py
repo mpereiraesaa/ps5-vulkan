@@ -10,6 +10,16 @@ SDK, into one SDK-linked eboot. Each variant is its own executable:
 * ``diagnostic-version-filter``: DIAGNOSTIC. Identical, plus one patched copy
   of ``src/dxvk/dxvk_device_filter.cpp`` that logs instead of skipping an
   adapter reporting Vulkan < 1.3. Never report it as unmodified DXVK.
+* ``diagnostic-compat``: DIAGNOSTIC. The version-filter patch; a patched
+  ``src/d3d11/d3d11_device.cpp`` whose feature-level gate requests transform
+  feedback only when the device reports it; and the payload translation layer
+  (examples/dxvk_native/compat_layer.cpp) between DXVK's Vulkan 1.1/1.2/1.3
+  aggregate structures and ps5vk's per-extension structures. The layer only
+  copies what ps5vk reports and refuses, by name, any enabled feature without a
+  ps5vk route.
+* ``diagnostic-compat-fl-relaxed``: DIAGNOSTIC. ``diagnostic-compat`` whose
+  feature-level gate also requests demote-to-helper only when reported, to
+  observe the refusals beyond that gate.
 
 Why static: DXVK's native loader dlopen()s "libvulkan.so" and dlsym()s
 vkGetInstanceProcAddr. The payload runtime only loads signed system modules,
@@ -47,6 +57,22 @@ VARIANTS = {
     "diagnostic-version-filter": {
         "diagnostic": True,
         "patches": ("src/dxvk/dxvk_device_filter.cpp:bypass-apiVersion-1.3-filter",),
+    },
+    "diagnostic-compat": {
+        "diagnostic": True,
+        "compat_layer": True,
+        "patches": ("src/dxvk/dxvk_device_filter.cpp:bypass-apiVersion-1.3-filter",
+                    "src/d3d11/d3d11_device.cpp:fl-gate-transform-feedback-relaxed",
+                    "payload:compat-translation-layer-v1"),
+    },
+    "diagnostic-compat-fl-relaxed": {
+        "diagnostic": True,
+        "compat_layer": True,
+        "relax_demote": True,
+        "patches": ("src/dxvk/dxvk_device_filter.cpp:bypass-apiVersion-1.3-filter",
+                    "src/d3d11/d3d11_device.cpp:fl-gate-transform-feedback-relaxed",
+                    "src/d3d11/d3d11_device.cpp:fl-gate-demote-to-helper-relaxed",
+                    "payload:compat-translation-layer-v1"),
     },
 }
 # Overlays needed on every variant to build DXVK for the PS5 at all. They do
@@ -98,6 +124,36 @@ def sha256_file(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
 
 
+XFB_BLOCK = """    enabled.extTransformFeedback.transformFeedback                = VK_TRUE;
+    enabled.extTransformFeedback.geometryStreams                  = VK_TRUE;
+"""
+XFB_DIAGNOSTIC = """    // DIAGNOSTIC BUILD (ps5vk dxvk-native): transform feedback is requested
+    // only when reported, so the feature-level gate can be passed without it.
+    enabled.extTransformFeedback.transformFeedback                = supported.extTransformFeedback.transformFeedback;
+    enabled.extTransformFeedback.geometryStreams                  = supported.extTransformFeedback.geometryStreams;
+"""
+
+
+DEMOTE_BLOCK = """    enabled.vk13.shaderDemoteToHelperInvocation                   = VK_TRUE;
+"""
+DEMOTE_DIAGNOSTIC = """    // DIAGNOSTIC BUILD (ps5vk dxvk-native): demote-to-helper is requested
+    // only when reported, so the feature-level gate can be passed without it.
+    enabled.vk13.shaderDemoteToHelperInvocation                   = supported.vk13.shaderDemoteToHelperInvocation;
+"""
+
+
+def patch_feature_level_xfb(source: str, relax_demote: bool = False) -> str:
+    """Return the DIAGNOSTIC D3D11 feature gate; each pinned block must match once."""
+    if source.count(XFB_BLOCK) != 1:
+        raise ValueError("D3D11 feature-level transform feedback terms changed")
+    source = source.replace(XFB_BLOCK, XFB_DIAGNOSTIC)
+    if relax_demote:
+        if source.count(DEMOTE_BLOCK) != 1:
+            raise ValueError("D3D11 feature-level demote-to-helper term changed")
+        source = source.replace(DEMOTE_BLOCK, DEMOTE_DIAGNOSTIC)
+    return source
+
+
 def patch_device_filter(source: str) -> str:
     """Return the DIAGNOSTIC device filter; the pinned block must match once."""
     if source.count(FILTER_BLOCK) != 1:
@@ -123,6 +179,7 @@ def identity_header(variant: str, dxvk_commit: str, ps5vk_commit: str,
         "#define DXVK_NATIVE_BUILD_IDENTITY_H",
         f"#define DXVK_NATIVE_VARIANT {c_string(variant)}",
         f"#define DXVK_NATIVE_DIAGNOSTIC {1 if config['diagnostic'] else 0}",
+        f"#define DXVK_NATIVE_COMPAT_LAYER {1 if config.get('compat_layer') else 0}",
         f"#define DXVK_NATIVE_DXVK_COMMIT {c_string(dxvk_commit)}",
         f"#define DXVK_NATIVE_PS5VK_COMMIT {c_string(ps5vk_commit)}",
         f"#define DXVK_NATIVE_PS5VK_DIRTY {1 if ps5vk_dirty else 0}",
@@ -238,6 +295,13 @@ def compile_dxvk(variant: str, dxvk: Path, build: Path, work: Path, cc: Path, cx
             patched = overlays / "dxvk_device_filter.cpp"
             patched.write_text(patch_device_filter((build / entry["file"]).read_text()))
             entry = overlay_entry(entry, patched, dxvk / "src/dxvk")
+        if (VARIANTS[variant].get("compat_layer") and
+                entry["file"].endswith("/d3d11/d3d11_device.cpp")):
+            patched = overlays / "d3d11_device.cpp"
+            patched.write_text(patch_feature_level_xfb(
+                (build / entry["file"]).read_text(),
+                bool(VARIANTS[variant].get("relax_demote"))))
+            entry = overlay_entry(entry, patched, dxvk / "src/d3d11")
         units.append(entry)
     wsi = (dxvk / "src/wsi/wsi_platform.cpp").read_text()
     anchor = "static const WsiBootstrap *wsiBootstrap[] = {"
@@ -340,7 +404,7 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
         sha256_bytes(shaders["vs"]), sha256_bytes(shaders["ps"])))
     logger = lab / "projects/logging_server/client"
     payload_objects = []
-    for source in ("ps5_main.cpp", "workload.cpp", "vk_trace.cpp"):
+    for source in ("ps5_main.cpp", "workload.cpp", "vk_trace.cpp", "compat_layer.cpp"):
         obj = work / (source + ".o")
         run([cxx, "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror",
              "-Wno-unused-parameter", "-Wno-missing-field-initializers",

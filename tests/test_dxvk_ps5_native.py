@@ -3,6 +3,7 @@ embedded DXBC, the DIAGNOSTIC device-filter patch, build identity and the
 run-receipt parser. None of this is evidence of PS5 execution."""
 
 import hashlib
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -198,6 +199,23 @@ class DiagnosticPatch(unittest.TestCase):
         self.assertEqual(patched.replace(build.FILTER_DIAGNOSTIC, build.FILTER_BLOCK),
                          self.SOURCE)
 
+    def test_feature_level_patch_touches_only_transform_feedback(self):
+        source = "void g() {\n" + build.XFB_BLOCK + "    enabled.x = VK_TRUE;\n}\n"
+        patched = build.patch_feature_level_xfb(source)
+        self.assertIn("supported.extTransformFeedback.transformFeedback", patched)
+        self.assertIn("supported.extTransformFeedback.geometryStreams", patched)
+        self.assertIn("DIAGNOSTIC", patched)
+        self.assertIn("enabled.x = VK_TRUE;", patched)
+        self.assertEqual(patched.replace(build.XFB_DIAGNOSTIC, build.XFB_BLOCK), source)
+        with self.assertRaises(ValueError):
+            build.patch_feature_level_xfb("void g() {}\n")
+        demote = source.replace("}\n", build.DEMOTE_BLOCK + "}\n")
+        relaxed = build.patch_feature_level_xfb(demote, relax_demote=True)
+        self.assertIn("supported.vk13.shaderDemoteToHelperInvocation", relaxed)
+        self.assertNotIn("supported.vk13", build.patch_feature_level_xfb(demote))
+        with self.assertRaises(ValueError):
+            build.patch_feature_level_xfb(source, relax_demote=True)
+
     def test_changed_or_repeated_upstream_blocks_are_refused(self):
         with self.assertRaises(ValueError):
             build.patch_device_filter(self.SOURCE.replace("1, 3, 0", "1, 4, 0"))
@@ -212,9 +230,18 @@ class DiagnosticPatch(unittest.TestCase):
                                        False, "c" * 64, "d" * 64)
         self.assertIn("#define DXVK_NATIVE_DIAGNOSTIC 1", header)
         self.assertIn("bypass-apiVersion-1.3-filter", header)
+        self.assertIn("#define DXVK_NATIVE_COMPAT_LAYER 0", header)
+        compat = build.VARIANTS["diagnostic-compat"]
+        self.assertTrue(compat["diagnostic"])
+        self.assertEqual(compat["patches"][0],
+                         build.VARIANTS["diagnostic-version-filter"]["patches"][0])
+        self.assertIn("payload:compat-translation-layer-v1", compat["patches"])
+        self.assertIn("#define DXVK_NATIVE_COMPAT_LAYER 1", build.identity_header(
+            "diagnostic-compat", "a" * 40, "b" * 40, False, "c" * 64, "d" * 64))
         plain = build.identity_header("unmodified", "a" * 40, "b" * 40, True, "c", "d")
         self.assertIn("#define DXVK_NATIVE_DIAGNOSTIC 0", plain)
         self.assertIn('#define DXVK_NATIVE_PATCHES "none"', plain)
+        self.assertIn("#define DXVK_NATIVE_COMPAT_LAYER 0", plain)
         self.assertIn("#define DXVK_NATIVE_PS5VK_DIRTY 1", plain)
         with self.assertRaises(ValueError):
             build.identity_header("other", "a", "b", False, "c", "d")
@@ -306,6 +333,69 @@ class ReceiptParser(unittest.TestCase):
         self.assertEqual(summary["first_refusal"]["params"], "apiVersion=1.3.0 app=eboot.bin")
         self.assertEqual(summary["oracle"]["mismatches"], 0)
         self.assertEqual(summary["oracle"]["checksum"], f"{EXPECTED_CHECKSUM:08x}")
+
+    def test_compat_translation_records(self):
+        log = ps5log([
+            IDENTITY,
+            ("WARN", "DXVK_COMPAT_INSTANCE added=VK_KHR_get_physical_device_properties2"),
+            ("INFO", "DXVK_VK_FEATURES struct=vk12 sType=51 mask=0x1"),
+            ("ERR", "DXVK_COMPAT_REFUSAL call=vkCreateDevice feature=vk13.synchronization2(VK_KHR_synchronization2)"),
+            ("ERR", "DXVK_FIRST_REFUSAL source=compat stage=dxvk.device_create call=vkCreateDevice "
+                    "result=-8 params= untranslatable=vk13.synchronization2(VK_KHR_synchronization2)"),
+        ])
+        summary = runner.parse_log(log)
+        self.assertEqual(summary["compat"]["refusals"],
+                         ["vk13.synchronization2(VK_KHR_synchronization2)"])
+        self.assertEqual(len(summary["compat"]["translations"]), 1)
+        self.assertEqual(summary["features"], [{"struct": "vk12", "sType": "51", "mask": "0x1"}])
+        self.assertEqual(summary["first_refusal"]["source"], "compat")
+        self.assertEqual(summary["first_refusal"]["result"], -8)
+
+    def test_feature_members_match_the_vulkan_headers(self):
+        header = (ROOT / "third_party/vulkan-headers/include/vulkan/vulkan_core.h")
+        if not header.is_file():
+            self.skipTest("Vulkan headers not prepared")
+        text = header.read_text()
+        structs = {"core": "VkPhysicalDeviceFeatures", "vk11": "VkPhysicalDeviceVulkan11Features",
+                   "vk12": "VkPhysicalDeviceVulkan12Features",
+                   "vk13": "VkPhysicalDeviceVulkan13Features"}
+        for key, name in structs.items():
+            body = re.search(r"typedef struct %s \{(.*?)\} %s;" % (name, name), text, re.S).group(1)
+            members = re.findall(r"VkBool32\s+(\w+);", body)
+            self.assertEqual(members, runner.FEATURE_MEMBERS[key], key)
+
+    def test_feature_level_gate_is_explicit(self):
+        core = sum(1 << runner.FEATURE_MEMBERS["core"].index(name) for name in (
+            "fullDrawIndexUint32 imageCubeArray independentBlend geometryShader tessellationShader "
+            "sampleRateShading dualSrcBlend multiDrawIndirect drawIndirectFirstInstance depthClamp "
+            "depthBiasClamp fillModeNonSolid multiViewport textureCompressionBC "
+            "occlusionQueryPrecise fragmentStoresAndAtomics shaderImageGatherExtended "
+            "shaderClipDistance shaderCullDistance").split())
+        log = ps5log([
+            IDENTITY,
+            ("INFO", "DXVK_VK_EXTENSIONS call=vkEnumerateDeviceExtensionProperties part=0 count=1 "
+                     "list=VK_KHR_sampler_mirror_clamp_to_edge:3"),
+            ("INFO", f"DXVK_VK_FEATURES struct=core mask={core:#x}"),
+            ("INFO", "DXVK_VK_FEATURES struct=vk13 sType=53 mask=0x0"),
+            ("INFO", "DXVK_VK_FEATURES struct=vk12 sType=51 mask=0x1"),
+        ])
+        summary = runner.parse_log(log)
+        gate = runner.feature_level_gate(summary, [
+            "src/d3d11/d3d11_device.cpp:fl-gate-transform-feedback-relaxed"])
+        self.assertTrue(gate["fl11_0"]["core.tessellationShader"])
+        self.assertTrue(gate["baseline"]["vk12.samplerMirrorClampToEdge"])
+        self.assertFalse(gate["baseline"]["xfb.transformFeedback"])
+        self.assertEqual(gate["relaxed_by_diagnostic_patch"],
+                         ["xfb.geometryStreams", "xfb.transformFeedback"])
+        self.assertEqual(gate["failing"], ["vk13.shaderDemoteToHelperInvocation"])
+        unpatched = runner.feature_level_gate(summary, [])
+        self.assertEqual(unpatched["failing"], ["vk13.shaderDemoteToHelperInvocation",
+                                                "xfb.transformFeedback", "xfb.geometryStreams"])
+        relaxed = runner.feature_level_gate(summary, [
+            "src/d3d11/d3d11_device.cpp:fl-gate-transform-feedback-relaxed",
+            "src/d3d11/d3d11_device.cpp:fl-gate-demote-to-helper-relaxed"])
+        self.assertEqual(relaxed["failing"], [])
+        self.assertIsNone(runner.feature_level_gate(runner.parse_log(ps5log([IDENTITY])), []))
 
     def test_crash_without_bye_and_identity_mismatch(self):
         log = ps5log([

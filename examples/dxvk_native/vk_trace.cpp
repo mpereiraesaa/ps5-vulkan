@@ -11,12 +11,15 @@
  * The tracing layer forwards every command unchanged. It logs entry points
  * that ps5vk does not provide, the parameters of instance/device/resource
  * creation, and every negative VkResult with its call and parameters. */
+#include "build_identity.h"
+#include "compat_layer.h"
 #include "telemetry.h"
 
 #include <vulkan/vulkan.h>
 
 #include <atomic>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 
@@ -118,6 +121,51 @@ void emit_extensions(const char *call, uint32_t count, const VkExtensionProperti
         dxvk_telemetry_emit("INFO", "DXVK_VK_EXTENSIONS call=%s part=0 count=0 list=none", call);
 }
 
+/* Report what a features query returned: one bit per VkBool32 member, in
+ * declaration order, for the core block and each known aggregate struct. */
+template<typename T>
+uint64_t bool_mask(const T &s, size_t offset)
+{
+    const VkBool32 *bits = reinterpret_cast<const VkBool32 *>(
+        reinterpret_cast<const char *>(&s) + offset);
+    uint64_t mask = 0;
+    for (size_t i = 0; i < (sizeof(T) - offset) / sizeof(VkBool32) && i < 64; ++i)
+        if (bits[i]) mask |= uint64_t(1) << i;
+    return mask;
+}
+
+void emit_features(const VkPhysicalDeviceFeatures2 *f)
+{
+    const size_t header = offsetof(VkPhysicalDeviceVulkan11Features, storageBuffer16BitAccess);
+    dxvk_telemetry_emit("INFO", "DXVK_VK_FEATURES struct=core mask=0x%llx",
+                        static_cast<unsigned long long>(bool_mask(f->features, 0)));
+    for (auto *s = static_cast<const VkBaseInStructure *>(f->pNext); s; s = s->pNext) {
+        uint64_t mask = 0;
+        const char *name = nullptr;
+        switch (s->sType) {
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
+            name = "vk11";
+            mask = bool_mask(*reinterpret_cast<const VkPhysicalDeviceVulkan11Features *>(s), header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
+            name = "vk12";
+            mask = bool_mask(*reinterpret_cast<const VkPhysicalDeviceVulkan12Features *>(s), header);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
+            name = "vk13";
+            mask = bool_mask(*reinterpret_cast<const VkPhysicalDeviceVulkan13Features *>(s), header);
+            break;
+        default:
+            break;
+        }
+        if (name)
+            dxvk_telemetry_emit("INFO", "DXVK_VK_FEATURES struct=%s sType=%u mask=0x%llx", name,
+                                unsigned(s->sType), static_cast<unsigned long long>(mask));
+        else
+            dxvk_telemetry_emit("INFO", "DXVK_VK_FEATURES struct=other sType=%u", unsigned(s->sType));
+    }
+}
+
 #define REAL(name) PFN_##name real_##name = nullptr
 
 REAL(vkEnumerateInstanceExtensionProperties);
@@ -209,6 +257,13 @@ VKAPI_ATTR VkResult VKAPI_CALL t_vkCreateInstance(const VkInstanceCreateInfo *in
         t.names("extensions", info->enabledExtensionCount, info->ppEnabledExtensionNames);
         t.chain(info->pNext);
     }
+#if DXVK_NATIVE_COMPAT_LAYER
+    /* DIAGNOSTIC compat layer: physical-device queries need
+     * VK_KHR_get_physical_device_properties2 on a Vulkan 1.0 device. */
+    const char *extensions[64];
+    VkInstanceCreateInfo patched;
+    if (compat_add_instance_extension(info, &patched, extensions, 64)) info = &patched;
+#endif
     VkResult r = real_vkCreateInstance(info, allocator, instance);
     record("vkCreateInstance", r, t, true);
     dxvk_telemetry_stage("dxvk.instance", r == VK_SUCCESS ? "ok" : "fail", t.data);
@@ -247,7 +302,11 @@ VKAPI_ATTR void VKAPI_CALL t_vkGetPhysicalDeviceProperties2(VkPhysicalDevice dev
     static std::atomic<unsigned> logged{0};
     Text t;
     if (props) t.chain(props->pNext);
+#if DXVK_NATIVE_COMPAT_LAYER
+    compat_properties2(real_vkGetPhysicalDeviceProperties2, device, props);
+#else
     real_vkGetPhysicalDeviceProperties2(device, props);
+#endif
     ++g_calls;
     dxvk_telemetry_last_call("vkGetPhysicalDeviceProperties2", t.data);
     if (logged++ < 4)
@@ -260,11 +319,17 @@ VKAPI_ATTR void VKAPI_CALL t_vkGetPhysicalDeviceFeatures2(VkPhysicalDevice devic
     static std::atomic<unsigned> logged{0};
     Text t;
     if (features) t.chain(features->pNext);
+#if DXVK_NATIVE_COMPAT_LAYER
+    compat_features2(real_vkGetPhysicalDeviceFeatures2, device, features);
+#else
     real_vkGetPhysicalDeviceFeatures2(device, features);
+#endif
     ++g_calls;
     dxvk_telemetry_last_call("vkGetPhysicalDeviceFeatures2", t.data);
-    if (logged++ < 4)
+    if (logged++ < 4) {
         dxvk_telemetry_emit("INFO", "DXVK_VK_CALL call=vkGetPhysicalDeviceFeatures2 result=void%s", t.data);
+        if (features) emit_features(features);
+    }
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL t_vkEnumerateDeviceExtensionProperties(VkPhysicalDevice device,
@@ -305,7 +370,11 @@ VKAPI_ATTR VkResult VKAPI_CALL t_vkCreateDevice(VkPhysicalDevice physical,
             t.add(" core_features=0x%llx", static_cast<unsigned long long>(mask));
         }
     }
+#if DXVK_NATIVE_COMPAT_LAYER
+    VkResult r = compat_create_device(real_vkCreateDevice, physical, info, allocator, device);
+#else
     VkResult r = real_vkCreateDevice(physical, info, allocator, device);
+#endif
     record("vkCreateDevice", r, t, true);
     dxvk_telemetry_stage("dxvk.device_create", r == VK_SUCCESS ? "ok" : "fail", "");
     return r;
