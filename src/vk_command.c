@@ -111,6 +111,8 @@ static void clear(VkCommandBuffer c)
     memset(c->operations, 0, sizeof(c->operations));
     memset(c->vertices, 0, sizeof(c->vertices));
     memset(&c->indices, 0, sizeof(c->indices));
+    memset(c->xfb_bindings, 0, sizeof(c->xfb_bindings));
+    c->xfb_active = VK_FALSE;
 }
 void ps5vk_command_invalidate(VkCommandBuffer c)
 {
@@ -204,6 +206,8 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
     if(type==VK_OBJECT_TYPE_BUFFER && c->indices.buffer==object)return 1;
     if(type==VK_OBJECT_TYPE_BUFFER)for(unsigned k=0;k<PS5VK_MAX_VERTEX_BINDINGS;++k)
         if(c->vertices[k].buffer==object)return 1;
+    if(type==VK_OBJECT_TYPE_BUFFER)for(unsigned k=0;k<PS5VK_XFB_ABI_BUFFERS;++k)
+        if(c->xfb_bindings[k].buffer==object)return 1;
     if ((type == VK_OBJECT_TYPE_PIPELINE && ((const void *)c->pipeline == object ||
         (const void *)c->graphics_pipeline == object))) return 1;
     for (unsigned j = 0; j < c->operation_count; ++j)
@@ -223,6 +227,8 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
         if(type==VK_OBJECT_TYPE_BUFFER && op->indices.buffer==object)return 1;
         if(type==VK_OBJECT_TYPE_BUFFER)for(unsigned k=0;k<PS5VK_MAX_VERTEX_BINDINGS;++k)
             if(op->vertices[k].buffer==object)return 1;
+        if(type==VK_OBJECT_TYPE_BUFFER)for(unsigned k=0;k<PS5VK_XFB_ABI_BUFFERS;++k)
+            if(op->xfb.buffers[k].buffer==object || op->xfb.counters[k].buffer==object)return 1;
         if ((type == VK_OBJECT_TYPE_RENDER_PASS && (const void *)op->render_pass == object) ||
             (type == VK_OBJECT_TYPE_FRAMEBUFFER &&
              (const void *)ps5vk_framebuffer_original(op->framebuffer) == object)) return 1;
@@ -493,7 +499,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer c)
      * INHERITED one must not, because the primary owns it and the secondary
      * has no vkCmdEndRenderPass to give. */
     if (!c || c->state != PS5VK_RECORDING || c->active_occlusion_query_pool ||
-        (c->render_pass && !c->render_pass_inherited)) return INVALID;
+        c->xfb_active || (c->render_pass && !c->render_pass_inherited)) return INVALID;
     c->state = PS5VK_EXECUTABLE;
     return VK_SUCCESS;
 }
@@ -504,6 +510,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(VkCommandBuffer c, VkPipelineBindPo
         p ? (unsigned)p->samples : 0u);
     if (!c || c->state != PS5VK_RECORDING || !p || p->device != c->pool->device) { invalid(c); return; }
     if (point == VK_PIPELINE_BIND_POINT_GRAPHICS && p->graphics && c->pool->device->graphics_enabled) {
+        /* VUID-vkCmdBindPipeline-None-02323: no graphics pipeline change while
+         * transform feedback is active. */
+        if (c->xfb_active) { invalid(c); return; }
         c->graphics_pipeline = p; return;
     }
     if (point != VK_PIPELINE_BIND_POINT_COMPUTE || p->graphics) { invalid(c); return; }
@@ -912,7 +921,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
     if (!c || c->state != PS5VK_RECORDING ||
         c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY || !c->render_pass ||
         c->render_pass_inherited || c->dynamic_rendering ||
-        c->active_occlusion_query_pool ||
+        c->active_occlusion_query_pool || c->xfb_active ||
         (contents != VK_SUBPASS_CONTENTS_INLINE &&
          contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
         c->subpass + 1 >= c->render_pass->subpass_count) { invalid(c); return; }
@@ -944,7 +953,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
         !c->render_pass || c->dynamic_rendering ||
         c->subpass + 1 != c->render_pass->subpass_count ||
-        c->active_occlusion_query_pool ||
+        c->active_occlusion_query_pool || c->xfb_active ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
@@ -1441,6 +1450,34 @@ static int compute_scope(VkPipelineStageFlags stages, VkAccessFlags access)
 }
 static int command_scope(VkPipelineStageFlags stages,VkAccessFlags access)
 { return texture_scope(stages,access) || compute_scope(stages,access); }
+/* VK_EXT_transform_feedback (DXVK262-T14). On a device that enabled
+ * transformFeedback, the capture stage and its three accesses name work this
+ * profile performs: the geometry program's buffer stores, and the counter
+ * reads and writes at begin/end. Each access must name a stage that performs
+ * it (VUID-VkMemoryBarrier-srcAccessMask-02815 and its siblings); it is then
+ * validated as the pre-rasterization shader stage with a generic memory
+ * access, which the full-cache dependency this queue executes orders anyway.
+ * Without the feature the bits reach the whitelists untranslated and fail. */
+static int transform_feedback_scope(VkCommandBuffer c, VkPipelineStageFlags stages,
+                                    VkAccessFlags access)
+{
+    const VkPipelineStageFlags xfb_stage=VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
+    const VkPipelineStageFlags any=VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    const VkAccessFlags writes=VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT |
+        VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT;
+    const VkAccessFlags reads=VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT;
+    if(!(c->pool->device->enabled_features_t09 & PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK))
+        return command_scope(stages,access);
+    if(((access & writes) && !(stages & (xfb_stage|any))) ||
+       ((access & reads) &&
+        !(stages & (xfb_stage|any|VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT))))return 0;
+    if(stages & xfb_stage)
+        stages=(stages & ~xfb_stage) | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    if(access & writes)access=(access & ~writes) | VK_ACCESS_MEMORY_WRITE_BIT;
+    if(access & reads)access=(access & ~reads) | VK_ACCESS_MEMORY_READ_BIT;
+    return command_scope(stages,access);
+}
 /* Whether per-aspect depth/stencil barriers and the separate layouts are
  * accepted: only on a device that enabled separateDepthStencilLayouts. */
 static VkBool32 separate_depth_stencil_layouts(VkDevice d)
@@ -1678,8 +1715,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
     VkAccessFlags src_access = 0, dst_access = 0;
     for (uint32_t j = 0; j < memory_count; ++j) {
         if (memory[j].sType != VK_STRUCTURE_TYPE_MEMORY_BARRIER || memory[j].pNext ||
-            !command_scope(src,memory[j].srcAccessMask) ||
-            !command_scope(dst,memory[j].dstAccessMask)) { invalid(c); return; }
+            !transform_feedback_scope(c,src,memory[j].srcAccessMask) ||
+            !transform_feedback_scope(c,dst,memory[j].dstAccessMask)) { invalid(c); return; }
         src_access |= memory[j].srcAccessMask; dst_access |= memory[j].dstAccessMask;
     }
     /* A full cache dependency is stronger than a buffer-range dependency.
@@ -1689,7 +1726,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         const VkBufferMemoryBarrier *b = &buffers[j];
         void *address; VkDeviceSize bytes;
         if (b->sType != VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER || b->pNext ||
-            !command_scope(src,b->srcAccessMask) || !command_scope(dst,b->dstAccessMask) ||
+            !transform_feedback_scope(c,src,b->srcAccessMask) || !transform_feedback_scope(c,dst,b->dstAccessMask) ||
             b->srcQueueFamilyIndex != b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED && b->srcQueueFamilyIndex != 0) ||
             ps5vk_buffer_span(c->pool->device, b->buffer, b->offset, b->size,
@@ -1701,7 +1738,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         VkImageSubresourceRange resolved;
         if(!c->pool->device->graphics_enabled ||
             b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
-            !command_scope(src,b->srcAccessMask) || !command_scope(dst,b->dstAccessMask) ||
+            !transform_feedback_scope(c,src,b->srcAccessMask) || !transform_feedback_scope(c,dst,b->dstAccessMask) ||
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
             !image || image->device!=c->pool->device) {invalid(c);return;}

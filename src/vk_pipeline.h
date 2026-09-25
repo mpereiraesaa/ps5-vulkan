@@ -3,6 +3,7 @@
 #include "vk_descriptor.h"
 #include "graphics_limits.h"
 #include "color_attachment_contract.h"
+#include "vk_transform_feedback.h"
 
 struct ps5vk_program_descriptor {
     uint32_t set, binding, element, table_dword;
@@ -169,6 +170,12 @@ struct VkPipeline_T {
      * end cuts a strip where an index matches the reset index. Accepted for the
      * strip topologies this profile carries and refused everywhere else. */
     VkBool32 primitive_restart;
+    /* VK_EXT_transform_feedback (DXVK262-T14): what the geometry stage
+     * captures (zero captures and no buffers when it captures nothing), and
+     * rasterizer discard, which this profile admits only for a capture
+     * pipeline. */
+    struct ps5vk_xfb_interface xfb;
+    VkBool32 rasterizer_discard;
     VkBool32 depth_test, depth_write;
     VkCompareOp depth_compare;
     /* Per-attachment colour state, the subpass's count in

@@ -255,6 +255,12 @@ enum ps5vk_t09_feature_bits {
      * map/unmap and submission boundaries (src/physical_device_profile.h).
      * Only the diagnostic witness build sets it until native proof. */
     PS5VK_T09_FEATURE_HOST_COHERENT_MEMORY = 1u << 26,
+    /* VK_EXT_transform_feedback (DXVK262-T14): transformFeedback and
+     * geometryStreams, captured by the geometry stage through the compiler's
+     * no-GDS global streamout. One bit: the platform sets it only once the
+     * native capture witness (stream order, resume, overflow and stream 1)
+     * holds on this build. */
+    PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK = 1u << 25,
 };
 
 /* robust{Storage,Uniform}BufferAccessSizeAlignment. GFX10 raw buffer records
@@ -445,6 +451,12 @@ struct VkDevice_T {
     /* VK_KHR_maintenance2 was enabled on this device: the structures it
      * defines are accepted only then. */
     VkBool32 maintenance2_extension_enabled;
+    /* VK_EXT_transform_feedback was enabled on this device: its buffer usages
+     * and entry points exist only then. The transformFeedback feature itself
+     * is PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK in enabled_features_t09, and
+     * geometryStreams (a stream other than zero) is recorded separately. */
+    VkBool32 transform_feedback_extension_enabled;
+    VkBool32 geometry_streams_enabled;
     /* VK_KHR_get_memory_requirements2, VK_KHR_dedicated_allocation and
      * VK_KHR_bind_memory2 were enabled on this device: their KHR commands and
      * structures are reachable only then. */

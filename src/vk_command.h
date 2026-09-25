@@ -30,7 +30,11 @@ enum ps5vk_operation_type {
     PS5VK_EXECUTE_COMMANDS,
     PS5VK_CLEAR_ATTACHMENT,
     /* Bounded frontend BC1/BC3 nearest decode into an RGBA8 linear target. */
-    PS5VK_BLIT_BC_TO_RGBA8
+    PS5VK_BLIT_BC_TO_RGBA8,
+    /* VK_EXT_transform_feedback (DXVK262-T14): the draws recorded between the
+     * two capture into the ranges the BEGIN operation snapshots. Both carry
+     * the counter buffers the caller named (struct ps5vk_xfb_operation). */
+    PS5VK_TRANSFORM_FEEDBACK_BEGIN, PS5VK_TRANSFORM_FEEDBACK_END
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -41,6 +45,13 @@ enum { PS5VK_MAX_OPERATIONS = 64 };
 enum { PS5VK_MAX_VERTEX_BINDINGS = 16 };
 struct ps5vk_vertex_binding { VkBuffer buffer; VkDeviceSize offset; };
 struct ps5vk_index_binding { VkBuffer buffer; VkDeviceSize offset; VkIndexType type; };
+/* One transform feedback range: a capture buffer with its resolved byte size,
+ * or a counter buffer (size 4). An unused slot has no buffer. */
+struct ps5vk_xfb_range { VkBuffer buffer; VkDeviceSize offset, size; };
+struct ps5vk_xfb_operation {
+    struct ps5vk_xfb_range buffers[PS5VK_XFB_ABI_BUFFERS];
+    struct ps5vk_xfb_range counters[PS5VK_XFB_ABI_BUFFERS];
+};
 struct ps5vk_operation {
     enum ps5vk_operation_type type;
     void *owned_payload;
@@ -138,6 +149,7 @@ struct ps5vk_operation {
     VkPipelineStageFlags src_stage, dst_stage;
     VkAccessFlags src_access, dst_access;
     VkBufferMemoryBarrier buffer_barrier;
+    struct ps5vk_xfb_operation xfb;
 };
 struct VkCommandBuffer_T {
     VkCommandPool pool;
@@ -233,6 +245,10 @@ struct VkCommandBuffer_T {
     VkStencilOp stencil_fail_op[2], stencil_pass_op[2], stencil_depth_fail_op[2];
     VkCompareOp stencil_compare_op[2];
     VkStencilFaceFlags stencil_op_faces;
+    /* VK_EXT_transform_feedback: the bound capture ranges, and whether
+     * capture is active (between begin and end, inside one subpass). */
+    struct ps5vk_xfb_range xfb_bindings[PS5VK_XFB_ABI_BUFFERS];
+    VkBool32 xfb_active;
     unsigned operation_count;
     struct ps5vk_operation operations[PS5VK_MAX_OPERATIONS];
 };

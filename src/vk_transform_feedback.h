@@ -48,6 +48,49 @@ enum {
     PS5VK_XFB_EXCEEDS = -2,    /* valid, but needs more than the limits allow */
 };
 
+/* The VK_EXT_transform_feedback properties this device reports, from the one
+ * platform bit. The four and four are the compiler ABI's own widths, and the
+ * pinned DXVK always binds and begins with slots 0..3 (MaxNumXfbBuffers). The
+ * data sizes follow the compiler's upstream (RADV) envelope: 512 bytes of
+ * captured data per stream and buffer, and a 2048-byte stride, which is also
+ * D3D11_SO_BUFFER_MAX_STRIDE_IN_BYTES. A buffer range is bounded by the 32-bit
+ * byte offsets the capture program keeps. Every optional behaviour stays
+ * false until it has its own measurement: queries, DrawIndirectByteCount,
+ * line/triangle output on several streams, and rasterizing a stream other
+ * than zero. Without the bit everything is zero. */
+enum { PS5VK_XFB_STREAM_DATA_SIZE = 512, PS5VK_XFB_BUFFER_DATA_SIZE = 512,
+       PS5VK_XFB_BUFFER_DATA_STRIDE = 2048 };
+#define PS5VK_XFB_MAX_BUFFER_SIZE ((VkDeviceSize)1u << 31)
+static inline void ps5vk_xfb_device_properties(int supported,
+    VkPhysicalDeviceTransformFeedbackPropertiesEXT *out)
+{
+    out->maxTransformFeedbackStreams = supported ? PS5VK_XFB_ABI_STREAMS : 0u;
+    out->maxTransformFeedbackBuffers = supported ? PS5VK_XFB_ABI_BUFFERS : 0u;
+    out->maxTransformFeedbackBufferSize = supported ? PS5VK_XFB_MAX_BUFFER_SIZE : 0u;
+    out->maxTransformFeedbackStreamDataSize = supported ? PS5VK_XFB_STREAM_DATA_SIZE : 0u;
+    out->maxTransformFeedbackBufferDataSize = supported ? PS5VK_XFB_BUFFER_DATA_SIZE : 0u;
+    out->maxTransformFeedbackBufferDataStride = supported ? PS5VK_XFB_BUFFER_DATA_STRIDE : 0u;
+    out->transformFeedbackQueries = VK_FALSE;
+    out->transformFeedbackStreamsLinesTriangles = VK_FALSE;
+    out->transformFeedbackRasterizationStreamSelect = VK_FALSE;
+    out->transformFeedbackDraw = VK_FALSE;
+}
+/* The reflection limits a logical device imposes: the reported properties,
+ * and a stream other than zero only when geometryStreams was enabled. */
+static inline void ps5vk_xfb_device_limits(int enabled, VkBool32 geometry_streams,
+                                           struct ps5vk_xfb_limits *out)
+{
+    VkPhysicalDeviceTransformFeedbackPropertiesEXT p;
+    ps5vk_xfb_device_properties(enabled, &p);
+    out->max_streams = p.maxTransformFeedbackStreams;
+    out->max_buffers = p.maxTransformFeedbackBuffers;
+    out->max_buffer_data_size = p.maxTransformFeedbackBufferDataSize;
+    out->max_buffer_data_stride = p.maxTransformFeedbackBufferDataStride;
+    out->max_stream_data_size = p.maxTransformFeedbackStreamDataSize;
+    out->geometry_streams = enabled && geometry_streams;
+    out->streams_lines_triangles = p.transformFeedbackStreamsLinesTriangles;
+}
+
 /* Reflect the capture interface of the entry point whose result id is `entry`.
  * `words` must be a module that already passed shader-module validation (well
  * formed instruction lengths). `out` is cleared first and filled only for

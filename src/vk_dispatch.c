@@ -206,6 +206,13 @@ static const struct entry entries[] = {
     ENTRY(vkCmdEndQuery, DEVICE),
     ENTRY(vkCmdWriteTimestamp, DEVICE),
     ENTRY(vkCmdCopyQueryPoolResults, DEVICE),
+    /* VK_EXT_transform_feedback (DXVK262-T14). */
+    ENTRY(vkCmdBindTransformFeedbackBuffersEXT, DEVICE),
+    ENTRY(vkCmdBeginTransformFeedbackEXT, DEVICE),
+    ENTRY(vkCmdEndTransformFeedbackEXT, DEVICE),
+    ENTRY(vkCmdBeginQueryIndexedEXT, DEVICE),
+    ENTRY(vkCmdEndQueryIndexedEXT, DEVICE),
+    ENTRY(vkCmdDrawIndirectByteCountEXT, DEVICE),
     ENTRY(vkGetImageSparseMemoryRequirements, DEVICE),
     ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties, INSTANCE),
     /* VK_EXT_extended_dynamic_state (DXVK262-T10). */
@@ -378,6 +385,18 @@ static int synchronization2_command(const char *name)
            !strcmp(name, "vkCmdSetEvent2KHR") || !strcmp(name, "vkCmdResetEvent2KHR") ||
            !strcmp(name, "vkCmdWaitEvents2KHR") ||
            !strcmp(name, "vkCmdWriteTimestamp2KHR") || !strcmp(name, "vkQueueSubmit2KHR");
+}
+
+/* VK_EXT_transform_feedback commands: reachable only on a device that enabled
+ * the extension. */
+static int transform_feedback_command(const char *name)
+{
+    return !strcmp(name, "vkCmdBindTransformFeedbackBuffersEXT") ||
+           !strcmp(name, "vkCmdBeginTransformFeedbackEXT") ||
+           !strcmp(name, "vkCmdEndTransformFeedbackEXT") ||
+           !strcmp(name, "vkCmdBeginQueryIndexedEXT") ||
+           !strcmp(name, "vkCmdEndQueryIndexedEXT") ||
+           !strcmp(name, "vkCmdDrawIndirectByteCountEXT");
 }
 
 static int timeline_semaphore_command(const char *name)
@@ -555,6 +574,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
     if (create_renderpass2_command(name) && !device->create_renderpass2_extension_enabled)
         return NULL;
     if (swapchain_command(name) && !device->swapchain_extension_enabled)
+        return NULL;
+    if (transform_feedback_command(name) && !device->transform_feedback_extension_enabled)
         return NULL;
     if (memory_requirements2_command(name) && !device->memory_requirements2_extension_enabled)
         return NULL;

@@ -743,6 +743,81 @@ int main(void)
         vkDestroyShaderModule(&d,xfb_module,NULL);
         d.graphics_library=&library;
     }
+    /* With transformFeedback enabled: a capture on the vertex stage is refused
+     * at its own site (the PS5 capture path is the geometry stage's), a
+     * geometry-stage capture is accepted and carries its buffers into the
+     * program identity and the pipeline, and rasterizer discard is admitted
+     * for that capture pipeline only. */
+    {
+        extern unsigned ps5vk_pipeline_refusal_site(void);
+        uint32_t xfb_vs[]={0x07230203,0x10000,0,16,0,(5u<<16)|15,0,1,0x6e69616d,0,
+            (3u<<16)|16,1,11};
+        uint32_t xfb_gs[]={0x07230203,0x10000,0,16,0,
+            (6u<<16)|15,3,1,0x6e69616d,0,5,
+            (3u<<16)|16,1,11,
+            (4u<<16)|71,5,36,0,(4u<<16)|71,5,37,16,(4u<<16)|71,5,35,0,
+            (3u<<16)|22,2,32,(4u<<16)|23,3,2,4,(4u<<16)|32,4,3,3,(4u<<16)|59,4,5,3};
+        VkShaderModule vs_capture,gs_capture;
+        VkShaderModuleCreateInfo vmi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(xfb_vs),.pCode=xfb_vs};
+        VkShaderModuleCreateInfo gmi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(xfb_gs),.pCode=xfb_gs};
+        assert(vkCreateShaderModule(&d,&vmi,NULL,&vs_capture)==VK_SUCCESS);
+        assert(vkCreateShaderModule(&d,&gmi,NULL,&gs_capture)==VK_SUCCESS);
+        d.enabled_features|=PS5VK_FEATURE_GEOMETRY_SHADER;
+        d.enabled_features_t09|=PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK;
+        VkPipelineShaderStageCreateInfo vs_stages[2]={stages[0],stages[1]};
+        vs_stages[0].module=vs_capture;
+        VkGraphicsPipelineCreateInfo vs_info=info;
+        vs_info.pStages=vs_stages;
+        VkPipeline pipeline=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&vs_info,NULL,&pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !pipeline &&
+               ps5vk_pipeline_refusal_site()==20);
+        VkPipelineShaderStageCreateInfo gs_stages[3]={stages[0],
+            {.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+             .stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=gs_capture,.pName="main"},
+            stages[1]};
+        VkGraphicsPipelineCreateInfo gs_info=info;
+        gs_info.stageCount=3;gs_info.pStages=gs_stages;
+        struct ps5vk_graphics_program capture_program=program;
+        capture_program.key.geometry=(struct ps5vk_graphics_module_key){
+            .words=xfb_gs,.word_count=sizeof(xfb_gs)/sizeof(xfb_gs[0]),.entry="main"};
+        capture_program.key.transform_feedback_buffers=1u;
+        struct ps5vk_graphics_library capture_library={&capture_program,1};
+        d.graphics_library=&capture_library;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)==VK_SUCCESS &&
+               pipeline && pipeline->xfb.buffers_mask==1u && pipeline->xfb.strides[0]==16u &&
+               !pipeline->rasterizer_discard);
+        vkDestroyPipeline(&d,pipeline,NULL);
+        /* A record compiled without the capture never satisfies it. */
+        capture_program.key.transform_feedback_buffers=0u;
+        pipeline=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)!=VK_SUCCESS && !pipeline);
+        /* Rasterizer discard: accepted with the capture, refused without it. */
+        capture_program.key.transform_feedback_buffers=1u;
+        capture_program.key.rasterizer_discard=VK_TRUE;
+        VkPipelineRasterizationStateCreateInfo discard=r;
+        discard.rasterizerDiscardEnable=VK_TRUE;
+        gs_info.pRasterizationState=&discard;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)==VK_SUCCESS &&
+               pipeline && pipeline->rasterizer_discard);
+        vkDestroyPipeline(&d,pipeline,NULL);
+        VkGraphicsPipelineCreateInfo plain_discard=info;
+        plain_discard.pRasterizationState=&discard;
+        pipeline=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&plain_discard,NULL,&pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !pipeline);
+        /* The same geometry capture without the feature: site 19. */
+        d.enabled_features_t09&=~PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK;
+        gs_info.pRasterizationState=&r;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT && ps5vk_pipeline_refusal_site()==19);
+        d.enabled_features&=~PS5VK_FEATURE_GEOMETRY_SHADER;
+        vkDestroyShaderModule(&d,vs_capture,NULL);
+        vkDestroyShaderModule(&d,gs_capture,NULL);
+        d.graphics_library=&library;
+    }
     /* The tessellation contract: the control and evaluation stages are
      * described and validated, and the pipeline is then refused because the
      * pinned compiler emits no loadable package for them. PATCH_LIST without
