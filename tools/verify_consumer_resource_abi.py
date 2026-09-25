@@ -1217,7 +1217,7 @@ def validate(log, receipt, artifact, texel_rgba8=False, texel_formats=False):
         "storage8_checksum_fnv1a32": "9575e8c5",
         "storage16_checksum_fnv1a32": "603ddade",
         "physical_device_report_fnv1a32": "7f34799b",
-        "reported_heap_bytes": 268435456,
+        "reported_heap_bytes": 1342177280,
         "reported_memory_type_flags": "DEVICE_LOCAL|HOST_VISIBLE",
         "reported_host_coherent": False,
         "synchronization_words_checked": 64,
