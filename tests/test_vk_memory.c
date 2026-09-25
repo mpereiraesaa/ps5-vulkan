@@ -300,7 +300,35 @@ static void test_buffer_views(void)
     assert(vkCreateBuffer(&d, &storage_info, NULL, &storage_texel) == VK_SUCCESS);
     assert(vkBindBufferMemory(&d, storage_texel, m, 1024) == VK_SUCCESS);
     vi.buffer = storage_texel;
+#if defined(PS5VK_STORAGE_TEXEL_DIAGNOSTIC) && PS5VK_STORAGE_TEXEL_DIAGNOSTIC
+    /* Measurement build: exactly the three storage-texel rows serve the role. */
+    const VkFormat storage_formats[] = {VK_FORMAT_R32_UINT, VK_FORMAT_R8G8B8A8_UNORM,
+                                        VK_FORMAT_R32G32B32A32_SFLOAT};
+    for (unsigned i = 0; i < 3; ++i) {
+        vi.format = storage_formats[i]; vi.offset = 0; vi.range = 64;
+        assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_SUCCESS && view);
+        vkDestroyBufferView(&d, view, NULL); view = VK_NULL_HANDLE;
+    }
+    /* A row with only the uniform role is refused for a storage buffer. */
+    vi.format = VK_FORMAT_R32_SINT;
     assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+    /* A buffer naming both roles needs both on the row. */
+    VkBufferCreateInfo both_info = bi;
+    both_info.usage = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
+        VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+    VkBuffer both;
+    assert(vkCreateBuffer(&d, &both_info, NULL, &both) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, both, m, 2048) == VK_SUCCESS);
+    vi.buffer = both; vi.format = VK_FORMAT_R32_UINT;
+    assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_SUCCESS && view);
+    vkDestroyBufferView(&d, view, NULL); view = VK_NULL_HANDLE;
+    vi.format = VK_FORMAT_R32_SINT;
+    assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+    vkDestroyBuffer(&d, both, NULL);
+    vi.format = VK_FORMAT_R32_UINT; vi.offset = 4; vi.range = VK_WHOLE_SIZE;
+#else
+    assert(vkCreateBufferView(&d, &vi, NULL, &view) == VK_ERROR_FEATURE_NOT_PRESENT && !view);
+#endif
     vkDestroyBuffer(&d, storage_texel, NULL);
     for (unsigned i = 0; i < sizeof(extra) / sizeof(extra[0]); ++i)
         vkDestroyBufferView(&d, extra[i], NULL);

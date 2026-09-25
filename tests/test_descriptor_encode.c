@@ -307,15 +307,23 @@ int main(void)
         separate_table,20)!=VK_SUCCESS);
     separate.images[0].sampler=&sampler;
     assert(!memcmp(saved,separate_table,sizeof(saved)));
-    /* The storage role is a distinct implemented capability: the same R32 view
-     * that serves texelFetch is refused for imageStore until its row carries
-     * the storage-texel role. */
+    /* The storage role is a distinct implemented capability. R32_UINT carries
+     * it: the imageStore V# is the texelFetch record. R32_SINT carries only
+     * the uniform role and is refused, table unchanged. */
     struct ps5vk_compiled_program storage_texel_program={.gfx=1013,.descriptor_count=1,
         .descriptors={{0,3,0,16,VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER}}};
-    assert(!(ps5vk_texture_format_capabilities(VK_FORMAT_R32_UINT) &
-        PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER));
+    assert(ps5vk_texture_format_capabilities(VK_FORMAT_R32_UINT) &
+        PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER);
+    assert(ps5vk_descriptor_encode(&device,&storage_texel_program,0,&separate,dynamic,
+        separate_table,20)==VK_SUCCESS);
+    assert(separate_table[16]==0x4040 && separate_table[17]==0x00040002 &&
+        separate_table[18]==64 && separate_table[19]==0x11014204);
+    typed_view.format=VK_FORMAT_R32_SINT;
+    memcpy(saved,separate_table,sizeof(saved));
     assert(ps5vk_descriptor_encode(&device,&storage_texel_program,0,&separate,dynamic,
         separate_table,20)!=VK_SUCCESS);
+    assert(!memcmp(saved,separate_table,sizeof(saved)));
+    typed_view.format=VK_FORMAT_R32_UINT;
     /* A compiled type the compute path has no record for is refused. */
     separate_program.descriptors[0].type=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     separate.signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;

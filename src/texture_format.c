@@ -47,6 +47,19 @@
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), GPL, 1, 1, (bpt) }
+/* The storage-texel-buffer role (DXVK typed UAV buffers, RWBuffer<>): the same
+ * typed V# the uniform-texel role reads, written with a format store. It is
+ * implemented on the three rows below and enabled only in the default-off
+ * measurement build until the storage-texel witness passes on the console. */
+#if defined(PS5VK_STORAGE_TEXEL_DIAGNOSTIC) && PS5VK_STORAGE_TEXEL_DIAGNOSTIC
+#define STEXEL_ENABLED PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER
+#else
+#define STEXEL_ENABLED 0u
+#endif
+#define SAMPLED_STEXEL(f, bpt, word, s0, s1, s2, s3, EXTRA, ENABLED) \
+    { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
+      CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED) | PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER, \
+      CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED) | STEXEL_ENABLED, GPL, 1, 1, (bpt) }
 /* Sampled row whose byte layout is the pinned registry's packed-component
  * order rather than one of the reference's explicit rows. WITNESSED lists
  * enabled capabilities, including the independently qualified sampled roles;
@@ -93,7 +106,7 @@ static const struct ps5vk_texture_format formats[] = {
     /* The only colour attachment this profile both renders into and reads
      * back; the readback pair is a separate capability from the bare
      * attachment usage. */
-    SAMPLED(VK_FORMAT_R8G8B8A8_UNORM, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
+    SAMPLED_STEXEL(VK_FORMAT_R8G8B8A8_UNORM, 4, UINT32_C(0x03800000), 4, 5, 6, 7,
             CAP_LINEAR | CAP_VERTEX | CAP_SRC | CAP_COLOR | CAP_COLOR_READBACK |
             CAP_UTEXEL | CAP_BLIT_DST,
             CAP_BLEND),
@@ -137,7 +150,7 @@ static const struct ps5vk_texture_format formats[] = {
             CAP_LINEAR | CAP_VERTEX | CAP_UTEXEL, 0),
     SAMPLED(VK_FORMAT_R32G32_SFLOAT, 8, UINT32_C(0x04000000), 4, 5, 0, 1,
             CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
-    SAMPLED(VK_FORMAT_R32G32B32A32_SFLOAT, 16, UINT32_C(0x04d00000), 4, 5, 6, 7,
+    SAMPLED_STEXEL(VK_FORMAT_R32G32B32A32_SFLOAT, 16, UINT32_C(0x04d00000), 4, 5, 6, 7,
             CAP_LINEAR | CAP_VERTEX, CAP_UTEXEL),
     /* --- typed integer sampled formats (nearest only) --------------------- */
     SAMPLED(VK_FORMAT_R8_UINT, 1, UINT32_C(0x00500000), 4, 0, 0, 1,
@@ -165,7 +178,7 @@ static const struct ps5vk_texture_format formats[] = {
             CAP_VERTEX, CAP_UTEXEL),
     SAMPLED(VK_FORMAT_R16G16B16A16_SINT, 8, UINT32_C(0x04600000), 4, 5, 6, 7,
             CAP_VERTEX, CAP_UTEXEL),
-    SAMPLED(VK_FORMAT_R32_UINT, 4, UINT32_C(0x01400000), 4, 0, 0, 1,
+    SAMPLED_STEXEL(VK_FORMAT_R32_UINT, 4, UINT32_C(0x01400000), 4, 0, 0, 1,
             CAP_VERTEX | CAP_UTEXEL, CAP_SRC | CAP_STORAGE_IMAGE),
     SAMPLED(VK_FORMAT_R32_SINT, 4, UINT32_C(0x01500000), 4, 0, 0, 1,
             CAP_VERTEX | CAP_UTEXEL, 0),

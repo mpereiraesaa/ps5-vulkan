@@ -340,8 +340,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateBufferView(VkDevice d,const VkBufferViewC
     if(!out)return INVALID;
     *out=VK_NULL_HANDLE;
     if(!d || !info || info->sType!=VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO || info->pNext ||
-       info->flags || !ps5vk_buffer_usage(d,info->buffer,VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT))
+       info->flags || !info->buffer || info->buffer->device!=d)
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* The view serves every texel role its buffer's usage names
+     * (VUID-VkBufferViewCreateInfo-buffer-00933/-00934), and needs one. */
+    const VkBool32 uniform_role=ps5vk_buffer_usage(d,info->buffer,
+        VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
+    const VkBool32 storage_role=ps5vk_buffer_usage(d,info->buffer,
+        VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT);
+    if(!uniform_role && !storage_role)return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Creation follows the WITNESSED capability, exactly like the published
      * VkFormatProperties: a format whose uniform-texel role is implemented but
      * still waiting for its console witness must not become a public success
@@ -350,7 +357,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateBufferView(VkDevice d,const VkBufferViewC
      * capability row. */
     const struct ps5vk_texture_format *texel=ps5vk_texture_format_lookup(info->format);
     const uint32_t element=texel?texel->bytes_per_texel:0;
-    if(!ps5vk_texture_format_witnessed(info->format,PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER) ||
+    if((uniform_role &&
+        !ps5vk_texture_format_witnessed(info->format,PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER)) ||
+       (storage_role &&
+        !ps5vk_texture_format_witnessed(info->format,PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER)) ||
        !element || info->offset%element)return VK_ERROR_FEATURE_NOT_PRESENT;
     void *address;VkDeviceSize range;
     if(ps5vk_buffer_span(d,info->buffer,info->offset,info->range,&address,&range)!=VK_SUCCESS ||
