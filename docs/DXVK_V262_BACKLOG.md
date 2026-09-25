@@ -78,6 +78,21 @@ reached in this run. This is a host boundary test, not DXVK execution on PS5.
 Run the new script after the same pinned DXVK native build above; it writes a
 compact JSON receipt with `--output <path>`.
 
+The next build boundary is now measurable with
+`python3 tools/build_dxvk_ps5_cross_probe.py`. Starting from the same clean,
+pinned DXVK source and configured native Meson build, it cross-compiles 160
+units for `x86_64-sie-ps5` and links D3D11/DXGI using the PS5 toolchain.
+SDL2 WSI, the EDID parser and its `libdisplay-info` dependency account for
+the 13 omitted units; a temporary
+empty EDID result and a diagnostic-only no-op for thread naming allow this
+link check without claiming a display backend. The first linked artifacts
+have SHA-256 `b8a8749717db6249beacca8585fe4acc89acab24d82d15414058b3f25b68d21d`
+(D3D11) and `eec6759d7e1138f50a476b081844782ee83762b4512ad84ea28ab9a4b809b82a`
+(DXGI). The generated receipt marks `runtime_ready=false`: no PS5 WSI
+bootstrap or Vulkan surface/swapchain route exists, and neither library has
+been packaged or run on PS5. Implement those routes before treating the
+cross-linked objects as a runnable DXVK build.
+
 T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
 `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` disabled. A
 default-off diagnostic compute route has twice read back 128 exact 32-bit
