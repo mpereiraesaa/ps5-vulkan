@@ -5,6 +5,21 @@
 /* Implementation bounds, not a claim of Vulkan minimum-limit conformance. */
 enum { PS5VK_MAX_BINDINGS = 32, PS5VK_MAX_DESCRIPTORS = 128, PS5VK_MAX_SETS = 4 };
 enum { PS5VK_MAX_PUSH_CONSTANT_BYTES = 256, PS5VK_MAX_PUSH_CONSTANT_DWORDS = 64 };
+/* Inline uniform blocks (DXVK262-T12). These are the bounds the descriptor
+ * model below enforces, and the values a Vulkan 1.3 report would carry: each
+ * equals or exceeds the core minimum (256 bytes, 4 blocks, 256 bytes total).
+ * Update-after-bind layouts are refused, so the two update-after-bind limits
+ * equal the plain ones. The descriptor model does not make the feature
+ * consumable: no shader path encodes an inline block yet, and every
+ * consumer refuses the descriptor type explicitly. */
+enum {
+    PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES = 256,
+    PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET = 4,
+    PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_STAGE = 4,
+    PS5VK_MAX_INLINE_UNIFORM_SET_BYTES =
+        PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES * PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET,
+    PS5VK_MAX_INLINE_UNIFORM_TOTAL_BYTES = PS5VK_MAX_INLINE_UNIFORM_SET_BYTES
+};
 struct VkBufferView_T {
     VkDevice device;
     VkBuffer buffer;
@@ -24,11 +39,19 @@ struct ps5vk_set_signature {
     VkDescriptorType type[PS5VK_MAX_BINDINGS];
     uint32_t count;
 };
+/* An inline uniform block occupies ONE descriptor slot of the signature (the
+ * slot a future buffer record would address) and bytes[] of the set's own
+ * inline storage. bytes[b] is zero for every other binding. */
+struct ps5vk_inline_uniform_layout {
+    uint32_t offset[PS5VK_MAX_BINDINGS], bytes[PS5VK_MAX_BINDINGS];
+    uint32_t total_bytes, blocks;
+};
 struct VkDescriptorSetLayout_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
     struct ps5vk_set_signature signature;
+    struct ps5vk_inline_uniform_layout inline_uniform;
 };
 struct VkDescriptorSet_T {
     VkDescriptorPool pool;
@@ -39,6 +62,8 @@ struct VkDescriptorSet_T {
     VkBufferView texel_views[PS5VK_MAX_DESCRIPTORS];
     VkImage image_resources[PS5VK_MAX_DESCRIPTORS];
     VkBool32 defined[PS5VK_MAX_DESCRIPTORS];
+    struct ps5vk_inline_uniform_layout inline_uniform;
+    uint8_t inline_data[PS5VK_MAX_INLINE_UNIFORM_SET_BYTES];
     uint64_t generation;
     unsigned pending;
 };
@@ -65,6 +90,11 @@ struct VkDescriptorPool_T {
     uint64_t sampler_capacity, sampler_used;
     uint64_t sampled_image_capacity, sampled_image_used;
     uint64_t storage_texel_capacity, storage_texel_used;
+    /* Inline uniform blocks are accounted twice, as Vulkan sizes them: bytes
+     * from VkDescriptorPoolSize and bindings from
+     * VkDescriptorPoolInlineUniformBlockCreateInfo (zero when absent). */
+    uint64_t inline_bytes_capacity, inline_bytes_used;
+    uint64_t inline_bindings_capacity, inline_bindings_used;
     VkDescriptorSet sets;
 };
 
