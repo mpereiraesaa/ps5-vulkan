@@ -80,18 +80,22 @@ compact JSON receipt with `--output <path>`.
 
 The next build boundary is now measurable with
 `python3 tools/build_dxvk_ps5_cross_probe.py`. Starting from the same clean,
-pinned DXVK source and configured native Meson build, it cross-compiles 160
-units for `x86_64-sie-ps5` and links D3D11/DXGI using the PS5 toolchain.
+pinned DXVK source and configured native Meson build, it cross-compiles 161
+DXVK/PS5-adapter units for `x86_64-sie-ps5` and links D3D11/DXGI using the
+PS5 toolchain. The adapter supplies a fixed 1080p60 monitor, requests
+`VK_KHR_surface`/`VK_KHR_display`, and selects a compatible display mode and
+plane for `vkCreateDisplayPlaneSurfaceKHR`. Its host test exercises the
+successful Vulkan call sequence and rejects a missing entry point, wrong mode
+or unsupported alpha mode.
 SDL2 WSI, the EDID parser and its `libdisplay-info` dependency account for
-the 13 omitted units; a temporary
-empty EDID result and a diagnostic-only no-op for thread naming allow this
-link check without claiming a display backend. The first linked artifacts
-have SHA-256 `b8a8749717db6249beacca8585fe4acc89acab24d82d15414058b3f25b68d21d`
-(D3D11) and `eec6759d7e1138f50a476b081844782ee83762b4512ad84ea28ab9a4b809b82a`
-(DXGI). The generated receipt marks `runtime_ready=false`: no PS5 WSI
-bootstrap or Vulkan surface/swapchain route exists, and neither library has
-been packaged or run on PS5. Implement those routes before treating the
-cross-linked objects as a runnable DXVK build.
+the 13 omitted units; an empty EDID result and a diagnostic-only no-op for
+thread naming allow this link check. The linked artifacts have SHA-256
+`7ba72f19613935a504112c2a8f0f2673daf0a08a1d07c80b7274bb563c5957ad`
+(D3D11) and `58d93013638da3e20e4b4ef2cafe882e4b62232f46f67cf343e128ed050b7b76`
+(DXGI). The generated receipt still marks `runtime_ready=false`: ps5vk does
+not implement the Vulkan display-surface/swapchain route, and neither library
+has been packaged or run on PS5. The API-version and required DXVK feature
+gates remain later steps; no public version or feature bit changes here.
 
 T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
 `shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` disabled. A

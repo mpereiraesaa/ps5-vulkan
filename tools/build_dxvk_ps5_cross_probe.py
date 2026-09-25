@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Cross-link pinned DXVK 2.6.2 D3D11/DXGI for PS5, without a WSI backend.
+"""Cross-link pinned DXVK 2.6.2 D3D11/DXGI with the PS5 WSI adapter.
 
-This answers a toolchain question only. The output cannot initialize DXVK:
-the SDL2 WSI is excluded and no PS5 WSI or Vulkan surface is substituted.
+The WSI adapter is linked, but the output cannot present until ps5vk implements
+the Vulkan display-surface and swapchain route. No PS5 execution is inferred.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ std::optional<WsiDisplayMetadata> parseColorimetryInfo(const WsiEdidData&) {
 """
 EXCLUDED_SOURCES = (
     "wsi_monitor_sdl2.cpp", "wsi_platform_sdl2.cpp", "wsi_window_sdl2.cpp",
-    "wsi_edid.cpp",
+    "wsi_edid.cpp", "wsi_platform.cpp",
 )
 
 
@@ -64,10 +64,9 @@ def compile_entry(index: int, entry: dict, build: Path, output: Path,
         elif arg in ("-o", "-MQ", "-MF"):
             skip_next = True
         elif arg not in ("-MD", "-O2", "-g"):
-            filtered.append(arg)
-    filtered[1:1] = ["-include", str(compat)]
-    if source.endswith("/wsi_platform.cpp"):
-        filtered.append("-UDXVK_WSI_SDL2")
+            filtered.append("-DDXVK_WSI_PS5" if arg == "-DDXVK_WSI_SDL2" else arg)
+    filtered[1:1] = ["-include", str(compat),
+                     f"-I{build.parent / 'src/util'}"]
     obj = output / f"{index:03d}.o"
     filtered.extend(("-O0", "-o", str(obj)))
     try:
@@ -82,6 +81,30 @@ def archive(output: Path, name: str, objects: list[Path]) -> Path:
     path.unlink(missing_ok=True)
     command(["ar", "rcs", str(path), *(str(obj) for obj in objects)])
     return path
+
+
+def run_wsi_host_contract(dxvk: Path, output: Path) -> None:
+    include = [
+        dxvk / "src/wsi", dxvk / "include/native",
+        dxvk / "include/native/windows", dxvk / "include/native/directx",
+        dxvk / "include/vulkan/include",
+    ]
+    executable = output / "test_dxvk_ps5_wsi"
+    command(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
+             "-Wno-unused-parameter", "-DDXVK_WSI_PS5",
+             *(f"-I{path}" for path in include),
+             str(ROOT / "tools/dxvk_ps5_wsi.cpp"),
+             str(ROOT / "tests/test_dxvk_ps5_wsi.cpp"),
+             "-o", str(executable)])
+    command([str(executable)])
+
+
+def wsi_entry(original: dict, source: Path) -> dict:
+    args = shlex.split(original["command"])
+    if args.count(original["file"]) != 1:
+        raise ValueError("WSI compile command no longer has one source")
+    args[args.index(original["file"])] = str(source)
+    return {**original, "file": str(source), "command": shlex.join(args)}
 
 
 def main() -> int:
@@ -134,10 +157,31 @@ def main() -> int:
         objects.mkdir(exist_ok=True)
         compat = output / "ps5_compat.h"
         compat.write_text(COMPAT_HEADER)
+        run_wsi_host_contract(dxvk, output)
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
             results = list(pool.map(
                 lambda item: compile_entry(item[0], item[1], build, objects,
                                            cc, cxx, compat), selected))
+        platform_entries = [entry for entry in entries
+                            if entry["file"].endswith("/wsi_platform.cpp")]
+        if len(platform_entries) != 1:
+            raise ValueError("DXVK WSI platform source not found uniquely")
+        original = (dxvk / "src/wsi/wsi_platform.cpp").read_text()
+        anchor = "static const WsiBootstrap *wsiBootstrap[] = {"
+        if original.count(anchor) != 1:
+            raise ValueError("DXVK WSI bootstrap location changed")
+        overlay = output / "wsi_platform_ps5.cpp"
+        overlay.write_text(original.replace(
+            anchor, "extern WsiBootstrap Ps5WSI;\n  " + anchor + "\n    &Ps5WSI,")
+            .replace('#include "../util/', '#include "'))
+        platform_result = compile_entry(
+            len(entries), wsi_entry(platform_entries[0], overlay), build,
+            objects, cc, cxx, compat)
+        backend_result = compile_entry(
+            len(entries) + 1,
+            wsi_entry(platform_entries[0], ROOT / "tools/dxvk_ps5_wsi.cpp"),
+            build, objects, cc, cxx, compat)
+        results.extend((platform_result, backend_result))
         no_edid = output / "no_edid.cpp"
         no_edid.write_text(NO_EDID)
         no_edid_obj = output / "no_edid.o"
@@ -174,10 +218,10 @@ def main() -> int:
             "dxvk_commit": actual,
             "target": "x86_64-sie-ps5",
             "compiled_units": len(results),
-            "excluded_units": len(entries) - len(results),
+            "excluded_units": len(entries) - len(selected) - 1,
             "artifacts": artifacts,
             "runtime_ready": False,
-            "runtime_blocker": "No PS5 WSI driver or Vulkan surface/swapchain route",
+            "runtime_blocker": "ps5vk has no Vulkan display-surface/swapchain route",
         }
         manifest = output / "receipt.json"
         manifest.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
