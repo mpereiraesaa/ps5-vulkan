@@ -52,7 +52,7 @@ def main():
     sources = {name: ROOT / f"experiments/compute/{name}.comp" for name in
                ("minimal", "xor", "shared_grid", "resource_abi", "push_specialization",
                 "storage8", "storage16", "shader_int16", "sync_producer", "sync_consumer",
-                "shared_atomic_multiwave")}
+                "shared_atomic_multiwave", "robust_access_wrap")}
     sources.update({name: ROOT / f"experiments/compute/{name}.comp"
                     for name in ("t08_address", "t08_memory_model_queue", "t08_memory_model")})
     targets = {name: OUTPUT / f"{name}.spv" for name in sources}

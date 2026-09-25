@@ -1,9 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
 #include <pthread.h>
 #include "ps5vk_compiler.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static uint32_t *read_file(const char *path, size_t *out_size)
 {
@@ -50,6 +52,62 @@ static void check_small_stack_compile(const uint32_t *spirv, size_t words,
     pthread_attr_destroy(&attr);
     assert(c.result == VK_SUCCESS && c.code && c.program.code_words);
     free(c.code);
+}
+
+/* Count one scalar-buffer load width in the first ACO listing (after register
+ * allocation) that PSBC_DEBUG_DISASM prints to stderr. */
+static unsigned count_width(const char *listing, const char *needle)
+{
+    unsigned n = 0;
+    for (const char *p = strstr(listing, needle); p; p = strstr(p + 1, needle))
+        if (p[strlen(needle)] == ' ') ++n;
+    return n;
+}
+
+/* VK_EXT_robustness2: the driver compiles every program with
+ * robust_buffer_access2, so v[i - 1] and v[i] from an SSBO and a UBO are four
+ * separate loads rather than one merged dwordx2/dwordx8 pair (the pinned
+ * compiler's contract shows the merged form without the option). */
+static void robust_access_wrap(void)
+{
+    size_t bytes = 0;
+    uint32_t *spv = read_file("build/test-shaders/robust_access_wrap.spv", &bytes);
+    assert(spv);
+    struct VkPipelineLayout_T layout = {.set_count = 1};
+    const VkDescriptorType types[3] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER};
+    for (uint32_t b = 0; b < PS5VK_MAX_BINDINGS; ++b)
+        layout.sets[0].binding[b].first = b < 3 ? b : 3;
+    for (uint32_t b = 0; b < 3; ++b) {
+        layout.sets[0].binding[b].count = 1;
+        layout.sets[0].binding[b].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+        layout.sets[0].type[b] = types[b];
+    }
+    layout.sets[0].count = 3;
+    FILE *capture = tmpfile(); assert(capture);
+    fflush(stderr);
+    int saved = dup(STDERR_FILENO); assert(saved >= 0);
+    assert(dup2(fileno(capture), STDERR_FILENO) >= 0);
+    assert(!setenv("PSBC_DEBUG_DISASM", "1", 1));
+    struct ps5vk_compiled_program prog = {0}; uint32_t *code = NULL;
+    VkResult res = ps5vk_runtime_compile_compute(spv, bytes / 4, "main", &layout, NULL,
+                                                 &prog, &code);
+    assert(!unsetenv("PSBC_DEBUG_DISASM"));
+    fflush(stderr);
+    assert(dup2(saved, STDERR_FILENO) >= 0); close(saved);
+    assert(res == VK_SUCCESS && code && prog.descriptor_count == 3);
+    long size = ftell(capture); assert(size > 0); rewind(capture);
+    char *text = calloc((size_t)size + 1, 1); assert(text);
+    assert(fread(text, 1, (size_t)size, capture) == (size_t)size); fclose(capture);
+    char *listing = strstr(text, "After RA:"); assert(listing);
+    char *stage = strstr(listing, "ACO shader stage:"); assert(stage);
+    char *next = strstr(stage + 1, "ACO shader stage:");
+    if (next) *next = '\0';
+    assert(count_width(listing, "s_buffer_load_dwordx2") == 0);
+    assert(count_width(listing, "s_buffer_load_dwordx8") == 0);
+    assert(count_width(listing, "s_buffer_load_dword") == 3);
+    assert(count_width(listing, "s_buffer_load_dwordx4") == 2);
+    free(text); free(code); free(spv);
 }
 
 int main(void)
@@ -531,6 +589,7 @@ int main(void)
     free(spv1);
     free(spv2);
 
+    robust_access_wrap();
     puts("Runtime compute compiler: pass (PSBC/ACO GFX1013 ABI, CS registers, error guards, CPU reference)");
     return 0;
 }

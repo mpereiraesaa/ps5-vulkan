@@ -829,6 +829,9 @@ static VkResult runtime_graphics_compile(const struct ps5vk_graphics_key *key,co
     VkResult failure=VK_ERROR_FEATURE_NOT_PRESENT;
     PsbcCompileOptions options={.target=PSBC_TARGET_PS5,.stage=PSBC_STAGE_FRAGMENT,
         .entrypoint=key->fragment.entry,.optimise=true,.address32_hi=2,
+        /* robustBufferAccess2 load handling on every compile: no SSBO/UBO
+         * pair is merged across a wrapping offset (VK_EXT_robustness2). */
+        .robust_buffer_access2=true,
         /* The pixel stage compiles for the sample count the pipeline carries:
          * the pinned compiler turns it into the per-sample ABI (screen position
          * per sample, sample-rate interpolation and the sample id), which is
@@ -960,6 +963,7 @@ static VkResult runtime_graphics_compile(const struct ps5vk_graphics_key *key,co
         PsbcCompileOptions hull_options={.target=PSBC_TARGET_PS5,
             .stage=PSBC_STAGE_TESS_CTRL,.entrypoint=key->tess_control.entry,
             .optimise=true,.address32_hi=2,.rasterization_samples=1,
+            .robust_buffer_access2=true,
             /* The input patch size is what makes the hull compile derive its
              * workgroup layout; without it the metadata publishes no tess
              * workgroup state and the native loader refuses the hull. */
@@ -992,6 +996,7 @@ static VkResult runtime_graphics_compile(const struct ps5vk_graphics_key *key,co
         PsbcCompileOptions domain_options={.target=PSBC_TARGET_PS5,
             .stage=PSBC_STAGE_TESS_EVAL,.entrypoint=key->tess_eval.entry,
             .optimise=true,.ngg=true,.address32_hi=2,.rasterization_samples=1,
+            .robust_buffer_access2=true,
             /* The domain is LINKED against the control half, which is what
              * keeps num_tess_patches, the attribute stride and
              * tes_reads_tess_factors compile-time constants. Compiled alone
