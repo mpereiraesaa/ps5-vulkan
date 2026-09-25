@@ -9,6 +9,7 @@ static int supported(VkImageLayout l)
         l==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
         l==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
         l==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
+        l==VK_IMAGE_LAYOUT_PRESENT_SRC_KHR ||
         l==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
         l==VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
         ps5vk_layout_is_mixed_depth_stencil(l) ||
@@ -54,7 +55,9 @@ VkResult ps5vk_layout_require_aspects(const struct ps5vk_layout_state *s,VkImage
     VkImageAspectFlags aspects,VkImageLayout expected)
 {
     if(!s || !image || !supported(expected) || s->count>PS5VK_LAYOUT_IMAGES ||
-       !aspects_valid(image,aspects))return VK_ERROR_UNKNOWN;
+       !aspects_valid(image,aspects) ||
+       (expected==VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && !image->swapchain_owned))
+        return VK_ERROR_UNKNOWN;
     for(unsigned k=0;k<3;++k) {
         if(!(aspects&order[k]))continue;
         VkImageLayout current;
@@ -73,7 +76,9 @@ VkResult ps5vk_layout_transition_aspects(struct ps5vk_layout_state *s,VkImage im
 {
     if(!s || !image || !supported(next) ||
         (!supported(old) && old!=VK_IMAGE_LAYOUT_UNDEFINED) || s->count>PS5VK_LAYOUT_IMAGES ||
-        !aspects_valid(image,aspects))
+        !aspects_valid(image,aspects) ||
+        ((old==VK_IMAGE_LAYOUT_PRESENT_SRC_KHR ||
+          next==VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) && !image->swapchain_owned))
         return VK_ERROR_UNKNOWN;
     /* Validate every named aspect before touching any entry. */
     int index[3]={-1,-1,-1};

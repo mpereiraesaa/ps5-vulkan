@@ -819,6 +819,20 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(VkCommandBuffer c, const VkRende
             if (!ps5vk_framebuffer_attachment_valid(fb, pass, i,
                     attachment_begin->pAttachments[i])) { invalid(c); return; }
     } else if (attachment_begin) { invalid(c); return; }
+    /* PRESENT_SRC_KHR is a boundary with the display, meaningful only for an
+     * image actually owned by a swapchain. Render passes are created before
+     * their attachment images are known, so enforce that boundary here for
+     * both ordinary and imageless framebuffers. */
+    for (uint32_t i = 0; i < fb->attachment_count; ++i) {
+        const VkAttachmentDescription *a = &pass->attachments[i];
+        if (a->initialLayout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
+            a->finalLayout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) continue;
+        VkImageView view = fb->imageless ? attachment_begin->pAttachments[i] :
+                           fb->attachments[i];
+        if (!view || !view->image || !view->image->swapchain_owned) {
+            invalid(c); return;
+        }
+    }
     /* Every colour role the subpass names must be the one the framebuffer
      * carries, in order, and the depth role after them. A subpass that names
      * no colour role at all - the DEPTH-ONLY shape - has an empty list on both
@@ -1258,6 +1272,7 @@ static int texture_layout_supported(VkImageLayout layout)
     return layout==VK_IMAGE_LAYOUT_GENERAL || layout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
         layout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
         layout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ||
+        layout==VK_IMAGE_LAYOUT_PRESENT_SRC_KHR ||
         /* Reachable only through the depth clear-target profile below; every
          * other usage profile refuses it. */
         layout==VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
@@ -1397,6 +1412,38 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
 {
     VkImage image=b->image;
     const VkImageUsageFlags usage=image->info.usage;
+    /* Only swapchain-owned images may cross the display layout. A present
+     * release may name MEMORY_READ at ALL_COMMANDS as DXVK does; the release
+     * still requires an exact producer write and an image role it declared.
+     * Stage/access compatibility is checked by the caller. */
+    if (image->swapchain_owned) {
+        const VkBool32 transfer = !!(usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        const VkBool32 color = !!(usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+        const VkBool32 from_present = b->oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        const VkBool32 to_present = b->newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        if (from_present || to_present) {
+            if (from_present && !b->srcAccessMask &&
+                ((transfer && b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                  b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT) ||
+                 (color && b->newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                  b->dstAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) ||
+                 ((transfer || color) && b->newLayout == VK_IMAGE_LAYOUT_GENERAL &&
+                  (b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT ||
+                   b->dstAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))))
+                return 1;
+            if (to_present && (b->dstAccessMask == 0 ||
+                               b->dstAccessMask == VK_ACCESS_MEMORY_READ_BIT) &&
+                ((transfer && b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                  b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT) ||
+                 (color && b->oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                  b->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) ||
+                 ((transfer || color) && b->oldLayout == VK_IMAGE_LAYOUT_GENERAL &&
+                  (b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT ||
+                   b->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))))
+                return 1;
+            return 0;
+        }
+    }
     if(ps5vk_tiled_cube_sampled_image(image))return
         b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
         b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
