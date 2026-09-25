@@ -229,6 +229,13 @@ enum ps5vk_t09_feature_bits {
      * VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT is refused by every image
      * format query, which the extension permits. */
     PS5VK_T09_FEATURE_MAINTENANCE1 = 1u << 24,
+    /* VK_KHR_format_feature_flags2 (no feature structure): VkFormatProperties3
+     * answered from the same capability table as VkFormatProperties. */
+    PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2 = 1u << 13,
+    /* VK_KHR_image_format_list (no feature structure) together with the
+     * VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT reinterpretations it lists: only the
+     * pairs src/texture_format.c implements (RGBA8 UNORM <-> SRGB). */
+    PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST = 1u << 14,
 };
 
 /* robust{Storage,Uniform}BufferAccessSizeAlignment. GFX10 raw buffer records
@@ -442,6 +449,14 @@ struct VkDevice_T {
     VkBool32 dynamic_rendering_extension_enabled;
     VkBool32 dynamic_rendering_enabled;
     VkBool32 extended_dynamic_state_enabled;
+    /* VK_KHR_image_format_list was enabled on this device: vkCreateImage
+     * accepts VkImageFormatListCreateInfo only then. */
+    VkBool32 image_format_list_extension_enabled;
+    /* The platform serves the mutable-format reinterpretations of
+     * PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST. VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT
+     * is core Vulkan 1.0, so this does not depend on the extension; a
+     * hand-built device leaves it zero and refuses the flag. */
+    VkBool32 mutable_format_views;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the

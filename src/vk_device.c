@@ -2,6 +2,7 @@
 #include "compilation_cache.h"
 #include "physical_device_profile.h"
 #include "wsi_present_backend.h"
+#include "texture_format.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -799,6 +800,27 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFormatProperties2KHR(VkPhysicalDev
     if (!p || !out || out->sType != VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2)
         return;
     vkGetPhysicalDeviceFormatProperties(p, format, &out->formatProperties);
+    /* VK_KHR_format_feature_flags2: VkFormatProperties3 is the same answer.
+     * Every VkFormatFeatureFlagBits value keeps its bit position in
+     * VkFormatFeatureFlagBits2, so the 64-bit masks are the 32-bit ones
+     * zero-extended. No 64-bit-only bit is claimed: the *_WITHOUT_FORMAT
+     * storage bits need shaderStorageImage{Read,Write}WithoutFormat, which
+     * are not reported, and the depth-comparison / minmax bits have no
+     * separate implementation or measurement. Without the platform route the
+     * structure is left untouched, as before. */
+    if (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2))
+        return;
+    for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext; next;
+         next = next->pNext) {
+        if (next->sType != VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3) continue;
+        VkFormatProperties3 *properties3 = (VkFormatProperties3 *)next;
+        properties3->linearTilingFeatures =
+            (VkFormatFeatureFlags2)out->formatProperties.linearTilingFeatures;
+        properties3->optimalTilingFeatures =
+            (VkFormatFeatureFlags2)out->formatProperties.optimalTilingFeatures;
+        properties3->bufferFeatures =
+            (VkFormatFeatureFlags2)out->formatProperties.bufferFeatures;
+    }
 }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice p,
     uint32_t *count, VkQueueFamilyProperties *out)
@@ -831,6 +853,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties(VkPhysic
     if(!out)return VK_ERROR_UNKNOWN;
     *out=(VkImageFormatProperties){0};
     if(!p || !p->platform.image_properties)return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    /* VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT changes no storage: a mutable image
+     * has exactly the limits of its immutable twin, provided the format has
+     * an implemented view reinterpretation (src/texture_format.c) and the
+     * platform serves it. Views outside that set are refused at view
+     * creation. */
+    if(flags&VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
+        if(!(p->platform.supported_features_t09&PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST) ||
+           tiling!=VK_IMAGE_TILING_OPTIMAL || !ps5vk_texture_format_mutable(format))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        flags&=~(VkImageCreateFlags)VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    }
     return p->platform.image_properties(format,type,tiling,usage,flags,
         p->platform.max_allocation,out);
 }
@@ -841,6 +874,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2KHR(VkPh
         info->sType != VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2 ||
         out->sType != VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2)
         return INVALID;
+    /* VK_KHR_image_format_list: a chained view-format list narrows a mutable
+     * query to exactly those formats, and each has to be an implemented
+     * reinterpretation of the image format. Without the platform route the
+     * structure is ignored, as before. */
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST) {
+        for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext; next;
+             next = next->pNext) {
+            if (next->sType != VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) continue;
+            const VkImageFormatListCreateInfo *list = (const VkImageFormatListCreateInfo *)next;
+            if (list->viewFormatCount && !list->pViewFormats) return INVALID;
+            for (uint32_t n = 0; n < list->viewFormatCount; ++n)
+                if (!ps5vk_texture_format_view_compatible(info->format, list->pViewFormats[n]) ||
+                    (!(info->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) &&
+                     list->pViewFormats[n] != info->format)) {
+                    out->imageFormatProperties = (VkImageFormatProperties){0};
+                    return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                }
+        }
+    }
     VkResult result = vkGetPhysicalDeviceImageFormatProperties(p, info->format, info->type,
         info->tiling, info->usage, info->flags, &out->imageFormatProperties);
     return result;
@@ -884,17 +936,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Twenty-nine conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Thirty-one conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
      * helper invocation, terminate invocation, get_memory_requirements2,
      * dedicated_allocation, bind_memory2, maintenance4, descriptor update
      * template, robustness2, extended dynamic state, maintenance1,
-     * copy_commands2, depth/stencil resolve, dynamic rendering). Keep headroom
-     * so a new entry cannot overflow the array before this bound is revisited;
-     * each push site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 29, DEVICE_EXTENSION_SLOTS = 32 };
+     * copy_commands2, depth/stencil resolve, dynamic rendering, format feature
+     * flags 2, image format list). Keep headroom so a new entry cannot overflow
+     * the array before this bound is revisited; each push site must stay below
+     * it. */
+    enum { DEVICE_EXTENSION_PUSHES = 31, DEVICE_EXTENSION_SLOTS = 36 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -1040,6 +1093,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_SPEC_VERSION};
     }
+    /* DXVK format routes: unadvertised until the platform sets the bits. */
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
+            VK_KHR_FORMAT_FEATURE_FLAGS_2_SPEC_VERSION};
+    }
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, VK_KHR_IMAGE_FORMAT_LIST_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -1087,6 +1150,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 maintenance1_extension = VK_FALSE;
     VkBool32 copy_commands2_extension = VK_FALSE;
     VkBool32 depth_stencil_resolve_extension = VK_FALSE, dynamic_rendering_extension = VK_FALSE;
+    VkBool32 format_feature_flags2_extension = VK_FALSE, image_format_list_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -1152,6 +1216,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &depth_stencil_resolve_extension;
         else if (!strcmp(name, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME))
             seen = &dynamic_rendering_extension;
+        else if (!strcmp(name, VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME))
+            seen = &format_feature_flags2_extension;
+        else if (!strcmp(name, VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME))
+            seen = &image_format_list_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1260,6 +1328,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     if (dynamic_rendering_extension &&
         (!dynamic_rendering_supported(p) || !depth_stencil_resolve_extension ||
          !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    /* VK_KHR_format_feature_flags2 depends on
+     * VK_KHR_get_physical_device_properties2 or Vulkan 1.1; this device is
+     * 1.0, so the instance extension is the route. VK_KHR_image_format_list
+     * has no registry dependency. */
+    if (format_feature_flags2_extension &&
+        (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (image_format_list_extension &&
+        !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
@@ -1633,6 +1712,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->depth_stencil_resolve_extension_enabled = depth_stencil_resolve_extension;
     d->dynamic_rendering_extension_enabled = dynamic_rendering_extension;
     d->dynamic_rendering_enabled = dynamic_rendering;
+    d->image_format_list_extension_enabled = image_format_list_extension;
+    d->mutable_format_views = (p->platform.supported_features_t09 &
+                               PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST) != 0;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

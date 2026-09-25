@@ -59,8 +59,35 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
             return VK_ERROR_FEATURE_NOT_PRESENT;
         }
     }
-    if (info->flags || info->format != image->info.format)
-        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (info->flags) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* A view in another format exists only over a mutable image, only in a
+     * format the image admitted, and only as an implemented reinterpretation
+     * (src/texture_format.c). Each usage the view carries - narrowed by
+     * VkImageViewUsageCreateInfo or inherited from the image - must be a
+     * witnessed capability of the VIEW format: an SRGB view of the RGBA8
+     * readback attachment inherits COLOR_ATTACHMENT, which SRGB does not
+     * serve, so it is refused. The input-attachment record is defined for
+     * the image's own format only. Transfer usage names no view operation. */
+    if (info->format != image->info.format) {
+        VkBool32 admitted = VK_FALSE;
+        for (uint32_t n = 0; image->mutable_format && n < image->view_format_count; ++n)
+            admitted |= image->view_formats[n] == info->format;
+        if (!admitted || !ps5vk_texture_format_view_compatible(image->info.format, info->format))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        const VkImageUsageFlags usage = view_usage ? view_usage : image->info.usage;
+        const struct { VkImageUsageFlags usage; uint32_t capability; } roles[] = {
+            {VK_IMAGE_USAGE_SAMPLED_BIT, PS5VK_FORMAT_CAP_SAMPLED_IMAGE},
+            {VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, PS5VK_FORMAT_CAP_COLOR_ATTACHMENT},
+            {VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+             PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT},
+            {VK_IMAGE_USAGE_STORAGE_BIT, PS5VK_FORMAT_CAP_STORAGE_IMAGE},
+        };
+        if (usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) return VK_ERROR_FEATURE_NOT_PRESENT;
+        for (unsigned n = 0; n < sizeof(roles) / sizeof(roles[0]); ++n)
+            if ((usage & roles[n].usage) &&
+                !ps5vk_texture_format_witnessed(info->format, roles[n].capability))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     const VkComponentMapping *c = &info->components;
     if ((c->r != VK_COMPONENT_SWIZZLE_IDENTITY && c->r != VK_COMPONENT_SWIZZLE_R) ||
         (c->g != VK_COMPONENT_SWIZZLE_IDENTITY && c->g != VK_COMPONENT_SWIZZLE_G) ||

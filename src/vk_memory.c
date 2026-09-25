@@ -525,8 +525,39 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
         info->imageType == VK_IMAGE_TYPE_2D && info->mipLevels == 1 &&
         (ps5vk_platform_sample_counts(d->platform_features) & info->samples))
         samples_supported = 1;
-    if (info->pNext ||
-        (info->flags && info->flags != VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
+    /* Mutable-format views. VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT is admitted
+     * only for a format with an implemented reinterpretation and only on a
+     * device whose platform serves it; a VkImageFormatListCreateInfo
+     * (VK_KHR_image_format_list, enabled on the device) may narrow the view
+     * formats, and each entry must be an implemented reinterpretation. The
+     * flag changes no storage, so the backend and every shape predicate see
+     * the storage flags alone. */
+    const VkImageFormatListCreateInfo *format_list = NULL;
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext; next;
+         next = next->pNext) {
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO && !format_list &&
+            d->image_format_list_extension_enabled)
+            format_list = (const VkImageFormatListCreateInfo *)next;
+        else
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    const VkBool32 mutable_format = (info->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) != 0;
+    const VkImageCreateFlags storage_flags =
+        info->flags & ~(VkImageCreateFlags)VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    if (mutable_format && (!d->mutable_format_views || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
+                           !ps5vk_texture_format_mutable(info->format)))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t list_count = format_list ? format_list->viewFormatCount : 0u;
+    if (list_count && !format_list->pViewFormats) return INVALID;
+    /* VUID-VkImageCreateInfo-flags-04738: without the mutable flag a list
+     * holds at most the image's own format. */
+    if (!mutable_format &&
+        (list_count > 1u || (list_count == 1u && format_list->pViewFormats[0] != info->format)))
+        return INVALID;
+    for (uint32_t n = 0; n < list_count; ++n)
+        if (!ps5vk_texture_format_view_compatible(info->format, format_list->pViewFormats[n]))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+    if ((storage_flags && storage_flags != VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) ||
         (info->imageType != VK_IMAGE_TYPE_1D && info->imageType != VK_IMAGE_TYPE_2D &&
          info->imageType != VK_IMAGE_TYPE_3D) ||
         !info->arrayLayers || !samples_supported ||
@@ -558,7 +589,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
          (info->extent.height!=1 || info->extent.depth!=1)) ||
         (info->imageType==VK_IMAGE_TYPE_2D && info->extent.depth!=1) ||
         (info->imageType==VK_IMAGE_TYPE_3D && info->arrayLayers!=1) ||
-        (info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
+        (storage_flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&
          (info->imageType!=VK_IMAGE_TYPE_2D || info->arrayLayers<6 ||
           info->extent.width!=info->extent.height ||
           info->samples!=VK_SAMPLE_COUNT_1_BIT))) return INVALID;
@@ -579,14 +610,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     /* The backend owns format/usage support. Keeping a second format whitelist
      * here made newly validated native formats impossible to create even when
      * the query and requirements paths accepted them. */
+    VkImageCreateInfo storage = *info;
+    storage.pNext = NULL; storage.flags = storage_flags;
     VkMemoryRequirements requirements = {0};
-    VkResult rc = d->image_requirements(d, info, &requirements);
+    VkResult rc = d->image_requirements(d, &storage, &requirements);
     if (rc != VK_SUCCESS) return rc;
     if (!requirements.size || requirements.size > d->max_allocation ||
         !power_two(requirements.alignment) || requirements.memoryTypeBits != 1 ||
         requirements.size % requirements.alignment) return VK_ERROR_INITIALIZATION_FAILED;
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
-    struct VkImage_T shape = {.info = *info};
+    struct VkImage_T shape = {.info = storage};
     size_t layout_count = 0;
     if ((info->mipLevels > 1 || info->arrayLayers > 1) &&
         (ps5vk_bc_linear_image(&shape) || ps5vk_rgba_linear_image(&shape))) {
@@ -599,7 +632,23 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice d, const VkImageCreateInfo
     if (!image) return VK_ERROR_OUT_OF_HOST_MEMORY;
     memset(image, 0, sizeof(*image));
     image->device = d; image->allocator = saved; image->custom_allocator = custom;
-    image->info = *info;
+    image->info = storage;
+    if (mutable_format) {
+        /* The admitted view formats, without duplicates: the list's entries,
+         * or every implemented reinterpretation when no list narrows it. */
+        image->mutable_format = VK_TRUE;
+        const uint32_t candidate_count = list_count ? list_count : ps5vk_texture_format_count();
+        for (uint32_t n = 0; n < candidate_count; ++n) {
+            const VkFormat candidate = list_count ? format_list->pViewFormats[n] :
+                ps5vk_texture_format_at(n)->format;
+            VkBool32 seen = !ps5vk_texture_format_view_compatible(info->format, candidate);
+            for (uint32_t m = 0; m < image->view_format_count && !seen; ++m)
+                seen = image->view_formats[m] == candidate;
+            if (!seen && image->view_format_count <
+                    (uint32_t)(sizeof(image->view_formats) / sizeof(image->view_formats[0])))
+                image->view_formats[image->view_format_count++] = candidate;
+        }
+    }
     if (layout_count) {
         image->subresource_layouts = (VkImageLayout *)(image + 1);
         memset(image->subresource_layouts, 0, layout_count * sizeof(VkImageLayout));
