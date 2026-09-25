@@ -1595,7 +1595,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         /* The combined depth/stencil attachment is ordered per aspect: its own
          * validator owns the aspect mask and the per-aspect layouts. */
         if(ps5vk_depth_stencil_attachment_image(image)) {
-            if(!ps5vk_depth_stencil_barrier(b,separate_depth_stencil_layouts(c->pool->device)) ||
+            if(!ps5vk_depth_stencil_barrier(b,separate_depth_stencil_layouts(c->pool->device),
+                   c->pool->device->maintenance2_extension_enabled) ||
                !ps5vk_image_range_resolve(image,&b->subresourceRange,&resolved) ||
                resolved.baseMipLevel || resolved.baseArrayLayer || resolved.levelCount!=1 ||
                resolved.layerCount!=1 ||

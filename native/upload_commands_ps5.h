@@ -97,7 +97,7 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
              * decide whether each old layout matches. The acquire is the same
              * conservative cache operation every other image barrier emits. */
             const VkImageMemoryBarrier *b=&op->image_barrier;
-            if(!ps5vk_depth_stencil_barrier(b,VK_TRUE))return VK_ERROR_FEATURE_NOT_PRESENT;
+            if(!ps5vk_depth_stencil_barrier(b,VK_TRUE,VK_TRUE))return VK_ERROR_FEATURE_NOT_PRESENT;
             VkResult rc=ps5vk_layout_transition_aspects(layouts,b->image,
                 b->subresourceRange.aspectMask,b->oldLayout,b->newLayout);
             if(rc!=VK_SUCCESS)return rc;

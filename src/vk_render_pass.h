@@ -77,28 +77,6 @@ struct ps5vk_render_pass2_refs {
     VkAttachmentReference depth;
     uint32_t preserve[PS5VK_MAX_ATTACHMENTS];
 };
-struct ps5vk_render_pass2_translation {
-    VkRenderPassCreateInfo info;
-    VkRenderPassMultiviewCreateInfo multiview;
-    VkAttachmentDescription attachments[PS5VK_MAX_ATTACHMENTS];
-    VkSubpassDescription subpasses[PS5VK_MAX_SUBPASSES];
-    struct ps5vk_render_pass2_refs refs[PS5VK_MAX_SUBPASSES];
-    VkSubpassDependency dependencies[PS5VK_MAX_DEPENDENCIES];
-    uint32_t view_masks[PS5VK_MAX_SUBPASSES];
-    int32_t view_offsets[PS5VK_MAX_DEPENDENCIES];
-    uint32_t correlation_masks[PS5VK_MAX_CORRELATION_MASKS];
-};
-VkResult ps5vk_render_pass2_translate(const VkRenderPassCreateInfo2 *info,
-    struct ps5vk_render_pass2_translation *out);
-
-/* The aspect mask an input reference declares, against the format of the
- * attachment it names: never empty, never METADATA or a memory plane, only
- * aspects the format has (VK_ERROR_UNKNOWN otherwise), and every aspect the
- * format has, because the owned input reference reads them all
- * (VK_ERROR_FEATURE_NOT_PRESENT for a strict subset). Shared by the version-2
- * reference and VkRenderPassInputAttachmentAspectCreateInfo. */
-VkResult ps5vk_render_pass_input_aspect_valid(VkFormat format, VkImageAspectFlags aspect);
-
 /* The STENCIL aspect's layouts of a pass (VK_KHR_separate_depth_stencil_layouts).
  * A render pass created through vkCreateRenderPass uses one layout for both
  * aspects of a combined depth/stencil attachment, so this table repeats the
@@ -113,6 +91,37 @@ struct ps5vk_render_pass_stencil_layouts {
     /* Stencil layout of each subpass's depth/stencil reference. */
     VkImageLayout reference[PS5VK_MAX_SUBPASSES];
 };
+
+struct ps5vk_render_pass2_translation {
+    VkRenderPassCreateInfo info;
+    VkRenderPassMultiviewCreateInfo multiview;
+    VkAttachmentDescription attachments[PS5VK_MAX_ATTACHMENTS];
+    VkSubpassDescription subpasses[PS5VK_MAX_SUBPASSES];
+    struct ps5vk_render_pass2_refs refs[PS5VK_MAX_SUBPASSES];
+    VkSubpassDependency dependencies[PS5VK_MAX_DEPENDENCIES];
+    uint32_t view_masks[PS5VK_MAX_SUBPASSES];
+    int32_t view_offsets[PS5VK_MAX_DEPENDENCIES];
+    uint32_t correlation_masks[PS5VK_MAX_CORRELATION_MASKS];
+    /* VK_KHR_separate_depth_stencil_layouts: set when any attachment chains
+     * VkAttachmentDescriptionStencilLayout or the depth/stencil reference of
+     * any subpass chains VkAttachmentReferenceStencilLayout. The table then
+     * holds every combined attachment's stencil layouts: the chained ones, or
+     * the stencil projection of the combined layout where nothing is
+     * chained. */
+    VkBool32 stencil_layouts;
+    struct ps5vk_render_pass_stencil_layouts stencil;
+};
+VkResult ps5vk_render_pass2_translate(const VkRenderPassCreateInfo2 *info,
+    struct ps5vk_render_pass2_translation *out);
+
+/* The aspect mask an input reference declares, against the format of the
+ * attachment it names: never empty, never METADATA or a memory plane, only
+ * aspects the format has (VK_ERROR_UNKNOWN otherwise), and every aspect the
+ * format has, because the owned input reference reads them all
+ * (VK_ERROR_FEATURE_NOT_PRESENT for a strict subset). Shared by the version-2
+ * reference and VkRenderPassInputAttachmentAspectCreateInfo. */
+VkResult ps5vk_render_pass_input_aspect_valid(VkFormat format, VkImageAspectFlags aspect);
+
 
 /* One subpass: the roles this profile executes.
  *

@@ -79,36 +79,46 @@ int main(void)
 
     /* --- recorder-side barrier shape -------------------------------------- */
     struct ps5vk_operation op = barrier(&image, D, DA, SRC);
-    assert(ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
     /* Without separateDepthStencilLayouts: both aspects, combined layouts. */
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_FALSE));
     op = barrier(&image, D | S, DSA, SRC);
-    assert(ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE));
+    assert(ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_FALSE));
     op = barrier(&image, D | S, DA, SRC);   /* separate layout, no feature */
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_FALSE));
     op = barrier(&image, D | S, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL, SRC);
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE));
-    assert(ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_FALSE));
+    assert(ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
+    /* VK_KHR_maintenance2 alone admits the mixed layouts on both aspects,
+     * never a single aspect or a separate layout. */
+    assert(ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_TRUE));
+    op = barrier(&image, D | S, DSA, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL);
+    assert(ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_FALSE));
+    op = barrier(&image, D, DSA, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL);
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_TRUE));
+    op = barrier(&image, D | S, DA, SRC);
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_FALSE, VK_TRUE));
     /* A layout that names the other aspect, a colour layout, a colour aspect,
      * a transfer destination (no such usage) and a foreign access. */
     op = barrier(&image, S, DA, SRC);
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
     op = barrier(&image, D, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
     op = barrier(&image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, SRC);
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
     op = barrier(&image, S, SA, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
     op = barrier(&image, S, SA, SRC);
     op.image_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
     op = barrier(&image, S, SA, VK_IMAGE_LAYOUT_UNDEFINED);   /* UNDEFINED as new */
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
     /* The readback source needs the image's TRANSFER_SRC usage. */
     struct VkImage_T attachment_only = image;
     attachment_only.info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     op = barrier(&attachment_only, D, DA, SRC);
-    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE));
+    assert(!ps5vk_depth_stencil_barrier(&op.image_barrier, VK_TRUE, VK_FALSE));
 
     /* --- executor: per-aspect transitions ---------------------------------- */
     struct ps5vk_layout_state layouts = {0};

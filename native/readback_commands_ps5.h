@@ -142,7 +142,7 @@ static inline VkResult ps5vk_depth_stencil_readback_commands(VkDevice d,
     struct ps5vk_layout_state updated=*layouts;
     if(staged) {
         const VkImageMemoryBarrier *b=&ops[0].image_barrier;
-        if(b->image!=image || !ps5vk_depth_stencil_barrier(b,VK_TRUE) ||
+        if(b->image!=image || !ps5vk_depth_stencil_barrier(b,VK_TRUE,VK_TRUE) ||
            !(b->subresourceRange.aspectMask&aspect) ||
            b->newLayout!=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
            !(b->dstAccessMask&VK_ACCESS_TRANSFER_READ_BIT) ||

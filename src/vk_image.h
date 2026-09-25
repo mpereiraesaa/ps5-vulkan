@@ -357,9 +357,12 @@ static inline int ps5vk_depth_stencil_barrier_layout(VkImage image, VkImageLayou
  * separateDepthStencilLayouts the aspect mask names both aspects and the
  * layouts are the combined ones (Vulkan 1.0 VUID-VkImageMemoryBarrier-image-
  * 03320); with it, DEPTH or STENCIL alone and the separate and mixed layouts
- * are valid, and each named aspect is checked through its own projection. The
- * accesses are the ones the attachment and its readback perform. */
-static inline int ps5vk_depth_stencil_barrier(const VkImageMemoryBarrier *b, VkBool32 separate)
+ * are valid, and each named aspect is checked through its own projection.
+ * VK_KHR_maintenance2 (`mixed`) adds only the two mixed layouts, still with
+ * both aspects named. The accesses are the ones the attachment and its
+ * readback perform. */
+static inline int ps5vk_depth_stencil_barrier(const VkImageMemoryBarrier *b, VkBool32 separate,
+    VkBool32 mixed)
 {
     const VkAccessFlags access = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
@@ -370,9 +373,9 @@ static inline int ps5vk_depth_stencil_barrier(const VkImageMemoryBarrier *b, VkB
         !(separate && (aspects == VK_IMAGE_ASPECT_DEPTH_BIT ||
                        aspects == VK_IMAGE_ASPECT_STENCIL_BIT))) return 0;
     if (!separate && (ps5vk_layout_is_separate_aspect(b->oldLayout) ||
-                      ps5vk_layout_is_separate_aspect(b->newLayout) ||
-                      ps5vk_layout_is_mixed_depth_stencil(b->oldLayout) ||
-                      ps5vk_layout_is_mixed_depth_stencil(b->newLayout))) return 0;
+                      ps5vk_layout_is_separate_aspect(b->newLayout))) return 0;
+    if (!separate && !mixed && (ps5vk_layout_is_mixed_depth_stencil(b->oldLayout) ||
+                                ps5vk_layout_is_mixed_depth_stencil(b->newLayout))) return 0;
     if ((b->srcAccessMask | b->dstAccessMask) & ~access) return 0;
     if ((b->srcAccessMask | b->dstAccessMask) & VK_ACCESS_TRANSFER_READ_BIT &&
         !(b->image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return 0;
