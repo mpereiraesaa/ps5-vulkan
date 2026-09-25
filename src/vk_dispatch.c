@@ -1,4 +1,5 @@
 #include "vk_internal.h"
+#include "vk_core_version.h"
 #include <string.h>
 
 /* Static-library entry-point lookup, not an ICD/loader ABI implementation.
@@ -413,6 +414,96 @@ static int copy_commands2_command(const char *name)
            !strcmp(name, "vkCmdBlitImage2KHR") || !strcmp(name, "vkCmdResolveImage2KHR");
 }
 
+/* Core Vulkan 1.1-1.3 device-level names for commands implemented under their
+ * extension name. A core name resolves to that implementation only when the
+ * effective device version (the lower of the instance and physical-device
+ * versions) includes it, and whether or not the extension was enabled; a row
+ * whose implementation is not an ENTRY resolves to NULL. The physical device
+ * reports Vulkan 1.0, so none of these resolves today. */
+struct core_alias { const char *core, *implementation; uint32_t version; };
+static const struct core_alias core_aliases[] = {
+    {"vkBindBufferMemory2", "vkBindBufferMemory2KHR", VK_API_VERSION_1_1},
+    {"vkBindImageMemory2", "vkBindImageMemory2KHR", VK_API_VERSION_1_1},
+    {"vkCmdDispatchBase", "vkCmdDispatchBaseKHR", VK_API_VERSION_1_1},
+    {"vkCmdSetDeviceMask", "vkCmdSetDeviceMaskKHR", VK_API_VERSION_1_1},
+    {"vkCreateDescriptorUpdateTemplate", "vkCreateDescriptorUpdateTemplateKHR", VK_API_VERSION_1_1},
+    {"vkCreateSamplerYcbcrConversion", "vkCreateSamplerYcbcrConversionKHR", VK_API_VERSION_1_1},
+    {"vkDestroyDescriptorUpdateTemplate", "vkDestroyDescriptorUpdateTemplateKHR", VK_API_VERSION_1_1},
+    {"vkDestroySamplerYcbcrConversion", "vkDestroySamplerYcbcrConversionKHR", VK_API_VERSION_1_1},
+    {"vkGetBufferMemoryRequirements2", "vkGetBufferMemoryRequirements2KHR", VK_API_VERSION_1_1},
+    {"vkGetDescriptorSetLayoutSupport", "vkGetDescriptorSetLayoutSupportKHR", VK_API_VERSION_1_1},
+    {"vkGetDeviceGroupPeerMemoryFeatures", "vkGetDeviceGroupPeerMemoryFeaturesKHR", VK_API_VERSION_1_1},
+    {"vkGetImageMemoryRequirements2", "vkGetImageMemoryRequirements2KHR", VK_API_VERSION_1_1},
+    {"vkGetImageSparseMemoryRequirements2", "vkGetImageSparseMemoryRequirements2KHR", VK_API_VERSION_1_1},
+    {"vkTrimCommandPool", "vkTrimCommandPoolKHR", VK_API_VERSION_1_1},
+    {"vkUpdateDescriptorSetWithTemplate", "vkUpdateDescriptorSetWithTemplateKHR", VK_API_VERSION_1_1},
+    {"vkCmdBeginRenderPass2", "vkCmdBeginRenderPass2KHR", VK_API_VERSION_1_2},
+    {"vkCmdDrawIndexedIndirectCount", "vkCmdDrawIndexedIndirectCountKHR", VK_API_VERSION_1_2},
+    {"vkCmdDrawIndirectCount", "vkCmdDrawIndirectCountKHR", VK_API_VERSION_1_2},
+    {"vkCmdEndRenderPass2", "vkCmdEndRenderPass2KHR", VK_API_VERSION_1_2},
+    {"vkCmdNextSubpass2", "vkCmdNextSubpass2KHR", VK_API_VERSION_1_2},
+    {"vkCreateRenderPass2", "vkCreateRenderPass2KHR", VK_API_VERSION_1_2},
+    {"vkGetBufferDeviceAddress", "vkGetBufferDeviceAddressKHR", VK_API_VERSION_1_2},
+    {"vkGetBufferOpaqueCaptureAddress", "vkGetBufferOpaqueCaptureAddressKHR", VK_API_VERSION_1_2},
+    {"vkGetDeviceMemoryOpaqueCaptureAddress", "vkGetDeviceMemoryOpaqueCaptureAddressKHR", VK_API_VERSION_1_2},
+    {"vkGetSemaphoreCounterValue", "vkGetSemaphoreCounterValueKHR", VK_API_VERSION_1_2},
+    {"vkSignalSemaphore", "vkSignalSemaphoreKHR", VK_API_VERSION_1_2},
+    {"vkWaitSemaphores", "vkWaitSemaphoresKHR", VK_API_VERSION_1_2},
+    {"vkCmdBeginRendering", "vkCmdBeginRenderingKHR", VK_API_VERSION_1_3},
+    {"vkCmdBindVertexBuffers2", "vkCmdBindVertexBuffers2EXT", VK_API_VERSION_1_3},
+    {"vkCmdBlitImage2", "vkCmdBlitImage2KHR", VK_API_VERSION_1_3},
+    {"vkCmdCopyBuffer2", "vkCmdCopyBuffer2KHR", VK_API_VERSION_1_3},
+    {"vkCmdCopyBufferToImage2", "vkCmdCopyBufferToImage2KHR", VK_API_VERSION_1_3},
+    {"vkCmdCopyImage2", "vkCmdCopyImage2KHR", VK_API_VERSION_1_3},
+    {"vkCmdCopyImageToBuffer2", "vkCmdCopyImageToBuffer2KHR", VK_API_VERSION_1_3},
+    {"vkCmdEndRendering", "vkCmdEndRenderingKHR", VK_API_VERSION_1_3},
+    {"vkCmdPipelineBarrier2", "vkCmdPipelineBarrier2KHR", VK_API_VERSION_1_3},
+    {"vkCmdResetEvent2", "vkCmdResetEvent2KHR", VK_API_VERSION_1_3},
+    {"vkCmdResolveImage2", "vkCmdResolveImage2KHR", VK_API_VERSION_1_3},
+    {"vkCmdSetCullMode", "vkCmdSetCullModeEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetDepthBiasEnable", "vkCmdSetDepthBiasEnableEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetDepthBoundsTestEnable", "vkCmdSetDepthBoundsTestEnableEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetDepthCompareOp", "vkCmdSetDepthCompareOpEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetDepthTestEnable", "vkCmdSetDepthTestEnableEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetDepthWriteEnable", "vkCmdSetDepthWriteEnableEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetEvent2", "vkCmdSetEvent2KHR", VK_API_VERSION_1_3},
+    {"vkCmdSetFrontFace", "vkCmdSetFrontFaceEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetPrimitiveRestartEnable", "vkCmdSetPrimitiveRestartEnableEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetPrimitiveTopology", "vkCmdSetPrimitiveTopologyEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetRasterizerDiscardEnable", "vkCmdSetRasterizerDiscardEnableEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetScissorWithCount", "vkCmdSetScissorWithCountEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetStencilOp", "vkCmdSetStencilOpEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetStencilTestEnable", "vkCmdSetStencilTestEnableEXT", VK_API_VERSION_1_3},
+    {"vkCmdSetViewportWithCount", "vkCmdSetViewportWithCountEXT", VK_API_VERSION_1_3},
+    {"vkCmdWaitEvents2", "vkCmdWaitEvents2KHR", VK_API_VERSION_1_3},
+    {"vkCmdWriteTimestamp2", "vkCmdWriteTimestamp2KHR", VK_API_VERSION_1_3},
+    {"vkCreatePrivateDataSlot", "vkCreatePrivateDataSlotEXT", VK_API_VERSION_1_3},
+    {"vkDestroyPrivateDataSlot", "vkDestroyPrivateDataSlotEXT", VK_API_VERSION_1_3},
+    {"vkGetDeviceBufferMemoryRequirements", "vkGetDeviceBufferMemoryRequirementsKHR", VK_API_VERSION_1_3},
+    {"vkGetDeviceImageMemoryRequirements", "vkGetDeviceImageMemoryRequirementsKHR", VK_API_VERSION_1_3},
+    {"vkGetDeviceImageSparseMemoryRequirements", "vkGetDeviceImageSparseMemoryRequirementsKHR", VK_API_VERSION_1_3},
+    {"vkGetPrivateData", "vkGetPrivateDataEXT", VK_API_VERSION_1_3},
+    {"vkQueueSubmit2", "vkQueueSubmit2KHR", VK_API_VERSION_1_3},
+    {"vkSetPrivateData", "vkSetPrivateDataEXT", VK_API_VERSION_1_3},
+};
+
+static const struct core_alias *find_core_alias(const char *name)
+{
+    for (size_t n = 0; n < sizeof(core_aliases) / sizeof(core_aliases[0]); ++n)
+        if (!strcmp(name, core_aliases[n].core)) return &core_aliases[n];
+    return NULL;
+}
+
+static PFN_vkVoidFunction resolve_core_alias(const struct core_alias *alias,
+                                             VkPhysicalDevice physical)
+{
+    if (!physical || ps5vk_effective_api_version(physical) < alias->version) return NULL;
+    for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
+        if (entries[j].scope == DEVICE && !strcmp(alias->implementation, entries[j].name))
+            return entries[j].function;
+    return NULL;
+}
+
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
                                                               const char *name)
 {
@@ -435,6 +526,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
     if (core11_instance_command(name) &&
         (!instance || instance->api_version < VK_API_VERSION_1_1))
         return NULL;
+    const struct core_alias *alias = find_core_alias(name);
+    if (alias) return instance ? resolve_core_alias(alias, &instance->physical) : NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if ((instance || entries[j].scope == GLOBAL) && !strcmp(name, entries[j].name))
             return entries[j].function;
@@ -443,6 +536,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char *name)
 {
     if (!device || !name) return NULL;
+    const struct core_alias *alias = find_core_alias(name);
+    if (alias) return resolve_core_alias(alias, device->physical);
     if ((!strcmp(name, "vkResetQueryPool") ||
          !strcmp(name, "vkResetQueryPoolEXT")) &&
         !(device->enabled_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET))

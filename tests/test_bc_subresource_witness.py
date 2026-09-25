@@ -203,7 +203,7 @@ class BCConsumerPhysicalQueryTests(unittest.TestCase):
                                     '-I'+str(ROOT), '-I'+str(ROOT/'src'),
                                     '-I'+str(ROOT/'third_party/vulkan-headers/include'),
                                     *flags, str(main),
-                                    *[str(ROOT/'src'/n) for n in ('vk_device.c','vk_alloc.c','vk_memory.c','texture_format.c','texture_layout.c')],
+                                    *[str(ROOT/'src'/n) for n in ('vk_device.c','vk_core_version.c','vk_alloc.c','vk_memory.c','texture_format.c','texture_layout.c')],
                                     '-Wl,--gc-sections','-o',str(binary)],check=False,
                                    capture_output=True,text=True)
                     self.assertEqual(compiled.returncode, 0, compiled.stderr)

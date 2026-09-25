@@ -72,7 +72,7 @@ class T09DeviceNegotiation(unittest.TestCase):
                        "-I" + str(ROOT / "third_party/vulkan-headers/include"),
                        str(source),
                        *[str(ROOT / "src" / name) for name in (
-                           "vk_device.c", "vk_alloc.c", "vk_memory.c",
+                           "vk_device.c", "vk_core_version.c", "vk_alloc.c", "vk_memory.c",
                            "texture_format.c", "texture_layout.c",
                            "compilation_cache.c")],
                        "-Wl,--gc-sections", "-o", str(binary)]

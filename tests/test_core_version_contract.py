@@ -75,7 +75,8 @@ class CoreVersionContract(unittest.TestCase):
             self.run_check(assume="1.3")
         message = str(raised.exception)
         self.assertIn("PS5VK_INSTANCE_API_VERSION 1.1 is lower", message)
-        self.assertIn("1.2 command vkWaitSemaphores (device)", message)
+        self.assertIn("1.2 command vkCmdDrawIndirectCount (device)", message)
+        self.assertNotIn("vkWaitSemaphores", message)
         self.assertIn("1.3 feature:synchronization2: in-progress", message)
         self.assertIn("1.3 limit:maxBufferSize: blocker", message)
 
@@ -114,10 +115,11 @@ class CoreVersionContract(unittest.TestCase):
     def test_core_alias_resolves_only_through_an_implemented_entry(self):
         table = ('{"vkCmdDispatchBase", "vkCmdDispatchBaseKHR", VK_API_VERSION_1_1},\n'
                  '{"vkTrimCommandPool", "vkTrimCommandPoolKHR", VK_API_VERSION_1_1},\n')
+        bare = self.dispatch.replace("ENTRY(vkCmdDispatchBaseKHR, DEVICE)", "")
+        self.assertNotIn("vkCmdDispatchBase", checker.dispatch_surface(bare + table))
         surface = checker.dispatch_surface(self.dispatch + table)
         self.assertIn("vkCmdDispatchBase", surface)
         self.assertEqual("vkTrimCommandPoolKHR" in surface, "vkTrimCommandPool" in surface)
-        self.assertNotIn("vkCmdDispatchBase", checker.dispatch_surface(self.dispatch))
 
     def test_gate_opens_only_when_the_whole_version_is_met(self):
         contract = copy.deepcopy(self.contract)
