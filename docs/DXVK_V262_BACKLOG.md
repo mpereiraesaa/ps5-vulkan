@@ -41,6 +41,10 @@ identities are in `VALIDATION.md`. A separate default-off signed Int8 compute
 IAdd witness passed twice with 128 exact wrapped results, zero guard errors
 and clean retirement on its recorded artifact. This still has no applicable
 original CTS Pass or broad narrow-type, operation and stage coverage.
+The ordinary build at T08 top passed the unchanged 829-case selection twice
+on one signed artifact, with strict identity, complete QPA and clean closure;
+the exact receipts are in `VALIDATION.md`. This checks neutrality of the
+advertised profile, not subgroup conformance.
 The Broadcast result advances implementation evidence only: the Vulkan 1.1
 extended-types contract still needs narrow types and its applicable original
 CTS, while the Vulkan 1.2 dynamic-ID contract still needs a legal public API
@@ -159,9 +163,10 @@ T08 has four satisfied requirements on `main`: buffer device address,
 standard uniform-buffer layout, the base Vulkan memory model and DeviceScope.
 Both subgroup bits remain blockers. The Int8 compute compiler probe is default
 off and supplies no public subgroup, `shaderInt8` or API-version credit. A
-combined runtime GPU readback remains the next implementation gate; any later
-public promotion also needs the required narrow-type contracts and applicable
-original CTS under a legal profile. Work toward DXVK continues on API 1.0.
+combined runtime GPU readback has passed for bounded 32-bit Broadcast/IAdd and
+Int8 IAdd forms. Broader type, operation and stage behavior still needs
+artifact-bound GPU evidence; any later public promotion also needs the legal
+profile route and applicable original CTS. Work toward DXVK continues on API 1.0.
 
 The table totals the 61 blockers observed at backlog creation: one API-version
 requirement, two extensions, 48 features and ten properties. Their membership

@@ -5618,3 +5618,31 @@ eboot SHA-256 was
 `aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
 The wrapper released the console and the subsequent status reported
 `running=none`.
+
+## T08 top ordinary acceptance after T07 (2026-09-25)
+
+The unchanged frozen 829-case original CTS selection was rebuilt from T08
+source HEAD `a90434c` with the pinned CTS and PSBC dependencies. All subgroup
+Broadcast, IAdd and narrow-type diagnostic switches were off. The signed
+eboot SHA-256 was
+`0adca480234f9b6cf19fc65eef05530a043f65574b49f125e84bf9edea556164`;
+the case-list SHA-256 was
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+The two strict runs on that same artifact each reported **829 Pass**, zero
+Fail, NotSupported, other, missing, unexpected or duplicate cases, a complete
+QPA, verified build identity, successful title closure and payload restoration.
+
+| Strict receipt | Logging run | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- |
+| `run-26549023647502` | `20260925T005421535Z_PPSA99994_upstream-cts_0x18256cf56309` | `9babfa3d2c1be09974f8115a2205ff8e8229d56b862b0fb1977e0283cfbb8f2e` | `615950b012edcf7a7c8b46694ee3a9fe6b4a0949afab864d49952ea40cea8a26` |
+| `run-26611944624449` | `20260925T005524456Z_PPSA99994_upstream-cts_0x183413422b39` | `185a504162146c9a104c5da004b44a75d8c6d730dcb2fa667376915184c6a9b0` | `89feaab61c56ab822eac2023cb22547438da51ba5db6f9f164a76533e6463a8d` |
+
+The receipts did not independently record firmware; the most recent owner
+report before these runs was 12.02. The console was idle with no active claim
+after each run, and the restored ordinary payload's exact-self eboot SHA-256
+was `aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
+An earlier combined preview on a different artifact had one complete run and
+two incomplete repeats; those receipts remain incomplete and are not counted
+as acceptance of this artifact. The 829-case selection contains no applicable
+subgroup leaf. These runs establish neutrality of the advertised Vulkan 1.0
+profile, not subgroup conformance or either blocked T08 profile row.
