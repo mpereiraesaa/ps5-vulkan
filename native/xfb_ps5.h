@@ -15,6 +15,13 @@
  *   u32 buffer_offsets[4]        byte offset written so far, per buffer
  *   u32 generated_primitives[4]  per stream
  *   u32 emitted_primitives[4]    per stream
+ *   u32 ticket                   @48: the ordered id whose turn it is
+ *   u32 unordered                @52: workgroups that gave up waiting
+ *
+ * The ticket keeps primitive order without GDS: each workgroup waits (bounded)
+ * until the ticket equals its ordered id, reserves, and hands the ticket on.
+ * The queue zeroes it before every capture draw after the pipeline has
+ * drained the previous one.
  *
  * A transform feedback session (begin..end) owns one control block and one
  * table. The queue loads buffer_offsets from the counter buffers at begin (or
@@ -31,6 +38,8 @@ enum {
     PS5VK_XFB_TABLE_RECORDS = 5,
     PS5VK_XFB_GENERATED_OFFSET = 16,
     PS5VK_XFB_EMITTED_OFFSET = 32,
+    PS5VK_XFB_TICKET_OFFSET = 48,
+    PS5VK_XFB_UNORDERED_OFFSET = 52,
     PS5VK_XFB_DMA_WORDS = 7,
 };
 /* The raw-buffer record format the lab's streamout reference and the
@@ -73,6 +82,19 @@ static inline int ps5vk_xfb_copy_dword(uint32_t out[PS5VK_XFB_DMA_WORDS],
     out[0] = UINT32_C(0xc0055000);
     out[1] = UINT32_C(0xe0300000);
     out[2] = (uint32_t)source; out[3] = (uint32_t)(source >> 32);
+    out[4] = (uint32_t)destination; out[5] = (uint32_t)(destination >> 32);
+    out[6] = 4u;
+    return 1;
+}
+
+/* PKT3 DMA_DATA of an immediate zero dword into L2, with CP_SYNC (the
+ * lab-validated immediate route of src/compute_commands.c). */
+static inline int ps5vk_xfb_zero_dword(uint32_t out[PS5VK_XFB_DMA_WORDS], uint64_t destination)
+{
+    if(!destination || (destination & 3u) || destination >= (UINT64_C(1) << 48))return 0;
+    out[0] = UINT32_C(0xc0055000);
+    out[1] = UINT32_C(0xc0300000);
+    out[2] = 0; out[3] = 0;
     out[4] = (uint32_t)destination; out[5] = (uint32_t)(destination >> 32);
     out[6] = 4u;
     return 1;

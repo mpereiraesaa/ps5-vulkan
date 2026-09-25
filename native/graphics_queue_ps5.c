@@ -1164,7 +1164,7 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
 #endif
     uint32_t subpass_index=0;
     int active_query_slot=-1;
-    unsigned xfb_session=0;
+    unsigned xfb_session=0,xfb_capture_draws=0;
     for(unsigned i=0;i<body_count;++i) {
         const struct ps5vk_operation *recorded=body[i];
         if(recorded->type==PS5VK_TRANSFORM_FEEDBACK_BEGIN) {
@@ -1615,9 +1615,31 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         if(!!op->pipeline->xfb.buffers_mask!=!!p->pair->runtime_arguments.streamout_valid ||
            (p->pair->runtime_arguments.streamout_valid && !j->xfb.address))
             {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=48;goto fail;}
-        if(p->pair->runtime_arguments.streamout_valid)
-            draw->state->runtime.streamout_low=(uint32_t)((uintptr_t)j->xfb.address+
-                (size_t)xfb_session*PS5VK_XFB_SESSION_BYTES+PS5VK_XFB_TABLE_OFFSET);
+        /* One ordered sequence per draw: a multi-command indirect draw would
+         * restart the ordered ids inside one emission, so a capture pipeline
+         * draws one command per operation. */
+        if(p->pair->runtime_arguments.streamout_valid && command_count>1u)
+            {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=50;goto fail;}
+        if(p->pair->runtime_arguments.streamout_valid) {
+            uint8_t *session=(uint8_t *)j->xfb.address+(size_t)xfb_session*PS5VK_XFB_SESSION_BYTES;
+            draw->state->runtime.streamout_low=(uint32_t)((uintptr_t)session+PS5VK_XFB_TABLE_OFFSET);
+            /* Primitive order restarts with every draw: the program's ordered
+             * ids do, so the ticket must too. Every capture draw after the
+             * job's first waits for the previous one to drain completely
+             * (its workgroups hand the ticket on until the last one), then
+             * zeroes the ticket of the table it is about to use. */
+            if(xfb_capture_draws++) {
+                BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u+PS5VK_XFB_DMA_WORDS);
+                size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
+                    (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),i+1u);
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}cursor+=n;
+                if(!ps5vk_xfb_zero_dword(cursor,(uintptr_t)session+PS5VK_XFB_TICKET_OFFSET))
+                    {rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}
+                cursor+=PS5VK_XFB_DMA_WORDS;
+                n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+                if(!n){rc=VK_ERROR_UNKNOWN;draw_site=49;goto fail;}cursor+=n;
+            }
+        }
 #if defined(PS5VK_TESS_RING_QUERY) && PS5VK_TESS_RING_QUERY == 4
         if(j->serial==17 && draw->vertex_table && vertex_usage==1u &&
            op->type==PS5VK_DRAW && op->vertex_count==80u &&
@@ -2284,6 +2306,21 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
                         (unsigned long long)content.gray128,content.hash);
             }
 #endif
+        }
+        /* Transform feedback evidence: each session's final byte offsets,
+         * primitive counts and how many workgroups gave up the ordered wait
+         * (zero on a correct run). */
+        if(j->xfb.address) {
+            cache(j->xfb.address,(size_t)j->xfb.sessions*PS5VK_XFB_SESSION_BYTES);
+            for(unsigned s=0;s<=j->xfb.used;++s) {
+                const uint32_t *c=(const uint32_t *)((const uint8_t *)j->xfb.address+
+                    (size_t)s*PS5VK_XFB_SESSION_BYTES+PS5VK_XFB_CONTROL_OFFSET);
+                ps5log_printf(PS5LOG_MARK,
+                    "PS5VK_XFB_SESSION serial=%llu session=%u offsets=%u,%u,%u,%u "
+                    "generated=%u,%u,%u,%u emitted=%u,%u,%u,%u ticket=%u unordered=%u",
+                    (unsigned long long)j->serial,s,c[0],c[1],c[2],c[3],c[4],c[5],c[6],c[7],
+                    c[8],c[9],c[10],c[11],c[12],c[13]);
+            }
         }
         if(j->query_arena_active) {
             for(unsigned q=0;q<j->query_count;++q) {

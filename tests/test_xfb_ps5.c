@@ -38,5 +38,11 @@ int main(void)
            copy[6] == 4u);
     assert(!ps5vk_xfb_copy_dword(copy, 2, 8) && !ps5vk_xfb_copy_dword(copy, 0, 8) &&
            !ps5vk_xfb_copy_dword(copy, 8, UINT64_C(1) << 48));
+    assert(PS5VK_XFB_TICKET_OFFSET == 48 && PS5VK_XFB_UNORDERED_OFFSET == 52 &&
+           PS5VK_XFB_UNORDERED_OFFSET + 4 <= PS5VK_XFB_CONTROL_BYTES);
+    assert(ps5vk_xfb_zero_dword(copy, UINT64_C(0x200000030)));
+    assert(copy[0] == 0xc0055000u && copy[1] == 0xc0300000u && !copy[2] && !copy[3] &&
+           copy[4] == 0x30u && copy[5] == 2u && copy[6] == 4u);
+    assert(!ps5vk_xfb_zero_dword(copy, 2) && !ps5vk_xfb_zero_dword(copy, 0));
     return 0;
 }
