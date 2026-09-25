@@ -263,6 +263,8 @@ and readback roles. Evidence on the promoted shipping build:
 * 50/50 focused original CTS leaves: timeline, renderpass2, and D32S8
   stencil/depth with and without separate layouts;
 * 829/829 frozen acceptance;
+* afterwards, the same 50 leaves frozen into acceptance and the 879-case
+  selection passed 879/879 on the shipping build;
 * a re-measured capability probe (30/62 query values, 13 extensions).
 
 Run IDs and hashes are in

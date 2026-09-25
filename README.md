@@ -36,8 +36,9 @@ complete Vulkan core version.
 
 These capabilities were validated through public-SDK consumers, structured
 `ps5log/1` telemetry and deterministic GPU readback; visual output alone is
-not the oracle. The T07 resource/query expansion is merged and its ordinary
-upstream selection passed 829/829 cases on hardware. See [API.md](API.md) for
+not the oracle. The T07 resource/query expansion and the T09 timeline,
+render pass 2 and D32S8 stencil/depth leaves are merged, and the ordinary
+upstream selection passed 879/879 cases on hardware. See [API.md](API.md) for
 the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 [BUILDING.md](BUILDING.md) to build the SDK.
 

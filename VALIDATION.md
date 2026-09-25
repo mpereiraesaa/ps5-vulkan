@@ -6047,3 +6047,39 @@ was restored by exact-self readback. Console status afterwards was
 `running=none` with no active claim. Firmware was not independently recorded
 in this receipt. This run is public reporting evidence, not subgroup CTS,
 subgroup execution or execution of DXVK 2.6.2.
+
+## T09 focused leaves frozen into acceptance (2026-09-25)
+
+The 50 original leaves of the focused T09 run
+`20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f` (case list
+SHA-256 `d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a`,
+50/50 Pass) moved into the frozen selection with `tools/move_leaves.py`:
+16 `t09-timeline`, 2 `t09-renderpass2`, 16 `t09-d32s8-combined` and 16
+`t09-separate-depth-stencil-layouts` cases. The existing 829 cases keep their
+order and the 50 are appended; the 66 diagnostics are unchanged.
+`tools/check_upstream_selection.py` now traces the stencil op groups
+(`fail_*`, `pass_*`, `dfail_*`), the `*_separate_layouts` format groups and
+the depth `compare_ops` leaf names to the tables of the pinned stencil and
+depth factories.
+
+The package was rebuilt from `main` `e4c3287` plus this change, with PSBC
+`ee8959186cfb1f5c0a574d1e2ee329aad1fe2747` and every diagnostic switch off.
+Signed eboot SHA-256
+`a2790d6d8c83ddaf38951ba553a53e1f41026b53eae5780f489a120be14f3973`;
+selection SHA-256
+`31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28`.
+The strict run reported **879 Pass**, zero Fail, NotSupported, other, missing,
+unexpected or duplicate cases, a complete QPA, verified build identity and
+successful title closure.
+
+| Strict receipt | Logging run | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- |
+| `run-41423133303939` | `20260925T050215847Z_PPSA99994_upstream-cts_0x25ac92fe5a27` | `2a43a1cf81fe2a7c125f46ca530b6e610973bad07549c82aadb500fcf7bb385a` | `7a5892921b3500ee007824cb078ff78cd253beee2bd43a241099b225c959845a` |
+
+The ordinary payload with exact-self eboot SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212` was
+restored afterwards and the console was idle. Firmware was not independently
+recorded in this receipt. The `timelineSemaphore`,
+`maxTimelineSemaphoreValueDifference` and `separateDepthStencilLayouts` DXVK
+rows now cite these leaves as frozen-selection CTS evidence; the matrix stays
+at 30/62 ready.

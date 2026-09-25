@@ -2639,8 +2639,6 @@
       ],
       "container": "VkPhysicalDeviceVulkan12Features",
       "cts": {
-        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
-        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
         "cases": [
           "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_never",
           "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_less",
@@ -2660,20 +2658,16 @@
           "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_greater_or_equal_less_or_equal_always_less"
         ],
         "mapped_cases": [],
-        "note": "The 16 original d32_sfloat_s8_uint_separate_layouts stencil and depth leaves passed on the promoted shipping CTS package, beside their 16 combined-layout twins.",
+        "note": "The 16 original d32_sfloat_s8_uint_separate_layouts stencil and depth leaves are frozen acceptance cases beside their 16 combined-layout twins. They first passed the focused shipping run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f (eboot 7f9bba150da8241d, case list d0e28eee) and were then frozen into the acceptance selection; the 879-case frozen selection then passed 879/879 in the strict shipping acceptance run 20260925T050215847Z_PPSA99994_upstream-cts_0x25ac92fe5a27 (receipt run-41423133303939, eboot a2790d6d8c83ddaf38951ba553a53e1f41026b53eae5780f489a120be14f3973, selection 31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28) with zero Fail, NotSupported, missing or unexpected cases and clean title closure.",
         "refs": [
-          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25",
+          "VALIDATION.md#t09-focused-leaves-frozen-into-acceptance-2026-09-25"
         ],
         "related_requirement_ids": [
           "VK14-CORE-003"
         ],
-        "result": {
-          "Pass": 16
-        },
-        "run_ids": [
-          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
-        ],
-        "state": "cts-focused-pass"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
@@ -2801,8 +2795,6 @@
       ],
       "container": "VkPhysicalDeviceVulkan12Features",
       "cts": {
-        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
-        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
         "cases": [
           "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value",
           "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value",
@@ -2824,21 +2816,17 @@
         "mapped_cases": [
           "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value"
         ],
-        "note": "All 16 original legacy timeline leaves (device_host.misc, wait, basic) passed on the promoted shipping CTS package.",
+        "note": "All 16 original legacy timeline leaves (device_host.misc, wait, basic) are frozen acceptance cases. They first passed the focused shipping run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f (eboot 7f9bba150da8241d, case list d0e28eee) and were then frozen into the acceptance selection; the 879-case frozen selection then passed 879/879 in the strict shipping acceptance run 20260925T050215847Z_PPSA99994_upstream-cts_0x25ac92fe5a27 (receipt run-41423133303939, eboot a2790d6d8c83ddaf38951ba553a53e1f41026b53eae5780f489a120be14f3973, selection 31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28) with zero Fail, NotSupported, missing or unexpected cases and clean title closure.",
         "refs": [
-          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25",
+          "VALIDATION.md#t09-focused-leaves-frozen-into-acceptance-2026-09-25"
         ],
         "related_requirement_ids": [
           "VK14-CORE-003",
           "VK14-SYNC-008"
         ],
-        "result": {
-          "Pass": 16
-        },
-        "run_ids": [
-          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
-        ],
-        "state": "cts-focused-pass"
+        "state": "cts-pass"
       },
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
@@ -3754,8 +3742,6 @@
       ],
       "container": "VkPhysicalDeviceVulkan12Properties",
       "cts": {
-        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
-        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
         "cases": [
           "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value",
           "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value",
@@ -3777,20 +3763,16 @@
         "mapped_cases": [
           "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value"
         ],
-        "note": "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value signals and waits across the reported difference; all 16 original timeline leaves passed on the promoted shipping CTS package.",
+        "note": "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value signals and waits across the reported difference; all 16 original timeline leaves are frozen acceptance cases. They first passed the focused shipping run 20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f (eboot 7f9bba150da8241d, case list d0e28eee) and were then frozen into the acceptance selection; the 879-case frozen selection then passed 879/879 in the strict shipping acceptance run 20260925T050215847Z_PPSA99994_upstream-cts_0x25ac92fe5a27 (receipt run-41423133303939, eboot a2790d6d8c83ddaf38951ba553a53e1f41026b53eae5780f489a120be14f3973, selection 31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28) with zero Fail, NotSupported, missing or unexpected cases and clean title closure.",
         "refs": [
-          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+          "cts/upstream/manifest.json",
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25",
+          "VALIDATION.md#t09-focused-leaves-frozen-into-acceptance-2026-09-25"
         ],
         "related_requirement_ids": [
           "VK14-SYNC-008"
         ],
-        "result": {
-          "Pass": 16
-        },
-        "run_ids": [
-          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
-        ],
-        "state": "cts-focused-pass"
+        "state": "cts-pass"
       },
       "expected": 2147483647,
       "id": "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference",

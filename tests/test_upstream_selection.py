@@ -94,10 +94,12 @@ class UpstreamSelectionTests(unittest.TestCase):
         # pipeline shape this profile refuses at creation. Seven T08 volatile
         # atomic leaves and two original buffer-device-address leaves belong
         # to acceptance. T07 adds 322 original BC, gather, precise-query and
-        # cube-array cases; the 66 remaining diagnostics record refusals and
-        # gaps. `leaves` counts every
+        # cube-array cases. T09 adds 50 original timeline-semaphore,
+        # renderpass2 write-mask and D32_SFLOAT_S8_UINT stencil/depth leaves
+        # (combined and separate-layouts); the 66 remaining diagnostics record
+        # refusals and gaps. `leaves` counts every
         # attachment_write_mask leaf the pinned factory generates.
-        self.assertEqual((829, 66, 48),
+        self.assertEqual((879, 66, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]
@@ -475,6 +477,67 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertEqual(6 * 8, len(names))
         self.assertEqual(set(), self.gate._draw_depth_clamp_leaf_names(
             depth.replace("formatCaseName + params.testNameSuffix", "name")))
+
+    def test_t09_recognizers_are_bound_to_their_constructions(self):
+        """The T09 stencil/depth recognizers derive exactly the pinned
+        factories' generated names and nothing once the construction they were
+        written against is gone."""
+        pipeline = UPSTREAM / "external/vulkancts/modules/vulkan/pipeline"
+        stencil = (pipeline / "vktPipelineStencilTests.cpp").read_text()
+        ops = {"keep", "zero", "repl", "incc", "decc", "inv", "wrap", "decw"}
+        separate = {"d16_unorm_s8_uint_separate_layouts",
+                    "d24_unorm_s8_uint_separate_layouts",
+                    "d32_sfloat_s8_uint_separate_layouts"}
+        expected = separate | {f"{prefix}{op}" for prefix in ("fail_", "pass_", "dfail_")
+                               for op in ops}
+        self.assertEqual(expected, self.gate._stencil_generated_segments(stencil))
+        self.assertNotIn("s8_uint_separate_layouts",
+                         self.gate._stencil_generated_segments(stencil))
+        self.assertEqual(separate, self.gate._stencil_generated_segments(
+            stencil.replace('std::string("dfail_") + getShortName', 'std::string("x_") + name')
+            .replace('std::string("pass_") + getShortName', 'std::string("y_") + name')
+            .replace('std::string("fail_") + getShortName', 'std::string("z_") + name')))
+        self.assertEqual(set(), self.gate._stencil_generated_segments(
+            stencil.replace("const char *getShortName(VkStencilOp stencilOp)", "")))
+
+        depth = (pipeline / "vktPipelineDepthTests.cpp").read_text()
+        self.assertEqual(separate, self.gate._depth_generated_segments(depth))
+        self.assertEqual(set(), self.gate._depth_generated_segments(
+            depth.replace('((useSeparateDepthStencilLayouts) ? "_separate_layouts" : "")',
+                          '""')))
+        names = self.gate._depth_compare_ops_leaf_names(depth)
+        self.assertEqual(3 * 77, len(names))
+        for leaf in ("triangle_list_not_equal_not_equal_not_equal_not_equal",
+                     "triangle_list_equal_less_never_always",
+                     "point_list_not_equal_equal_equal_greater"):
+            self.assertIn(leaf, names)
+        self.assertNotIn("triangle_strip_not_equal_not_equal_not_equal_not_equal", names)
+        self.assertEqual(set(), self.gate._depth_compare_ops_leaf_names(
+            depth.replace("topologyName + getCompareOpsName(depthOps[opsNdx])", "name")))
+
+    def test_frozen_selection_contains_measured_t09_leaves(self):
+        """The 50 focused T09 leaves are acceptance, each promoted from the
+        recorded hardware run, and none is also a diagnostic."""
+        cases = self.current_manifest["cases"]
+        by_category = {}
+        for case in cases:
+            if case["category"].startswith("t09-"):
+                by_category.setdefault(case["category"], []).append(case)
+        self.assertEqual({"t09-timeline": 16, "t09-renderpass2": 2,
+                          "t09-d32s8-combined": 16,
+                          "t09-separate-depth-stencil-layouts": 16},
+                         {k: len(v) for k, v in by_category.items()})
+        t09 = [c for group in by_category.values() for c in group]
+        self.assertTrue(all(c["expected_status"] == "Pass" for c in t09))
+        self.assertTrue(all(c["rationale"].startswith("PROMOTED ") and
+                            "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
+                            in c["rationale"] for c in t09))
+        self.assertTrue(all("_separate_layouts" in c["path"] for c in
+                            by_category["t09-separate-depth-stencil-layouts"]))
+        self.assertFalse(any("_separate_layouts" in c["path"] for c in
+                             by_category["t09-d32s8-combined"]))
+        diagnostics = {d["path"] for d in self.current_manifest["diagnostics"]}
+        self.assertFalse(diagnostics & {c["path"] for c in t09})
 
     def test_amber_backend_is_compiled_in_not_just_compiled(self):
         """Amber picks its backend with a compile-time macro, not by linking.
