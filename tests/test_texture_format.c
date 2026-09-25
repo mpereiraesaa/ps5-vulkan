@@ -520,7 +520,9 @@ int main(void)
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
                                VK_FORMAT_FEATURE_BLIT_DST_BIT));
     ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_UNORM, &properties);
-    assert(properties.optimalTilingFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+    assert(properties.optimalTilingFeatures ==
+        (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                               VK_FORMAT_FEATURE_TRANSFER_DST_BIT));
     assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
     /* The depth target advertises the transfer destination the whole-subresource
      * vkCmdClearDepthStencilImage consumes, and the transfer source its
@@ -713,9 +715,14 @@ int main(void)
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-    /* BGRA8 is a colour attachment only: no sampled role, no readback. */
+    /* BGRA8's display-compatible tiled image serves each nonempty subset of
+     * colour attachment and transfer destination; it has no sampled/readback role. */
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,

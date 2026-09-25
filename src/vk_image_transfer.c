@@ -158,6 +158,8 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
     case PS5VK_COPY_IMAGE:
         if (ps5vk_bc_linear_image(op->image_source) &&
             ps5vk_bc_linear_image(op->image_destination)) return PS5VK_IMAGE_DOMAIN_LINEAR;
+        if (ps5vk_bgra8_transfer_target(op->image_destination))
+            return PS5VK_IMAGE_DOMAIN_LINEAR;
         /* A linear staging destination is the pinned host readback: its source
          * must be the colour attachment whose tiled surface is detiled below.
          * Any other combination is not an implemented copy at all. */
@@ -171,6 +173,8 @@ enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *op)
         return transfer_role_destination(op->image_destination) ?
             PS5VK_IMAGE_DOMAIN_TRANSFER : PS5VK_IMAGE_DOMAIN_NONE;
     case PS5VK_COPY_BUFFER_IMAGE:
+        if (ps5vk_bgra8_transfer_target(op->copy_image))
+            return PS5VK_IMAGE_DOMAIN_LINEAR;
         /* An upload into the colour-attachment shape that declares a transfer
          * destination is frontend work for the same reason the pure transfer
          * role is: padded linear memory the graphics backend never touches. */
@@ -217,6 +221,54 @@ static int layout_is_transfer_source(VkImageLayout layout)
 
 static int layout_is_transfer_destination(VkImageLayout layout)
 { return layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL || layout == VK_IMAGE_LAYOUT_GENERAL; }
+
+/* Raw 32-bit blocks from a padded-linear RGBA8 transfer source into a tiled
+ * BGRA8 target. VkImageCopy preserves component bytes. */
+static VkResult bgra_image_copy_validate(VkDevice d, VkImage source,
+    VkImageLayout source_layout, VkImage destination,
+    VkImageLayout destination_layout, uint32_t count, const VkImageCopy *regions)
+{
+    void *src = NULL, *dst = NULL;
+    VkDeviceSize source_bytes = 0, destination_bytes = 0, linear_bytes = 0;
+    uint32_t pitch = 0;
+    if (!d || !source || !destination || !count || !regions ||
+        source == destination || destination->display_busy ||
+        !ps5vk_pure_transfer_image(source) ||
+        source->info.format != VK_FORMAT_R8G8B8A8_UNORM ||
+        !(source->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+        !ps5vk_bgra8_transfer_target(destination) ||
+        !layout_is_transfer_source(source_layout) ||
+        destination_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
+        ps5vk_image_span(d, source, &src, &source_bytes) != VK_SUCCESS ||
+        ps5vk_image_span(d, destination, &dst, &destination_bytes) != VK_SUCCESS ||
+        spans_overlap(src, source_bytes, dst, destination_bytes) ||
+        transfer_layout(source->info.extent.width, source->info.extent.height,
+            &pitch, &linear_bytes) || source_bytes < linear_bytes ||
+        ps5vk_color_64k_rx_surface_size(4u, destination->info.extent.width,
+            destination->info.extent.height) > destination_bytes)
+        return INVALID;
+    for (uint32_t i = 0; i < count; ++i) {
+        const VkImageCopy *r = &regions[i];
+        if (r->srcSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+            r->dstSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+            r->srcSubresource.mipLevel || r->dstSubresource.mipLevel ||
+            r->srcSubresource.baseArrayLayer || r->dstSubresource.baseArrayLayer ||
+            r->srcSubresource.layerCount != 1 || r->dstSubresource.layerCount != 1 ||
+            r->srcOffset.x < 0 || r->srcOffset.y < 0 || r->srcOffset.z ||
+            r->dstOffset.x < 0 || r->dstOffset.y < 0 || r->dstOffset.z ||
+            !r->extent.width || !r->extent.height || r->extent.depth != 1 ||
+            (uint32_t)r->srcOffset.x > source->info.extent.width ||
+            (uint32_t)r->srcOffset.y > source->info.extent.height ||
+            (uint32_t)r->dstOffset.x > destination->info.extent.width ||
+            (uint32_t)r->dstOffset.y > destination->info.extent.height ||
+            r->extent.width > source->info.extent.width - (uint32_t)r->srcOffset.x ||
+            r->extent.height > source->info.extent.height - (uint32_t)r->srcOffset.y ||
+            r->extent.width > destination->info.extent.width - (uint32_t)r->dstOffset.x ||
+            r->extent.height > destination->info.extent.height - (uint32_t)r->dstOffset.y)
+            return INVALID;
+    }
+    return VK_SUCCESS;
+}
 
 
 /* BC image copies preserve block bytes; equal block sizes are compatible even
@@ -376,6 +428,23 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage(VkCommandBuffer c, VkImage source,
         op->image_region_count=region_count;
         return;
     }
+    if (ps5vk_bgra8_transfer_target(destination)) {
+        if (bgra_image_copy_validate(d, source, source_layout, destination,
+                destination_layout, region_count, regions) != VK_SUCCESS) {
+            ps5vk_command_invalidate(c);
+            return;
+        }
+        struct ps5vk_operation *op = ps5vk_command_reserve_operation_with_payload(c,
+            PS5VK_COPY_IMAGE, PS5VK_OPERATION_OUTSIDE_RENDER_PASS, regions,
+            (size_t)region_count * sizeof(*regions));
+        if (!op) return;
+        op->image_source = source;
+        op->image_destination = destination;
+        op->image_source_layout = source_layout;
+        op->image_destination_layout = destination_layout;
+        op->image_region_count = region_count;
+        return;
+    }
     /* The pinned draw module's host readback: the tiled colour attachment is
      * copied into the linear staging image, both in GENERAL, one whole-surface
      * region with no offsets (vktDrawImageObjectUtil.cpp:424-425). The staging
@@ -484,7 +553,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
     VkDevice d = c->pool->device;
     void *address = NULL;
     VkDeviceSize bytes = 0;
-    const VkBool32 tiled = ps5vk_array_color_image(image) &&
+    const VkBool32 tiled = (ps5vk_array_color_image(image) ||
+        ps5vk_bgra8_transfer_target(image)) &&
         (image->info.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     if ((!transfer_role_destination(image) && !tiled) || !layout_is_transfer_destination(image_layout) ||
         ps5vk_image_span(d, image, &address, &bytes) != VK_SUCCESS) {
@@ -495,7 +565,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdClearColorImage(VkCommandBuffer c, VkImage image
      * pass clear conversion so both paths agree on the byte encoding. */
     uint32_t word = 0;
     if (ps5vk_storage_image(image)) word = color->uint32[0];
-    else if (!ps5vk_color_clear_rgba8(color->float32, &word)) {
+    else if (!(image->info.format == VK_FORMAT_B8G8R8A8_UNORM ?
+               ps5vk_color_clear_bgra8(color->float32, &word) :
+               ps5vk_color_clear_rgba8(color->float32, &word))) {
         ps5vk_command_invalidate(c);
         return;
     }
@@ -965,6 +1037,14 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
             op->image_destination,op->image_destination_layout,op->image_region_count,
             op->owned_payload);
     }
+    if (op->type == PS5VK_COPY_IMAGE &&
+        ps5vk_bgra8_transfer_target(op->image_destination)) {
+        if (!op->owned_payload || op->owned_payload_size !=
+                (size_t)op->image_region_count * sizeof(VkImageCopy)) return INVALID;
+        return bgra_image_copy_validate(d, op->image_source,
+            op->image_source_layout, op->image_destination,
+            op->image_destination_layout, op->image_region_count, op->owned_payload);
+    }
     if (op->type == PS5VK_COPY_IMAGE) {
         /* The pinned host readback: the tiled colour attachment in GENERAL into
          * the linear staging image in GENERAL, one whole-surface region. The
@@ -1010,6 +1090,24 @@ VkResult ps5vk_image_linear_validate(VkDevice d, const struct ps5vk_operation *o
     }
     if (op->type == PS5VK_BLIT_BC_TO_RGBA8)
         return bc_blit_operation_validate(d, op);
+    if (op->type == PS5VK_COPY_BUFFER_IMAGE &&
+        ps5vk_bgra8_transfer_target(op->copy_image)) {
+        void *buffer_address = NULL, *image_address = NULL;
+        VkDeviceSize buffer_bytes = 0, image_bytes = 0;
+        const size_t surface = ps5vk_color_64k_rx_surface_size(4u,
+            op->copy_image->info.extent.width, op->copy_image->info.extent.height);
+        if (op->copy_image->display_busy ||
+            op->copy_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
+            !ps5vk_buffer_usage(d, op->copy_source, VK_BUFFER_USAGE_TRANSFER_SRC_BIT) ||
+            ps5vk_buffer_span(d, op->copy_source, 0, VK_WHOLE_SIZE,
+                &buffer_address, &buffer_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->copy_image, &image_address, &image_bytes) != VK_SUCCESS ||
+            surface == SIZE_MAX || image_bytes < surface ||
+            spans_overlap(buffer_address, buffer_bytes, image_address, image_bytes) ||
+            !ps5vk_bgra8_buffer_copy_region(op->copy_image, buffer_bytes,
+                &op->copy_region)) return INVALID;
+        return VK_SUCCESS;
+    }
     if (op->type == PS5VK_COPY_BUFFER_IMAGE && ps5vk_d32_gather_image(op->copy_image)) {
         void *buffer_address = NULL, *image_address = NULL;
         VkDeviceSize buffer_bytes = 0, image_bytes = 0;
@@ -1113,6 +1211,50 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
     }
     if (op->type==PS5VK_COPY_IMAGE && ps5vk_bc_linear_image(op->image_source) &&
         ps5vk_bc_linear_image(op->image_destination)) return bc_image_copy_execute(d,op);
+    if (op->type == PS5VK_COPY_IMAGE &&
+        ps5vk_bgra8_transfer_target(op->image_destination)) {
+        const VkImageCopy *regions = op->owned_payload;
+        void *source_address = NULL, *destination_address = NULL;
+        VkDeviceSize source_bytes = 0, destination_bytes = 0, linear_bytes = 0;
+        uint32_t pitch = 0;
+        const uint32_t width = op->image_destination->info.extent.width;
+        const uint32_t height = op->image_destination->info.extent.height;
+        const size_t surface = ps5vk_color_64k_rx_surface_size(4u, width, height);
+        if (op->image_source->layout != op->image_source_layout ||
+            op->image_destination->layout != op->image_destination_layout ||
+            bgra_image_copy_validate(d, op->image_source, op->image_source_layout,
+                op->image_destination, op->image_destination_layout,
+                op->image_region_count, regions) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->image_source, &source_address, &source_bytes) != VK_SUCCESS ||
+            ps5vk_image_span(d, op->image_destination, &destination_address,
+                &destination_bytes) != VK_SUCCESS ||
+            transfer_layout(op->image_source->info.extent.width,
+                op->image_source->info.extent.height, &pitch, &linear_bytes) ||
+            surface == SIZE_MAX || destination_bytes < surface ||
+            ps5vk_image_invalidate_range(d, op->image_source, 0, linear_bytes) != VK_SUCCESS ||
+            ps5vk_image_invalidate_range(d, op->image_destination, 0, surface) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+        for (uint32_t i = 0; i < op->image_region_count; ++i) {
+            const VkImageCopy *r = &regions[i];
+            for (uint32_t y = 0; y < r->extent.height; ++y) {
+                for (uint32_t x = 0; x < r->extent.width; ++x) {
+                    const size_t offset = ps5vk_color_64k_rx_offset(4u,
+                        (uint32_t)r->dstOffset.x + x,
+                        (uint32_t)r->dstOffset.y + y, width);
+                    const uint64_t src_offset =
+                        ((uint64_t)r->srcOffset.y + y) * pitch +
+                        ((uint64_t)r->srcOffset.x + x) * 4u;
+                    if (offset == SIZE_MAX || offset > destination_bytes ||
+                        4u > destination_bytes - offset || src_offset > source_bytes ||
+                        4u > source_bytes - src_offset) return VK_ERROR_DEVICE_LOST;
+                    memcpy((unsigned char *)destination_address + offset,
+                        (const unsigned char *)source_address + src_offset, 4u);
+                }
+            }
+        }
+        return ps5vk_image_flush_range(d, op->image_destination, 0, surface) == VK_SUCCESS ?
+            VK_SUCCESS : VK_ERROR_DEVICE_LOST;
+    }
     if (op->type == PS5VK_COPY_IMAGE) {
         /* The tiled colour attachment was painted by an earlier submission.
          * Segments are executed in recorded order and a segment starts only
@@ -1240,6 +1382,44 @@ VkResult ps5vk_image_linear_execute(VkDevice d, const struct ps5vk_operation *op
         }
         return ps5vk_image_flush_range(d, op->image_destination, 0,
             destination_layout.bytes) == VK_SUCCESS ? VK_SUCCESS : VK_ERROR_DEVICE_LOST;
+    }
+    if (op->type == PS5VK_COPY_BUFFER_IMAGE &&
+        ps5vk_bgra8_transfer_target(op->copy_image)) {
+        void *image_address = NULL, *buffer_address = NULL;
+        VkDeviceSize image_bytes = 0, buffer_bytes = 0;
+        const VkBufferImageCopy *r = &op->copy_region;
+        const uint32_t width = op->copy_image->info.extent.width;
+        const uint32_t height = op->copy_image->info.extent.height;
+        const size_t surface = ps5vk_color_64k_rx_surface_size(4u, width, height);
+        if (op->copy_image->display_busy ||
+            op->copy_image->layout != op->copy_layout ||
+            ps5vk_image_span(d, op->copy_image, &image_address, &image_bytes) != VK_SUCCESS ||
+            ps5vk_buffer_span(d, op->copy_source, 0, VK_WHOLE_SIZE,
+                &buffer_address, &buffer_bytes) != VK_SUCCESS ||
+            surface == SIZE_MAX || image_bytes < surface ||
+            !ps5vk_bgra8_buffer_copy_region(op->copy_image, buffer_bytes, r))
+            return VK_ERROR_DEVICE_LOST;
+        const uint64_t pitch = (uint64_t)(r->bufferRowLength ?
+            r->bufferRowLength : r->imageExtent.width) * 4u;
+        const uint64_t span = (uint64_t)(r->imageExtent.height - 1u) * pitch +
+            (uint64_t)r->imageExtent.width * 4u;
+        if (ps5vk_buffer_cache(d, op->copy_source, r->bufferOffset, span, VK_TRUE) != VK_SUCCESS ||
+            ps5vk_image_invalidate_range(d, op->copy_image, 0, surface) != VK_SUCCESS)
+            return VK_ERROR_DEVICE_LOST;
+        const unsigned char *src = (const unsigned char *)buffer_address + r->bufferOffset;
+        unsigned char *dst = image_address;
+        for (uint32_t y = 0; y < r->imageExtent.height; ++y) {
+            for (uint32_t x = 0; x < r->imageExtent.width; ++x) {
+                const size_t offset = ps5vk_color_64k_rx_offset(4u,
+                    (uint32_t)r->imageOffset.x + x,
+                    (uint32_t)r->imageOffset.y + y, width);
+                if (offset == SIZE_MAX || offset > image_bytes ||
+                    4u > image_bytes - offset) return VK_ERROR_DEVICE_LOST;
+                memcpy(dst + offset, src + (uint64_t)y * pitch + (uint64_t)x * 4u, 4u);
+            }
+        }
+        return ps5vk_image_flush_range(d, op->copy_image, 0, surface) == VK_SUCCESS ?
+            VK_SUCCESS : VK_ERROR_DEVICE_LOST;
     }
     if (op->type == PS5VK_COPY_BUFFER_IMAGE && ps5vk_d32_gather_image(op->copy_image)) {
         void *image_address = NULL, *buffer_address = NULL;

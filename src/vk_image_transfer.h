@@ -37,6 +37,68 @@ enum ps5vk_image_domain {
 };
 enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *operation);
 
+/* VideoOut's BGRA8 transfer destination uses the tiled colour footprint,
+ * whether or not it also declares colour-attachment usage. */
+static inline VkBool32 ps5vk_bgra8_transfer_target(VkImage image)
+{
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return image && image->info.format == VK_FORMAT_B8G8R8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D && !image->info.flags &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.extent.depth == 1 && image->info.mipLevels == 1 &&
+        image->info.arrayLayers == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        (image->info.usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
+         image->info.usage == usage);
+}
+
+/* One colour subresource copied from a linear buffer into the tiled target.
+ * The executor uses the measured 64KB_R_X address equation for each texel. */
+static inline VkBool32 ps5vk_bgra8_buffer_copy_region(
+    VkImage image, VkDeviceSize buffer_bytes, const VkBufferImageCopy *r)
+{
+    if (!ps5vk_bgra8_transfer_target(image) || !r ||
+        r->imageSubresource.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+        r->imageSubresource.mipLevel || r->imageSubresource.baseArrayLayer ||
+        r->imageSubresource.layerCount != 1 || r->imageOffset.x < 0 ||
+        r->imageOffset.y < 0 || r->imageOffset.z || !r->imageExtent.width ||
+        !r->imageExtent.height || r->imageExtent.depth != 1 ||
+        r->bufferOffset % 4 ||
+        (r->bufferRowLength && r->bufferRowLength < r->imageExtent.width) ||
+        (r->bufferImageHeight && r->bufferImageHeight < r->imageExtent.height) ||
+        (uint32_t)r->imageOffset.x > image->info.extent.width ||
+        (uint32_t)r->imageOffset.y > image->info.extent.height ||
+        r->imageExtent.width > image->info.extent.width - (uint32_t)r->imageOffset.x ||
+        r->imageExtent.height > image->info.extent.height - (uint32_t)r->imageOffset.y)
+        return VK_FALSE;
+    const uint64_t pitch = (uint64_t)(r->bufferRowLength ?
+        r->bufferRowLength : r->imageExtent.width) * 4u;
+    const uint64_t row = (uint64_t)r->imageExtent.width * 4u;
+    if (pitch && (r->imageExtent.height - 1u) > (UINT64_MAX - row) / pitch)
+        return VK_FALSE;
+    const uint64_t span = (uint64_t)(r->imageExtent.height - 1u) * pitch + row;
+    return r->bufferOffset <= buffer_bytes &&
+        span <= buffer_bytes - r->bufferOffset;
+}
+
+static inline VkBool32 ps5vk_bgra8_transfer_barrier(const VkImageMemoryBarrier *b)
+{
+    if (!b || !ps5vk_bgra8_transfer_target(b->image)) return VK_FALSE;
+    const VkAccessFlags color = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    const VkAccessFlags transfer = VK_ACCESS_TRANSFER_WRITE_BIT;
+    const VkBool32 has_color =
+        (b->image->info.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0;
+    return (b->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+            b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+            !b->srcAccessMask && b->dstAccessMask == transfer) ||
+        (has_color && b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         b->newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+         b->srcAccessMask == transfer && b->dstAccessMask == color) ||
+        (has_color && b->oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+         b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+         b->srcAccessMask == color && b->dstAccessMask == transfer);
+}
+
 static inline VkBool32 ps5vk_d32_gather_barrier(const VkImageMemoryBarrier *b)
 {
     if (!b || !ps5vk_d32_gather_image(b->image)) return VK_FALSE;
@@ -98,7 +160,9 @@ static inline VkBool32 ps5vk_array_color_barrier(const VkImageMemoryBarrier *b)
  * the whole allocation, so the tiling equations are neither needed nor claimed. */
 static inline VkBool32 ps5vk_explicit_color_clear_image(VkImage image)
 {
-    return image && (ps5vk_array_color_image(image) || ps5vk_colour_transfer_image(image));
+    return image && (ps5vk_array_color_image(image) ||
+                     ps5vk_colour_transfer_image(image) ||
+                     ps5vk_bgra8_transfer_target(image));
 }
 static inline VkBool32 ps5vk_array_color_clear(const struct ps5vk_operation *op)
 {

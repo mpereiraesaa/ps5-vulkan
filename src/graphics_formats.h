@@ -208,7 +208,9 @@ static inline VkResult ps5vk_graphics_image_properties(VkFormat format,
         return VK_SUCCESS;
     }
     const VkBool32 attachment=(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0;
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 ||
+        (format == VK_FORMAT_B8G8R8A8_UNORM &&
+         usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     const VkBool32 cube_sampled_attachment =
         format == VK_FORMAT_R8G8B8A8_UNORM && type == VK_IMAGE_TYPE_2D &&
         flags == VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT &&

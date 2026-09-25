@@ -218,7 +218,9 @@ static const struct ps5vk_texture_format formats[] = {
     BC(VK_FORMAT_BC7_UNORM_BLOCK, 181, 16, 4),
     BC(VK_FORMAT_BC7_SRGB_BLOCK, 182, 16, 4),
     /* VideoOut target and vertex input; deliberately not sampled. */
-    BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_VERTEX),
+    /* VideoOut colour target. Its transfer-destination role writes the same
+     * tiled surface through whole-image clear or checked pixel scatter. */
+    BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_DST | CAP_VERTEX),
     /* 64KB_Z_X depth target. TRANSFER_DST is the whole-subresource clear:
      * vkCmdClearDepthStencilImage writes one uniform 32-bit word over the
      * entire surface, which is tiling-invariant. TRANSFER_SRC is the whole
@@ -434,6 +436,14 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
              PS5VK_FORMAT_CAP_TRANSFER_DST) &&
         usage == (VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                   VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+        return VK_TRUE;
+    /* BGRA8 transfer destinations use the tiled display-compatible footprint
+     * with or without the colour-attachment usage bit. */
+    if (format == VK_FORMAT_B8G8R8A8_UNORM &&
+        (usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
+         usage == (attachment | VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
+        (w & (PS5VK_FORMAT_CAP_COLOR_ATTACHMENT | PS5VK_FORMAT_CAP_TRANSFER_DST)) ==
+            (PS5VK_FORMAT_CAP_COLOR_ATTACHMENT | PS5VK_FORMAT_CAP_TRANSFER_DST))
         return VK_TRUE;
     if ((w & PS5VK_FORMAT_CAP_TRANSFER_DST) && usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT)
         return VK_TRUE;

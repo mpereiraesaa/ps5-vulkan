@@ -19,6 +19,7 @@
 #include "graphics_formats.h"
 #include "bc_blit_decode.h"
 #include "depth_detile.h"
+#include "color_detile.h"
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
@@ -1136,6 +1137,133 @@ static void precise_query_colour_barriers(void)
     vkFreeMemory(device,memory,NULL);
 }
 
+static void bgra_tiled_transfer_destination(void)
+{
+    const VkImageUsageFlags target_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    const VkImageUsageFlags subsets[] = {
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        target_usage};
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM, 0));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+        target_usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    for (size_t i = 0; i < sizeof(subsets) / sizeof(subsets[0]); ++i) {
+        VkImageFormatProperties properties;
+        assert(ps5vk_graphics_image_properties(VK_FORMAT_B8G8R8A8_UNORM,
+            VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, subsets[i], 0,
+            1u << 20, &properties) == VK_SUCCESS);
+        assert(properties.maxMipLevels == 1 && properties.maxArrayLayers == 1);
+        VkImage image = make_image_extent(VK_FORMAT_B8G8R8A8_UNORM,
+            subsets[i], 16, 8, NULL);
+        VkMemoryRequirements requirements;
+        vkGetImageMemoryRequirements(device, image, &requirements);
+        assert(requirements.alignment == 131072);
+        assert(requirements.size >= 131072);
+        assert(ps5vk_bgra8_transfer_target(image) ==
+            (subsets[i] != VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+        if (subsets[i] & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
+            VkImageMemoryBarrier to_transfer = transfer_barrier(image,
+                VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                0, VK_ACCESS_TRANSFER_WRITE_BIT);
+            VkImageMemoryBarrier to_color = transfer_barrier(image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+            assert(ps5vk_bgra8_transfer_barrier(&to_transfer));
+            assert(ps5vk_bgra8_transfer_barrier(&to_color) ==
+                (subsets[i] == target_usage));
+            VkCommandBuffer clear = begin();
+            VkClearColorValue red = {.float32 = {1.f, 0.f, 0.f, 1.f}};
+            VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            vkCmdClearColorImage(clear, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                &red, 1, &range);
+            assert(clear->state == PS5VK_RECORDING && clear->operation_count == 1);
+            assert(clear->operations[0].clear_word == 0xffff0000u);
+            vkFreeCommandBuffers(device, pool, 1, &clear);
+        }
+        vkDestroyImage(device, image, NULL);
+    }
+    void *target_map = NULL, *buffer_map = NULL, *source_map = NULL;
+    VkImage target = make_image_extent(VK_FORMAT_B8G8R8A8_UNORM,
+        target_usage, 16, 8, &target_map);
+    VkBuffer upload = make_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 128, &buffer_map);
+    VkImage source = make_image_extent(VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        16, 8, &source_map);
+    struct ps5vk_texture_layout source_layout;
+    assert(ps5vk_texture_layout(16, 8, &source_layout) == 0);
+    const size_t target_bytes = ps5vk_color_64k_rx_surface_size(4, 16, 8);
+    assert(target_bytes != SIZE_MAX);
+    memset(target_map, 0xa5, target_bytes);
+    memset(buffer_map, 0, 128);
+    memset(source_map, 0, source_layout.bytes);
+    target->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    source->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    for (unsigned y = 0; y < 3; ++y)
+        for (unsigned x = 0; x < 5; ++x) {
+            const uint32_t value = 0xff000000u | (y << 8) | x;
+            memcpy((uint8_t *)buffer_map + 8 + y * 32 + x * 4, &value, 4);
+        }
+    VkBufferImageCopy upload_region = {
+        .bufferOffset = 8, .bufferRowLength = 8,
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .imageOffset = {3, 2, 0}, .imageExtent = {5, 3, 1}};
+    VkCommandBuffer command = begin();
+    vkCmdCopyBufferToImage(command, upload, target,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &upload_region);
+    assert(command->state == PS5VK_RECORDING);
+    submit_and_wait(command);
+    for (unsigned y = 0; y < 8; ++y)
+        for (unsigned x = 0; x < 16; ++x) {
+            const size_t offset = ps5vk_color_64k_rx_offset(4, x, y, 16);
+            uint32_t value;
+            memcpy(&value, (uint8_t *)target_map + offset, 4);
+            const uint32_t expected = x >= 3 && x < 8 && y >= 2 && y < 5 ?
+                0xff000000u | ((y - 2) << 8) | (x - 3) : 0xa5a5a5a5u;
+            assert(value == expected);
+        }
+    for (unsigned y = 0; y < 3; ++y)
+        for (unsigned x = 0; x < 4; ++x) {
+            const uint32_t value = 0x11220000u | (y << 8) | x;
+            memcpy((uint8_t *)source_map + (y + 1) * source_layout.row_pitch +
+                (x + 2) * 4, &value, 4);
+        }
+    VkImageCopy image_region = {
+        .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .srcOffset = {2, 1, 0},
+        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .dstOffset = {10, 4, 0}, .extent = {4, 3, 1}};
+    command = begin();
+    vkCmdCopyImage(command, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &image_region);
+    assert(command->state == PS5VK_RECORDING);
+    submit_and_wait(command);
+    for (unsigned y = 0; y < 3; ++y)
+        for (unsigned x = 0; x < 4; ++x) {
+            const size_t offset = ps5vk_color_64k_rx_offset(4, x + 10, y + 4, 16);
+            uint32_t value;
+            memcpy(&value, (uint8_t *)target_map + offset, 4);
+            assert(value == (0x11220000u | (y << 8) | x));
+        }
+    VkBufferImageCopy invalid = upload_region;
+    invalid.imageOffset.x = 14;
+    command = begin();
+    vkCmdCopyBufferToImage(command, upload, target,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &invalid);
+    assert(command->state == PS5VK_INVALID);
+    target->display_busy = VK_TRUE;
+    command = begin();
+    vkCmdCopyImage(command, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &image_region);
+    assert(command->state == PS5VK_INVALID);
+    target->display_busy = VK_FALSE;
+    vkDestroyImage(device, source, NULL);
+    vkDestroyBuffer(device, upload, NULL);
+    vkDestroyImage(device, target, NULL);
+}
+
 int main(void)
 {
     VkInstance instance;
@@ -1155,6 +1283,7 @@ int main(void)
     VkCommandPoolCreateInfo pci = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                                    .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
     assert(vkCreateCommandPool(device, &pci, NULL, &pool) == VK_SUCCESS);
+    bgra_tiled_transfer_destination();
     d32_gather_mip_tail_upload();
     for(int srgb=0;srgb<2;++srgb)
     for(unsigned general_source=0;general_source<2;++general_source)

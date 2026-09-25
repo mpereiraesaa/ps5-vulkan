@@ -1405,6 +1405,8 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
         src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
         dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     if(ps5vk_d32_gather_image(image))return ps5vk_d32_gather_barrier(b);
+    if(ps5vk_bgra8_transfer_target(image))return
+        ps5vk_bgra8_transfer_barrier(b) || ps5vk_color_discard_barrier(b);
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
     if(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image))
         return ps5vk_linear_image_barrier(b);

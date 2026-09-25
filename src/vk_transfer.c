@@ -121,9 +121,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
     const int linear_upload=(ps5vk_pure_transfer_image(image) ||
         ps5vk_colour_transfer_image(image)) &&
         (usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    if(!ps5vk_buffer_usage(d,source,VK_BUFFER_USAGE_TRANSFER_SRC_BIT) ||
-        !ps5vk_texture_format_sampled_image(image->info.format) ||
-        (!sampled_upload && !linear_upload)) {invalid(c);return;}
+    const int tiled_bgra=ps5vk_bgra8_transfer_target(image);
+    if((tiled_bgra && layout!=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) ||
+        !ps5vk_buffer_usage(d,source,VK_BUFFER_USAGE_TRANSFER_SRC_BIT) ||
+        (!tiled_bgra && !ps5vk_texture_format_sampled_image(image->info.format)) ||
+        (!sampled_upload && !linear_upload && !tiled_bgra)) {invalid(c);return;}
     void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
     if(ps5vk_buffer_span(d,source,0,VK_WHOLE_SIZE,&src,&src_bytes)!=VK_SUCCESS ||
         ps5vk_image_span(d,image,&dst,&dst_bytes)!=VK_SUCCESS) {invalid(c);return;}
@@ -135,8 +137,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer c,VkBuffer sou
          * upload path, so the shared planner is the record-time gate for both;
          * ps5vk_image_transfer.c keeps a queue-group-local copy of the same
          * arithmetic, and tests/test_image_copy_clear.c asserts they agree. */
-        if(ps5vk_texture_copy_plan_for_image(image,src_bytes,dst_bytes,
-            &regions[i],&plan)!=VK_SUCCESS) {invalid(c);return;}
+        if(tiled_bgra ?
+            !ps5vk_bgra8_buffer_copy_region(image,src_bytes,&regions[i]) :
+            ps5vk_texture_copy_plan_for_image(image,src_bytes,dst_bytes,
+                &regions[i],&plan)!=VK_SUCCESS) {invalid(c);return;}
     }
     struct ps5vk_operation *ops=ps5vk_command_reserve_operations(c,PS5VK_COPY_BUFFER_IMAGE,
         PS5VK_OPERATION_OUTSIDE_RENDER_PASS,count);

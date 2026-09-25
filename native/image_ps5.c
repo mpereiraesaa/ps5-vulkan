@@ -182,8 +182,16 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
          info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL ||
          info->usage != VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    const int bgra_transfer_only =
+        info->format == VK_FORMAT_B8G8R8A8_UNORM &&
+        info->usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (bgra_transfer_only &&
+        (info->imageType != VK_IMAGE_TYPE_2D || info->flags ||
+         info->mipLevels != 1 || info->arrayLayers != 1 ||
+         info->samples != VK_SAMPLE_COUNT_1_BIT || info->extent.depth != 1))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     const int attachment=(info->usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 || depth;
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))!=0 || depth || bgra_transfer_only;
     const int cube=info->flags==VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     if (cube && info->usage == (VK_IMAGE_USAGE_SAMPLED_BIT |
                                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
@@ -216,7 +224,8 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
     /* Padded linear layout: the sampled/upload role and the pure transfer role
      * (copy source and/or destination) share one host-visible layout, so the
      * upload path and both transfer directions address the same bytes. */
-    if(!depth && (info->usage & (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
+    if(!depth && !bgra_transfer_only &&
+        (info->usage & (VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|
             VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
         !(info->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
         struct ps5vk_texture_mip_layout texture;
