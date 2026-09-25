@@ -184,6 +184,10 @@ struct VkCommandBuffer_T {
      * the inheritance record by a continuation secondary, and reset with the
      * rest of the recording state. */
     uint32_t subpass;
+    /* The active render pass instance was begun with vkCmdBeginRenderingKHR:
+     * only vkCmdEndRenderingKHR closes it, and only pipelines created for
+     * dynamic rendering draw in it. */
+    VkBool32 dynamic_rendering;
     /* Dynamic viewport/scissor arrays. Bit i of each mask says index i was set
      * by vkCmdSetViewport/vkCmdSetScissor since the last reset; a draw needs
      * every index below its pipeline's viewport_count. The single names alias

@@ -544,6 +544,19 @@ static VkBool32 copy_commands2_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_COPY_COMMANDS2) != 0;
 }
+/* VK_KHR_depth_stencil_resolve needs VK_KHR_create_renderpass2;
+ * VK_KHR_dynamic_rendering needs it and VK_KHR_get_physical_device_properties2
+ * on Vulkan 1.0. Both are reported only with the route beneath them. */
+static VkBool32 depth_stencil_resolve_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE) &&
+        create_renderpass2_supported(p);
+}
+static VkBool32 dynamic_rendering_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_DYNAMIC_RENDERING) &&
+        depth_stencil_resolve_supported(p);
+}
 /* VK_KHR_maintenance1 has no registry dependency. */
 static VkBool32 maintenance1_supported(VkPhysicalDevice p)
 {
@@ -677,6 +690,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT) {
             ((VkPhysicalDeviceExtendedDynamicStateFeaturesEXT *)next)->extendedDynamicState =
                 extended_dynamic_state_supported(p);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES) {
+            ((VkPhysicalDeviceDynamicRenderingFeatures *)next)->dynamicRendering =
+                dynamic_rendering_supported(p);
         }
     }
 }
@@ -743,6 +760,21 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
                 PS5VK_ROBUST_BUFFER_ACCESS_SIZE_ALIGNMENT : 0u;
             properties->robustStorageBufferAccessSizeAlignment = alignment;
             properties->robustUniformBufferAccessSizeAlignment = alignment;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES) {
+            /* VK_KHR_depth_stencil_resolve: SAMPLE_ZERO is the mode the
+             * extension makes mandatory, and the only one claimed. No resolve
+             * can be requested here (every depth attachment is single-sample),
+             * so nothing beyond the mandatory minimum is reported, and zero
+             * when the route is absent. */
+            VkPhysicalDeviceDepthStencilResolveProperties *properties =
+                (VkPhysicalDeviceDepthStencilResolveProperties *)next;
+            const VkResolveModeFlags modes = depth_stencil_resolve_supported(p) ?
+                VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : 0u;
+            properties->supportedDepthResolveModes = modes;
+            properties->supportedStencilResolveModes = modes;
+            properties->independentResolveNone = VK_FALSE;
+            properties->independentResolve = VK_FALSE;
         }
     }
 }
@@ -852,17 +884,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Twenty-seven conditional pushes follow (storage class, 8-bit, 16-bit,
-     * draw parameters, multiview, memory model, device group, buffer address,
-     * UBO layout, host query reset, sampler mirror clamp, timeline,
-     * maintenance2, create_renderpass2, separate depth/stencil layouts,
-     * swapchain, demote to helper invocation, terminate invocation,
-     * get_memory_requirements2, dedicated_allocation, bind_memory2,
-     * maintenance4, descriptor update template, robustness2, extended dynamic
-     * state, maintenance1, copy_commands2). Keep headroom so a new entry cannot
-     * overflow the array before this bound is revisited; each push site must
-     * stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 27, DEVICE_EXTENSION_SLOTS = 32 };
+    /* Twenty-nine conditional pushes follow (storage class, 8-bit, 16-bit, draw
+     * parameters, multiview, memory model, device group, buffer address, UBO
+     * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
+     * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
+     * helper invocation, terminate invocation, get_memory_requirements2,
+     * dedicated_allocation, bind_memory2, maintenance4, descriptor update
+     * template, robustness2, extended dynamic state, maintenance1,
+     * copy_commands2, depth/stencil resolve, dynamic rendering). Keep headroom
+     * so a new entry cannot overflow the array before this bound is revisited;
+     * each push site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 29, DEVICE_EXTENSION_SLOTS = 32 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -999,6 +1031,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_COPY_COMMANDS_2_SPEC_VERSION};
     }
+    if (depth_stencil_resolve_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
+            VK_KHR_DEPTH_STENCIL_RESOLVE_SPEC_VERSION};
+    }
+    if (dynamic_rendering_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -1045,6 +1086,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 extended_dynamic_state_extension = VK_FALSE;
     VkBool32 maintenance1_extension = VK_FALSE;
     VkBool32 copy_commands2_extension = VK_FALSE;
+    VkBool32 depth_stencil_resolve_extension = VK_FALSE, dynamic_rendering_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -1106,6 +1148,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &maintenance1_extension;
         else if (!strcmp(name, VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME))
             seen = &copy_commands2_extension;
+        else if (!strcmp(name, VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME))
+            seen = &depth_stencil_resolve_extension;
+        else if (!strcmp(name, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME))
+            seen = &dynamic_rendering_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1208,6 +1254,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     if (copy_commands2_extension &&
         (!copy_commands2_supported(p) || !p->instance->features2_extension_enabled))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (depth_stencil_resolve_extension &&
+        (!depth_stencil_resolve_supported(p) || !create_renderpass2_extension))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (dynamic_rendering_extension &&
+        (!dynamic_rendering_supported(p) || !depth_stencil_resolve_extension ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
     uint32_t enabled_features_t09 = sampler_mirror_clamp_extension ?
@@ -1220,7 +1273,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_device_group = VK_FALSE;
     VkBool32 saw_uniform_buffer_standard_layout = VK_FALSE;
     VkBool32 saw_host_query_reset = VK_FALSE, saw_imageless_framebuffer = VK_FALSE;
-    VkBool32 saw_dynamic_rendering = VK_FALSE;
+    VkBool32 saw_dynamic_rendering = VK_FALSE, dynamic_rendering = VK_FALSE;
     VkBool32 saw_timeline = VK_FALSE;
     VkBool32 saw_separate_depth_stencil = VK_FALSE;
     VkBool32 saw_demote = VK_FALSE, saw_terminate = VK_FALSE;
@@ -1306,17 +1359,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             /* The pinned CTS builds one device chain for every rendering type it
              * exercises, so it always carries VkPhysicalDeviceDynamicRendering
              * Features once Features2 is available, with the feature left at its
-             * default false value. Dynamic rendering is not implemented and not
-             * advertised, so accept the neutral value only: the structure
-             * enables nothing, and asking for the feature fails closed with the
-             * precise unsupported-feature result instead of being mistaken for
-             * an unrecognised structure. */
+             * default false value; that neutral structure enables nothing. The
+             * feature itself needs VK_KHR_dynamic_rendering enabled, which the
+             * platform reports only with its native route (DXVK262-T10). */
             if (saw_dynamic_rendering) return INVALID;
             saw_dynamic_rendering = VK_TRUE;
             const VkPhysicalDeviceDynamicRenderingFeatures *features =
                 (const VkPhysicalDeviceDynamicRenderingFeatures *)next;
             if (!valid_bool(features->dynamicRendering)) return INVALID;
-            if (features->dynamicRendering) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (features->dynamicRendering) {
+                if (!dynamic_rendering_extension) return VK_ERROR_FEATURE_NOT_PRESENT;
+                dynamic_rendering = VK_TRUE;
+            }
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
             /* Enabling the extension does NOT oblige the caller to ask for the
@@ -1576,6 +1630,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->extended_dynamic_state_enabled = extended_dynamic_state;
     d->maintenance1_extension_enabled = maintenance1_extension;
     d->copy_commands2_extension_enabled = copy_commands2_extension;
+    d->depth_stencil_resolve_extension_enabled = depth_stencil_resolve_extension;
+    d->dynamic_rendering_extension_enabled = dynamic_rendering_extension;
+    d->dynamic_rendering_enabled = dynamic_rendering;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

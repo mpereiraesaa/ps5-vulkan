@@ -223,11 +223,93 @@ static VkResult tessellation_domain_origin(VkDevice d,
     if (origin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT) return refuse(11);
     return VK_ERROR_UNKNOWN;
 }
+/* A shader stage's chain. The pinned DXVK 2.6.2 always chains the stage's
+ * VkShaderModuleCreateInfo, even when it also created the module
+ * (dxvk_shader.cpp:1150-1177: the stage structure is zeroed before its module
+ * is tested). An inline module is VK_KHR_maintenance5 / graphics-pipeline-
+ * library behaviour this device does not expose, so a stage without a module
+ * stays refused; the redundant structure is ignored only when it carries
+ * exactly the words of the module the stage names, so it can never select
+ * different code. Anything else in the chain stays fail-closed. */
+static int stage_next_supported(const VkPipelineShaderStageCreateInfo *s)
+{
+    if (!s->pNext) return 1;
+    const VkShaderModuleCreateInfo *inline_module = s->pNext;
+    return inline_module->sType == VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO &&
+        !inline_module->pNext && !inline_module->flags && s->module &&
+        inline_module->pCode && inline_module->codeSize == s->module->word_count * 4u &&
+        !memcmp(inline_module->pCode, s->module->words, inline_module->codeSize);
+}
+/* VK_KHR_dynamic_rendering: the pass a pipeline created with renderPass =
+ * VK_NULL_HANDLE describes, built from its VkPipelineRenderingCreateInfo the
+ * way vkCmdBeginRenderingKHR builds an instance's pass - colour attachments
+ * in order, then the depth/stencil one - so the rest of creation, and every
+ * draw, compares formats exactly as for a render-pass pipeline. The storage is
+ * the caller's; nothing is retained. A hole in the colour list (an UNDEFINED
+ * format), a view mask, or depth and stencil formats that differ are shapes
+ * this profile does not build and stay refused. */
+struct rendering_pass {
+    struct VkRenderPass_T pass;
+    VkAttachmentDescription attachments[PS5VK_MAX_COLOR_ATTACHMENTS + 1];
+    struct ps5vk_subpass subpass;
+};
+static VkResult rendering_pass(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
+    struct rendering_pass *out)
+{
+    const VkPipelineRenderingCreateInfo *r = in->pNext;
+    if (!d->dynamic_rendering_enabled || !r ||
+        r->sType != VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO) return refuse(2);
+    if (r->pNext || r->viewMask ||
+        r->colorAttachmentCount > PS5VK_MAX_COLOR_ATTACHMENTS ||
+        (r->colorAttachmentCount && !r->pColorAttachmentFormats) || in->subpass ||
+        !in->pMultisampleState)
+        return refuse(2);
+    const VkFormat depth = r->depthAttachmentFormat != VK_FORMAT_UNDEFINED ?
+        r->depthAttachmentFormat : r->stencilAttachmentFormat;
+    if (r->depthAttachmentFormat != VK_FORMAT_UNDEFINED &&
+        r->stencilAttachmentFormat != VK_FORMAT_UNDEFINED &&
+        r->depthAttachmentFormat != r->stencilAttachmentFormat) return refuse(2);
+    memset(out, 0, sizeof(*out));
+    const VkSampleCountFlagBits samples = in->pMultisampleState->rasterizationSamples;
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < r->colorAttachmentCount; ++i) {
+        if (r->pColorAttachmentFormats[i] == VK_FORMAT_UNDEFINED) return refuse(2);
+        out->attachments[n] = (VkAttachmentDescription){.format = r->pColorAttachmentFormats[i],
+            .samples = samples, .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        out->subpass.color[n] = (VkAttachmentReference){n, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        ++n;
+    }
+    out->subpass.color_count = n;
+    out->subpass.depth = (VkAttachmentReference){VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED};
+    if (depth != VK_FORMAT_UNDEFINED) {
+        out->attachments[n] = (VkAttachmentDescription){.format = depth, .samples = samples,
+            .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+        out->subpass.depth = (VkAttachmentReference){n,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+        ++n;
+    }
+    out->pass.device = d;
+    out->pass.attachment_count = n;
+    out->pass.subpass_count = 1;
+    out->pass.attachments = out->attachments;
+    out->pass.subpasses = &out->subpass;
+    return VK_SUCCESS;
+}
 static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                        const VkAllocationCallbacks *allocator, VkPipeline *out)
 {
     if (in->sType != VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO || !in->layout ||
-        in->layout->device != d || !in->renderPass || in->renderPass->device != d) return VK_ERROR_UNKNOWN;
+        in->layout->device != d || (in->renderPass && in->renderPass->device != d))
+        return VK_ERROR_UNKNOWN;
+    struct rendering_pass rendering;
+    VkRenderPass render_pass = in->renderPass;
+    if (!render_pass) {
+        VkResult rc = rendering_pass(d, in, &rendering);
+        if (rc != VK_SUCCESS) return rc;
+        render_pass = &rendering.pass;
+    }
     /* The pipeline is created for ONE subpass, which must exist in the pass it
      * names. A nonzero index is no longer refused outright: it identifies the
      * scope this pipeline may draw in. */
@@ -235,7 +317,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * three through five add the optional tessellation control/evaluation pair
      * and geometry after evaluation. Nothing else is accepted, so a
      * mesh or task stage still fails here. */
-    if (in->pNext || in->flags || in->subpass >= in->renderPass->subpass_count ||
+    if ((in->pNext && in->renderPass) || in->flags || in->subpass >= render_pass->subpass_count ||
         (in->stageCount < 2 || in->stageCount > 5) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return refuse(2);
@@ -255,7 +337,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         const VkPipelineShaderStageCreateInfo *s=&in->pStages[i];
         if (s->sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO || !s->module ||
             s->module->device != d || !s->pName) return VK_ERROR_UNKNOWN;
-        if (s->flags || s->pNext) return refuse(4);
+        if (s->flags || !stage_next_supported(s)) return refuse(4);
         uint32_t id;
         if (!ps5vk_shader_entry(s->module, s->stage, s->pName, &id)) return VK_ERROR_UNKNOWN;
         if (s->stage == VK_SHADER_STAGE_VERTEX_BIT && !vs) vs=s;
@@ -358,7 +440,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * no colour attachment leaves the count bounded only by the platform's own
      * mask. */
     const struct ps5vk_subpass *multisample_subpass =
-        ps5vk_render_pass_subpass(in->renderPass, in->subpass);
+        ps5vk_render_pass_subpass(render_pass, in->subpass);
     const uint32_t multisample_attachment = multisample_subpass->color[0].attachment;
     const int multisample_has_attachment = multisample_subpass->color_count &&
         multisample_attachment != VK_ATTACHMENT_UNUSED;
@@ -390,7 +472,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         r->lineWidth != 1.0f ||
         m->pNext || m->flags || m->alphaToCoverageEnable || m->alphaToOneEnable ||
         !multisample_state(d, m, multisample_has_attachment ?
-                in->renderPass->attachments[multisample_attachment].samples :
+                render_pass->attachments[multisample_attachment].samples :
                 VK_SAMPLE_COUNT_1_BIT, multisample_has_attachment) ||
         /* Viewport arrays: the two counts must match and lie in
          * 1..PS5VK_MAX_VIEWPORTS; more than one needs multiViewport ENABLED
@@ -431,7 +513,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          r->frontFace != VK_FRONT_FACE_COUNTER_CLOCKWISE))
         return VK_ERROR_UNKNOWN;
     const VkPipelineDepthStencilStateCreateInfo *depth=in->pDepthStencilState;
-    VkRenderPass pass=in->renderPass;
+    VkRenderPass pass=render_pass;
     /* The formats come from the subpass this pipeline names, not from the
      * first one: the identity is what a draw is later checked against. */
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, in->subpass);
@@ -599,6 +681,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     p->device=d; p->allocator=saved; p->custom_allocator=custom; p->graphics=VK_TRUE;
     p->subpass=in->subpass;
+    p->dynamic_rendering=in->renderPass?VK_FALSE:VK_TRUE;
     /* The multisample state the native draw state reads (DXVK262-T06): the
      * count the accepted state carries, and the shading flag and fraction the
      * loader turns into pixel iterations. */

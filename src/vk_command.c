@@ -76,6 +76,7 @@ static void clear(VkCommandBuffer c)
     c->render_pass_inherited = VK_FALSE;
     c->render_pass_contents = VK_SUBPASS_CONTENTS_INLINE;
     c->subpass = 0;
+    c->dynamic_rendering = VK_FALSE;
     c->viewport_valid = c->scissor_valid = 0;
     c->line_width = 1.0f;
     c->min_depth_bounds = 0.0f;
@@ -910,7 +911,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(VkCommandBuffer c,
 {
     if (!c || c->state != PS5VK_RECORDING ||
         c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY || !c->render_pass ||
-        c->render_pass_inherited ||
+        c->render_pass_inherited || c->dynamic_rendering ||
         c->active_occlusion_query_pool ||
         (contents != VK_SUBPASS_CONTENTS_INLINE &&
          contents != VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS) ||
@@ -941,7 +942,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
      * structural requirement of the recording rather than a judgement about
      * work: ending early would silently drop the subpasses never entered. */
     if (!c || c->state != PS5VK_RECORDING || c->level != VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
-        !c->render_pass || c->subpass + 1 != c->render_pass->subpass_count ||
+        !c->render_pass || c->dynamic_rendering ||
+        c->subpass + 1 != c->render_pass->subpass_count ||
         c->active_occlusion_query_pool ||
         c->operation_count == PS5VK_MAX_OPERATIONS) { invalid(c); return; }
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_END_RENDER_PASS,
@@ -1196,6 +1198,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
      * it was never compiled for, so it is refused rather than tolerated
      * because the formats happen to agree. */
     if (p->subpass != c->subpass) { invalid(c); return; }
+    /* A pipeline created for dynamic rendering draws only inside a
+     * vkCmdBeginRenderingKHR instance and a render-pass pipeline only inside
+     * a render pass (VUID-vkCmdDraw-renderPass-06198). */
+    if (!p->dynamic_rendering != !c->dynamic_rendering) { invalid(c); return; }
     /* The formats a draw must match are those of the CURRENT subpass, not of
      * the pass as a whole. */
     const struct ps5vk_subpass *subpass = ps5vk_render_pass_subpass(pass, c->subpass);

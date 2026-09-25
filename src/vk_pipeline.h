@@ -161,6 +161,10 @@ struct VkPipeline_T {
      * viewport_count is zero and the draw takes the count, the viewports and
      * the scissors from the command buffer. */
     uint32_t dynamic_eds;
+    /* Created with renderPass = VK_NULL_HANDLE and a
+     * VkPipelineRenderingCreateInfo (VK_KHR_dynamic_rendering): it draws only
+     * inside a vkCmdBeginRenderingKHR instance. */
+    VkBool32 dynamic_rendering;
     /* Input-assembly state, not a shader capability: the fixed-function front
      * end cuts a strip where an index matches the reset index. Accepted for the
      * strip topologies this profile carries and refused everywhere else. */

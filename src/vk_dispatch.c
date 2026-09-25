@@ -229,6 +229,9 @@ static const struct entry entries[] = {
     ENTRY(vkCmdCopyImageToBuffer2KHR, DEVICE),
     ENTRY(vkCmdBlitImage2KHR, DEVICE),
     ENTRY(vkCmdResolveImage2KHR, DEVICE),
+    /* VK_KHR_dynamic_rendering (DXVK262-T10). */
+    ENTRY(vkCmdBeginRenderingKHR, DEVICE),
+    ENTRY(vkCmdEndRenderingKHR, DEVICE),
 };
 #undef ENTRY
 
@@ -453,6 +456,9 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
     if (!strcmp(name, "vkTrimCommandPoolKHR") && !device->maintenance1_extension_enabled)
         return NULL;
     if (copy_commands2_command(name) && !device->copy_commands2_extension_enabled)
+        return NULL;
+    if ((!strcmp(name, "vkCmdBeginRenderingKHR") || !strcmp(name, "vkCmdEndRenderingKHR")) &&
+        !device->dynamic_rendering_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;
