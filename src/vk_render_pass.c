@@ -49,6 +49,7 @@ static int layout(VkImageLayout value, int depth, int initial)
     return (initial && value == VK_IMAGE_LAYOUT_UNDEFINED) ||
         value == VK_IMAGE_LAYOUT_GENERAL || value == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
         value == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
+        (!depth && value == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) ||
         value == (depth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) ||
         (!depth && value == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }

@@ -40,16 +40,22 @@ static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
     const VkImageLayout attachment = depth ?
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL :
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    /* A render pass can hand the fixed BGRA display image back to VideoOut.
+     * vkCmdBeginRenderPass checks the actual attachment's swapchain ownership
+     * before this plan reaches the native queue. */
+    const VkBool32 present = !depth && format == VK_FORMAT_B8G8R8A8_UNORM;
     if (!a || !out || a->format != format ||
         (depth ? a->samples != VK_SAMPLE_COUNT_1_BIT : !(served & a->samples)) ||
         (depth ? (format != VK_FORMAT_D32_SFLOAT && format != VK_FORMAT_D16_UNORM) :
          !ps5vk_color_target_format_supported(format)) ||
         (reference != attachment && reference != VK_IMAGE_LAYOUT_GENERAL) ||
         (a->initialLayout != VK_IMAGE_LAYOUT_UNDEFINED &&
-         a->initialLayout != attachment && a->initialLayout != VK_IMAGE_LAYOUT_GENERAL) ||
+         a->initialLayout != attachment && a->initialLayout != VK_IMAGE_LAYOUT_GENERAL &&
+         !(present && a->initialLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)) ||
         (a->finalLayout != attachment && a->finalLayout != VK_IMAGE_LAYOUT_GENERAL &&
          !(readback && !depth &&
-           a->finalLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)) ||
+           a->finalLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) &&
+         !(present && a->finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)) ||
         a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
         a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
         (a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&
