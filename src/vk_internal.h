@@ -282,12 +282,23 @@ struct VkPhysicalDevice_T {
     VkInstance instance;
     struct ps5vk_platform platform;
 };
+struct VkSurfaceKHR_T {
+    VkInstance instance;
+    VkExtent2D extent;
+    VkAllocationCallbacks allocator;
+    VkBool32 custom_allocator;
+    struct VkSurfaceKHR_T *next;
+    unsigned swapchains;
+};
 struct VkInstance_T {
     VkAllocationCallbacks allocator;
     VkBool32 custom_allocator;
     struct VkPhysicalDevice_T physical;
     VkBool32 features2_extension_enabled;
     VkBool32 device_group_creation_enabled;
+    VkBool32 surface_extension_enabled;
+    VkBool32 display_extension_enabled;
+    struct VkSurfaceKHR_T *surfaces;
     unsigned devices, lifetime_errors;
 };
 struct VkQueue_T {

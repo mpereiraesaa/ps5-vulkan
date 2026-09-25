@@ -1469,18 +1469,20 @@ static void negative(void)
 static void narrow_storage_features(void)
 {
     uint32_t count = 0;
-    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, NULL) == VK_SUCCESS && count == 2);
-    VkExtensionProperties instance_properties[2] = {0};
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, NULL) == VK_SUCCESS && count == 4);
+    VkExtensionProperties instance_properties[4] = {0};
     count = 0;
     assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_INCOMPLETE && count == 0);
-    count = 2;
-    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_SUCCESS && count == 2);
+    count = 4;
+    assert(vkEnumerateInstanceExtensionProperties(NULL, &count, instance_properties) == VK_SUCCESS && count == 4);
     assert(!strcmp(instance_properties[0].extensionName,
                    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
     assert(instance_properties[0].specVersion == VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION);
     assert(!strcmp(instance_properties[1].extensionName,
                    VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME));
     assert(instance_properties[1].specVersion == VK_KHR_DEVICE_GROUP_CREATION_SPEC_VERSION);
+    assert(!strcmp(instance_properties[2].extensionName, VK_KHR_SURFACE_EXTENSION_NAME));
+    assert(!strcmp(instance_properties[3].extensionName, VK_KHR_DISPLAY_EXTENSION_NAME));
     assert(vkEnumerateInstanceExtensionProperties("layer", &count, NULL) == VK_ERROR_LAYER_NOT_PRESENT);
     assert(vkEnumerateInstanceExtensionProperties(NULL, NULL, NULL) == VK_ERROR_UNKNOWN);
 
@@ -2319,9 +2321,106 @@ static void uniform_buffer_standard_layout_route(void)
     vkDestroyInstance(plain_instance, NULL);
 }
 
+static void wsi_display_surface_contract(void)
+{
+    const char *names[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_DISPLAY_EXTENSION_NAME};
+    VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 2, .ppEnabledExtensionNames = names};
+    VkInstance i = VK_NULL_HANDLE;
+    names[0] = VK_KHR_DISPLAY_EXTENSION_NAME;
+    info.enabledExtensionCount = 1;
+    assert(vkCreateInstance(&info, NULL, &i) == VK_ERROR_EXTENSION_NOT_PRESENT && !i);
+    names[0] = VK_KHR_SURFACE_EXTENSION_NAME;
+    info.enabledExtensionCount = 2;
+    assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS);
+    VkPhysicalDevice p = physical(i);
+    p->platform.queue_flags |= VK_QUEUE_GRAPHICS_BIT;
+    assert(vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceDisplayPropertiesKHR") ==
+           (PFN_vkVoidFunction)vkGetPhysicalDeviceDisplayPropertiesKHR);
+    assert(vkGetInstanceProcAddr(i, "vkCreateDisplayPlaneSurfaceKHR") ==
+           (PFN_vkVoidFunction)vkCreateDisplayPlaneSurfaceKHR);
+    assert(vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR") ==
+           (PFN_vkVoidFunction)vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+    assert(!vkGetInstanceProcAddr(NULL, "vkCreateDisplayPlaneSurfaceKHR"));
+    uint32_t count = 0;
+    assert(vkGetPhysicalDeviceDisplayPropertiesKHR(p, &count, NULL) == VK_SUCCESS && count == 1);
+    VkDisplayPropertiesKHR display = {0};
+    count = 0;
+    assert(vkGetPhysicalDeviceDisplayPropertiesKHR(p, &count, &display) == VK_INCOMPLETE);
+    count = 1;
+    assert(vkGetPhysicalDeviceDisplayPropertiesKHR(p, &count, &display) == VK_SUCCESS);
+    assert(display.physicalResolution.width == 1920 && display.physicalResolution.height == 1080);
+    assert(display.supportedTransforms == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR);
+    VkDisplayModePropertiesKHR mode = {0};
+    count = 1;
+    assert(vkGetDisplayModePropertiesKHR(p, display.display, &count, &mode) == VK_SUCCESS);
+    assert(mode.parameters.visibleRegion.width == 1920 &&
+           mode.parameters.visibleRegion.height == 1080 &&
+           mode.parameters.refreshRate == 60000);
+    VkDisplayModeCreateInfoKHR mode_info = {
+        .sType = VK_STRUCTURE_TYPE_DISPLAY_MODE_CREATE_INFO_KHR,
+        .parameters = mode.parameters};
+    VkDisplayModeKHR made = VK_NULL_HANDLE;
+    assert(vkCreateDisplayModeKHR(p, display.display, &mode_info, NULL, &made) == VK_SUCCESS);
+    assert(made == mode.displayMode);
+    mode_info.parameters.refreshRate = 50000;
+    assert(vkCreateDisplayModeKHR(p, display.display, &mode_info, NULL, &made) ==
+           VK_ERROR_INITIALIZATION_FAILED && !made);
+    VkDisplayPlanePropertiesKHR plane = {0};
+    count = 1;
+    assert(vkGetPhysicalDeviceDisplayPlanePropertiesKHR(p, &count, &plane) == VK_SUCCESS);
+    assert(plane.currentDisplay == display.display && plane.currentStackIndex == 0);
+    VkDisplayKHR supported = VK_NULL_HANDLE;
+    count = 1;
+    assert(vkGetDisplayPlaneSupportedDisplaysKHR(p, 0, &count, &supported) == VK_SUCCESS);
+    assert(supported == display.display);
+    VkDisplayPlaneCapabilitiesKHR plane_caps = {0};
+    assert(vkGetDisplayPlaneCapabilitiesKHR(p, mode.displayMode, 0, &plane_caps) == VK_SUCCESS);
+    assert(plane_caps.supportedAlpha == VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR);
+    VkDisplaySurfaceCreateInfoKHR create = {
+        .sType = VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR,
+        .displayMode = mode.displayMode, .planeIndex = 0, .planeStackIndex = 0,
+        .transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+        .alphaMode = VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR,
+        .imageExtent = {1920, 1080}};
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    create.imageExtent.width = 1280;
+    assert(vkCreateDisplayPlaneSurfaceKHR(i, &create, NULL, &surface) ==
+           VK_ERROR_INITIALIZATION_FAILED && !surface);
+    create.imageExtent.width = 1920;
+    assert(vkCreateDisplayPlaneSurfaceKHR(i, &create, NULL, &surface) == VK_SUCCESS && surface);
+    VkBool32 present = VK_FALSE;
+    assert(vkGetPhysicalDeviceSurfaceSupportKHR(p, 0, surface, &present) == VK_SUCCESS && !present);
+    VkSurfaceCapabilitiesKHR caps = {0};
+    assert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(p, surface, &caps) == VK_SUCCESS);
+    assert(caps.minImageCount == 2 && caps.maxImageCount == 2 && caps.maxImageArrayLayers == 1);
+    assert(caps.currentExtent.width == 1920 && caps.currentExtent.height == 1080);
+    assert(caps.supportedUsageFlags == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    VkSurfaceFormatKHR format = {0};
+    count = 1;
+    assert(vkGetPhysicalDeviceSurfaceFormatsKHR(p, surface, &count, &format) == VK_SUCCESS);
+    assert(count == 1 && format.format == VK_FORMAT_B8G8R8A8_UNORM &&
+           format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
+    VkPresentModeKHR present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    count = 1;
+    assert(vkGetPhysicalDeviceSurfacePresentModesKHR(p, surface, &count, &present_mode) == VK_SUCCESS);
+    assert(count == 1 && present_mode == VK_PRESENT_MODE_FIFO_KHR);
+    vkDestroyInstance(i, NULL);
+    assert(i->lifetime_errors == 1);
+    vkDestroySurfaceKHR(i, surface, NULL);
+    assert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(p, surface, &caps) == VK_ERROR_SURFACE_LOST_KHR);
+    vkDestroyInstance(i, NULL);
+
+    VkInstance plain = instance();
+    assert(!vkGetInstanceProcAddr(plain, "vkGetPhysicalDeviceDisplayPropertiesKHR"));
+    assert(!vkGetInstanceProcAddr(plain, "vkGetPhysicalDeviceSurfaceFormatsKHR"));
+    vkDestroyInstance(plain, NULL);
+}
+
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
+    wsi_display_surface_contract();
     consumer_physical_queries();
     tessellation_feature_negotiation();
     shader_int16_core_route();
