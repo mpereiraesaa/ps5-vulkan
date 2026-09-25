@@ -393,6 +393,8 @@ def implemented_device_extensions() -> set[str]:
 
         "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
 
+        "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
+
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
 
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
@@ -453,6 +455,8 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_DEDICATED_ALLOCATION"},
         "VK_KHR_BIND_MEMORY_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_BIND_MEMORY2"},
         "VK_KHR_MAINTENANCE_4_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE4"},
+        "VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE"},
 
     }
     unmapped = sorted(tokens - gates.keys())
