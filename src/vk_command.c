@@ -918,6 +918,56 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(VkCommandBuffer c)
     op->subpass=c->subpass;
     c->render_pass = NULL; c->framebuffer = NULL; c->subpass = 0;
 }
+/* VK_KHR_create_renderpass2 recording commands.
+ *
+ * Each version-2 command carries the same transition as its version-1 twin
+ * plus a VkSubpassBeginInfo / VkSubpassEndInfo. This device extends neither
+ * structure (a fragment density map offset is the only pinned extension of the
+ * end info, and it is not exposed), so each is checked for its structure type,
+ * an empty chain and, for the begin info, a valid contents value, and the
+ * command then records EXACTLY what the version-1 command records. The render
+ * pass begin info is forwarded unchanged, pNext chain included, so whatever the
+ * version-1 begin accepts in that chain is accepted here and nothing else is.
+ *
+ * A malformed version-2 structure poisons the recording like any other refused
+ * command, and records no operation. */
+static int subpass_begin_info_valid(const VkSubpassBeginInfo *info)
+{
+    return info && info->sType == VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO && !info->pNext &&
+        (info->contents == VK_SUBPASS_CONTENTS_INLINE ||
+         info->contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+}
+static int subpass_end_info_valid(const VkSubpassEndInfo *info)
+{
+    return info && info->sType == VK_STRUCTURE_TYPE_SUBPASS_END_INFO && !info->pNext;
+}
+static int render_pass2_enabled(VkCommandBuffer c)
+{
+    return c && c->pool && c->pool->device &&
+        c->pool->device->create_renderpass2_extension_enabled;
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass2KHR(VkCommandBuffer c,
+    const VkRenderPassBeginInfo *info, const VkSubpassBeginInfo *begin)
+{
+    if (!c) return;
+    if (!render_pass2_enabled(c) || !subpass_begin_info_valid(begin)) { invalid(c); return; }
+    vkCmdBeginRenderPass(c, info, begin->contents);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass2KHR(VkCommandBuffer c,
+    const VkSubpassBeginInfo *begin, const VkSubpassEndInfo *end)
+{
+    if (!c) return;
+    if (!render_pass2_enabled(c) || !subpass_begin_info_valid(begin) ||
+        !subpass_end_info_valid(end)) { invalid(c); return; }
+    vkCmdNextSubpass(c, begin->contents);
+}
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass2KHR(VkCommandBuffer c,
+    const VkSubpassEndInfo *end)
+{
+    if (!c) return;
+    if (!render_pass2_enabled(c) || !subpass_end_info_valid(end)) { invalid(c); return; }
+    vkCmdEndRenderPass(c);
+}
 /* Record an ordered, owned list of secondary references.
  *
  * Nothing is copied or flattened: the operation NAMES the children and the
@@ -1061,6 +1111,29 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
         raster.depth_bias_constant=c->depth_bias_constant;
         raster.depth_bias_clamp=c->depth_bias_clamp;
         raster.depth_bias_slope=c->depth_bias_slope;
+    }
+    /* The stencil masks and reference the pipeline declared dynamic come
+     * from the command buffer, and each one must have been set for both
+     * faces: the test reads the front and the back state. A pipeline with the
+     * test disabled ignores them, exactly as Vulkan does. */
+    if(raster.stencil_test) {
+        const VkStencilFaceFlags both=VK_STENCIL_FACE_FRONT_BIT|VK_STENCIL_FACE_BACK_BIT;
+        if((p->dynamic_stencil_compare_mask && (c->stencil_compare_faces&both)!=both) ||
+           (p->dynamic_stencil_write_mask && (c->stencil_write_faces&both)!=both) ||
+           (p->dynamic_stencil_reference && (c->stencil_reference_faces&both)!=both))
+            {invalid(c);return;}
+        if(p->dynamic_stencil_compare_mask) {
+            raster.stencil_front.compareMask=c->stencil_compare_mask[0];
+            raster.stencil_back.compareMask=c->stencil_compare_mask[1];
+        }
+        if(p->dynamic_stencil_write_mask) {
+            raster.stencil_front.writeMask=c->stencil_write_mask[0];
+            raster.stencil_back.writeMask=c->stencil_write_mask[1];
+        }
+        if(p->dynamic_stencil_reference) {
+            raster.stencil_front.reference=c->stencil_reference[0];
+            raster.stencil_back.reference=c->stencil_reference[1];
+        }
     }
     if(p->push_constant_size && (!c->push_constants_valid ||
         memcmp(p->push_constant_stages,c->push_constant_stages,
@@ -1313,6 +1386,12 @@ static int compute_scope(VkPipelineStageFlags stages, VkAccessFlags access)
 }
 static int command_scope(VkPipelineStageFlags stages,VkAccessFlags access)
 { return texture_scope(stages,access) || compute_scope(stages,access); }
+/* Whether per-aspect depth/stencil barriers and the separate layouts are
+ * accepted: only on a device that enabled separateDepthStencilLayouts. */
+static VkBool32 separate_depth_stencil_layouts(VkDevice d)
+{
+    return (d->enabled_features_t09 & PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS) != 0;
+}
 static int image_barrier_profile(const VkImageMemoryBarrier *b,
     VkPipelineStageFlags src_stage,VkPipelineStageFlags dst_stage)
 {
@@ -1533,11 +1612,23 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         if(!c->pool->device->graphics_enabled ||
             b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
             !command_scope(src,b->srcAccessMask) || !command_scope(dst,b->dstAccessMask) ||
-            (!texture_layout_supported(b->oldLayout) && b->oldLayout!=VK_IMAGE_LAYOUT_UNDEFINED) ||
-            !texture_layout_supported(b->newLayout) ||
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
-            !image || image->device!=c->pool->device ||
+            !image || image->device!=c->pool->device) {invalid(c);return;}
+        /* The combined depth/stencil attachment is ordered per aspect: its own
+         * validator owns the aspect mask and the per-aspect layouts. */
+        if(ps5vk_depth_stencil_attachment_image(image)) {
+            if(!ps5vk_depth_stencil_barrier(b,separate_depth_stencil_layouts(c->pool->device),
+                   c->pool->device->maintenance2_extension_enabled) ||
+               !ps5vk_image_range_resolve(image,&b->subresourceRange,&resolved) ||
+               resolved.baseMipLevel || resolved.baseArrayLayer || resolved.levelCount!=1 ||
+               resolved.layerCount!=1 ||
+               ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS)
+                {invalid(c);return;}
+            continue;
+        }
+        if((!texture_layout_supported(b->oldLayout) && b->oldLayout!=VK_IMAGE_LAYOUT_UNDEFINED) ||
+            !texture_layout_supported(b->newLayout) ||
             !image_barrier_profile(b,src,dst) ||
             /* A depth target is ordered through its depth aspect; every other
              * role in this profile is colour. */

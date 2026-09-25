@@ -1,3 +1,4 @@
+#include "depth_stencil_layout.h"
 #include "vk_pipeline.h"
 #include "vk_render_pass.h"
 #include "graphics_program.h"
@@ -106,24 +107,40 @@ static int rasterization_pnext_supported(const void *pnext)
 /* The core dynamic states this profile executes: viewport, scissor and depth
  * bias. Every other VkDynamicState stays refused, so a pipeline can never be
  * created with a dynamic state that no draw would honour. */
+/* The stencil states (compare mask, write mask, reference) are dynamic
+ * values the draw folds into its stencil snapshot; they are honoured on the
+ * combined depth/stencil attachment the stencil test runs on. */
 static int dynamic_states(const VkPipelineDynamicStateCreateInfo *info,
-                          VkBool32 *viewport, VkBool32 *scissor, VkBool32 *depth_bias)
+                          VkBool32 *viewport, VkBool32 *scissor, VkBool32 *depth_bias,
+                          VkBool32 stencil[3])
 {
     *viewport=*scissor=*depth_bias=VK_FALSE;
+    stencil[0]=stencil[1]=stencil[2]=VK_FALSE;
     if(!info)return 1;
     if(info->sType!=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO ||
-       info->pNext || info->flags || info->dynamicStateCount>3 ||
+       info->pNext || info->flags || info->dynamicStateCount>6 ||
        (info->dynamicStateCount && !info->pDynamicStates))return 0;
     for(uint32_t i=0;i<info->dynamicStateCount;++i) {
         VkBool32 *flag;
         if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_VIEWPORT)flag=viewport;
         else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_SCISSOR)flag=scissor;
         else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_DEPTH_BIAS)flag=depth_bias;
+        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK)flag=&stencil[0];
+        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_STENCIL_WRITE_MASK)flag=&stencil[1];
+        else if(info->pDynamicStates[i]==VK_DYNAMIC_STATE_STENCIL_REFERENCE)flag=&stencil[2];
         else return 0;
         if(*flag)return 0;
         *flag=VK_TRUE;
     }
     return 1;
+}
+
+static int stencil_op_state_valid(const VkStencilOpState *s)
+{
+    return s->failOp <= VK_STENCIL_OP_DECREMENT_AND_WRAP &&
+        s->passOp <= VK_STENCIL_OP_DECREMENT_AND_WRAP &&
+        s->depthFailOp <= VK_STENCIL_OP_DECREMENT_AND_WRAP &&
+        s->compareOp <= VK_COMPARE_OP_ALWAYS;
 }
 
 static int specialization_key(const VkSpecializationInfo *info,
@@ -153,6 +170,28 @@ static int specialization_key(const VkSpecializationInfo *info,
     return 1;
 }
 
+/* The tessellation state's chain. VK_KHR_maintenance2 adds exactly one
+ * structure to it, VkPipelineTessellationDomainOriginStateCreateInfo, accepted
+ * once and only on a device that enabled the extension. UPPER_LEFT is the
+ * origin the state has without the structure, so it changes nothing.
+ * LOWER_LEFT would need the evaluation stage's domain coordinate flipped, which
+ * the compiler adapter does not do; it is refused rather than silently drawn
+ * with the upper-left origin. tessellationShader itself stays unadvertised, so
+ * no shipping pipeline reaches this. Any other structure stays fail-closed. */
+static VkResult tessellation_domain_origin(VkDevice d,
+    const VkPipelineTessellationStateCreateInfo *t)
+{
+    const VkBaseInStructure *next=(const VkBaseInStructure *)t->pNext;
+    if (!next) return VK_SUCCESS;
+    if (next->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO ||
+        next->pNext || !d->maintenance2_extension_enabled)
+        return refuse(11);
+    const VkTessellationDomainOrigin origin=
+        ((const VkPipelineTessellationDomainOriginStateCreateInfo *)next)->domainOrigin;
+    if (origin == VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT) return VK_SUCCESS;
+    if (origin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT) return refuse(11);
+    return VK_ERROR_UNKNOWN;
+}
 static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                        const VkAllocationCallbacks *allocator, VkPipeline *out)
 {
@@ -169,8 +208,9 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         (in->stageCount < 2 || in->stageCount > 5) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return refuse(2);
-    VkBool32 dynamic_viewport,dynamic_scissor,dynamic_depth_bias;
-    if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor,&dynamic_depth_bias))
+    VkBool32 dynamic_viewport,dynamic_scissor,dynamic_depth_bias,dynamic_stencil[3];
+    if(!dynamic_states(in->pDynamicState,&dynamic_viewport,&dynamic_scissor,&dynamic_depth_bias,
+                       dynamic_stencil))
         return refuse(3);
     const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL, *gs=NULL,
         *tcs=NULL, *tes=NULL;
@@ -245,10 +285,12 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (tcs) {
         const VkPipelineTessellationStateCreateInfo *t=in->pTessellationState;
         if (!t || t->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO ||
-            t->pNext || t->flags || !t->patchControlPoints ||
+            t->flags || !t->patchControlPoints ||
             t->patchControlPoints > PS5VK_MAX_PATCH_CONTROL_POINTS ||
             ia->topology != VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)
             return refuse(11);
+        VkResult origin=tessellation_domain_origin(d,t);
+        if (origin!=VK_SUCCESS) return origin;
     }
     if (in->pTessellationState &&
        in->pTessellationState->sType != VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO)
@@ -352,8 +394,17 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     /* One blend attachment per colour attachment the subpass names, and none
      * for the DEPTH-ONLY shape. The exact agreement is checked below, where the
      * per-attachment state is read out of the subpass and the pipeline. */
+    /* The stencil test runs only on an attachment that has a stencil aspect:
+     * the combined D32_SFLOAT_S8_UINT surface. A depth-only attachment keeps
+     * refusing it rather than silently dropping the test. */
+    const VkFormat depth_attachment_format = subpass->depth.attachment == VK_ATTACHMENT_UNUSED ?
+        VK_FORMAT_UNDEFINED : pass->attachments[subpass->depth.attachment].format;
+    const int stencil_aspect =
+        (ps5vk_format_aspects(depth_attachment_format) & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
     if (depth && (depth->sType != VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO ||
-        depth->pNext || depth->flags || depth->depthBoundsTestEnable || depth->stencilTestEnable ||
+        depth->pNext || depth->flags || depth->depthBoundsTestEnable ||
+        (depth->stencilTestEnable && (!stencil_aspect ||
+            !stencil_op_state_valid(&depth->front) || !stencil_op_state_valid(&depth->back))) ||
         depth->depthCompareOp < VK_COMPARE_OP_NEVER || depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))
         return refuse(16);
     struct ps5vk_graphics_key key={
@@ -544,7 +595,17 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         p->depth_format=pass->attachments[subpass->depth.attachment].format;
         p->depth_test=depth->depthTestEnable; p->depth_write=depth->depthWriteEnable;
         p->depth_compare=depth->depthCompareOp;
+        /* The stencil state is kept whole; the draw replaces the masks and
+         * the reference the pipeline declared dynamic. */
+        if(depth->stencilTestEnable) {
+            p->raster.stencil_test=VK_TRUE;
+            p->raster.stencil_front=depth->front;
+            p->raster.stencil_back=depth->back;
+        }
     }
+    p->dynamic_stencil_compare_mask=dynamic_stencil[0];
+    p->dynamic_stencil_write_mask=dynamic_stencil[1];
+    p->dynamic_stencil_reference=dynamic_stencil[2];
     ++d->pipeline_objects;
     *out=p;
     return VK_SUCCESS;

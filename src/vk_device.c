@@ -235,6 +235,34 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice 
 { if (p && out) *out = p->platform.memory_properties; }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures(VkPhysicalDevice p, VkPhysicalDeviceFeatures *out)
 { if (p && out) get_core_features(&p->platform, out); }
+/* VK_KHR_maintenance2 has no registry dependency on Vulkan 1.0. */
+static VkBool32 maintenance2_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE2) != 0;
+}
+/* VK_KHR_create_renderpass2 depends, in the pinned registry, on
+ * VK_KHR_multiview and VK_KHR_maintenance2 (or Vulkan 1.1, which this 1.0
+ * profile is not), so it is reported only when both are. */
+static VkBool32 create_renderpass2_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_CREATE_RENDERPASS2) &&
+        maintenance2_supported(p) &&
+        (p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW);
+}
+/* VK_KHR_separate_depth_stencil_layouts depends, in the pinned registry, on
+ * VK_KHR_get_physical_device_properties2 and VK_KHR_create_renderpass2. The
+ * instance extension is checked at device creation; the device route is
+ * create_renderpass2. */
+static VkBool32 separate_depth_stencil_route(VkPhysicalDevice p)
+{
+    return create_renderpass2_supported(p);
+}
+static VkBool32 separate_depth_stencil_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 &
+            PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS) &&
+        separate_depth_stencil_route(p);
+}
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                                                            VkPhysicalDeviceFeatures2 *out)
 {
@@ -300,6 +328,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
             ((VkPhysicalDeviceUniformBufferStandardLayoutFeatures *)next)->uniformBufferStandardLayout =
                 !!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT);
         } else if (next->sType ==
+
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES) {
             ((VkPhysicalDeviceHostQueryResetFeatures *)next)->hostQueryReset =
                 !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET);
@@ -307,6 +336,15 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES) {
             ((VkPhysicalDeviceImagelessFramebufferFeatures *)next)->imagelessFramebuffer =
                 !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES) {
+            ((VkPhysicalDeviceTimelineSemaphoreFeatures *)next)->timelineSemaphore =
+                !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES) {
+            ((VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *)next)
+                ->separateDepthStencilLayouts = separate_depth_stencil_supported(p);
+
         }
     }
 }
@@ -339,6 +377,21 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
                 supported ? (uint32_t)PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR : 0u;
             properties->maxMultiviewInstanceIndex =
                 supported ? (uint32_t)PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR : 0u;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES) {
+            /* The payload algorithm's own bound (src/vk_internal.h), and
+             * zero when the platform does not carry the capability. */
+            ((VkPhysicalDeviceTimelineSemaphoreProperties *)next)
+                ->maxTimelineSemaphoreValueDifference =
+                (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE) ?
+                PS5VK_TIMELINE_MAX_VALUE_DIFFERENCE : 0u;
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES) {
+            /* VK_KHR_maintenance2. ALL_CLIP_PLANES is the Vulkan 1.0 rule this
+             * device already obeys - a point outside the clip volume is
+             * discarded - so reporting it claims no new behaviour; the
+             * USER_CLIP_PLANES_ONLY relaxation is never claimed. */
+            ((VkPhysicalDevicePointClippingProperties *)next)->pointClippingBehavior =
+                VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
         }
     }
 }
@@ -447,7 +500,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
 {
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
-    VkExtensionProperties properties[11];
+
+    /* Fifteen conditional pushes follow (storage class, 8-bit, 16-bit, draw
+     * parameters, multiview, memory model, device group, buffer address, UBO
+     * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
+     * create_renderpass2, separate
+     * depth/stencil layouts). Keep headroom so a new entry cannot overflow
+     * the array before this bound is revisited; each push site must stay
+     * below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 15, DEVICE_EXTENSION_SLOTS = 16 };
+    _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
+                   "device extension array too small");
+    VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
+
     uint32_t total = 0;
     if (p->platform.supported_features & (PS5VK_FEATURE_STORAGE_BUFFER_8BIT |
                                           PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) {
@@ -492,6 +557,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME,
             VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_SPEC_VERSION};
     }
+
     if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET) {
         properties[total++] = (VkExtensionProperties){
             VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME, VK_EXT_HOST_QUERY_RESET_SPEC_VERSION};
@@ -501,6 +567,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME,
             VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_SPEC_VERSION};
+    }
+
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+            VK_KHR_TIMELINE_SEMAPHORE_SPEC_VERSION};
+    }
+    if (maintenance2_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_MAINTENANCE_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_2_SPEC_VERSION};
+    }
+    if (create_renderpass2_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, VK_KHR_CREATE_RENDERPASS_2_SPEC_VERSION};
+    }
+    if (separate_depth_stencil_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
+            VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_SPEC_VERSION};
     }
     return enumerate_extensions(properties, total, count, out);
 }
@@ -530,8 +615,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 memory_model_extension = VK_FALSE;
     VkBool32 group_extension = VK_FALSE, buffer_address_extension = VK_FALSE;
     VkBool32 uniform_buffer_standard_layout_extension = VK_FALSE;
+
     VkBool32 host_query_reset_extension = VK_FALSE;
     VkBool32 sampler_mirror_clamp_extension = VK_FALSE;
+
+    VkBool32 timeline_extension = VK_FALSE;
+    VkBool32 separate_depth_stencil_extension = VK_FALSE;
+    VkBool32 maintenance2_extension = VK_FALSE, create_renderpass2_extension = VK_FALSE;
+
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
         VkBool32 *seen = NULL;
@@ -554,10 +645,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &buffer_address_extension;
         else if (!strcmp(name, VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME))
             seen = &uniform_buffer_standard_layout_extension;
+
         else if (!strcmp(name, VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME))
             seen = &host_query_reset_extension;
         else if (!strcmp(name, VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME))
             seen = &sampler_mirror_clamp_extension;
+
+        else if (!strcmp(name, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME))
+            seen = &timeline_extension;
+        else if (!strcmp(name, VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME))
+            seen = &separate_depth_stencil_extension;
+        else if (!strcmp(name, VK_KHR_MAINTENANCE_2_EXTENSION_NAME))
+            seen = &maintenance2_extension;
+        else if (!strcmp(name, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME))
+            seen = &create_renderpass2_extension;
+
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
@@ -594,6 +696,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT) ||
          !p->instance->features2_extension_enabled))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+
     if (host_query_reset_extension &&
         (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET) ||
          !p->instance->features2_extension_enabled))
@@ -603,9 +706,30 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
           PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
+    /* The pinned registry makes VK_KHR_timeline_semaphore depend on
+     * VK_KHR_get_physical_device_properties2 or Vulkan 1.1; this profile is
+     * 1.0, so only the instance extension satisfies it. */
+    if (timeline_extension &&
+        (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+
+    /* Every enabled extension's registry dependencies must be enabled too
+     * (VUID-vkCreateDevice-ppEnabledExtensionNames-01387). */
+    if (maintenance2_extension && !maintenance2_supported(p))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (create_renderpass2_extension &&
+        (!create_renderpass2_supported(p) || !multiview_extension || !maintenance2_extension))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (separate_depth_stencil_extension &&
+        (!separate_depth_stencil_supported(p) || !p->instance->features2_extension_enabled ||
+         !create_renderpass2_extension))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+
     uint32_t enabled_features = 0;
     uint32_t enabled_features_t09 = sampler_mirror_clamp_extension ?
         PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE : 0;
+
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
     VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
     VkBool32 saw_memory_model = VK_FALSE;
@@ -614,6 +738,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_uniform_buffer_standard_layout = VK_FALSE;
     VkBool32 saw_host_query_reset = VK_FALSE, saw_imageless_framebuffer = VK_FALSE;
     VkBool32 saw_dynamic_rendering = VK_FALSE;
+    VkBool32 saw_timeline = VK_FALSE;
+    VkBool32 saw_separate_depth_stencil = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO) {
@@ -813,6 +939,31 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
             }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES) {
+            if (saw_timeline) return INVALID;
+            saw_timeline = VK_TRUE;
+            const VkPhysicalDeviceTimelineSemaphoreFeatures *features =
+                (const VkPhysicalDeviceTimelineSemaphoreFeatures *)next;
+            if (!valid_bool(features->timelineSemaphore)) return INVALID;
+            if (features->timelineSemaphore) {
+                if (!timeline_extension ||
+                    !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES) {
+            if (saw_separate_depth_stencil) return INVALID;
+            saw_separate_depth_stencil = VK_TRUE;
+            const VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *features =
+                (const VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *)next;
+            if (!valid_bool(features->separateDepthStencilLayouts)) return INVALID;
+            if (features->separateDepthStencilLayouts) {
+                if (!separate_depth_stencil_extension || !separate_depth_stencil_supported(p))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS;
+            }
         } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;
         }
@@ -839,11 +990,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         p->platform.close(&d->memory); result = VK_ERROR_INITIALIZATION_FAILED;
     }
     if (result != VK_SUCCESS) { ps5vk_object_free(d, &saved, custom); return result; }
+    if (pthread_mutex_init(&d->queue_lock, NULL)) {
+        p->platform.close(&d->memory); ps5vk_object_free(d, &saved, custom);
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
     d->physical = p; d->queue.device = d; d->queue.next_serial = 1;
     d->queue.priority_class = q->pQueuePriorities[0] >= 0.5f ? 1u : 0u;
     d->enabled_features = enabled_features;
     d->enabled_features_t09 = enabled_features_t09;
     d->device_group_extension_enabled = group_extension;
+    d->timeline_extension_enabled = timeline_extension;
+    d->maintenance2_extension_enabled = maintenance2_extension;
+    d->create_renderpass2_extension_enabled = create_renderpass2_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;
@@ -889,6 +1047,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
         d->pipeline_cache = NULL;
     }
     d->physical->platform.close(&d->memory);
+    pthread_mutex_destroy(&d->queue_lock);
     --d->physical->instance->devices;
     VkAllocationCallbacks a = d->allocator; VkBool32 custom = d->custom_allocator;
     ps5vk_object_free(d, &a, custom);

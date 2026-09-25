@@ -1,5 +1,6 @@
 #include "vk_render_pass.h"
 #include "color_attachment_contract.h"
+#include "depth_stencil_layout.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -9,6 +10,39 @@
 #else
 #define PASS_MARK(...) ((void)0)
 #endif
+
+/* The depth-aspect layouts a pass with an explicit stencil table may name for
+ * a combined attachment: anything that means an attachment, read-only,
+ * GENERAL or transfer state for the depth aspect, including the separate
+ * DEPTH_* layouts (VK_KHR_separate_depth_stencil_layouts). */
+static int separate_depth_layout(VkImageLayout value, int initial, int reference)
+{
+    VkImageLayout p;
+    if (initial && value == VK_IMAGE_LAYOUT_UNDEFINED) return 1;
+    if (!ps5vk_layout_for_aspect(value, VK_IMAGE_ASPECT_DEPTH_BIT, &p)) return 0;
+    return p == VK_IMAGE_LAYOUT_GENERAL || p == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
+        (!reference && (p == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+                        p == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
+}
+
+/* The same for the stencil half, which never takes a combined layout from the
+ * stencil structures (VkAttachmentDescriptionStencilLayout and
+ * VkAttachmentReferenceStencilLayout name STENCIL_* or aspect-neutral
+ * layouts only). */
+static int separate_stencil_layout(VkImageLayout value, int initial, int reference)
+{
+    VkImageLayout p;
+    if (initial && value == VK_IMAGE_LAYOUT_UNDEFINED) return 1;
+    if (value == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+        value == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
+        ps5vk_layout_is_mixed_depth_stencil(value) ||
+        !ps5vk_layout_for_aspect(value, VK_IMAGE_ASPECT_STENCIL_BIT, &p)) return 0;
+    return p == VK_IMAGE_LAYOUT_GENERAL || p == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL ||
+        (!reference && (p == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+                        p == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
+}
 
 static int layout(VkImageLayout value, int depth, int initial)
 {
@@ -40,7 +74,8 @@ static int input_layout(VkImageLayout value)
  * reference it follows - and a non-empty preserve list is outside the bounded
  * profile. */
 static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachments,
-    struct ps5vk_subpass *out, uint32_t *input_count, uint32_t *preserve_count)
+    VkBool32 separate, struct ps5vk_subpass *out, uint32_t *input_count,
+    uint32_t *preserve_count)
 {
     /* A subpass names the colour attachments this profile serves, or none at
      * all. Zero is how
@@ -125,8 +160,9 @@ static VkResult subpass_valid(const VkSubpassDescription *s, uint32_t attachment
              out->depth.attachment == out->color[i].attachment))
             return VK_ERROR_UNKNOWN;
     if (out->depth.attachment != VK_ATTACHMENT_UNUSED &&
-        out->depth.layout != VK_IMAGE_LAYOUT_GENERAL &&
-        out->depth.layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        (separate ? !separate_depth_layout(out->depth.layout, 0, 1) :
+         (out->depth.layout != VK_IMAGE_LAYOUT_GENERAL &&
+          out->depth.layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)))
         return VK_ERROR_UNKNOWN;
     /* pResolveAttachments, when present, carries exactly one entry per colour
      * reference: entry i resolves colour reference i, and an entry may be
@@ -204,8 +240,63 @@ static VkResult owned_bytes(const VkRenderPassCreateInfo *info, size_t *total)
     return VK_SUCCESS;
 }
 
+/* Whether a pass names a maintenance2 mixed layout for a combined
+ * depth/stencil attachment, and if so its stencil projections. VK_SUCCESS
+ * fills `out`; VK_NOT_READY means no mixed layout is named (the combined
+ * model applies unchanged); VK_ERROR_UNKNOWN means a combined layout has no
+ * stencil meaning. Counts and pointers are checked by the caller's profile
+ * bounds first only where they are dereferenced here. */
+static VkResult mixed_layout_table(const VkRenderPassCreateInfo *info,
+    struct ps5vk_render_pass_stencil_layouts *out)
+{
+    if (!info->pAttachments || !info->pSubpasses ||
+        info->attachmentCount > PS5VK_MAX_ATTACHMENTS ||
+        info->subpassCount > PS5VK_MAX_SUBPASSES) return VK_NOT_READY;
+    int mixed = 0;
+    for (uint32_t i = 0; i < info->attachmentCount; ++i) {
+        const VkAttachmentDescription *a = &info->pAttachments[i];
+        if (ps5vk_format_is_combined_depth_stencil(a->format))
+            mixed |= ps5vk_layout_is_mixed_depth_stencil(a->initialLayout) ||
+                ps5vk_layout_is_mixed_depth_stencil(a->finalLayout);
+    }
+    for (uint32_t s = 0; s < info->subpassCount; ++s) {
+        const VkAttachmentReference *r = info->pSubpasses[s].pDepthStencilAttachment;
+        if (r && r->attachment < info->attachmentCount &&
+            ps5vk_format_is_combined_depth_stencil(info->pAttachments[r->attachment].format))
+            mixed |= ps5vk_layout_is_mixed_depth_stencil(r->layout);
+    }
+    if (!mixed) return VK_NOT_READY;
+    for (uint32_t i = 0; i < info->attachmentCount; ++i) {
+        const VkAttachmentDescription *a = &info->pAttachments[i];
+        out->initial[i] = a->initialLayout;
+        out->final[i] = a->finalLayout;
+        if (ps5vk_format_is_combined_depth_stencil(a->format) &&
+            (!ps5vk_layout_for_aspect(a->initialLayout, VK_IMAGE_ASPECT_STENCIL_BIT,
+                                      &out->initial[i]) ||
+             !ps5vk_layout_for_aspect(a->finalLayout, VK_IMAGE_ASPECT_STENCIL_BIT,
+                                      &out->final[i])))
+            return VK_ERROR_UNKNOWN;
+    }
+    for (uint32_t s = 0; s < info->subpassCount; ++s) {
+        const VkAttachmentReference *r = info->pSubpasses[s].pDepthStencilAttachment;
+        out->reference[s] = r ? r->layout : VK_IMAGE_LAYOUT_UNDEFINED;
+        if (r && r->attachment < info->attachmentCount &&
+            ps5vk_format_is_combined_depth_stencil(info->pAttachments[r->attachment].format) &&
+            !ps5vk_layout_for_aspect(r->layout, VK_IMAGE_ASPECT_STENCIL_BIT, &out->reference[s]))
+            return VK_ERROR_UNKNOWN;
+    }
+    return VK_SUCCESS;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     const VkRenderPassCreateInfo *info, const VkAllocationCallbacks *allocator, VkRenderPass *out)
+{
+    return ps5vk_render_pass_create(d, info, NULL, allocator, out);
+}
+
+VkResult ps5vk_render_pass_create(VkDevice d, const VkRenderPassCreateInfo *info,
+    const struct ps5vk_render_pass_stencil_layouts *stencil,
+    const VkAllocationCallbacks *allocator, VkRenderPass *out)
 {
     PASS_MARK("PS5VK_RENDER_PASS_CREATE attachments=%u subpasses=%u dependencies=%u",
         info ? info->attachmentCount : 0u, info ? info->subpassCount : 0u,
@@ -215,14 +306,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO)
         return VK_ERROR_UNKNOWN;
     if (!d->graphics_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
-    /* Exactly one optional VkRenderPassMultiviewCreateInfo is understood; any
-     * other structure, or a second copy of it, stays fail-closed. */
+    /* One optional VkRenderPassMultiviewCreateInfo and, on a device that
+     * enabled VK_KHR_maintenance2, one VkRenderPassInputAttachmentAspectCreateInfo
+     * are understood; any other structure, or a second copy of either, stays
+     * fail-closed. */
     const VkRenderPassMultiviewCreateInfo *multiview = NULL;
+    const VkRenderPassInputAttachmentAspectCreateInfo *input_aspects = NULL;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
-        if (next->sType != VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO || multiview)
+        if (next->sType == VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO && !multiview)
+            multiview = (const VkRenderPassMultiviewCreateInfo *)next;
+        else if (next->sType == VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO &&
+                 !input_aspects && d->maintenance2_extension_enabled)
+            input_aspects = (const VkRenderPassInputAttachmentAspectCreateInfo *)next;
+        else
             return VK_ERROR_FEATURE_NOT_PRESENT;
-        multiview = (const VkRenderPassMultiviewCreateInfo *)next;
     }
     if (info->flags ||
         !info->subpassCount || info->subpassCount > PS5VK_MAX_SUBPASSES || !info->pSubpasses ||
@@ -231,13 +329,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
         info->dependencyCount > PS5VK_MAX_DEPENDENCIES ||
         (info->dependencyCount && !info->pDependencies))
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* VK_KHR_maintenance2's two mixed layouts give the aspects of a combined
+     * attachment different access through one layout value. They are read
+     * per aspect, exactly like an explicit stencil table: when a pass without
+     * one names a mixed layout for a combined attachment, the table is the
+     * stencil projection of every combined layout. A layout with no stencil
+     * meaning (a DEPTH_* one) cannot be projected and is refused, so this
+     * never admits the separate layouts on the maintenance2 route alone. */
+    struct ps5vk_render_pass_stencil_layouts projected;
+    if (!stencil && d->maintenance2_extension_enabled) {
+        const VkResult rc = mixed_layout_table(info, &projected);
+        if (rc == VK_ERROR_UNKNOWN) return rc;
+        if (rc == VK_SUCCESS) stencil = &projected;
+    }
     struct ps5vk_subpass colors[PS5VK_MAX_SUBPASSES];
     VkAttachmentReference depths[PS5VK_MAX_SUBPASSES];
     uint32_t input_counts[PS5VK_MAX_SUBPASSES];
     uint32_t preserve_counts[PS5VK_MAX_SUBPASSES];
     for (uint32_t i = 0; i < info->subpassCount; ++i) {
         VkResult rc = subpass_valid(&info->pSubpasses[i], info->attachmentCount,
-                                    &colors[i], &input_counts[i], &preserve_counts[i]);
+                                    stencil != NULL, &colors[i], &input_counts[i],
+                                    &preserve_counts[i]);
         if (rc != VK_SUCCESS) return rc;
         depths[i] = colors[i].depth;
     }
@@ -250,6 +362,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
      * framebuffer compatibility is checked per reference rather than by role.
      * The native queue still refuses a graph it cannot execute - it carries the
      * shared-role shape only - so nothing here reaches hardware that way. */
+    /* Input aspects (VK_KHR_maintenance2). Each entry names an input reference
+     * that exists (VUID-VkRenderPassCreateInfo-pNext-01926 and -01927) and an
+     * aspect mask the version-2 reference would carry, checked by the same
+     * rule against the attachment it names (01963). Because the owned input
+     * reference reads every aspect, an accepted mask changes nothing stored. */
+    if (input_aspects) {
+        if (!input_aspects->aspectReferenceCount || !input_aspects->pAspectReferences)
+            return VK_ERROR_UNKNOWN;
+        for (uint32_t i = 0; i < input_aspects->aspectReferenceCount; ++i) {
+            const VkInputAttachmentAspectReference *r = &input_aspects->pAspectReferences[i];
+            if (r->subpass >= info->subpassCount ||
+                r->inputAttachmentIndex >= info->pSubpasses[r->subpass].inputAttachmentCount)
+                return VK_ERROR_UNKNOWN;
+            const uint32_t attachment = info->pSubpasses[r->subpass]
+                .pInputAttachments[r->inputAttachmentIndex].attachment;
+            if (attachment == VK_ATTACHMENT_UNUSED) continue;
+            VkResult rc = ps5vk_render_pass_input_aspect_valid(
+                info->pAttachments[attachment].format, r->aspectMask);
+            if (rc != VK_SUCCESS) return rc;
+        }
+    }
     /* Every attachment must be reachable through a subpass reference: an
      * attachment this profile never uses has no role to play. An input
      * reference is a use, which is the whole point of the shape: a later
@@ -295,8 +428,41 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
         if (a->flags ||
             ((as_colour || as_resolve) && !ps5vk_color_target_format_supported(a->format)) ||
             (as_depth && a->format != VK_FORMAT_D32_SFLOAT &&
-                         a->format != VK_FORMAT_D16_UNORM))
+                         a->format != VK_FORMAT_D16_UNORM &&
+                         a->format != VK_FORMAT_D32_SFLOAT_S8_UINT))
             return VK_ERROR_FEATURE_NOT_PRESENT;
+        /* With an explicit stencil table the depth half of a combined
+         * attachment may use the separate DEPTH_* layouts, and its stencil
+         * half is checked on its own; without one, both ride on one combined
+         * layout exactly as before. A depth reference in a separate layout
+         * must name a combined attachment. */
+        const int combined = as_depth && ps5vk_format_is_combined_depth_stencil(a->format);
+        if (stencil && combined) {
+            if (!separate_depth_layout(a->initialLayout, 1, 0) ||
+                !separate_depth_layout(a->finalLayout, 0, 0) ||
+                !separate_stencil_layout(stencil->initial[i], 1, 0) ||
+                !separate_stencil_layout(stencil->final[i], 0, 0) ||
+                (a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&
+                 a->initialLayout == VK_IMAGE_LAYOUT_UNDEFINED) ||
+                (a->stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&
+                 stencil->initial[i] == VK_IMAGE_LAYOUT_UNDEFINED) ||
+                a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
+                a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
+                a->stencilLoadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
+                a->stencilStoreOp > VK_ATTACHMENT_STORE_OP_DONT_CARE)
+                return VK_ERROR_UNKNOWN;
+            for (uint32_t s = 0; s < info->subpassCount; ++s)
+                if (depths[s].attachment == i &&
+                    !separate_stencil_layout(stencil->reference[s], 0, 1))
+                    return VK_ERROR_UNKNOWN;
+            continue;
+        }
+        if (as_depth)
+            for (uint32_t s = 0; s < info->subpassCount; ++s)
+                if (depths[s].attachment == i &&
+                    depths[s].layout != VK_IMAGE_LAYOUT_GENERAL &&
+                    depths[s].layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                    return VK_ERROR_UNKNOWN;
         if (a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
             a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
             a->stencilLoadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->stencilLoadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
@@ -448,7 +614,345 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(VkDevice d,
     pass->preserves = preserves;
     pass->preserve_count = preserve_total;
     pass->multiview = owned_multiview;
+    /* The stencil halves: explicit for a combined attachment when a table
+     * was supplied, the combined layouts otherwise. */
+    for (uint32_t i = 0; i < info->attachmentCount; ++i) {
+        const int explicit_stencil = stencil &&
+            ps5vk_format_is_combined_depth_stencil(info->pAttachments[i].format);
+        pass->stencil.initial[i] = explicit_stencil ? stencil->initial[i] :
+            info->pAttachments[i].initialLayout;
+        pass->stencil.final[i] = explicit_stencil ? stencil->final[i] :
+            info->pAttachments[i].finalLayout;
+    }
+    for (uint32_t s = 0; s < info->subpassCount; ++s) {
+        const uint32_t a = depths[s].attachment;
+        pass->stencil.reference[s] = (stencil && a != VK_ATTACHMENT_UNUSED &&
+            ps5vk_format_is_combined_depth_stencil(info->pAttachments[a].format)) ?
+            stencil->reference[s] : depths[s].layout;
+    }
     ++d->graphics_objects; *out = pass; return VK_SUCCESS;
+}
+
+/* VK_KHR_create_renderpass2.
+ *
+ * A VkRenderPassCreateInfo2 describes the same object a VkRenderPassCreateInfo
+ * plus a chained VkRenderPassMultiviewCreateInfo describes: the per-subpass
+ * view masks, the per-dependency view offsets and the correlated view masks
+ * move out of the multiview structure into the version-2 structures, and each
+ * attachment reference gains an aspect mask that only an input reference
+ * uses. The call therefore validates what is new in the version-2 structures
+ * and then TRANSLATES the pass into the version-1 form, which it hands to
+ * vkCreateRenderPass. There is exactly one render pass model and one set of
+ * profile rules; a pass that the version-1 path refuses is refused here with
+ * the same result, and a pass it accepts becomes the same object.
+ *
+ * Every translation array lives on the stack and is bounded by the profile
+ * limits the version-1 path enforces, so a count beyond them is refused before
+ * anything is copied and nothing is allocated until vkCreateRenderPass makes
+ * its single allocation. */
+
+/* The aspects a format has. The render pass profile only admits colour formats
+ * and the depth-only D16/D32 formats, but the input-aspect rule is stated
+ * against the attachment's format whatever the rest of the profile decides, so
+ * the stencil and combined formats are named here too. */
+static VkImageAspectFlags format_aspects(VkFormat format)
+{
+    switch (format) {
+    case VK_FORMAT_D16_UNORM: case VK_FORMAT_X8_D24_UNORM_PACK32: case VK_FORMAT_D32_SFLOAT:
+        return VK_IMAGE_ASPECT_DEPTH_BIT;
+    case VK_FORMAT_S8_UINT:
+        return VK_IMAGE_ASPECT_STENCIL_BIT;
+    case VK_FORMAT_D16_UNORM_S8_UINT: case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+        return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    default:
+        return VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+}
+
+VkResult ps5vk_render_pass_input_aspect_valid(VkFormat format, VkImageAspectFlags aspect)
+{
+    const VkImageAspectFlags present = format_aspects(format);
+    /* VUID-VkSubpassDescription2-attachment-02800 (not zero), -02801 (never
+     * METADATA), -04563 (never a memory plane) and
+     * VUID-VkRenderPassCreateInfo2-attachment-02525 (only aspects the
+     * attachment's format has). */
+    if (!aspect || (aspect & ~present)) return VK_ERROR_UNKNOWN;
+    /* A version-1 input reference reads every aspect of its attachment. For
+     * the single-aspect formats this profile serves the only valid mask IS
+     * every aspect, so nothing valid is refused here; a strict subset of a
+     * combined depth/stencil format would need a per-reference aspect this
+     * model does not store yet, and is refused rather than widened. */
+    if (aspect != present) return VK_ERROR_FEATURE_NOT_PRESENT;
+    return VK_SUCCESS;
+}
+
+/* pNext of VkAttachmentDescription2. One VkAttachmentDescriptionStencilLayout
+ * (VK_KHR_separate_depth_stencil_layouts) is understood and returned; the
+ * owned per-aspect table in the render pass carries it. Anything else, or a
+ * second copy, is refused rather than silently ignored. */
+static VkResult attachment2_next(const VkAttachmentDescription2 *a,
+    const VkAttachmentDescriptionStencilLayout **stencil)
+{
+    *stencil = NULL;
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)a->pNext;
+         next; next = next->pNext) {
+        if (next->sType != VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT || *stencil)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        *stencil = (const VkAttachmentDescriptionStencilLayout *)next;
+    }
+    return VK_SUCCESS;
+}
+
+/* pNext of VkAttachmentReference2. VkAttachmentReferenceStencilLayout is
+ * understood only where the caller passes `stencil` (the depth/stencil
+ * reference); a colour, resolve or input reference refuses it, since no
+ * stencil layout of those roles is modelled. */
+static VkResult reference2_next(const VkAttachmentReference2 *r,
+    const VkAttachmentReferenceStencilLayout **stencil)
+{
+    if (stencil) *stencil = NULL;
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)r->pNext;
+         next; next = next->pNext) {
+        if (!stencil || next->sType != VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT ||
+            *stencil)
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        *stencil = (const VkAttachmentReferenceStencilLayout *)next;
+    }
+    return VK_SUCCESS;
+}
+
+/* One version-2 reference into its version-1 form. The aspect mask is not
+ * part of the version-1 reference; input references check it separately. */
+static VkResult reference2(const VkAttachmentReference2 *r, VkAttachmentReference *out,
+    const VkAttachmentReferenceStencilLayout **stencil)
+{
+    if (r->sType != VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2) return VK_ERROR_UNKNOWN;
+    VkResult rc = reference2_next(r, stencil);
+    if (rc != VK_SUCCESS) return rc;
+    *out = (VkAttachmentReference){r->attachment, r->layout};
+    return VK_SUCCESS;
+}
+
+/* pNext of VkSubpassDescription2. Depth/stencil resolve
+ * (VK_KHR_depth_stencil_resolve), a fragment shading rate attachment and every
+ * other extension of the subpass are outside this profile and refused. */
+static VkResult subpass2_next(const VkSubpassDescription2 *s)
+{
+    return s->pNext ? VK_ERROR_FEATURE_NOT_PRESENT : VK_SUCCESS;
+}
+
+/* pNext of VkSubpassDependency2. A chained VkMemoryBarrier2 needs
+ * synchronization2, which this device does not expose. */
+static VkResult dependency2_next(const VkSubpassDependency2 *d)
+{
+    return d->pNext ? VK_ERROR_FEATURE_NOT_PRESENT : VK_SUCCESS;
+}
+
+static VkResult subpass2(const VkRenderPassCreateInfo2 *info, uint32_t index,
+    struct ps5vk_render_pass2_refs *refs, VkSubpassDescription *out,
+    const VkAttachmentReferenceStencilLayout **depth_stencil)
+{
+    *depth_stencil = NULL;
+    const VkSubpassDescription2 *s = &info->pSubpasses[index];
+    if (s->sType != VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2) return VK_ERROR_UNKNOWN;
+    VkResult rc = subpass2_next(s);
+    if (rc != VK_SUCCESS) return rc;
+    /* The profile bounds are the ones the version-1 path would apply to the
+     * same counts, and with the same result. */
+    if (s->colorAttachmentCount > PS5VK_MAX_COLOR_ATTACHMENTS ||
+        (s->colorAttachmentCount && !s->pColorAttachments) ||
+        s->inputAttachmentCount > PS5VK_MAX_INPUT_ATTACHMENTS ||
+        (s->inputAttachmentCount && !s->pInputAttachments) ||
+        (s->preserveAttachmentCount && !s->pPreserveAttachments))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* More preserve entries than attachments must repeat one or name one
+     * outside the pass, which the version-1 path refuses as invalid. */
+    if (s->preserveAttachmentCount > info->attachmentCount) return VK_ERROR_UNKNOWN;
+    *out = (VkSubpassDescription){
+        .flags = s->flags, .pipelineBindPoint = s->pipelineBindPoint,
+        .inputAttachmentCount = s->inputAttachmentCount,
+        .colorAttachmentCount = s->colorAttachmentCount,
+        .preserveAttachmentCount = s->preserveAttachmentCount,
+    };
+    for (uint32_t i = 0; i < s->colorAttachmentCount; ++i)
+        if ((rc = reference2(&s->pColorAttachments[i], &refs->color[i], NULL)) != VK_SUCCESS)
+            return rc;
+    if (s->colorAttachmentCount) out->pColorAttachments = refs->color;
+    if (s->pResolveAttachments) {
+        for (uint32_t i = 0; i < s->colorAttachmentCount; ++i)
+            if ((rc = reference2(&s->pResolveAttachments[i], &refs->resolve[i], NULL)) != VK_SUCCESS)
+                return rc;
+        out->pResolveAttachments = refs->resolve;
+    }
+    for (uint32_t i = 0; i < s->inputAttachmentCount; ++i) {
+        const VkAttachmentReference2 *r = &s->pInputAttachments[i];
+        if ((rc = reference2(r, &refs->input[i], NULL)) != VK_SUCCESS) return rc;
+        /* The aspect mask is meaningful only for a real input reference, and
+         * is checked against the format of the attachment it names. */
+        if (r->attachment == VK_ATTACHMENT_UNUSED) continue;
+        if (r->attachment >= info->attachmentCount) return VK_ERROR_UNKNOWN;
+        rc = ps5vk_render_pass_input_aspect_valid(
+            info->pAttachments[r->attachment].format, r->aspectMask);
+        if (rc != VK_SUCCESS) return rc;
+    }
+    if (s->inputAttachmentCount) out->pInputAttachments = refs->input;
+    if (s->pDepthStencilAttachment) {
+        if ((rc = reference2(s->pDepthStencilAttachment, &refs->depth, depth_stencil)) !=
+            VK_SUCCESS)
+            return rc;
+        out->pDepthStencilAttachment = &refs->depth;
+    }
+    if (s->preserveAttachmentCount) {
+        memcpy(refs->preserve, s->pPreserveAttachments,
+               (size_t)s->preserveAttachmentCount * sizeof(refs->preserve[0]));
+        out->pPreserveAttachments = refs->preserve;
+    }
+    return VK_SUCCESS;
+}
+
+VkResult ps5vk_render_pass2_translate(const VkRenderPassCreateInfo2 *info,
+    struct ps5vk_render_pass2_translation *out)
+{
+    if (!info || !out) return VK_ERROR_UNKNOWN;
+    memset(out, 0, sizeof(*out));
+    if (info->sType != VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2) return VK_ERROR_UNKNOWN;
+    /* No structure extends VkRenderPassCreateInfo2 on this device. */
+    if (info->pNext) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (!info->subpassCount || info->subpassCount > PS5VK_MAX_SUBPASSES || !info->pSubpasses ||
+        !info->attachmentCount || info->attachmentCount > PS5VK_MAX_ATTACHMENTS ||
+        !info->pAttachments ||
+        info->dependencyCount > PS5VK_MAX_DEPENDENCIES ||
+        (info->dependencyCount && !info->pDependencies) ||
+        info->correlatedViewMaskCount > PS5VK_MAX_CORRELATION_MASKS ||
+        (info->correlatedViewMaskCount && !info->pCorrelatedViewMasks))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkResult rc;
+    const VkAttachmentDescriptionStencilLayout *attachment_stencil[PS5VK_MAX_ATTACHMENTS];
+    const VkAttachmentReferenceStencilLayout *reference_stencil[PS5VK_MAX_SUBPASSES];
+    for (uint32_t i = 0; i < info->attachmentCount; ++i) {
+        const VkAttachmentDescription2 *a = &info->pAttachments[i];
+        if (a->sType != VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2) return VK_ERROR_UNKNOWN;
+        if ((rc = attachment2_next(a, &attachment_stencil[i])) != VK_SUCCESS) return rc;
+        out->stencil_layouts |= attachment_stencil[i] != NULL;
+        out->attachments[i] = (VkAttachmentDescription){
+            a->flags, a->format, a->samples, a->loadOp, a->storeOp,
+            a->stencilLoadOp, a->stencilStoreOp, a->initialLayout, a->finalLayout};
+    }
+    /* Whether the pass says anything multiview at all. Only then is the
+     * version-1 multiview structure chained, so a version-2 pass without views
+     * becomes exactly the object its version-1 twin becomes. */
+    VkBool32 views = info->correlatedViewMaskCount != 0;
+    for (uint32_t i = 0; i < info->subpassCount; ++i) {
+        if ((rc = subpass2(info, i, &out->refs[i], &out->subpasses[i],
+                           &reference_stencil[i])) != VK_SUCCESS)
+            return rc;
+        out->stencil_layouts |= reference_stencil[i] != NULL;
+        out->view_masks[i] = info->pSubpasses[i].viewMask;
+        views |= out->view_masks[i] != 0;
+    }
+    for (uint32_t i = 0; i < info->dependencyCount; ++i) {
+        const VkSubpassDependency2 *dep = &info->pDependencies[i];
+        if (dep->sType != VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2) return VK_ERROR_UNKNOWN;
+        if ((rc = dependency2_next(dep)) != VK_SUCCESS) return rc;
+        out->dependencies[i] = (VkSubpassDependency){
+            dep->srcSubpass, dep->dstSubpass, dep->srcStageMask, dep->dstStageMask,
+            dep->srcAccessMask, dep->dstAccessMask, dep->dependencyFlags};
+        out->view_offsets[i] = dep->viewOffset;
+        views |= dep->viewOffset != 0 ||
+            (dep->dependencyFlags & VK_DEPENDENCY_VIEW_LOCAL_BIT) != 0;
+    }
+    /* The stencil table, only when something separate was chained: the
+     * chained layouts where present and the stencil projection of the
+     * combined layout otherwise. A combined layout with no stencil meaning
+     * (DEPTH_* without a chained stencil layout) cannot be split, which is
+     * VUID-VkAttachmentDescription2-format-06906/06907 and
+     * VUID-VkAttachmentReference2-attachment-06910. */
+    if (out->stencil_layouts) {
+        for (uint32_t i = 0; i < info->attachmentCount; ++i) {
+            const VkAttachmentDescription2 *a = &info->pAttachments[i];
+            const VkAttachmentDescriptionStencilLayout *chained = attachment_stencil[i];
+            if (chained) {
+                out->stencil.initial[i] = chained->stencilInitialLayout;
+                out->stencil.final[i] = chained->stencilFinalLayout;
+            } else if (ps5vk_format_is_combined_depth_stencil(a->format)) {
+                if (!ps5vk_layout_for_aspect(a->initialLayout, VK_IMAGE_ASPECT_STENCIL_BIT,
+                                             &out->stencil.initial[i]) ||
+                    !ps5vk_layout_for_aspect(a->finalLayout, VK_IMAGE_ASPECT_STENCIL_BIT,
+                                             &out->stencil.final[i]))
+                    return VK_ERROR_UNKNOWN;
+            } else {
+                out->stencil.initial[i] = a->initialLayout;
+                out->stencil.final[i] = a->finalLayout;
+            }
+        }
+        for (uint32_t i = 0; i < info->subpassCount; ++i) {
+            const VkAttachmentReference2 *r = info->pSubpasses[i].pDepthStencilAttachment;
+            if (reference_stencil[i]) {
+                out->stencil.reference[i] = reference_stencil[i]->stencilLayout;
+            } else if (r && r->attachment < info->attachmentCount &&
+                       ps5vk_format_is_combined_depth_stencil(
+                           info->pAttachments[r->attachment].format)) {
+                if (!ps5vk_layout_for_aspect(r->layout, VK_IMAGE_ASPECT_STENCIL_BIT,
+                                             &out->stencil.reference[i]))
+                    return VK_ERROR_UNKNOWN;
+            } else {
+                out->stencil.reference[i] = r ? r->layout : VK_IMAGE_LAYOUT_UNDEFINED;
+            }
+        }
+    }
+    if (info->correlatedViewMaskCount)
+        memcpy(out->correlation_masks, info->pCorrelatedViewMasks,
+               (size_t)info->correlatedViewMaskCount * sizeof(out->correlation_masks[0]));
+    out->info = (VkRenderPassCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .flags = info->flags,
+        .attachmentCount = info->attachmentCount, .pAttachments = out->attachments,
+        .subpassCount = info->subpassCount, .pSubpasses = out->subpasses,
+        .dependencyCount = info->dependencyCount,
+        .pDependencies = info->dependencyCount ? out->dependencies : NULL,
+    };
+    if (views) {
+        /* VUID-VkRenderPassCreateInfo2-viewMask-03057/03058/03059,
+         * VUID-VkSubpassDependency2-dependencyFlags-03092 and -viewOffset-02530,
+         * VUID-VkRenderPassCreateInfo2-pCorrelatedViewMasks-03056 and
+         * VUID-VkSubpassDescription2-multiview-06558/viewMask-06706 are the
+         * version-1 multiview obligations restated, and the version-1
+         * validator enforces them on this structure. */
+        out->multiview = (VkRenderPassMultiviewCreateInfo){
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
+            .subpassCount = info->subpassCount, .pViewMasks = out->view_masks,
+            .dependencyCount = info->dependencyCount,
+            .pViewOffsets = info->dependencyCount ? out->view_offsets : NULL,
+            .correlationMaskCount = info->correlatedViewMaskCount,
+            .pCorrelationMasks = info->correlatedViewMaskCount ? out->correlation_masks : NULL,
+        };
+        out->info.pNext = &out->multiview;
+    }
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2KHR(VkDevice d,
+    const VkRenderPassCreateInfo2 *info, const VkAllocationCallbacks *allocator, VkRenderPass *out)
+{
+    PASS_MARK("PS5VK_RENDER_PASS2_CREATE attachments=%u subpasses=%u dependencies=%u",
+        info ? info->attachmentCount : 0u, info ? info->subpassCount : 0u,
+        info ? info->dependencyCount : 0u);
+    if (!out) return VK_ERROR_UNKNOWN;
+    *out = VK_NULL_HANDLE;
+    if (!d || !info) return VK_ERROR_UNKNOWN;
+    if (!d->create_renderpass2_extension_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
+    struct ps5vk_render_pass2_translation translation;
+    VkResult rc = ps5vk_render_pass2_translate(info, &translation);
+    if (rc != VK_SUCCESS) return rc;
+    /* The stencil-layout structures belong to
+     * VK_KHR_separate_depth_stencil_layouts: without the negotiated feature
+     * they are refused, never ignored. */
+    if (translation.stencil_layouts &&
+        !(d->enabled_features_t09 & PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    return ps5vk_render_pass_create(d, &translation.info,
+        translation.stencil_layouts ? &translation.stencil : NULL, allocator, out);
 }
 
 VkResult ps5vk_render_pass_multiview_validate(const VkRenderPassCreateInfo *info,

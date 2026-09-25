@@ -62,6 +62,7 @@ static const struct entry entries[] = {
     ENTRY(vkCreateRenderPass, DEVICE),
     ENTRY(vkDestroyRenderPass, DEVICE),
     ENTRY(vkGetRenderAreaGranularity, DEVICE),
+    ENTRY(vkCreateRenderPass2KHR, DEVICE),
     ENTRY(vkCreateFramebuffer, DEVICE),
     ENTRY(vkDestroyFramebuffer, DEVICE),
     ENTRY(vkCreateDescriptorSetLayout, DEVICE),
@@ -106,6 +107,9 @@ static const struct entry entries[] = {
     ENTRY(vkCmdBeginRenderPass, DEVICE),
     ENTRY(vkCmdNextSubpass, DEVICE),
     ENTRY(vkCmdEndRenderPass, DEVICE),
+    ENTRY(vkCmdBeginRenderPass2KHR, DEVICE),
+    ENTRY(vkCmdNextSubpass2KHR, DEVICE),
+    ENTRY(vkCmdEndRenderPass2KHR, DEVICE),
     ENTRY(vkCmdExecuteCommands, DEVICE),
     ENTRY(vkCmdBindVertexBuffers, DEVICE),
     ENTRY(vkCmdBindIndexBuffer, DEVICE),
@@ -132,6 +136,9 @@ static const struct entry entries[] = {
     ENTRY(vkWaitForFences, DEVICE),
     ENTRY(vkCreateSemaphore, DEVICE),
     ENTRY(vkDestroySemaphore, DEVICE),
+    ENTRY(vkGetSemaphoreCounterValueKHR, DEVICE),
+    ENTRY(vkWaitSemaphoresKHR, DEVICE),
+    ENTRY(vkSignalSemaphoreKHR, DEVICE),
     ENTRY(vkCreateEvent, DEVICE),
     ENTRY(vkDestroyEvent, DEVICE),
     ENTRY(vkGetEventStatus, DEVICE),
@@ -189,11 +196,30 @@ static int device_group_command(const char *name)
            !strcmp(name, "vkGetDeviceGroupPeerMemoryFeaturesKHR");
 }
 
+/* VK_KHR_create_renderpass2: visible only on a device that enabled it. This
+ * device reports Vulkan 1.0, so the core-1.2 names without the suffix are not
+ * entries at all. */
+static int create_renderpass2_command(const char *name)
+{
+    return !strcmp(name, "vkCreateRenderPass2KHR") ||
+           !strcmp(name, "vkCmdBeginRenderPass2KHR") ||
+           !strcmp(name, "vkCmdNextSubpass2KHR") ||
+           !strcmp(name, "vkCmdEndRenderPass2KHR");
+}
 static int buffer_device_address_command(const char *name)
 {
     return !strcmp(name, "vkGetBufferDeviceAddressKHR") ||
            !strcmp(name, "vkGetBufferOpaqueCaptureAddressKHR") ||
            !strcmp(name, "vkGetDeviceMemoryOpaqueCaptureAddressKHR");
+}
+
+/* VK_KHR_timeline_semaphore host commands, reachable only on a device that
+ * enabled the extension. Vulkan 1.0 has no core names for them. */
+static int timeline_semaphore_command(const char *name)
+{
+    return !strcmp(name, "vkGetSemaphoreCounterValueKHR") ||
+           !strcmp(name, "vkWaitSemaphoresKHR") ||
+           !strcmp(name, "vkSignalSemaphoreKHR");
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
@@ -222,6 +248,10 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
         !(device->enabled_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS))
         return NULL;
     if (device_group_command(name) && !device->device_group_extension_enabled)
+        return NULL;
+    if (timeline_semaphore_command(name) && !device->timeline_extension_enabled)
+        return NULL;
+    if (create_renderpass2_command(name) && !device->create_renderpass2_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;

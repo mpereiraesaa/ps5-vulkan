@@ -385,9 +385,30 @@ int main(void)
     vkDestroyPipeline(&d,dynamic_pipeline,NULL);
     const VkDynamicState unsupported_dynamic[]={
         VK_DYNAMIC_STATE_LINE_WIDTH,
-        VK_DYNAMIC_STATE_BLEND_CONSTANTS,VK_DYNAMIC_STATE_DEPTH_BOUNDS,
+        VK_DYNAMIC_STATE_BLEND_CONSTANTS,VK_DYNAMIC_STATE_DEPTH_BOUNDS};
+    /* The three stencil states are dynamic values the draw folds into its
+     * stencil snapshot (T09); declaring them is valid whether or not the
+     * pipeline enables the test, which then ignores them. */
+    const VkDynamicState stencil_dynamic[]={
         VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
         VK_DYNAMIC_STATE_STENCIL_REFERENCE};
+    const unsigned stencil_saved[4]={created,released,acquired,compiled_released};
+    dynamic.dynamicStateCount=3;dynamic.pDynamicStates=stencil_dynamic;
+    vp.pViewports=&viewport;vp.pScissors=&scissor;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)==VK_SUCCESS);
+    assert(dynamic_pipeline->dynamic_stencil_compare_mask &&
+           dynamic_pipeline->dynamic_stencil_write_mask &&
+           dynamic_pipeline->dynamic_stencil_reference &&
+           !dynamic_pipeline->dynamic_viewport && !dynamic_pipeline->raster.stencil_test);
+    vkDestroyPipeline(&d,dynamic_pipeline,NULL);
+    const VkDynamicState repeated[]={VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+        VK_DYNAMIC_STATE_STENCIL_REFERENCE};
+    dynamic.dynamicStateCount=2;dynamic.pDynamicStates=repeated;
+    assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&dynamic_pipeline)!=VK_SUCCESS &&
+           !dynamic_pipeline);
+    created=stencil_saved[0];released=stencil_saved[1];
+    acquired=stencil_saved[2];compiled_released=stencil_saved[3];
+    vp.pViewports=NULL;vp.pScissors=NULL;
     unsigned before_created=created;
     dynamic.dynamicStateCount=1;
     for(unsigned i=0;i<sizeof(unsupported_dynamic)/sizeof(unsupported_dynamic[0]);++i) {
@@ -740,6 +761,37 @@ int main(void)
             d.enabled_features=saved_features|required;
             assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==VK_SUCCESS);
             vkDestroyPipeline(&d,tess_pipeline,NULL);
+            /* VkPipelineTessellationDomainOriginStateCreateInfo
+             * (VK_KHR_maintenance2): refused without the extension; with it,
+             * UPPER_LEFT is the default origin and accepted, LOWER_LEFT is
+             * refused because nothing flips the domain coordinate, and a value
+             * outside the enum is invalid. */
+            {
+                VkPipelineTessellationDomainOriginStateCreateInfo origin={
+                    .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO,
+                    .domainOrigin=VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT};
+                VkPipelineTessellationStateCreateInfo with_origin=tessellation;
+                with_origin.pNext=&origin;
+                tess_info.pTessellationState=&with_origin;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+                       VK_ERROR_FEATURE_NOT_PRESENT && !tess_pipeline);
+                d.maintenance2_extension_enabled=VK_TRUE;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==VK_SUCCESS);
+                vkDestroyPipeline(&d,tess_pipeline,NULL);
+                origin.domainOrigin=VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+                       VK_ERROR_FEATURE_NOT_PRESENT && !tess_pipeline);
+                origin.domainOrigin=(VkTessellationDomainOrigin)7;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+                       VK_ERROR_UNKNOWN && !tess_pipeline);
+                origin.domainOrigin=VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
+                VkPipelineTessellationDomainOriginStateCreateInfo twice=origin;
+                origin.pNext=&twice;
+                assert(vkCreateGraphicsPipelines(&d,0,1,&tess_info,NULL,&tess_pipeline)==
+                       VK_ERROR_FEATURE_NOT_PRESENT && !tess_pipeline);
+                d.maintenance2_extension_enabled=VK_FALSE;
+                tess_info.pTessellationState=&tessellation;
+            }
             for(unsigned i=0;i<2;++i) {
                 d.enabled_features=(saved_features|required)&~(i?PS5VK_FEATURE_GEOMETRY_SHADER:PS5VK_FEATURE_TESSELLATION_SHADER);
                 unsigned calls=acquired;tess_pipeline=(void *)(uintptr_t)1;

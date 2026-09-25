@@ -29,5 +29,18 @@ int main(void)
     assert(ps5vk_native_image_requirements(NULL, &info, &req) == VK_SUCCESS && req.size == 131072);
     info.format=VK_FORMAT_R16G16B16A16_SFLOAT;
     assert(ps5vk_native_image_requirements(NULL, &info, &req) == VK_ERROR_FORMAT_NOT_SUPPORTED && !req.size);
+    {
+        struct ps5vk_depth_stencil_layout ds;
+        /* 128x128: one depth block, then one 256x256 stencil block. */
+        assert(!ps5vk_depth_stencil_layout(128, 128, &ds));
+        assert(ds.depth.bytes == 65536 && ds.stencil_offset == 65536 &&
+               ds.stencil_bytes == 65536 && ds.bytes == 131072 && ds.alignment == 65536);
+        /* Mesa AddrLib for 300x200: depth 384x256 (0x60000), stencil 512x256. */
+        assert(!ps5vk_depth_stencil_layout(300, 200, &ds));
+        assert(ds.depth.bytes == 0x60000 && ds.stencil_offset == 0x60000 &&
+               ds.stencil_pitch == 512 && ds.stencil_bytes == 0x20000 && ds.bytes == 0x80000);
+        assert(ps5vk_depth_stencil_layout(0, 1, &ds) == -1 && !ds.bytes);
+        assert(ps5vk_depth_stencil_layout(1, 16385, &ds) == -1);
+    }
     puts("D32 64KB_Z_X footprint: reference arithmetic only, not hardware execution");
 }

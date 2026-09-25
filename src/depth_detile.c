@@ -97,3 +97,50 @@ int ps5vk_depth_64k_zx_detile(void *destination,size_t destination_bytes,
     }
     return 0;
 }
+
+/* SW_64K_Z_X, 1xaa, 16 pipes, 1-byte element: the stencil plane of a
+ * combined depth/stencil surface. Mesa's AddrLib (Gfx10Lib, GB_ADDR_CONFIG
+ * with 16 pipes - the configuration the depth row above is cross-checked
+ * against) computes the plane with flags.stencil and bpp 8; its
+ * Addr2ComputeSurfaceAddrFromCoord results over a whole 256x256 tile, and over
+ * a 300x200 multi-tile surface, are affine over GF(2) with exactly these
+ * per-coordinate-bit masks. tests/test_depth_detile.c pins sampled addresses
+ * from that run. */
+#define PS5VK_STENCIL_TILE 256u
+size_t ps5vk_stencil_64k_zx_surface_size(uint32_t width,uint32_t height)
+{
+    if(!width||!height)return SIZE_MAX;
+    size_t tx=((size_t)width+PS5VK_STENCIL_TILE-1u)/PS5VK_STENCIL_TILE;
+    size_t ty=((size_t)height+PS5VK_STENCIL_TILE-1u)/PS5VK_STENCIL_TILE;
+    if(ty>SIZE_MAX/tx||tx*ty>SIZE_MAX/UINT32_C(0x10000))return SIZE_MAX;
+    return tx*ty*UINT32_C(0x10000);
+}
+
+size_t ps5vk_stencil_64k_zx_offset(uint32_t x,uint32_t y,uint32_t width)
+{
+    static const uint16_t sx[8]={0x0001,0x0004,0x0010,0x0140,0x0200,0x0800,0x2400,0x8000};
+    static const uint16_t sy[8]={0x0002,0x0008,0x0020,0x0100,0x0280,0x0400,0x1800,0x4000};
+    if(!width||x>=width)return SIZE_MAX;
+    size_t local=affine(x&(PS5VK_STENCIL_TILE-1u),y&(PS5VK_STENCIL_TILE-1u),sx,8,sy,8);
+    size_t tx=((size_t)width+PS5VK_STENCIL_TILE-1u)/PS5VK_STENCIL_TILE;
+    size_t tile_y=y/PS5VK_STENCIL_TILE;
+    if(tile_y>SIZE_MAX/tx)return SIZE_MAX;
+    size_t index=tile_y*tx+x/PS5VK_STENCIL_TILE;
+    if(index>SIZE_MAX/UINT32_C(0x10000))return SIZE_MAX;
+    return index*UINT32_C(0x10000)+local;
+}
+
+int ps5vk_stencil_64k_zx_detile(void *destination,size_t destination_bytes,
+    const void *source,size_t source_bytes,uint32_t width,uint32_t height)
+{
+    size_t surface=ps5vk_stencil_64k_zx_surface_size(width,height);
+    if(!destination||!source||surface==SIZE_MAX||source_bytes<surface||
+        (size_t)width>SIZE_MAX/height||destination_bytes<(size_t)width*height)return -1;
+    unsigned char *dst=destination;const unsigned char *src=source;
+    for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x) {
+        size_t offset=ps5vk_stencil_64k_zx_offset(x,y,width);
+        if(offset==SIZE_MAX||offset>=source_bytes)return -1;
+        dst[(size_t)y*width+x]=src[offset];
+    }
+    return 0;
+}

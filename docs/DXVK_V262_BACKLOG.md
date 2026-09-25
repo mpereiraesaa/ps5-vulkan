@@ -12,7 +12,7 @@ leaves within a 165/165 regression; the indirect and indexed draws (T03)
 have all three requirements satisfied by core feature reports, the
 per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
 leaves within a 211/211 regression and the public-SDK indirect witness; the
-the four DXVK262-T05 rasterization and viewport features were promoted on
+four DXVK262-T05 rasterization and viewport features were promoted on
 2026-09-21; and DXVK262-T06 is complete, with all four of its requirements
 satisfied: `fragmentStoresAndAtomics` and `dualSrcBlend` with their four axes,
 `independentBlend` promoted on 2026-09-22, and `sampleRateShading` promoted on
@@ -24,15 +24,11 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 27/62 ready with 35 blockers after T07's four resource and
-precise-query features passed the ordinary 829-case selection twice, T08
-DeviceScope passed its SDK KHR witness, and T09 host query reset passed its
-public EXT query and shipping reset/reuse witness. The ordered table preserves the
-original tranche membership.
-
-The sampler mirror-clamp public KHR route then passed the ordinary SDK
-capability probe and shipping U-nearest/W-linear pixel witnesses. The probe
-observed 29/62 requested values, while the four-axis matrix is 27/62 ready.
+checked matrix is **30/62 ready with 32 blockers**. T07's four resource and
+precise-query features, T08 DeviceScope, and five T09 requirements have public
+routes and artifact-bound witnesses. The combined public SDK probe observed
+32/62 requested values on API 1.0.0. The ordered table preserves the original
+tranche membership.
 
 Tranche delivery and DXVK profile scoring are different gates. The current
 matrix still leaves `geometryShader` and `tessellationShader` as blockers:
@@ -151,6 +147,51 @@ a baseline requirement is missing, duplicated or unknown, or if the initially
 satisfied `robustBufferAccess` regresses. It also enforces dependency order and
 the final API promotion gate.
 
+### T09 timeline semaphores and separate depth/stencil layouts (2026-09-25)
+
+Three T09 rows are now ready on all four axes, through Vulkan 1.0 KHR
+extensions. `apiVersion` stays 1.0.
+
+* `timelineSemaphore` and `maxTimelineSemaphoreValueDifference` use
+  `VK_KHR_timeline_semaphore`. The reported difference is `UINT64_MAX`, because
+  payloads are compared at full width.
+* `separateDepthStencilLayouts` uses `VK_KHR_separate_depth_stencil_layouts`
+  over `VK_KHR_create_renderpass2`, `VK_KHR_maintenance2` and
+  `VK_KHR_multiview`.
+
+The public `D32_SFLOAT_S8_UINT` format carries only its witnessed attachment
+and readback roles. Evidence on the promoted shipping build:
+
+* two strict public-SDK witness runs per capability;
+* 50/50 focused original CTS leaves: timeline, renderpass2, and D32S8
+  stencil/depth with and without separate layouts;
+* 829/829 frozen acceptance;
+* a re-measured capability probe (30/62 query values, 13 extensions).
+
+Run IDs and hashes are in
+[VALIDATION.md](../VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25).
+DXVK 2.6.2 renders through dynamic rendering, not `vkCreateRenderPass*`. The
+render pass 2 route exists because the registry requires it for the separate
+layouts. It is not a claim that dynamic rendering is available.
+
+The following are still missing for D32S8:
+
+* sampled or single-aspect views;
+* `vkCmdClearDepthStencilImage`;
+* transfer-destination uploads;
+* mip levels and array layers;
+* HTILE compression.
+
+`D24_UNORM_S8_UINT` is not reported.
+
+**Open blocker: fragment discard does not suppress depth/stencil writes.** On
+gfx1013, through this driver's path, a fragment shader that executes
+`discard`/kill still lets the DB write depth and stencil. The compiled shader
+enables kill (`DB_SHADER_CONTROL=0x50`), yet the T09 depth/stencil witness saw
+all 4096 texels written. The root cause is open. This breaks alpha-tested
+depth in DXVK. It needs an owner and a native witness in a later tranche. It
+does not change the three T09 rows above, which do not depend on discard.
+
 ### T08 subgroup profile prerequisites
 
 The pinned registry and original CTS impose different routes for the two T08
@@ -217,7 +258,7 @@ With the public route enabled, separate SDK draws for U nearest and 3D W
 linear each matched all 373,248 pixels against the CPU reference and closed
 cleanly. The compact upstream 3D W address-mode CTS leaf remains a strict 1/1
 PASS. The two larger filtering leaves retain their pre-sampling image-upload
-`Fail` verdicts. The current checked matrix is **27/62 ready with 35 blockers**;
+`Fail` verdicts. At that promotion, the checked matrix was **27/62 ready with 35 blockers**;
 the ordinary capability probe observed 29/62 requested values. Exact current
 artifact, run and receipt hashes are in
 [VALIDATION.md](../VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).

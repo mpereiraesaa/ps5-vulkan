@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "b88157ffa829add85acc213a25a40840256825ab1180f839a0f556f32c7d6b60",
+    "artifact_sha256": "d2bb5425d51c11f214efd7533b51c81dab49956e769852eacd9279d98a689248",
     "satisfied_ids": [
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -28,16 +28,19 @@
       "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
       "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
       "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
+      "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+      "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
       "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
       "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
-      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+      "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
     ],
     "runs": [
       {
-        "id": "20260924T235311412Z_PPSA99994_ps5vk_0x14ceeba58a1e",
-        "log_sha256": "2c5997d112288f768b6ad1b2c631e7e39843c204d40773c4c2bc02a9af7522c2"
+        "id": "20260925T012038463Z_PPSA99994_ps5vk_0x199493f2488f",
+        "log_sha256": "f123a5bc4e3e5cf287c1877e7725965cb9c4cd207363adb9499063ef579585ab"
       }
     ],
     "transport": "ps5log/1",
@@ -69,14 +72,23 @@
       {
         "route": "VK_KHR_sampler_mirror_clamp_to_edge",
         "samplerMirrorClampToEdge": "1"
+      },
+      {
+        "route": "VK_KHR_timeline_semaphore",
+        "timelineSemaphore": "1",
+        "maxTimelineSemaphoreValueDifference": "18446744073709551615"
+      },
+      {
+        "route": "VK_KHR_separate_depth_stencil_layouts",
+        "separateDepthStencilLayouts": "1"
       }
     ],
-    "source_matrix_sha256": "e4bad3e4fac18113effd6b02fa85e38fa5a215eea32d70df188f1da7fc1c6628",
-    "satisfied": 29,
-    "blockers": 33,
     "requirements": 62,
+    "satisfied": 32,
+    "blockers": 30,
     "device_api": "1.0.0",
-    "device_extensions": 11
+    "device_extensions": 15,
+    "source_matrix_sha256": "d9776b6f225ae9c3854dce7c97604ea7fe31325c88eb1846aca08eb9863bdcdf"
   },
   "historical_capability_probes": [
     {
@@ -555,6 +567,162 @@
       "requirements": 62,
       "device_api": "1.0.0",
       "device_extensions": 9
+    },
+    {
+      "artifact_sha256": "b88157ffa829add85acc213a25a40840256825ab1180f839a0f556f32c7d6b60",
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+        "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+      ],
+      "runs": [
+        {
+          "id": "20260924T235311412Z_PPSA99994_ps5vk_0x14ceeba58a1e",
+          "log_sha256": "2c5997d112288f768b6ad1b2c631e7e39843c204d40773c4c2bc02a9af7522c2"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        },
+        {
+          "route": "VK_KHR_uniform_buffer_standard_layout",
+          "uniformBufferStandardLayout": "1"
+        },
+        {
+          "route": "VK_KHR_vulkan_memory_model",
+          "vulkanMemoryModel": "1",
+          "vulkanMemoryModelDeviceScope": "1"
+        },
+        {
+          "route": "VK_KHR_buffer_device_address",
+          "bufferDeviceAddress": "1"
+        },
+        {
+          "route": "VK_EXT_host_query_reset",
+          "hostQueryReset": "1"
+        },
+        {
+          "route": "VK_KHR_sampler_mirror_clamp_to_edge",
+          "samplerMirrorClampToEdge": "1"
+        }
+      ],
+      "source_matrix_sha256": "e4bad3e4fac18113effd6b02fa85e38fa5a215eea32d70df188f1da7fc1c6628",
+      "satisfied": 29,
+      "blockers": 33,
+      "requirements": 62,
+      "device_api": "1.0.0",
+      "device_extensions": 11
+    },
+    {
+      "artifact_sha256": "f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414",
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+        "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+      ],
+      "runs": [
+        {
+          "id": "20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8",
+          "log_sha256": "2c640eb60bde32473ae31529000dc49493207c29fb52279e43a194fffacb3832"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        },
+        {
+          "route": "VK_KHR_uniform_buffer_standard_layout",
+          "uniformBufferStandardLayout": "1"
+        },
+        {
+          "route": "VK_KHR_vulkan_memory_model",
+          "vulkanMemoryModel": "1",
+          "vulkanMemoryModelDeviceScope": "1"
+        },
+        {
+          "route": "VK_KHR_buffer_device_address",
+          "bufferDeviceAddress": "1"
+        },
+        {
+          "route": "VK_KHR_timeline_semaphore",
+          "timelineSemaphore": "1",
+          "maxTimelineSemaphoreValueDifference": "18446744073709551615"
+        },
+        {
+          "route": "VK_KHR_separate_depth_stencil_layouts",
+          "separateDepthStencilLayouts": "1"
+        }
+      ],
+      "source_matrix_sha256": "bc40d999b56604e9c3f98e21037ce84076df8311ad6ecabeb91d22c1ff39072f",
+      "satisfied": 30,
+      "blockers": 32,
+      "requirements": 62,
+      "device_api": "1.0.0",
+      "device_extensions": 13
     }
   ],
   "requirements": {
@@ -2252,6 +2420,150 @@
           "VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25"
         ],
         "note": "Fourteen strict default-off SDK U/V/W witnesses and two shipping KHR SDK U-nearest/W-linear witnesses each matched 373248 CPU/readback pixels with clean lifecycle. The compact upstream 3D W address-mode leaf passed 1/1. Two larger 3D filtering leaves remain Fail at image upload before sampling and do not establish sampler behavior."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore": {
+      "_comment": "Vulkan 1.0 KHR route (VK_KHR_timeline_semaphore); the Vulkan 1.2 aggregate structure stays unadvertised.",
+      "cts": {
+        "state": "cts-focused-pass",
+        "run_ids": [
+          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
+        ],
+        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
+        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
+        "cases": [
+          "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value",
+          "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_host",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_host",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.host_wait_before_signal",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_host",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.one_queue",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.chain",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.two_threads",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_current_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_lesser_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_current_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_lesser_value"
+        ],
+        "result": {
+          "Pass": 16
+        },
+        "note": "All 16 original legacy timeline leaves (device_host.misc, wait, basic) passed on the promoted shipping CTS package."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260925T002416578Z_PPSA99994_ps5vk_0x16812ebb8301",
+          "20260925T002420804Z_PPSA99994_ps5vk_0x16822a9eabf2"
+        ],
+        "artifact_sha256": "612de7a09058f8b57130eaf88e5104381a7b2d673465220bb6dc80508e52eae2",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
+        "note": "Two strict public-SDK timeline witness runs on the shipping build: KHR feature negotiated, a submission that waits on an unsignalled value does not run before the host signal, vkWaitSemaphoresKHR then observes exact GPU-written data, a second device signal reaches 2^40; guard words intact, bounded fences and clean retirement."
+      }
+    },
+    "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference": {
+      "_comment": "Vulkan 1.0 KHR route (VK_KHR_timeline_semaphore); the Vulkan 1.2 aggregate structure stays unadvertised.",
+      "cts": {
+        "state": "cts-focused-pass",
+        "run_ids": [
+          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
+        ],
+        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
+        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
+        "cases": [
+          "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value",
+          "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.initial_value",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.all_signal_from_host",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.one_signal_from_host",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.host_wait_before_signal",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_device",
+          "dEQP-VK.synchronization.timeline_semaphore.wait.poll_signal_from_host",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.one_queue",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.chain",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.two_threads",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_current_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_any_lesser_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_current_value",
+          "dEQP-VK.synchronization.basic.timeline_semaphore.wait_for_all_lesser_value"
+        ],
+        "result": {
+          "Pass": 16
+        },
+        "note": "dEQP-VK.synchronization.timeline_semaphore.device_host.misc.max_difference_value signals and waits across the reported difference; all 16 original timeline leaves passed on the promoted shipping CTS package."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260925T002416578Z_PPSA99994_ps5vk_0x16812ebb8301",
+          "20260925T002420804Z_PPSA99994_ps5vk_0x16822a9eabf2"
+        ],
+        "artifact_sha256": "612de7a09058f8b57130eaf88e5104381a7b2d673465220bb6dc80508e52eae2",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
+        "note": "The same two witness runs read maxTimelineSemaphoreValueDifference = UINT64_MAX through VK_KHR_timeline_semaphore and signal a value above 2^32; the frontend orders every payload with full 64-bit comparisons, so no difference window exists to bound."
+      }
+    },
+    "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts": {
+      "_comment": "Vulkan 1.0 KHR route (VK_KHR_separate_depth_stencil_layouts over create_renderpass2, maintenance2 and multiview); the Vulkan 1.2 aggregate structure stays unadvertised.",
+      "cts": {
+        "state": "cts-focused-pass",
+        "run_ids": [
+          "20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f"
+        ],
+        "artifact_sha256": "7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1",
+        "case_list_sha256": "d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
+        "cases": [
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_never",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_less",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_less_or_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_greater",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_not_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_greater_or_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_keep.pass_keep.dfail_keep.comp_always",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_zero.pass_repl.dfail_incc.comp_always",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_inv.pass_wrap.dfail_decw.comp_less",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_repl.pass_incc.dfail_decc.comp_greater_or_equal",
+          "dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_decc.pass_inv.dfail_zero.comp_not_equal",
+          "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_not_equal_not_equal_not_equal_not_equal",
+          "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_equal_less_never_always",
+          "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_greater_less_equal_never",
+          "dEQP-VK.pipeline.monolithic.depth.format.d32_sfloat_s8_uint_separate_layouts.compare_ops.triangle_list_greater_or_equal_less_or_equal_always_less"
+        ],
+        "result": {
+          "Pass": 16
+        },
+        "note": "The 16 original d32_sfloat_s8_uint_separate_layouts stencil and depth leaves passed on the promoted shipping CTS package, beside their 16 combined-layout twins."
+      },
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260925T002437399Z_PPSA99994_ps5vk_0x168607a70485",
+          "20260925T002441648Z_PPSA99994_ps5vk_0x168704e1920e"
+        ],
+        "artifact_sha256": "8fa2b2410ee4e635e5ec7b5a85274d1625f6f51b95d6855405c1cfaff573b742",
+        "refs": [
+          "VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25"
+        ],
+        "note": "Two strict public-SDK D32_SFLOAT_S8_UINT witness runs on the shipping build: the feature and its extension route negotiated, both 64x64 planes written by the DB and read back per aspect with zero mismatches across independent depth-only and stencil-only transitions, bounded fences and clean retirement."
       }
     }
   }

@@ -804,6 +804,16 @@ static void lifecycle(void)
         vkGetPhysicalDeviceProperties2KHR(p, &properties2);
         assert(mv_properties.maxMultiviewViewCount == PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR);
         assert(mv_properties.maxMultiviewInstanceIndex == PS5VK_MULTIVIEW_INSTANCE_INDEX_FLOOR);
+        /* VK_KHR_maintenance2 point clipping: the Vulkan 1.0 rule, reported in
+         * the same chain without disturbing the structure before it. */
+        VkPhysicalDevicePointClippingProperties clipping = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES,
+            .pointClippingBehavior = (VkPointClippingBehavior)0x7FFFFFFF};
+        mv_properties.pNext = &clipping;
+        vkGetPhysicalDeviceProperties2KHR(p, &properties2);
+        assert(clipping.pointClippingBehavior == VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES);
+        assert(mv_properties.maxMultiviewViewCount == PS5VK_MULTIVIEW_VIEW_COUNT_FLOOR);
+        mv_properties.pNext = NULL;
         /* Without the capability both answers are zero and the extension is not
          * enumerated at all. */
         p->platform.supported_features &= ~(uint32_t)PS5VK_FEATURE_MULTIVIEW;
@@ -2104,6 +2114,28 @@ static void device_group_dispatch_command_gate(void)
     assert(!vkGetDeviceProcAddr(&d, "vkCmdSetDeviceMask"));
 }
 
+static void create_renderpass2_command_gate(void)
+{
+    static const char *const commands[] = {
+        "vkCreateRenderPass2KHR", "vkCmdBeginRenderPass2KHR",
+        "vkCmdNextSubpass2KHR", "vkCmdEndRenderPass2KHR"};
+    const PFN_vkVoidFunction functions[] = {
+        (PFN_vkVoidFunction)vkCreateRenderPass2KHR,
+        (PFN_vkVoidFunction)vkCmdBeginRenderPass2KHR,
+        (PFN_vkVoidFunction)vkCmdNextSubpass2KHR,
+        (PFN_vkVoidFunction)vkCmdEndRenderPass2KHR};
+    struct VkDevice_T d = {0};
+    for (size_t n = 0; n < 4; ++n) assert(!vkGetDeviceProcAddr(&d, commands[n]));
+    d.create_renderpass2_extension_enabled = VK_TRUE;
+    for (size_t n = 0; n < 4; ++n)
+        assert(vkGetDeviceProcAddr(&d, commands[n]) == functions[n]);
+    /* This device still reports Vulkan 1.0: no core-1.2 command alias. */
+    assert(!vkGetDeviceProcAddr(&d, "vkCreateRenderPass2"));
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdBeginRenderPass2"));
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdNextSubpass2"));
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdEndRenderPass2"));
+}
+
 static void buffer_address_khr_device_route(void)
 {
     const char *instance_names[] = {
@@ -2298,6 +2330,7 @@ int main(void)
     single_device_group_creation();
     buffer_address_command_gate();
     device_group_dispatch_command_gate();
+    create_renderpass2_command_gate();
     buffer_address_khr_device_route();
     uniform_buffer_standard_layout_route();
     puts("Vulkan device lifecycle: pass (host backend only)");

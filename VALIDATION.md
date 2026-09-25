@@ -5453,6 +5453,7 @@ eboot SHA-256 was
 The wrapper released the console and the subsequent status reported
 `running=none`.
 
+
 ## T09 diagnostic measurements (2026-09-24)
 
 These are default-off, SDK-linked measurements of three DXVK 2.6.2
@@ -5662,5 +5663,148 @@ resource retirement. Firmware was not re-probed for these runs.
 The earlier 14/14 default-off U/V/W draw results and compact original CTS
 3D W address-mode 1/1 PASS remain separate evidence. The two larger 3D
 filtering leaves remain `Fail` at image upload before sampling. The checked
-four-axis DXVK matrix now records **27/62 ready with 35 blockers**; its score
+four-axis DXVK matrix then recorded **27/62 ready with 35 blockers**; its score
 is distinct from the public probe's 29/62 query count.
+
+## T09 timeline semaphores and separate depth/stencil layouts promotion (2026-09-25)
+
+DXVK 2.6.2 requires `timelineSemaphore`, `maxTimelineSemaphoreValueDifference`
+and `separateDepthStencilLayouts`. The device still reports API 1.0.0. All three
+rows are reached through Vulkan 1.0 KHR extensions:
+
+* `VK_KHR_timeline_semaphore`, which needs
+  `VK_KHR_get_physical_device_properties2` on the instance;
+* `VK_KHR_separate_depth_stencil_layouts`, which needs
+  `VK_KHR_create_renderpass2`, which in turn needs `VK_KHR_multiview` and
+  `VK_KHR_maintenance2`, as the pinned `vk.xml` lists them.
+
+`vkCreateDevice` refuses any of these extensions when one of its dependencies
+is not enabled. The Vulkan 1.2 aggregate structures stay unadvertised. The
+promoted build had no measurement switch. The
+`PS5VK_TIMELINE_DIAGNOSTIC` and `PS5VK_DEPTH_STENCIL_DIAGNOSTIC` switches are
+retired, and `tests/test_native_diagnostic_options.py` fails if either returns.
+Firmware was not re-probed for these runs.
+
+**Reported values.** `maxTimelineSemaphoreValueDifference` is `UINT64_MAX`. The
+queue frontend stores each payload, wait value and signal value as a full
+`uint64_t` and orders them only with full-width comparisons. No modular window
+exists that a smaller bound would describe. The combined
+`D32_SFLOAT_S8_UINT` format reports only its witnessed roles: depth/stencil
+attachment and transfer source. The following are not implemented for it:
+sampled or single-aspect views, `vkCmdClearDepthStencilImage`, transfer
+destination, mip levels, array layers and HTILE. `D24_UNORM_S8_UINT` stays
+unreported.
+
+**Native witnesses on the shipping SDK.** Each witness ran twice from the same
+signed artifact, with strict ps5log/1 receipts and a clean title close:
+
+| Witness | eboot SHA-256 | Runs | Log SHA-256 |
+| --- | --- | --- | --- |
+| Timeline (public SDK) | `612de7a09058f8b57130eaf88e5104381a7b2d673465220bb6dc80508e52eae2` | `20260925T002416578Z_PPSA99994_ps5vk_0x16812ebb8301`, `20260925T002420804Z_PPSA99994_ps5vk_0x16822a9eabf2` | `68a5d207cacc532753bb320f5306760882ddec6bef5b8b78c7e7deb4059f248c`, `5cc5b4f3c26da3179f57f42fba337919819591ac63057192c9f2099d17d78142` |
+| D32S8 separate layouts (public SDK) | `8fa2b2410ee4e635e5ec7b5a85274d1625f6f51b95d6855405c1cfaff573b742` | `20260925T002437399Z_PPSA99994_ps5vk_0x168607a70485`, `20260925T002441648Z_PPSA99994_ps5vk_0x168704e1920e` | `7d3bf8cc8a82bf1d00d9f2ce5e7b596048011a7cbfecd94f7f98cb3b3b083530`, `4ddebce9cc2077d6bd5f47461e2148e27c977b58a1bd73a2dd8100aae809811a` |
+
+* **Timeline witness.** It negotiates the KHR feature. A compute submission
+  waits on a value that has not been signalled yet. Its buffer and counter do
+  not move until the host signals. `vkWaitSemaphoresKHR` then observes the exact
+  GPU-written data. A second device signal reaches 2^40. The guard words stay
+  intact.
+* **Depth/stencil witness.** It negotiates `separateDepthStencilLayouts` and
+  the extension chain. The DB writes both 64x64 planes, and each aspect is read
+  back separately with zero mismatches. Depth-only and stencil-only transitions
+  leave the other aspect's data unchanged.
+
+Earlier measurement-build runs of the same witnesses are retained only as
+history. They were
+`20260924T203941004Z_PPSA99994_ps5vk_0xa3fb2ed879a` for the timeline, and
+`20260924T223931620Z_PPSA99994_ps5vk_0x10c9df198899` and
+`20260924T223940271Z_PPSA99994_ps5vk_0x10cbe2bcf6e0` for depth/stencil.
+
+**Focused original CTS.** 50 source-verified leaves ran outside the frozen
+selection:
+
+* 16 legacy timeline leaves: `synchronization.timeline_semaphore.device_host.misc.*`,
+  `.wait.*` and `synchronization.basic.timeline_semaphore.*`;
+* 2 `renderpass2.suballocation.attachment_write_mask` leaves;
+* 12 + 12 `pipeline.monolithic.stencil.format.d32_sfloat_s8_uint[_separate_layouts].states.*`
+  leaves;
+* 4 + 4 `pipeline.monolithic.depth.format.d32_sfloat_s8_uint[_separate_layouts].compare_ops.triangle_list_*`
+  leaves.
+
+Both runs used case list SHA-256
+`d0e28eee2592d7013d8ea0b76e934c26db8abd0df7b32b845391c490a3b7c28a`:
+
+| Build | eboot SHA-256 | Run | Result | QPA SHA-256 | Source log SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| Measurement (pre-promotion switches) | `fa1c35315ff138850624dc93f23a055bc5787cac196266a110dc59191d82d574` | `20260925T001516592Z_PPSA99994_upstream-cts_0x1603757c86f7` | 50/50 Pass | `5cb0e98713cf66de16a299ad8c2367a31053a7af438b7ae7bc5c9ac89a217e8d` | `7149e021eef99b37f301b7f56357f95ec80bddba281f34d3092a56df49e92898` |
+| Promoted shipping | `7f9bba150da8241db59d430fa4e934e285fbe3da243327c8b0d10b723c31e0f1` | `20260925T002648833Z_PPSA99994_upstream-cts_0x16a4a1a6323f` | 50/50 Pass | `ed01b891d7b6a67e660f6ca52d302c8df60e69af9c3bfc1440a828e106fe940f` | `4c30628836dd1186c15b2a66328ce5e14f8d85ea09f66f38dfd552d833e8a256` |
+
+In each run, every named case reported `Pass`: zero Fail, zero NotSupported,
+zero missing and zero unexpected. The upstream oracles were unchanged.
+
+**Neutrality.** The promoted shipping build ran the frozen 829-case acceptance
+selection, SHA-256
+`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
+
+* eboot SHA-256:
+  `fa8497b11bb9e8aa00bf6accb1fc01c1e0b84350e83fe4937696de26574eb07d`
+* Run: `20260925T002842262Z_PPSA99994_upstream-cts_0x16bf0a65db9c`
+* QPA SHA-256: `f439e73dc7e67891c899fcef942750c8efe084ce94841373a232255d03ff99d5`
+* Source log SHA-256:
+  `341aef326dd1a28ccb0e9085b3e82752237ffcdb9620f86790a8920970d3c406`
+
+It reported **829 Pass, zero Fail, zero NotSupported** and verified strict
+identity and lifecycle. This includes the twelve
+`dynamic_state.monolithic.compute_transfer.*.stencil_*` leaves. Those leaves
+exercise the dynamic stencil compare mask, write mask and reference that the
+default build accepts since the T09 stencil-test change.
+
+**Public-ABI capability probe.** The probe was re-measured on the promoted
+build:
+
+* eboot SHA-256:
+  `f206382f04686ac42b0a33a4eec4265fefa7857beb959eddb1d9c7a4ccfab414`
+* Run: `20260925T002500503Z_PPSA99994_ps5vk_0x168b688f5bd8`
+* Log SHA-256:
+  `2c640eb60bde32473ae31529000dc49493207c29fb52279e43a194fffacb3832`
+
+`tools/verify_dxvk_probe.py` verified it strictly. It found API 1.0.0 and 13
+device extensions, and 30/62 requested query values met, reached through
+explicit `VK_KHR_timeline_semaphore` and
+`VK_KHR_separate_depth_stencil_layouts` query routes. The joined four-axis DXVK
+matrix then had **28/62 ready and 34 blockers**.
+
+**Open, outside these rows.** On this path, fragment `discard`/kill does not
+suppress depth/stencil writes, even though the compiled fragment shader
+enables kill (`DB_SHADER_CONTROL=0x50`). The depth/stencil witness saw every
+texel written. The root cause is not known. This breaks alpha-tested depth in
+DXVK, and it is tracked as an open blocker in
+[docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md).
+
+Every console window restored the ordinary acceptance payload, exact-self eboot
+SHA-256
+`aad6299d6b245f5e3c2b73f2d125d34b01fa44411f119ff66edb11a80ccb9212`.
+Status afterwards reported `running=none`, and no GPU hang occurred.
+
+## T09 combined public query (2026-09-25)
+
+The integration tree combines the host-query-reset and mirror-clamp work with
+the timeline and separate-depth/stencil work. The SDK-linked public capability
+probe was rebuilt from that tree with every measurement switch off. Its signed
+eboot SHA-256 is
+`d2bb5425d51c11f214efd7533b51c81dab49956e769852eacd9279d98a689248`;
+the build-time matrix snapshot SHA-256 is
+`d9776b6f225ae9c3854dce7c97604ea7fe31325c88eb1846aca08eb9863bdcdf`.
+Strict verification of run
+`20260925T012038463Z_PPSA99994_ps5vk_0x199493f2488f` (log SHA-256
+`f123a5bc4e3e5cf287c1877e7725965cb9c4cd207363adb9499063ef579585ab`)
+found API 1.0.0, 15 device extensions and 32/62 requested query values met.
+The explicit query routes included host reset, sampler mirror clamp, timeline
+semaphores and separate depth/stencil layouts. The title closed cleanly and
+the ordinary acceptance eboot was restored by exact-self readback. Firmware
+was not independently queried in this run.
+
+The checked four-axis matrix is 30/62 ready with 32 blockers. This combined
+probe validates public reporting only; the per-capability GPU witnesses and
+focused CTS receipts remain bound to the separate signed artifacts documented
+above. A combined runtime GPU regression and execution of the real DXVK 2.6.2
+build remain open.
