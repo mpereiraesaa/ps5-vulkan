@@ -245,6 +245,11 @@ def main():
             raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC must be 0 or 1")
         if sample_rate_diagnostic == "1":
             native_cflags.append("-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
+        shader_int8_diagnostic = os.environ.get("PS5VK_SHADER_INT8_DIAGNOSTIC", "0")
+        if shader_int8_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_SHADER_INT8_DIAGNOSTIC must be 0 or 1")
+        if shader_int8_diagnostic == "1":
+            native_cflags.append("-DPS5VK_SHADER_INT8_DIAGNOSTIC=1")
         subgroup_broadcast_diagnostic = os.environ.get(
             "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC", "0")
         if subgroup_broadcast_diagnostic not in ("0", "1"):

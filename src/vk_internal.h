@@ -147,6 +147,8 @@ enum ps5vk_feature_bits {
     /* Independent private compute IAdd route; never a public ARITHMETIC
      * operation or extended-types feature promise. */
     PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE = 1u << 30,
+    /* Internal compute compiler probe only. Never maps to VkPhysicalDeviceFeatures. */
+    PS5VK_FEATURE_SHADER_INT8_COMPUTE = 1u << 31,
 };
 
 /* The original 32-bit feature mask is full once the T08 shader gates land.

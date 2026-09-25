@@ -174,8 +174,8 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyShaderModule(VkDevice d, VkShaderModule m, c
 }
 
 /* OpCapability declarations that name negotiated device features. Int16 is
- * gated by the core shaderInt16 opt-in; Int8 and the broader storage classes
- * remain unsupported. */
+ * gated by shaderInt16; the Int8 compute probe is private and default off.
+ * Broader narrow storage classes remain unsupported. */
 static int spirv_narrow_requirements(const uint32_t *words, size_t count,
                                      uint32_t *required)
 {
@@ -197,9 +197,10 @@ static int spirv_narrow_requirements(const uint32_t *words, size_t count,
                              PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE; break;
             case 5347u: /* PhysicalStorageBufferAddresses */
                 *required |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS; break;
-            case 22u:   /* Int16 */
+            case 39u: /* Int8 */
+                *required |= PS5VK_FEATURE_SHADER_INT8_COMPUTE; break;
+            case 22u: /* Int16 */
                 *required |= PS5VK_FEATURE_SHADER_INT16; break;
-            case 39u:   /* Int8 */
             case 4434u: /* UniformAndStorageBuffer16BitAccess */
             case 4449u: /* UniformAndStorageBuffer8BitAccess */
                 return 0;
@@ -301,10 +302,13 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!d->compiler.resolve && (!d->runtime_compiler_enabled || !d->compiler.compile)) return VK_ERROR_UNKNOWN;
     uint32_t required_features = 0;
+    const uint32_t compile_features =
+        (d->enabled_features & ~PS5VK_FEATURE_SHADER_INT8_COMPUTE) |
+        (d->platform_features & PS5VK_FEATURE_SHADER_INT8_COMPUTE);
     if (!spirv_narrow_requirements(info->stage.module->words,
                                    info->stage.module->word_count,
                                    &required_features) ||
-        (required_features & ~d->enabled_features))
+        (required_features & ~compile_features))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t dims[3];
     if (!local_size(info->stage.module, info->stage.pName, dims)) return VK_ERROR_UNKNOWN;
@@ -317,7 +321,7 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     struct ps5vk_cache_key key;
     if (!ps5vk_cache_build_key(info->stage.module->words, info->stage.module->word_count,
                                info->stage.pName, info->layout,
-                               info->stage.pSpecializationInfo, d->enabled_features,
+                               info->stage.pSpecializationInfo, compile_features,
                                &key)) return INVALID;
     if (d->pipeline_cache) {
             entry = ps5vk_compilation_cache_lookup(d->pipeline_cache, &key, info->stage.module->words);
@@ -327,7 +331,7 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
                 VkResult cr = d->compiler.compile(d->compiler.context,
                     info->stage.module->words, info->stage.module->word_count,
                     info->stage.pName, info->layout, info->stage.pSpecializationInfo,
-                    d->enabled_features,
+                    compile_features,
                     &compiled_storage, &compiled_code);
                 if (cr == VK_SUCCESS) {
                     compiled_storage.code = compiled_code;
