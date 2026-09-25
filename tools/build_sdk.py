@@ -276,7 +276,8 @@ def main():
                      "PS5VK_MAINTENANCE4_DIAGNOSTIC",
                      "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
                      "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
-                     "PS5VK_DXVK_RENDER_DIAGNOSTIC"):
+                     "PS5VK_DXVK_RENDER_DIAGNOSTIC",
+                     "PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC"):
             value = os.environ.get(name, "0")
             if value not in ("0", "1"):
                 raise SystemExit(f"{name} must be 0 or 1")
