@@ -83,7 +83,6 @@ int main(void)
             .extent={128,128,1},.mipLevels=1,.arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,
             .tiling=VK_IMAGE_TILING_OPTIMAL,.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
         VkMemoryRequirements req;
-#if defined(PS5VK_DEPTH_STENCIL_DIAGNOSTIC) && PS5VK_DEPTH_STENCIL_DIAGNOSTIC
         assert(ps5vk_native_image_requirements(&device,&info,&req)==VK_SUCCESS &&
                req.size==131072u && req.alignment==65536u);
         info.arrayLayers=2;
@@ -92,13 +91,6 @@ int main(void)
         assert(ps5vk_native_image_requirements(&device,&info,&req)==VK_ERROR_FORMAT_NOT_SUPPORTED);
         info.mipLevels=1;info.usage|=VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         assert(ps5vk_native_image_requirements(&device,&info,&req)==VK_ERROR_FORMAT_NOT_SUPPORTED);
-#else
-        /* The shipping format table does not publish the row, so neither the
-         * surface nor its target exists. */
-        assert(ps5vk_native_image_requirements(&device,&info,&req)==VK_ERROR_FORMAT_NOT_SUPPORTED);
-        assert(ps5vk_native_target(&device,&view,NULL,&ds)!=VK_SUCCESS && !ds.count);
-        if(0)
-#endif
         {
         assert(ps5vk_native_target(&device,&view,NULL,&ds)==VK_SUCCESS &&
                ds.count==PS5_DEPTH_REGISTER_COUNT);

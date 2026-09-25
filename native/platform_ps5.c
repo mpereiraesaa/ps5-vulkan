@@ -318,6 +318,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     /* Constant, dynamic, four-offset and Dref forms have GPU readback and
      * original CTS coverage at the required offset limits. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
+    /* separateDepthStencilLayouts (DXVK262-T09) and the Vulkan 1.0 extension
+     * route the registry requires for it: VK_KHR_maintenance2 and
+     * VK_KHR_create_renderpass2 over VK_KHR_multiview. Per-aspect layout
+     * state, the two D32_SFLOAT_S8_UINT planes and per-aspect barriers,
+     * load/store and readback passed the public-SDK witness and the focused
+     * original stencil/depth leaves. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |
+        PS5VK_T09_FEATURE_MAINTENANCE2 | PS5VK_T09_FEATURE_CREATE_RENDERPASS2;
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};
@@ -339,23 +347,12 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * properties2. The bounded address witness and two unchanged original
      * buffer-address compute leaves execute through the R32_UINT output. */
     platform->supported_features |= PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS;
-#if defined(PS5VK_TIMELINE_DIAGNOSTIC) && PS5VK_TIMELINE_DIAGNOSTIC
-    /* VK_KHR_timeline_semaphore measurement build (DXVK262-T09). The payload
-     * lives in the queue frontend and advances only when a record retires
-     * after this backend's exact-serial completion. Off by default: the
-     * shipping bit is a separate, evidence-backed promotion. */
+    /* VK_KHR_timeline_semaphore (DXVK262-T09). The payload lives in the
+     * queue frontend and advances only when a record retires after this
+     * backend's exact-serial completion; maxTimelineSemaphoreValueDifference
+     * is UINT64_MAX because every comparison is full-width. Promoted on the
+     * public-SDK witness and the focused original timeline leaves. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;
-#endif
-#if defined(PS5VK_DEPTH_STENCIL_DIAGNOSTIC) && PS5VK_DEPTH_STENCIL_DIAGNOSTIC
-    /* separateDepthStencilLayouts measurement build (DXVK262-T09): per-aspect
-     * layout state, the D32_SFLOAT_S8_UINT planes and the per-aspect barriers
-     * and readback measured by the SDK depth/stencil witness, plus the
-     * extension route the registry requires for it (VK_KHR_maintenance2 and
-     * VK_KHR_create_renderpass2 over the shipping VK_KHR_multiview), so the
-     * focused upstream CTS can negotiate all three. Off by default. */
-    platform->supported_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |
-        PS5VK_T09_FEATURE_MAINTENANCE2 | PS5VK_T09_FEATURE_CREATE_RENDERPASS2;
-#endif
     platform->max_allocation = HEAP_BYTES;
     /* The same initializer the host reporting dump uses; see
      * src/device_profile_report.h. Object-model sizing follows

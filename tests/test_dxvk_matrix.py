@@ -193,8 +193,8 @@ class DxvkMatrixTests(unittest.TestCase):
         # independently witnessed fragment-storage and dual-source features, and
         # the four T05 rasterization and viewport features, and the four T07
         # resource/query features advance; API 1.3 remains a separate blocker.
-        self.assertEqual(25, document["summary"]["satisfied"])
-        self.assertEqual(37, document["summary"]["blocker"])
+        self.assertEqual(28, document["summary"]["satisfied"])
+        self.assertEqual(34, document["summary"]["blocker"])
 
     def test_t07_public_rows_have_all_four_axes_and_original_cts_cases(self):
         rows = {row["id"]: row for row in matrix.generate()["requirements"]}
@@ -220,8 +220,8 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(25, document["summary"]["satisfied"])
-        self.assertEqual(37, document["summary"]["blocker"])
+        self.assertEqual(28, document["summary"]["satisfied"])
+        self.assertEqual(34, document["summary"]["blocker"])
         self.assertEqual(
             [
                          "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
@@ -244,16 +244,65 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
                          "feature:VkPhysicalDeviceVulkan11Features:multiview",
                          "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+                         "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+                         "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
                          "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
                          "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
                          "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
                          "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
-                         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount"
+                         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+                         "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
             ],
             [row["id"] for row in document["requirements"]
              if row["verdict"] == "satisfied"])
         self.assertNotIn("not-run",
                          {row["native"]["state"] for row in document["requirements"]})
+
+    def test_timeline_axes_follow_the_khr_query(self):
+        reports = {"timelineSemaphore": {"kind": "extension-feature", "reported": True,
+                                         "verdict": "satisfied"}}
+        query = {"route": "VK_KHR_timeline_semaphore", "timelineSemaphore": True,
+                 "maxTimelineSemaphoreValueDifference": 2**64 - 1}
+        feature = {"id": matrix.TIMELINE_ID, "expected": True}
+        limit = {"id": matrix.TIMELINE_DIFFERENCE_ID, "expected": 2147483647}
+        self.assertIsNone(matrix.timeline_axes({"id": "x", "expected": 1}, query, set(), reports))
+        for row in (feature, limit):
+            api, implementation = matrix.timeline_axes(
+                row, query, {"VK_KHR_timeline_semaphore"}, reports)
+            self.assertEqual("satisfied", api["state"])
+            self.assertEqual("VK_KHR_timeline_semaphore", api["via"])
+            self.assertEqual("implemented", implementation["state"])
+            # Without the enumerated extension nothing is reachable.
+            api, implementation = matrix.timeline_axes(row, query, set(), reports)
+            self.assertEqual(("blocker", "missing"), (api["state"], implementation["state"]))
+        low = dict(query, maxTimelineSemaphoreValueDifference=2147483646)
+        api, _ = matrix.timeline_axes(limit, low, {"VK_KHR_timeline_semaphore"}, reports)
+        self.assertEqual("blocker", api["state"])
+        for broken in ({"route": "VK_KHR_timeline_semaphore", "timelineSemaphore": True,
+                        "maxTimelineSemaphoreValueDifference": 0},
+                       {"route": "VK_KHR_timeline_semaphore", "timelineSemaphore": False,
+                        "maxTimelineSemaphoreValueDifference": 5},
+                       {"route": "other", "timelineSemaphore": True,
+                        "maxTimelineSemaphoreValueDifference": 5}):
+            with self.assertRaises(ValueError):
+                matrix.timeline_axes(feature, broken, {"VK_KHR_timeline_semaphore"}, reports)
+
+    def test_separate_depth_stencil_axes_need_the_whole_route(self):
+        reports = {"separateDepthStencilLayouts": {"kind": "extension-feature",
+                                                   "reported": True, "verdict": "satisfied"}}
+        query = {"route": "VK_KHR_separate_depth_stencil_layouts",
+                 "separateDepthStencilLayouts": True}
+        row = {"id": matrix.SEPARATE_DEPTH_STENCIL_ID, "expected": True}
+        route = {"VK_KHR_separate_depth_stencil_layouts", "VK_KHR_create_renderpass2",
+                 "VK_KHR_maintenance2", "VK_KHR_multiview"}
+        api, implementation = matrix.separate_depth_stencil_axes(row, query, route, reports)
+        self.assertEqual(("satisfied", "implemented"), (api["state"], implementation["state"]))
+        for missing in sorted(route):
+            api, _ = matrix.separate_depth_stencil_axes(row, query, route - {missing}, reports)
+            self.assertEqual("blocker", api["state"])
+        api, _ = matrix.separate_depth_stencil_axes(
+            row, dict(query, separateDepthStencilLayouts=False), route, reports)
+        self.assertEqual("blocker", api["state"])
 
     def test_capability_probe_accepts_one_strict_run(self):
         """One strict run is evidence; zero runs is not.
@@ -292,8 +341,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(25, document["summary"]["satisfied"])
-                self.assertEqual(37, document["summary"]["blocker"])
+                self.assertEqual(28, document["summary"]["satisfied"])
+                self.assertEqual(34, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 
@@ -408,7 +457,7 @@ class DxvkMatrixTests(unittest.TestCase):
         row["cts"]["state"] = "cts-fail"
         with self.assertRaisesRegex(ValueError, "non-fail-closed"):
             matrix.validate(broken)
-        self.assertEqual({"pass": 26, "fail": 0, "no-evidence": 36},
+        self.assertEqual({"pass": 29, "fail": 0, "no-evidence": 33},
                          document["summary"]["dimensions"]["cts"])
 
     def test_unmapped_cts_allows_artifact_bound_khr_device_scope(self):

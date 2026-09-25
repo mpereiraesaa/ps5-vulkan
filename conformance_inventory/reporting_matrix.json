@@ -2092,6 +2092,32 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
+      "detail": "the Vulkan 1.0 KHR query and opt-in route enables timeline semaphores with full 64-bit payload comparisons; the public-SDK witness and the focused original timeline leaves passed",
+      "feature": "timelineSemaphore",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the Vulkan 1.0 KHR route (maintenance2, create_renderpass2) enables per-aspect D32_SFLOAT_S8_UINT layouts, barriers, load/store and readback; the public-SDK witness and the focused original stencil/depth leaves passed",
+      "feature": "separateDepthStencilLayouts",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
       "detail": "alphaToOneEnable is rejected (src/vk_graphics_pipeline.c)",
       "feature": "alphaToOne",
       "kind": "feature",
@@ -3267,6 +3293,32 @@
       "kind": "extension-feature",
       "profile": "compute",
       "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the Vulkan 1.0 KHR query and opt-in route enables timeline semaphores with full 64-bit payload comparisons; the public-SDK witness and the focused original timeline leaves passed",
+      "feature": "timelineSemaphore",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "separateDepthStencilLayouts",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
       "verdict": "satisfied"
     }
   ],
@@ -9230,7 +9282,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "supported by ['VK_FORMAT_D32_SFLOAT']",
+      "detail": "supported by ['VK_FORMAT_D32_SFLOAT', 'VK_FORMAT_D32_SFLOAT_S8_UINT']",
       "feature": "VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT",
       "formats": [
         "VK_FORMAT_D24_UNORM_S8_UINT",
@@ -27478,9 +27530,18 @@
         "multiview": false,
         "route": "VK_KHR_multiview"
       },
+      "separate_depth_stencil_layouts_query": {
+        "route": "VK_KHR_separate_depth_stencil_layouts",
+        "separateDepthStencilLayouts": false
+      },
       "standard_ubo_query": {
         "route": "VK_KHR_uniform_buffer_standard_layout",
         "uniformBufferStandardLayout": true
+      },
+      "timeline_semaphore_query": {
+        "maxTimelineSemaphoreValueDifference": 18446744073709551615,
+        "route": "VK_KHR_timeline_semaphore",
+        "timelineSemaphore": true
       },
       "vendorID": 4098
     },
@@ -27505,9 +27566,18 @@
         "multiview": true,
         "route": "VK_KHR_multiview"
       },
+      "separate_depth_stencil_layouts_query": {
+        "route": "VK_KHR_separate_depth_stencil_layouts",
+        "separateDepthStencilLayouts": true
+      },
       "standard_ubo_query": {
         "route": "VK_KHR_uniform_buffer_standard_layout",
         "uniformBufferStandardLayout": true
+      },
+      "timeline_semaphore_query": {
+        "maxTimelineSemaphoreValueDifference": 18446744073709551615,
+        "route": "VK_KHR_timeline_semaphore",
+        "timelineSemaphore": true
       },
       "vendorID": 4098
     }
@@ -27859,7 +27929,7 @@
   ],
   "summary": {
     "features": {
-      "satisfied": 118
+      "satisfied": 122
     },
     "format_query_consistency": {
       "satisfied": 60

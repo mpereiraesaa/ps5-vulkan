@@ -1355,19 +1355,11 @@ static int compute_scope(VkPipelineStageFlags stages, VkAccessFlags access)
 }
 static int command_scope(VkPipelineStageFlags stages,VkAccessFlags access)
 { return texture_scope(stages,access) || compute_scope(stages,access); }
-/* Whether per-aspect depth/stencil barriers and the separate/mixed layouts
- * are accepted: only on a device that enabled separateDepthStencilLayouts.
- * The private PS5VK_DEPTH_STENCIL_DIAGNOSTIC build accepts them without the
- * negotiation so the on-console witness can measure the path before any
- * build advertises the feature. */
+/* Whether per-aspect depth/stencil barriers and the separate layouts are
+ * accepted: only on a device that enabled separateDepthStencilLayouts. */
 static VkBool32 separate_depth_stencil_layouts(VkDevice d)
 {
-#if defined(PS5VK_DEPTH_STENCIL_DIAGNOSTIC) && PS5VK_DEPTH_STENCIL_DIAGNOSTIC
-    (void)d;
-    return VK_TRUE;
-#else
     return (d->enabled_features_t09 & PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS) != 0;
-#endif
 }
 static int image_barrier_profile(const VkImageMemoryBarrier *b,
     VkPipelineStageFlags src_stage,VkPipelineStageFlags dst_stage)

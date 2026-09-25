@@ -39,9 +39,11 @@ class DxvkBacklogTests(unittest.TestCase):
         # rows on 2026-09-24.
         # The Vulkan 1.0 KHR DeviceScope route has ordinary SDK execution and
         # public-query evidence; original message-passing CTS is ineligible.
-        self.assertEqual(24, summary["implementation_ready"])
-        self.assertEqual(24, summary["profile_satisfied"])
-        self.assertEqual(37, summary["remaining_profile_blockers"])
+        # T09 then promoted timelineSemaphore, maxTimelineSemaphoreValueDifference
+        # and separateDepthStencilLayouts through their Vulkan 1.0 KHR routes.
+        self.assertEqual(27, summary["implementation_ready"])
+        self.assertEqual(27, summary["profile_satisfied"])
+        self.assertEqual(34, summary["remaining_profile_blockers"])
         self.assertEqual({
             "api-version": 1,
             "extension": 2,

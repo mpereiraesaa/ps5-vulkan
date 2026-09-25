@@ -139,6 +139,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                         PS5VK_FEATURE_TEXTURE_COMPRESSION_BC |
                                         PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
                                         PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
+    /* DXVK262-T09, mirroring native/platform_ps5.c: timeline semaphores on
+     * every profile, and separateDepthStencilLayouts with its
+     * maintenance2/create_renderpass2 route on the graphics submit path. */
+    platform->supported_features_t09 = PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE;
+    if (graphics_submit)
+        platform->supported_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS |
+                                            PS5VK_T09_FEATURE_MAINTENANCE2 |
+                                            PS5VK_T09_FEATURE_CREATE_RENDERPASS2;
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
@@ -586,8 +594,14 @@ int main(int argc, char **argv)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR};
     VkPhysicalDeviceBufferDeviceAddressFeaturesKHR device_address = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR};
+    VkPhysicalDeviceTimelineSemaphoreFeatures timeline = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES};
+    VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures separate_layouts = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES};
     VkPhysicalDeviceMultiviewProperties multiview_properties = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
+    VkPhysicalDeviceTimelineSemaphoreProperties timeline_properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES};
     uint32_t extensions = 0;
     (void)vkEnumerateDeviceExtensionProperties(dump_physical, NULL, &extensions, NULL);
     char **extension_names = extensions ? calloc(extensions, sizeof(*extension_names)) : NULL;
@@ -603,6 +617,9 @@ int main(int argc, char **argv)
     multiview.pNext = &standard_ubo;
     standard_ubo.pNext = &memory_model;
     memory_model.pNext = &device_address;
+    device_address.pNext = &timeline;
+    timeline.pNext = &separate_layouts;
+    multiview_properties.pNext = &timeline_properties;
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = &storage8};
     vkGetPhysicalDeviceFeatures2KHR(dump_physical, &features2);
@@ -633,6 +650,16 @@ int main(int argc, char **argv)
         device_address.bufferDeviceAddress ? "true" : "false",
         device_address.bufferDeviceAddressCaptureReplay ? "true" : "false",
         device_address.bufferDeviceAddressMultiDevice ? "true" : "false");
+    fprintf(stdout, "  \"timelineSemaphoreQuery\": {\"route\": "
+                    "\"VK_KHR_timeline_semaphore\", "
+                    "\"timelineSemaphore\": %s, "
+                    "\"maxTimelineSemaphoreValueDifference\": %llu},\n",
+        timeline.timelineSemaphore ? "true" : "false",
+        (unsigned long long)timeline_properties.maxTimelineSemaphoreValueDifference);
+    fprintf(stdout, "  \"separateDepthStencilLayoutsQuery\": {\"route\": "
+                    "\"VK_KHR_separate_depth_stencil_layouts\", "
+                    "\"separateDepthStencilLayouts\": %s},\n",
+        separate_layouts.separateDepthStencilLayouts ? "true" : "false");
     fprintf(stdout, "  \"extensionCount\": %u,\n", extensions);
     fputs("  \"extensions\": [", stdout);
     for (uint32_t i = 0; i < extensions; ++i)
@@ -651,7 +678,9 @@ int main(int argc, char **argv)
                     "    \"uniformBufferStandardLayout\": %s,\n"
                     "    \"vulkanMemoryModel\": %s,\n"
                     "    \"vulkanMemoryModelDeviceScope\": %s,\n"
-                    "    \"bufferDeviceAddress\": %s\n"
+                    "    \"bufferDeviceAddress\": %s,\n"
+                    "    \"timelineSemaphore\": %s,\n"
+                    "    \"separateDepthStencilLayouts\": %s\n"
                     "  },\n",
         storage8.storageBuffer8BitAccess ? "true" : "false",
         storage8.uniformAndStorageBuffer8BitAccess ? "true" : "false",
@@ -665,7 +694,9 @@ int main(int argc, char **argv)
         standard_ubo.uniformBufferStandardLayout ? "true" : "false",
         memory_model.vulkanMemoryModel ? "true" : "false",
         memory_model.vulkanMemoryModelDeviceScope ? "true" : "false",
-        device_address.bufferDeviceAddress ? "true" : "false");
+        device_address.bufferDeviceAddress ? "true" : "false",
+        timeline.timelineSemaphore ? "true" : "false",
+        separate_layouts.separateDepthStencilLayouts ? "true" : "false");
     free(extension_names);
     free(extension_properties);
 

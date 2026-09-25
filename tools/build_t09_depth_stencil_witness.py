@@ -75,10 +75,9 @@ def main() -> None:
     (build / "t09_depth_stencil_shaders.h").write_text(
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
 
-    # The private measurement switch affects only this payload's SDK archive:
-    # it publishes D32_SFLOAT_S8_UINT and the per-aspect barriers.
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk),
-                   PS5VK_DEPTH_STENCIL_DIAGNOSTIC="1")
+    # The ordinary staged SDK: D32_SFLOAT_S8_UINT and the separate-layout
+    # route are part of the shipping profile, negotiated by the witness.
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t09_depth_stencil_witness/main.c"
@@ -136,7 +135,7 @@ def main() -> None:
     artifact = {
         "profile": "t09-depth-stencil-public-sdk-witness",
         "extent": 64, "format": "D32_SFLOAT_S8_UINT",
-        "diagnostic_switch": "PS5VK_DEPTH_STENCIL_DIAGNOSTIC=1",
+        "diagnostic_switch": None,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),

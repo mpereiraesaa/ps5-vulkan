@@ -245,6 +245,59 @@ class DxvkProbeTests(unittest.TestCase):
         fixture.write(records)
         self.assertEqual(2, fixture.validate()["satisfied"])
 
+    def test_timeline_positive_requires_exact_khr_query(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        feature = "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore"
+        limit = "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+        maximum = 18446744073709551615
+        records = list(fixture.records)
+        for identifier, value in ((feature, 1), (limit, maximum)):
+            index = next(i for i, record in enumerate(records) if f"id={identifier} " in record)
+            records[index] = records[index].replace("observed=0 status=blocker",
+                                                     f"observed={value} status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                         "satisfied=3 blockers=59")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "explicit timeline semaphore query route"):
+            fixture.validate()
+        route = ("DXVK262_TIMELINE_SEMAPHORE_QUERY route=VK_KHR_timeline_semaphore "
+                 f"timelineSemaphore=1 maxTimelineSemaphoreValueDifference={maximum}")
+        records.insert(1, route)
+        fixture.write(records)
+        result = fixture.validate()
+        self.assertEqual(3, result["satisfied"])
+        self.assertEqual(maximum, result["observed"][limit])
+        records[1] = route.replace(str(maximum), "2147483647")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError, "timeline semaphore route value mismatch"):
+            fixture.validate()
+
+    def test_separate_depth_stencil_positive_requires_exact_khr_query(self):
+        fixture = ProbeFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        identifier = "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts"
+        records = list(fixture.records)
+        index = next(i for i, record in enumerate(records) if f"id={identifier} " in record)
+        records[index] = records[index].replace("observed=0 status=blocker",
+                                                 "observed=1 status=satisfied")
+        records[-1] = records[-1].replace("satisfied=1 blockers=61",
+                                         "satisfied=2 blockers=60")
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError,
+                                    "explicit separate depth/stencil layouts query route"):
+            fixture.validate()
+        route = ("DXVK262_SEPARATE_DEPTH_STENCIL_LAYOUTS_QUERY "
+                 "route=VK_KHR_separate_depth_stencil_layouts separateDepthStencilLayouts=1")
+        records.insert(1, route)
+        fixture.write(records)
+        self.assertEqual(2, fixture.validate()["satisfied"])
+        records.insert(1, route)
+        fixture.write(records)
+        with self.assertRaisesRegex(ValueError,
+                                    "explicit separate depth/stencil layouts query route"):
+            fixture.validate()
+
     def test_historical_matrix_snapshot_remains_hash_bound(self):
         fixture = ProbeFixture()
         self.addCleanup(fixture.tmp.cleanup)
