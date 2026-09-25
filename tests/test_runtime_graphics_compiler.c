@@ -620,6 +620,94 @@ static void check_depth_kill_forms(void)
     assert(published_control==0x10u && published_removal==0x50u);
 }
 
+/* The fragment module without its OpExtension instructions: DXVK 2.6.2's
+ * DXBC compiler emits OpDemoteToHelperInvocation in SPIR-V 1.6 with the core
+ * capability and no SPV_EXT_demote_to_helper_invocation declaration, while
+ * glslang still declares the extension. */
+static struct ps5vk_graphics_module_key without_extensions(
+    const struct ps5vk_graphics_module_key *m)
+{
+    uint32_t *words=malloc(m->word_count*sizeof(*words));assert(words);
+    size_t kept=0;
+    for(size_t at=0;at<m->word_count;) {
+        const size_t length=at<5?1:(m->words[at]>>16);
+        assert(length);
+        if(at<5 || (m->words[at]&0xffffu)!=10u)
+            memcpy(words+kept,m->words+at,length*sizeof(*words)),kept+=length;
+        at+=length;
+    }
+    return (struct ps5vk_graphics_module_key){.words=words,.word_count=kept,.entry=m->entry};
+}
+
+/* DXVK262-T11 demote versus terminate. A demoted invocation stops writing but
+ * keeps executing as a helper, so derivatives its quad computes afterwards
+ * stay defined; a terminated one is gone. The fixture removes the top-left
+ * lane of every quad and then takes dFdx/dFdy that read it. The pinned
+ * compiler lowers OpKill to demote (RADV's discard_is_demote) and
+ * OpTerminateInvocation to terminate, so the contract is on the machine code
+ * itself: every demote spelling (SPIR-V 1.6 core as DXVK emits it, 1.6 with
+ * the extension declared, 1.3 with SPV_EXT_demote_to_helper_invocation) and
+ * OpKill compile to one program; both terminate spellings (SPIR-V 1.6 core,
+ * 1.0 with SPV_KHR_terminate_invocation) compile to another; and the two
+ * differ from each other and from the no-removal control. */
+static void check_helper_derivative_forms(void)
+{
+    enum { CONTROL, KILL, DEMOTE, DEMOTE_EXT, DEMOTE_DXVK, TERMINATE, TERMINATE_KHR, FORMS };
+    static const char *paths[FORMS]={
+        "build/runtime-graphics/helper_control.frag.spv",
+        "build/runtime-graphics/helper_kill.frag.spv",
+        "build/runtime-graphics/helper_demote.frag.spv",
+        "build/runtime-graphics/helper_demote_ext.frag.spv",
+        "build/runtime-graphics/helper_demote.frag.spv",
+        "build/runtime-graphics/helper_terminate.frag.spv",
+        "build/runtime-graphics/helper_terminate_khr.frag.spv",
+    };
+    static const uint32_t versions[FORMS]={0x00010000u,0x00010000u,0x00010600u,
+        0x00010300u,0x00010600u,0x00010600u,0x00010000u};
+    static const uint32_t removal[FORMS]={0,252u,5380u,5380u,5380u,4416u,4416u};
+    uint32_t *code[FORMS]={NULL};size_t bytes[FORMS]={0};
+    for(unsigned f=0;f<FORMS;++f) {
+        struct ps5vk_graphics_module_key fragment=read_module(paths[f]);
+        if(f==DEMOTE_DXVK) {
+            struct ps5vk_graphics_module_key stripped=without_extensions(&fragment);
+            assert(stripped.word_count<fragment.word_count);
+            free((void *)fragment.words);fragment=stripped;
+            for(size_t at=5;at<fragment.word_count;at+=fragment.words[at]>>16)
+                assert((fragment.words[at]&0xffffu)!=10u);
+        }
+        assert(fragment.words[1]==versions[f]);
+        for(unsigned other=1;other<FORMS;++other)
+            assert(module_has_opcode(&fragment,removal[other])==
+                   (removal[f]==removal[other] && removal[f]));
+        struct ps5vk_graphics_key key={
+            .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+            .fragment=fragment,.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+            .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+        assert(ps5vk_spirv_graphics_interface(&key));
+        const void *out=NULL;
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+        const struct ps5vk_runtime_graphics_program *program=out;
+        PsbcShaderMetadata *m=(PsbcShaderMetadata *)&program->fragment.metadata;
+        const PsbcRegisterWrite *db=context_register(m,0x203u);
+        assert(db && db->value==(f==CONTROL?0x10u:0x50u));
+        /* A colour export exists, so no export-memory rewrite applies. */
+        const PsbcRegisterWrite *format=context_register(m,0x1c5u);
+        assert(format && format->value);
+        bytes[f]=program->fragment.machine_code_size;
+        code[f]=malloc(bytes[f]);assert(code[f] && bytes[f]);
+        memcpy(code[f],program->fragment.machine_code,bytes[f]);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)key.vertex.words);free((void *)key.fragment.words);
+    }
+#define SAME(a,b) (bytes[a]==bytes[b] && !memcmp(code[a],code[b],bytes[a]))
+    assert(SAME(KILL,DEMOTE) && SAME(DEMOTE,DEMOTE_EXT) && SAME(DEMOTE,DEMOTE_DXVK));
+    assert(SAME(TERMINATE,TERMINATE_KHR));
+    assert(!SAME(DEMOTE,TERMINATE) && !SAME(CONTROL,DEMOTE) && !SAME(CONTROL,TERMINATE));
+#undef SAME
+    for(unsigned f=0;f<FORMS;++f)free(code[f]);
+}
+
 static void check_clip_cull_distances(void)
 {
     struct ps5vk_graphics_key key={
@@ -2487,6 +2575,7 @@ int main(void)
     check_clip_cull_distances();
     check_depth_only_target();
     check_depth_kill_forms();
+    check_helper_derivative_forms();
     check_fragment_distance_read();
     check_fragment_position();
     check_sample_rate_compilation();
