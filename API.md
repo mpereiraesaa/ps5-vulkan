@@ -5,12 +5,13 @@ PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely. Each
 capability below states its evidence boundary when it is narrower than native
 hardware acceptance.
 
-This document describes the ordinary build at the T07 `main` checkpoint.
-Earlier measurements below are dated history, not the current advertised
-profile. A missing focused CTS result is not, by itself, a reason to reject an
-otherwise implemented and strictly GPU-witnessed capability; an observed CTS
-failure remains a defect to investigate. The public device still reports
-Vulkan 1.0, and no complete 1.1/1.2/1.3 core contract is claimed.
+This document describes the current ordinary Vulkan 1.0 build, including the
+T08 and T09 extension routes. Earlier measurements below are dated history,
+not the current advertised profile. A missing focused CTS result is not, by
+itself, a reason to reject an otherwise implemented and strictly GPU-witnessed
+capability; an observed CTS failure remains a defect to investigate. The public
+device still reports Vulkan 1.0, and no complete 1.1/1.2/1.3 core contract is
+claimed.
 
 ## Capability introspection
 
