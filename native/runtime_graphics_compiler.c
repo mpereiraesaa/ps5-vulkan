@@ -499,6 +499,12 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
      * This adapter checks modules, interfaces and the bounded pipeline shape;
      * it is not a feature-promotion gate. Native queue ownership and feature
      * negotiation are checked independently. */
+    /* Transform feedback (DXVK262-T14) is compiled only through the merged
+     * vertex+geometry program's no-GDS capture lowering; a capture without a
+     * geometry stage, or under tessellation, has no program here. */
+    if(key->transform_feedback_buffers &&
+       (!ps5vk_graphics_has_geometry(key) || ps5vk_graphics_has_tessellation(key) ||
+        key->transform_feedback_buffers>0xfu))return ps5vk_reject(key,27);
     if(ps5vk_graphics_has_tessellation(key)) {
         if(ps5vk_graphics_has_geometry(key) &&
            (key->geometry.specialization_count>64 || !module_supported(&key->geometry,3,key->feature_mask)))
@@ -1156,6 +1162,10 @@ static VkResult runtime_graphics_compile(const struct ps5vk_graphics_key *key,co
             key->geometry.specialization_count?&key->geometry:&key->vertex;
         if(!apply_parameters(&options,specialized,key,
                 VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_GEOMETRY_BIT))goto failed;
+        /* A capture pipeline reserves its buffer ranges with global atomics on
+         * the begin's control block instead of GDS (psbc
+         * ps5_global_streamout): this platform has no GDS allocation route. */
+        options.ps5_global_streamout=key->transform_feedback_buffers!=0;
         result=psbc_compile_geometry_pipeline(key->vertex.words,key->vertex.word_count*4u,
             key->geometry.words,key->geometry.word_count*4u,&options,&p->vertex);
     } else {
@@ -1170,6 +1180,11 @@ static VkResult runtime_graphics_compile(const struct ps5vk_graphics_key *key,co
      * consumes a capability the application never enabled. */
     if(!ps5vk_runtime_graphics_feature_use_ok(&p->vertex.metadata,&p->fragment.metadata,
         key->feature_mask))goto failed;
+    /* The compiled capture must be exactly the one the pipeline declared: the
+     * same written buffers (the metadata mask has one nibble per stream),
+     * each with a stride, and none at all without a capture. */
+    if(!ps5vk_runtime_streamout_matches(&p->vertex.metadata,key->transform_feedback_buffers))
+        goto failed;
     /* The pixel end of the clip/cull interface is delivered only when the
      * compiled metadata describes it end to end: the pre-raster stage names each
      * packed distance register it exports (parameter index included) and the

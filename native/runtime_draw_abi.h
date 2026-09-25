@@ -68,6 +68,10 @@ struct ps5vk_runtime_draw_abi {
      * property rather than a per-draw one, so it travels in this struct
      * beside the slot instead of through the value builder's parameters. */
     uint32_t ring_table_valid, ring_table_slot;
+    /* VK_EXT_transform_feedback (DXVK262-T14): the merged geometry program's
+     * streamout table pointer slot, and the low word of the table the draw
+     * captures through (set per draw by the queue, zero until then). */
+    uint32_t streamout_valid, streamout_slot, streamout_low;
     uint32_t ring_table_low, ring_table_high;
     /* DIAGNOSTIC (legacy hardware-VS launch): 1 when the pre-raster program
      * that launches is a legacy hardware VS, whose user data lives at
@@ -121,13 +125,17 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
      * the pair has to fit inside the window and both halves have to be
      * checked for collisions, not just the first. */
     if(a->ring_table_valid && a->ring_table_slot+1u>=a->vertex_count)return -1;
-    uint32_t slots[9]={a->base_vertex_slot,a->start_instance_slot,a->draw_id_slot,
+    if(a->streamout_valid>1 ||
+       (!a->streamout_valid && (a->streamout_slot || a->streamout_low)) ||
+       (a->streamout_low & 15u))return -1;
+    uint32_t slots[10]={a->base_vertex_slot,a->start_instance_slot,a->draw_id_slot,
         a->view_index_slot,
         a->vertex_buffer_valid?a->vertex_buffer_slot:UINT32_MAX,
         a->lds_slot,a->vertex_push_slot,
         a->ring_table_valid?a->ring_table_slot:UINT32_MAX,
-        a->ring_table_valid?a->ring_table_slot+1u:UINT32_MAX};
-    for(unsigned i=0;i<9;++i) {
+        a->ring_table_valid?a->ring_table_slot+1u:UINT32_MAX,
+        a->streamout_valid?a->streamout_slot:UINT32_MAX};
+    for(unsigned i=0;i<10;++i) {
         if(slots[i]==UINT32_MAX)continue;
         if(slots[i]>=a->vertex_count)return -1;
         for(unsigned j=0;j<i;++j)if(slots[i]==slots[j])return -1;
@@ -141,7 +149,7 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
         pixel[a->fragment_view_index_slot]=view_index;
         pixel_used|=1u<<a->fragment_view_index_slot;
     }
-    for(unsigned i=0;i<9;++i)if(slots[i]!=UINT32_MAX)vertex_used|=1u<<slots[i];
+    for(unsigned i=0;i<10;++i)if(slots[i]!=UINT32_MAX)vertex_used|=1u<<slots[i];
     if(a->base_vertex_slot!=UINT32_MAX)vertex[a->base_vertex_slot]=base_vertex;
     if(a->start_instance_slot!=UINT32_MAX)vertex[a->start_instance_slot]=instance;
     if(a->draw_id_slot!=UINT32_MAX)vertex[a->draw_id_slot]=draw_index;
@@ -151,6 +159,7 @@ static inline int ps5vk_runtime_draw_values_sets(const struct ps5vk_runtime_draw
         vertex[a->vertex_buffer_slot]=vertex_buffer_low;
     } else if(vertex_buffer_low)return -1;
     if(a->lds_slot!=UINT32_MAX)vertex[a->lds_slot]=a->lds_value;
+    if(a->streamout_valid)vertex[a->streamout_slot]=a->streamout_low;
     if(a->ring_table_valid) {
         vertex[a->ring_table_slot]=a->ring_table_low;
         vertex[a->ring_table_slot+1u]=a->ring_table_high;

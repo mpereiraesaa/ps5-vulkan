@@ -46,7 +46,10 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
          * (DXVK262-T06): the sample-shading flag, the minSampleShading fraction
          * the pixel iteration count is derived from, and the sample mask. */
         SAMPLE_WORDS=3,
-        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS+TESS_WORDS+BLEND_WORDS+SAMPLE_WORDS };
+        /* VK_EXT_transform_feedback (DXVK262-T14): the captured buffer mask
+         * selects the compiler's capture lowering, and rasterizer discard. */
+        XFB_WORDS=2,
+        HEADER_WORDS=48+PS5VK_MAX_PUSH_CONSTANT_DWORDS+2+64*4*2+DESCRIPTOR_WORDS+VERTEX_WORDS+GEOMETRY_WORDS+TESS_WORDS+BLEND_WORDS+SAMPLE_WORDS+XFB_WORDS };
     const int has_geometry=ps5vk_graphics_has_geometry(key);
     const int has_tessellation=ps5vk_graphics_tessellation_key_valid(key);
     size_t count=HEADER_WORDS+key->vertex.word_count+key->fragment.word_count+
@@ -178,6 +181,8 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     { uint32_t min_bits; memcpy(&min_bits,&key->min_sample_shading,sizeof(min_bits));
       words[at++]=min_bits; }
     words[at++]=key->sample_mask;
+    words[at++]=key->transform_feedback_buffers;
+    words[at++]=key->rasterizer_discard?1u:0u;
     if(at!=HEADER_WORDS){free(words);return NULL;}
     memcpy(words+HEADER_WORDS,key->vertex.words,key->vertex.word_count*4);
     memcpy(words+HEADER_WORDS+key->vertex.word_count,key->fragment.words,key->fragment.word_count*4);
@@ -196,7 +201,7 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
     /* The key stream changed shape with the tessellation pair, so the name that
      * identifies the layout moves with it: a cache populated by the earlier
      * layout must never be read as if it had this one. */
-    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v9",
+    if(!ps5vk_cache_build_stage_key(words,count,"graphics-pair-v10",
             VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|
             (has_geometry?VK_SHADER_STAGE_GEOMETRY_BIT:0)|
             (has_tessellation?(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT|
