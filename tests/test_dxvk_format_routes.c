@@ -455,11 +455,11 @@ static void object_routes(void)
     assert(ps5vk_texture_descriptor(&d, &forged, sampler, native_words) ==
            VK_ERROR_FEATURE_NOT_PRESENT);
 
-    /* The tiled colour readback of the mutable render target is the whole
-     * surface into offset zero. The first native run of the mutable-view
-     * witness packed three readbacks into one buffer; the copy at
-     * bufferOffset 1024 was refused while recording (unmarked), and the next
-     * vkCmdPipelineBarrier reported the invalid command buffer. */
+    /* The tiled colour readback of the mutable render target. The first
+     * native run of the mutable-view witness packed three readbacks into one
+     * buffer, and the copy at a nonzero bufferOffset was refused while
+     * recording. General colour readback regions (texel-aligned offset inside
+     * the buffer) now record that copy too, so both offsets are accepted. */
     {
         VkBufferCreateInfo buffer_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .size = 3 * 64 * 64 * 4, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -491,11 +491,9 @@ static void object_routes(void)
             region.bufferOffset = n ? 64 * 64 * 4 : 0;
             vkCmdCopyImageToBuffer(commands[n], rt, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                    readback, 1, &region);
-            assert(vkEndCommandBuffer(commands[n]) ==
-                   (n ? VK_ERROR_UNKNOWN : VK_SUCCESS));
+            assert(vkEndCommandBuffer(commands[n]) == VK_SUCCESS);
         }
-        assert(d.lifetime_errors == errors_before + 1);
-        d.lifetime_errors = errors_before;
+        assert(d.lifetime_errors == errors_before);
         vkDestroyCommandPool(&d, pool, NULL);
         vkDestroyBuffer(&d, readback, NULL);
         vkFreeMemory(&d, readback_memory, NULL);
