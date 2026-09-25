@@ -706,6 +706,43 @@ int main(void)
         d.enabled_features&=~PS5VK_FEATURE_GEOMETRY_SHADER;
         vkDestroyShaderModule(&d,geometry_module,NULL);
     }
+    /* Transform feedback is not negotiated on this device: a vertex stage that
+     * declares the Xfb execution mode is refused at its own site, before any
+     * backend work, even though a program record with the same words exists. */
+    {
+        extern unsigned ps5vk_pipeline_refusal_site(void);
+        uint32_t xfb_vs[]={0x07230203,0x10000,0,2,0,(5u<<16)|15,0,1,0x6e69616d,0,
+            (3u<<16)|16,1,11};
+        VkShaderModule xfb_module;
+        VkShaderModuleCreateInfo xmi={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(xfb_vs),.pCode=xfb_vs};
+        assert(vkCreateShaderModule(&d,&xmi,NULL,&xfb_module)==VK_SUCCESS);
+        struct ps5vk_graphics_program xfb_program=program;
+        xfb_program.key.vertex.words=xfb_vs;
+        xfb_program.key.vertex.word_count=sizeof(xfb_vs)/sizeof(xfb_vs[0]);
+        struct ps5vk_graphics_library xfb_library={&xfb_program,1};
+        d.graphics_library=&xfb_library;
+        VkPipelineShaderStageCreateInfo xfb_stages[2]={stages[0],stages[1]};
+        xfb_stages[0].module=xfb_module;
+        VkGraphicsPipelineCreateInfo xfb_info=info;
+        xfb_info.pStages=xfb_stages;
+        const unsigned created_before=created;
+        VkPipeline xfb_pipeline=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&xfb_info,NULL,&xfb_pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !xfb_pipeline);
+        assert(ps5vk_pipeline_refusal_site()==19 && created==created_before);
+        /* The same module without the execution mode is the ordinary vertex
+         * stage and is accepted. */
+        xfb_vs[10]=(3u<<16)|16;xfb_vs[11]=1;xfb_vs[12]=0x7fffffffu;
+        vkDestroyShaderModule(&d,xfb_module,NULL);
+        assert(vkCreateShaderModule(&d,&xmi,NULL,&xfb_module)==VK_SUCCESS);
+        xfb_stages[0].module=xfb_module;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&xfb_info,NULL,&xfb_pipeline)==VK_SUCCESS &&
+               xfb_pipeline && xfb_pipeline->graphics);
+        vkDestroyPipeline(&d,xfb_pipeline,NULL);
+        vkDestroyShaderModule(&d,xfb_module,NULL);
+        d.graphics_library=&library;
+    }
     /* The tessellation contract: the control and evaluation stages are
      * described and validated, and the pipeline is then refused because the
      * pinned compiler emits no loadable package for them. PATCH_LIST without
