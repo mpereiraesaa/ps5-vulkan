@@ -1137,9 +1137,9 @@ static void negative(void)
     ii.ppEnabledExtensionNames = &unknown_instance_extension;
     assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_EXTENSION_NOT_PRESENT);
     ii.enabledExtensionCount = 0; ii.ppEnabledExtensionNames = NULL;
-    VkApplicationInfo ai = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .apiVersion = VK_API_VERSION_1_1};
+    VkApplicationInfo ai = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pNext = &ai};
     ii.pApplicationInfo = &ai;
-    assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_INCOMPATIBLE_DRIVER); ii.pApplicationInfo = NULL;
+    assert(vkCreateInstance(&ii, NULL, &i) == VK_ERROR_UNKNOWN && !i); ii.pApplicationInfo = NULL;
     i = instance(); VkPhysicalDevice p = physical(i);
     VkDeviceQueueCreateInfo q; float priority; VkDeviceCreateInfo info = device_info(&q, &priority);
     VkDevice d; unsigned before = opened;
@@ -2092,6 +2092,137 @@ static void single_device_group_creation(void)
     vkDestroyInstance(i, NULL);
 }
 
+/* A Vulkan 1.1 instance accepts every requested apiVersion (DXVK 2.6.2 asks
+ * for 1.3) and resolves the core 1.1 instance- and physical-device-level names.
+ * The physical device keeps reporting Vulkan 1.0 and the device-level core 1.1
+ * names stay absent. */
+static void vulkan11_instance_version(void)
+{
+    uint32_t version = 0;
+    PFN_vkEnumerateInstanceVersion enumerate_version = (PFN_vkEnumerateInstanceVersion)
+        vkGetInstanceProcAddr(NULL, "vkEnumerateInstanceVersion");
+    assert(enumerate_version == vkEnumerateInstanceVersion);
+    assert(enumerate_version(&version) == VK_SUCCESS && version == VK_API_VERSION_1_1);
+    assert(enumerate_version(NULL) == VK_ERROR_UNKNOWN);
+    assert(!vkGetInstanceProcAddr(NULL, "vkEnumeratePhysicalDeviceGroups"));
+
+    const uint32_t requests[] = {
+        VK_API_VERSION_1_1, VK_API_VERSION_1_2, VK_API_VERSION_1_3,
+        VK_MAKE_API_VERSION(0, 1, 3, 204), VK_MAKE_API_VERSION(0, 2, 0, 0)};
+    for (size_t n = 0; n < sizeof(requests) / sizeof(requests[0]); ++n) {
+        VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = requests[n]};
+        VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &app};
+        VkInstance i = VK_NULL_HANDLE;
+        assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS && i);
+        assert(i->api_version == VK_API_VERSION_1_1);
+        VkPhysicalDevice p = physical(i);
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(p, &properties);
+        assert(properties.apiVersion == VK_API_VERSION_1_0);
+        assert(vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroups") ==
+               (PFN_vkVoidFunction)vkEnumeratePhysicalDeviceGroups);
+        assert(!vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroupsKHR"));
+        assert(!vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceFeatures2KHR"));
+        assert(vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceFeatures2") ==
+               (PFN_vkVoidFunction)vkGetPhysicalDeviceFeatures2);
+        assert(vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceExternalSemaphoreProperties") ==
+               (PFN_vkVoidFunction)vkGetPhysicalDeviceExternalSemaphoreProperties);
+        /* Device-level core 1.1 names stay absent from both lookups. */
+        assert(!vkGetInstanceProcAddr(i, "vkTrimCommandPool"));
+        assert(!vkGetInstanceProcAddr(i, "vkGetDeviceQueue2"));
+        assert(!vkGetInstanceProcAddr(i, "vkBindBufferMemory2"));
+        /* The core query names answer exactly as the KHR route does. */
+        VkPhysicalDeviceFeatures2 core = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        VkPhysicalDeviceFeatures2 khr = core;
+        vkGetPhysicalDeviceFeatures2(p, &core);
+        vkGetPhysicalDeviceFeatures2KHR(p, &khr);
+        assert(!memcmp(&core.features, &khr.features, sizeof(core.features)));
+        VkPhysicalDeviceProperties2 properties2 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+        vkGetPhysicalDeviceProperties2(p, &properties2);
+        assert(properties2.properties.apiVersion == VK_API_VERSION_1_0);
+        VkQueueFamilyProperties2 family = {.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2};
+        uint32_t families = 1;
+        vkGetPhysicalDeviceQueueFamilyProperties2(p, &families, &family);
+        assert(families == 1 && family.queueFamilyProperties.queueCount == 1);
+        VkPhysicalDeviceExternalBufferInfo buffer_info = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO,
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT};
+        VkExternalBufferProperties buffer_external = {
+            .sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES,
+            .externalMemoryProperties = {1, 1, 1}};
+        vkGetPhysicalDeviceExternalBufferProperties(p, &buffer_info, &buffer_external);
+        assert(!buffer_external.externalMemoryProperties.externalMemoryFeatures &&
+               !buffer_external.externalMemoryProperties.exportFromImportedHandleTypes &&
+               !buffer_external.externalMemoryProperties.compatibleHandleTypes);
+        VkPhysicalDeviceExternalFenceInfo fence_info = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FENCE_INFO,
+            .handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT};
+        VkExternalFenceProperties fence_external = {
+            .sType = VK_STRUCTURE_TYPE_EXTERNAL_FENCE_PROPERTIES,
+            .exportFromImportedHandleTypes = 1, .compatibleHandleTypes = 1,
+            .externalFenceFeatures = 1};
+        vkGetPhysicalDeviceExternalFenceProperties(p, &fence_info, &fence_external);
+        assert(!fence_external.exportFromImportedHandleTypes &&
+               !fence_external.compatibleHandleTypes && !fence_external.externalFenceFeatures);
+        VkPhysicalDeviceExternalSemaphoreInfo semaphore_info = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO,
+            .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT};
+        VkExternalSemaphoreProperties semaphore_external = {
+            .sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES,
+            .exportFromImportedHandleTypes = 1, .compatibleHandleTypes = 1,
+            .externalSemaphoreFeatures = 1};
+        vkGetPhysicalDeviceExternalSemaphoreProperties(p, &semaphore_info, &semaphore_external);
+        assert(!semaphore_external.exportFromImportedHandleTypes &&
+               !semaphore_external.compatibleHandleTypes &&
+               !semaphore_external.externalSemaphoreFeatures);
+        uint32_t count = 0;
+        assert(vkEnumeratePhysicalDeviceGroups(i, &count, NULL) == VK_SUCCESS && count == 1);
+        VkPhysicalDeviceGroupProperties group = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES};
+        assert(vkEnumeratePhysicalDeviceGroups(i, &count, &group) == VK_SUCCESS &&
+               count == 1 && group.physicalDeviceCount == 1 &&
+               group.physicalDevices[0] == p && !group.subsetAllocation);
+        assert(vkEnumeratePhysicalDeviceGroupsKHR(i, &count, NULL) == VK_ERROR_UNKNOWN);
+        vkDestroyInstance(i, NULL);
+    }
+
+    const uint32_t legacy[] = {0, VK_API_VERSION_1_0, VK_MAKE_API_VERSION(0, 1, 0, 300),
+                               VK_MAKE_API_VERSION(0, 0, 9, 0)};
+    for (size_t n = 0; n < sizeof(legacy) / sizeof(legacy[0]); ++n) {
+        VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = legacy[n]};
+        VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &app};
+        VkInstance i = VK_NULL_HANDLE;
+        assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS);
+        assert(i->api_version == VK_API_VERSION_1_0);
+        assert(!vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroups"));
+        assert(!vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceFeatures2"));
+        assert(!vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceExternalFenceProperties"));
+        uint32_t count = 0;
+        assert(vkEnumeratePhysicalDeviceGroups(i, &count, NULL) == VK_ERROR_UNKNOWN);
+        vkDestroyInstance(i, NULL);
+    }
+    /* A non-zero variant is incompatible with this Vulkan implementation. */
+    const uint32_t variants[] = {VK_MAKE_API_VERSION(1, 1, 0, 0), VK_MAKE_API_VERSION(7, 1, 3, 0),
+                                 VK_MAKE_API_VERSION(1, 1, 0, 0) & ~0x1fffffffu};
+    for (size_t n = 0; n < sizeof(variants) / sizeof(variants[0]); ++n) {
+        VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = variants[n]};
+        VkInstanceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &app};
+        VkInstance i = (VkInstance)(uintptr_t)1;
+        assert(vkCreateInstance(&info, NULL, &i) == VK_ERROR_INCOMPATIBLE_DRIVER && !i);
+    }
+    VkInstance i = instance();
+    assert(i->api_version == VK_API_VERSION_1_0);
+    vkDestroyInstance(i, NULL);
+}
+
 static void buffer_address_command_gate(void)
 {
     struct VkDevice_T d = {0};
@@ -2570,6 +2701,7 @@ int main(void)
     unadvertised_subgroup_properties();
     memory_model_feature_negotiation();
     single_device_group_creation();
+    vulkan11_instance_version();
     buffer_address_command_gate();
     device_group_dispatch_command_gate();
     create_renderpass2_command_gate();

@@ -13,6 +13,17 @@ capability; an observed CTS failure remains a defect to investigate. The public
 device still reports Vulkan 1.0, and no complete 1.1/1.2/1.3 core contract is
 claimed.
 
+The instance is a Vulkan 1.1 instance: `vkEnumerateInstanceVersion` reports
+1.1, `vkCreateInstance` accepts any variant-0 `VkApplicationInfo::apiVersion`
+instead of returning `VK_ERROR_INCOMPATIBLE_DRIVER` (DXVK 2.6.2 requests 1.3;
+a non-zero variant is still incompatible), and an
+instance created with 1.1 or later resolves the core 1.1 instance- and
+physical-device-level names (`vkEnumeratePhysicalDeviceGroups`, the seven
+`vkGetPhysicalDevice*2` queries and the three external handle queries, which
+report no support). The physical device still reports 1.0, so those queries
+answer exactly as the `VK_KHR_get_physical_device_properties2` route does, and
+device-level core 1.1 names stay unresolved.
+
 ## Capability introspection
 
 The independently staged consumer includes an optional DXVK 2.6.2 D3D11
