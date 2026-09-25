@@ -686,6 +686,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
             features->robustImageAccess2 = VK_FALSE;
             features->nullDescriptor = !!(p->platform.supported_features_t09 &
                 PS5VK_T09_FEATURE_NULL_DESCRIPTOR);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES) {
+            ((VkPhysicalDeviceSynchronization2Features *)next)->synchronization2 =
+                !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2);
 
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT) {
@@ -936,7 +940,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Thirty-one conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Thirty-two conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
@@ -944,10 +948,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
      * dedicated_allocation, bind_memory2, maintenance4, descriptor update
      * template, robustness2, extended dynamic state, maintenance1,
      * copy_commands2, depth/stencil resolve, dynamic rendering, format feature
-     * flags 2, image format list). Keep headroom so a new entry cannot overflow
-     * the array before this bound is revisited; each push site must stay below
-     * it. */
-    enum { DEVICE_EXTENSION_PUSHES = 31, DEVICE_EXTENSION_SLOTS = 36 };
+     * flags 2, image format list, synchronization2). Keep headroom so a new
+     * entry cannot overflow the array before this bound is revisited; each push
+     * site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 32, DEVICE_EXTENSION_SLOTS = 36 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -1103,6 +1107,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, VK_KHR_IMAGE_FORMAT_LIST_SPEC_VERSION};
     }
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+            VK_KHR_SYNCHRONIZATION_2_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -1151,6 +1160,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 copy_commands2_extension = VK_FALSE;
     VkBool32 depth_stencil_resolve_extension = VK_FALSE, dynamic_rendering_extension = VK_FALSE;
     VkBool32 format_feature_flags2_extension = VK_FALSE, image_format_list_extension = VK_FALSE;
+    VkBool32 synchronization2_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -1220,6 +1230,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &format_feature_flags2_extension;
         else if (!strcmp(name, VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME))
             seen = &image_format_list_extension;
+        else if (!strcmp(name, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME))
+            seen = &synchronization2_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1310,6 +1322,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (bind_memory2_extension && !bind_memory2_supported(p)) ||
         (maintenance4_extension && !maintenance4_supported(p)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    /* VK_KHR_synchronization2 depends, in the pinned registry, on
+     * VK_KHR_get_physical_device_properties2 or Vulkan 1.1. */
+    if (synchronization2_extension &&
+        (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     if (robustness2_extension &&
         (!robustness2_supported(p) || !p->instance->features2_extension_enabled))
@@ -1358,6 +1376,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_demote = VK_FALSE, saw_terminate = VK_FALSE;
     VkBool32 saw_robustness2 = VK_FALSE;
     VkBool32 saw_extended_dynamic_state = VK_FALSE, extended_dynamic_state = VK_FALSE;
+    VkBool32 saw_synchronization2 = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO) {
@@ -1649,6 +1668,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 if (!extended_dynamic_state_extension) return VK_ERROR_FEATURE_NOT_PRESENT;
                 extended_dynamic_state = VK_TRUE;
             }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES) {
+            if (saw_synchronization2) return INVALID;
+            saw_synchronization2 = VK_TRUE;
+            const VkPhysicalDeviceSynchronization2Features *features =
+                (const VkPhysicalDeviceSynchronization2Features *)next;
+            if (!valid_bool(features->synchronization2)) return INVALID;
+            if (features->synchronization2) {
+                if (!synchronization2_extension) return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;
+            }
         } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;
         }
@@ -1698,6 +1728,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->device_group_extension_enabled = group_extension;
     d->timeline_extension_enabled = timeline_extension;
     d->maintenance2_extension_enabled = maintenance2_extension;
+    d->synchronization2_extension_enabled = synchronization2_extension;
     d->create_renderpass2_extension_enabled = create_renderpass2_extension;
     d->swapchain_extension_enabled = swapchain_extension;
     d->memory_requirements2_extension_enabled = memory_requirements2_extension;

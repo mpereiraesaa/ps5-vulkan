@@ -236,6 +236,12 @@ enum ps5vk_t09_feature_bits {
      * VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT reinterpretations it lists: only the
      * pairs src/texture_format.c implements (RGBA8 UNORM <-> SRGB). */
     PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST = 1u << 14,
+    /* DXVK262 synchronization2 on the Vulkan 1.0 profile:
+     * VK_KHR_synchronization2 and its synchronization2 feature. Its commands
+     * convert onto the Vulkan 1.0 barrier, event, timestamp and submit
+     * paths (src/vk_sync2.c). A platform sets it only once a native witness
+     * measured the converted route. */
+    PS5VK_T09_FEATURE_SYNCHRONIZATION2 = 1u << 27,
 };
 
 /* robust{Storage,Uniform}BufferAccessSizeAlignment. GFX10 raw buffer records
@@ -457,6 +463,10 @@ struct VkDevice_T {
      * is core Vulkan 1.0, so this does not depend on the extension; a
      * hand-built device leaves it zero and refuses the flag. */
     VkBool32 mutable_format_views;
+    /* VK_KHR_synchronization2 was enabled on this device: its six KHR
+     * commands are reachable only then (the feature bit itself is in
+     * enabled_features_t09). */
+    VkBool32 synchronization2_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the

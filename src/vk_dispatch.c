@@ -232,6 +232,13 @@ static const struct entry entries[] = {
     /* VK_KHR_dynamic_rendering (DXVK262-T10). */
     ENTRY(vkCmdBeginRenderingKHR, DEVICE),
     ENTRY(vkCmdEndRenderingKHR, DEVICE),
+    /* VK_KHR_synchronization2 (DXVK262): converted onto the 1.0 paths. */
+    ENTRY(vkCmdPipelineBarrier2KHR, DEVICE),
+    ENTRY(vkCmdSetEvent2KHR, DEVICE),
+    ENTRY(vkCmdResetEvent2KHR, DEVICE),
+    ENTRY(vkCmdWaitEvents2KHR, DEVICE),
+    ENTRY(vkCmdWriteTimestamp2KHR, DEVICE),
+    ENTRY(vkQueueSubmit2KHR, DEVICE),
 };
 #undef ENTRY
 
@@ -362,6 +369,16 @@ static int descriptor_update_template_command(const char *name)
            !strcmp(name, "vkUpdateDescriptorSetWithTemplateKHR");
 }
 
+/* VK_KHR_synchronization2 commands, reachable only on a device that enabled
+ * the extension. Vulkan 1.0 has no core names for them. */
+static int synchronization2_command(const char *name)
+{
+    return !strcmp(name, "vkCmdPipelineBarrier2KHR") ||
+           !strcmp(name, "vkCmdSetEvent2KHR") || !strcmp(name, "vkCmdResetEvent2KHR") ||
+           !strcmp(name, "vkCmdWaitEvents2KHR") ||
+           !strcmp(name, "vkCmdWriteTimestamp2KHR") || !strcmp(name, "vkQueueSubmit2KHR");
+}
+
 static int timeline_semaphore_command(const char *name)
 {
     return !strcmp(name, "vkGetSemaphoreCounterValueKHR") ||
@@ -459,6 +476,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
         return NULL;
     if ((!strcmp(name, "vkCmdBeginRenderingKHR") || !strcmp(name, "vkCmdEndRenderingKHR")) &&
         !device->dynamic_rendering_extension_enabled)
+        return NULL;
+    if (synchronization2_command(name) && !device->synchronization2_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;

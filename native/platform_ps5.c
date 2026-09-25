@@ -376,6 +376,12 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
         PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1;
 #endif
+#if defined(PS5VK_SYNCHRONIZATION2_DIAGNOSTIC) && PS5VK_SYNCHRONIZATION2_DIAGNOSTIC
+    /* Private measurement build (DXVK262): enumerate VK_KHR_synchronization2
+     * so a witness can record through the converted barrier and submit
+     * route. The ordinary profile waits for that witness. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;
+#endif
 
 #endif
 #else
