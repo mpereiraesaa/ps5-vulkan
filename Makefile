@@ -198,6 +198,8 @@ check-sanitize: check-thread-sanitize
 	./build/tests/test_vk_memory_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_device.c -o build/tests/test_vk_device_sanitized
 	./build/tests/test_vk_device_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/image_layout_state.c src/depth_layout.c native/image_ps5.c tests/test_wsi_buffer_present.c -o build/tests/test_wsi_buffer_present_sanitized
+	./build/tests/test_wsi_buffer_present_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_timeline_device.c -o build/tests/test_timeline_device_sanitized
 	./build/tests/test_timeline_device_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_renderpass2_route.c -o build/tests/test_renderpass2_route_sanitized
@@ -425,6 +427,8 @@ check:
 	./build/tests/test_vk_memory_storage_texel
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_device.c -o build/tests/test_vk_device
 	./build/tests/test_vk_device
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/image_layout_state.c src/depth_layout.c native/image_ps5.c tests/test_wsi_buffer_present.c -o build/tests/test_wsi_buffer_present
+	./build/tests/test_wsi_buffer_present
 
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_t09_sampler_negotiation.c -o build/tests/test_t09_sampler_negotiation
 	./build/tests/test_t09_sampler_negotiation
