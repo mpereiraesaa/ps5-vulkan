@@ -176,38 +176,42 @@ refuse:
     return VK_ERROR_UNKNOWN;
 }
 
-/* Records one converted dependency. Members of one VkDependencyInfo are
- * unordered with respect to each other, so members that share a stage pair
- * go into one Vulkan 1.0 barrier, and each distinct pair gets its own barrier
- * in order of first appearance. Separate barriers are at least as strong as
- * the single synchronization2 dependency. */
+/* The stage masks of the single Vulkan 1.0 barrier that carries a whole
+ * VkDependencyInfo: the union of every member's source and destination
+ * stages. A wider scope only adds ordering, and it keeps each member's
+ * access masks inside a stage scope that can perform them (DXVK's readback
+ * publication names host/compute/fragment stages while the image hand-back
+ * in the same dependency names the colour-attachment stage). */
+void ps5vk_sync2_union_stages(const struct ps5vk_sync2_barrier *list, uint32_t count,
+    VkPipelineStageFlags *src, VkPipelineStageFlags *dst)
+{
+    VkPipelineStageFlags s = 0, d = 0;
+    for (uint32_t j = 0; j < count; ++j) { s |= list[j].src_stage; d |= list[j].dst_stage; }
+    *src = s ? s : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    *dst = d ? d : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+}
+
+/* Records one converted dependency as one Vulkan 1.0 barrier. */
 static void record_barriers(VkCommandBuffer command, VkDependencyFlags flags,
     const struct ps5vk_sync2_barrier *list, uint32_t count)
 {
-    VkMemoryBarrier *memory = calloc(count ? count : 1, sizeof(*memory));
-    VkBufferMemoryBarrier *buffers = calloc(count ? count : 1, sizeof(*buffers));
-    VkImageMemoryBarrier *images = calloc(count ? count : 1, sizeof(*images));
-    unsigned char *done = calloc(count ? count : 1, 1);
-    if (!memory || !buffers || !images || !done) {
+    VkMemoryBarrier *memory = calloc(count, sizeof(*memory));
+    VkBufferMemoryBarrier *buffers = calloc(count, sizeof(*buffers));
+    VkImageMemoryBarrier *images = calloc(count, sizeof(*images));
+    if (!memory || !buffers || !images) {
         ps5vk_command_invalidate(command); goto out;
     }
-    for (uint32_t first = 0; first < count; ++first) {
-        if (done[first]) continue;
-        const VkPipelineStageFlags src = list[first].src_stage;
-        const VkPipelineStageFlags dst = list[first].dst_stage;
-        uint32_t nm = 0, nb = 0, ni = 0;
-        for (uint32_t j = first; j < count; ++j) {
-            if (done[j] || list[j].src_stage != src || list[j].dst_stage != dst) continue;
-            done[j] = 1;
-            if (list[j].kind == PS5VK_SYNC2_MEMORY) memory[nm++] = list[j].memory;
-            else if (list[j].kind == PS5VK_SYNC2_BUFFER) buffers[nb++] = list[j].buffer;
-            else images[ni++] = list[j].image;
-        }
-        vkCmdPipelineBarrier(command, src, dst, flags, nm, memory, nb, buffers, ni, images);
-        if (command->state != PS5VK_RECORDING) goto out;
+    uint32_t nm = 0, nb = 0, ni = 0;
+    for (uint32_t j = 0; j < count; ++j) {
+        if (list[j].kind == PS5VK_SYNC2_MEMORY) memory[nm++] = list[j].memory;
+        else if (list[j].kind == PS5VK_SYNC2_BUFFER) buffers[nb++] = list[j].buffer;
+        else images[ni++] = list[j].image;
     }
+    VkPipelineStageFlags src, dst;
+    ps5vk_sync2_union_stages(list, count, &src, &dst);
+    vkCmdPipelineBarrier(command, src, dst, flags, nm, memory, nb, buffers, ni, images);
 out:
-    free(memory); free(buffers); free(images); free(done);
+    free(memory); free(buffers); free(images);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2KHR(VkCommandBuffer command,
@@ -241,10 +245,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent2KHR(VkCommandBuffer command, VkEvent ev
         ps5vk_sync2_convert_dependency(dependency, &list, &count) != VK_SUCCESS) {
         ps5vk_command_invalidate(command); return;
     }
-    VkPipelineStageFlags stages = 0;
-    for (uint32_t j = 0; j < count; ++j) stages |= list[j].src_stage;
+    VkPipelineStageFlags stages, unused;
+    ps5vk_sync2_union_stages(list, count, &stages, &unused);
     free(list);
-    vkCmdSetEvent(command, event, stages ? stages : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    vkCmdSetEvent(command, event, stages);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent2KHR(VkCommandBuffer command, VkEvent event,
@@ -289,14 +293,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2KHR(VkCommandBuffer command, uint32_t
     buffers = calloc(total ? total : 1, sizeof(*buffers));
     images = calloc(total ? total : 1, sizeof(*images));
     if (!memory || !buffers || !images) goto refuse;
+    ps5vk_sync2_union_stages(all, total, &src, &dst);
     for (uint32_t j = 0; j < total; ++j) {
-        src |= all[j].src_stage; dst |= all[j].dst_stage;
         if (all[j].kind == PS5VK_SYNC2_MEMORY) memory[nm++] = all[j].memory;
         else if (all[j].kind == PS5VK_SYNC2_BUFFER) buffers[nb++] = all[j].buffer;
         else images[ni++] = all[j].image;
     }
-    if (!src) src = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    if (!dst) dst = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     vkCmdWaitEvents(command, count, events, src, dst, nm, memory, nb, buffers, ni, images);
     free(all); free(memory); free(buffers); free(images);
     return;

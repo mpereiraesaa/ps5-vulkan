@@ -241,11 +241,12 @@ static void dxvk_first_frame(struct fixture *f)
     vkCmdPipelineBarrier2KHR(&c, &dep);
     assert(c.state == PS5VK_INVALID && !c.operation_count);
 
-    /* The final dependency: a global TRANSFER_WRITE -> HOST_READ publication
-     * plus the image hand-back. Distinct stage pairs become two Vulkan 1.0
-     * barriers, memory first. With DXVK's src NONE on the hand-back the
-     * profile refuses; with the readback read it records both, in order. */
-    recording(&c, &f->pool);
+    /* The final dependency, exactly as DXVK records it: a global
+     * TRANSFER_WRITE publication to 0x5880/0x3860 plus the image hand-back
+     * TRANSFER_SRC -> COLOR_ATTACHMENT at 0x1400/0x1980. It becomes one
+     * Vulkan 1.0 barrier whose stages are the union of both members (dst
+     * 0x5c80): the publication's stages alone name no colour-attachment
+     * stage for the hand-back's colour access. */
     VkMemoryBarrier2 publish = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
         .srcStageMask = S2(TRANSFER), .srcAccessMask = A2(TRANSFER_WRITE),
         .dstStageMask = DXVK_HOST_STAGES, .dstAccessMask = DXVK_HOST_ACCESS};
@@ -254,8 +255,24 @@ static void dxvk_first_frame(struct fixture *f)
     VkDependencyInfo last = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .memoryBarrierCount = 1, .pMemoryBarriers = &publish,
         .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &back};
+    {
+        struct ps5vk_sync2_barrier *list; uint32_t n;
+        VkPipelineStageFlags src, dst;
+        assert(ps5vk_sync2_convert_dependency(&last, &list, &n) == VK_SUCCESS && n == 2);
+        ps5vk_sync2_union_stages(list, n, &src, &dst);
+        assert(src == S1(TRANSFER) && dst == 0x5c80u &&
+               dst == (S1(HOST) | S1(TRANSFER) | S1(COMPUTE_SHADER) |
+                       S1(FRAGMENT_SHADER) | S1(COLOR_ATTACHMENT_OUTPUT)));
+        assert(list[0].memory.dstAccessMask == 0x3860u &&
+               list[1].image.dstAccessMask == 0x1980u && !list[1].image.srcAccessMask);
+        free(list);
+    }
+    /* With DXVK's src NONE the Vulkan 1.0 image profile still refuses the
+     * hand-back; with the readback's read it records publication then image,
+     * both under the union stages. */
+    recording(&c, &f->pool);
     vkCmdPipelineBarrier2KHR(&c, &last);
-    assert(c.state == PS5VK_INVALID);
+    assert(c.state == PS5VK_INVALID && !c.operation_count);
     recording(&c, &f->pool);
     back.srcAccessMask = A2(TRANSFER_READ);
     back.dstStageMask = S2(COLOR_ATTACHMENT_OUTPUT);
@@ -264,15 +281,15 @@ static void dxvk_first_frame(struct fixture *f)
     assert(c.state == PS5VK_RECORDING && c.operation_count == 2);
     assert(c.operations[0].type == PS5VK_BARRIER &&
            c.operations[0].src_stage == S1(TRANSFER) &&
-           c.operations[0].dst_stage == (S1(HOST) | S1(TRANSFER) | S1(COMPUTE_SHADER) |
-                                         S1(FRAGMENT_SHADER)) &&
+           c.operations[0].dst_stage == 0x5c80u &&
            c.operations[0].dst_access == (A1(HOST_READ) | A1(TRANSFER_WRITE) |
                A1(TRANSFER_READ) | A1(SHADER_WRITE) | A1(SHADER_READ)));
     assert(c.operations[1].type == PS5VK_IMAGE_BARRIER &&
+           c.operations[1].dst_stage == 0x5c80u &&
            c.operations[1].image_barrier.oldLayout == SRC &&
            c.operations[1].image_barrier.newLayout == ATT);
 
-    /* Members that share one stage pair stay one Vulkan 1.0 barrier. */
+    /* Members that share one stage pair keep that pair. */
     recording(&c, &f->pool);
     publish.dstStageMask = S2(COLOR_ATTACHMENT_OUTPUT);
     publish.dstAccessMask = A2(COLOR_ATTACHMENT_WRITE);

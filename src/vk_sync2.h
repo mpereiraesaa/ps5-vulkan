@@ -23,5 +23,7 @@ VkBool32 ps5vk_sync2_image_layout(VkImageLayout layout, VkImage image,
                                   VkImageAspectFlags aspect, VkImageLayout *legacy);
 VkResult ps5vk_sync2_convert_dependency(const VkDependencyInfo *dependency,
     struct ps5vk_sync2_barrier **out, uint32_t *out_count);
+void ps5vk_sync2_union_stages(const struct ps5vk_sync2_barrier *list, uint32_t count,
+    VkPipelineStageFlags *src, VkPipelineStageFlags *dst);
 
 #endif
