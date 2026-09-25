@@ -27,19 +27,32 @@ static void cache(const void *p,size_t n)
 }
 static int flip(uint32_t **c,uint32_t capacity,uint32_t mode,int32_t handle,int32_t index,uint32_t fm,uint64_t token)
 { return ps5_agc_writer_set_flip(c,capacity,mode,handle,index,fm,token,sceAgcDcbSetFlip); }
+static int compatible_image(VkImage image, VkDevice device)
+{
+    const VkImageUsageFlags scanout = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return image && image->device == device && !image->pending && !image->display_busy &&
+        image->info.format == VK_FORMAT_B8G8R8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D && !image->info.flags &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.extent.width == 1920 && image->info.extent.height == 1080 &&
+        image->info.extent.depth == 1 && image->info.mipLevels == 1 &&
+        image->info.arrayLayers == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.usage && !(image->info.usage & ~scanout);
+}
 /* Synchronous native interop, NOT a Vulkan surface/swapchain. Registration
  * retains both images until close. Each frame requires completed rendering;
  * the current display image stays unwritable until the next matching flip. */
 VkResult ps5vk_native_present_open(struct ps5vk_native_present *p,VkDevice d,VkImage image,VkImage spare)
 {
-    if(!p || p->open || p->device || !d || d->lost || d->submission || !image || image->device!=d || image->pending || image->display_busy ||
-        image->info.format!=VK_FORMAT_B8G8R8A8_UNORM || image->info.extent.width!=1920 || image->info.extent.height!=1080)
+    if(!p || p->open || p->device || !d || d->lost || d->submission ||
+       !compatible_image(image,d))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     void *address;VkDeviceSize bytes;
     VkResult result=ps5vk_image_span(d,image,&address,&bytes);if(result!=VK_SUCCESS)return result;
     if((uintptr_t)address%131072 || bytes<UINT64_C(8912896))return VK_ERROR_UNKNOWN;
-    if(!spare || spare==image || spare->device!=d || spare->pending || spare->display_busy ||
-       spare->info.format!=image->info.format || spare->info.extent.width!=1920 || spare->info.extent.height!=1080)
+    if(spare==image || !compatible_image(spare,d) ||
+       spare->info.usage!=image->info.usage)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     void *spare_address;VkDeviceSize spare_bytes;
     result=ps5vk_image_span(d,spare,&spare_address,&spare_bytes);if(result!=VK_SUCCESS)return result;
