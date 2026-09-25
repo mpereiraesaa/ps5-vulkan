@@ -30,8 +30,10 @@ UNASSIGNED_FORMAT_TABLES = {
 }
 UNASSIGNED_FORMAT_TABLE_DIGEST = (
     # T07 qualifies BC sample/filter/transfer, RGBA8 blit destinations and the
-    # bounded D16/D32 roles across the audited format tables.
-    "fb9bebc979b41d80f0872e8f1eeff71c174422431788d58ad4933b86bc88f7d8")
+    # bounded D16/D32 roles across the audited format tables. T09 publishes the
+    # witnessed D32_SFLOAT_S8_UINT attachment and readback roles, which now
+    # satisfy the depth/stencil table's combined-format attachment rule.
+    "0ba43c36bb2d78ee66e1f435bf8c2330b22b35c1158c05c503a4d07824f214ff")
 
 
 def unassigned_format_table_digest(rows):

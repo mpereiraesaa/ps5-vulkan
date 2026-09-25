@@ -71,6 +71,15 @@ NATIVE_PREPARE_TEST = -D_DEFAULT_SOURCE $(VULKAN_CFLAGS) -Isrc -I$(LAB_SIBLINGS)
 # native build already passes.
 GRAPHICS_PAIR_TEST = -Ithird_party/vulkan-headers/include -Inative -Isrc -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include native/graphics_pair.c src/shader_relocate.c $(LAB_SIBLINGS)/ps5-agc-gears/src/ps5_shader_header.c tests/test_graphics_pair.c
 .PHONY: check doctor compiler-control compiler-programs native-bootstrap vulkan-headers check-sanitize native-memory-check test-shaders
+.PHONY: check-thread-sanitize
+# The timeline payload is the one queue state other threads may touch
+# (host signal, counter query and semaphore waits), so its host contract also
+# runs under ThreadSanitizer. Kernels with high mmap entropy need ASLR off for
+# the TSan runtime, hence setarch.
+check-thread-sanitize:
+	mkdir -p build/tests
+	$(CC) -std=c11 -g -O1 -Wall -Wextra -Werror -pthread -fsanitize=thread $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) src/vk_transfer.c tests/test_vk_timeline.c -o build/tests/test_vk_timeline_tsan
+	setarch $$(uname -m) -R ./build/tests/test_vk_timeline_tsan
 .PHONY: compiler-pipelines
 .PHONY: native-compute native-graphics native-runtime-graphics
 .PHONY: upstream-cts check-upstream-cts check-upstream-cts-sink
@@ -110,11 +119,15 @@ compiler-deps:
 	$(PYTHON) tools/prepare_compiler_deps.py
 test-shaders:
 	$(PYTHON) tools/prepare_test_shaders.py
-check-sanitize:
+# ThreadSanitizer for the timeline/queue lock runs as part of the sanitizer
+# gate; it needs only setarch (util-linux) on the host.
+check-sanitize: check-thread-sanitize
 	mkdir -p build/tests
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/color_detile.c src/texture_dma.c tests/test_color_rect_clear.c -o build/tests/test_color_rect_clear_sanitized
 	./build/tests/test_color_rect_clear_sanitized
-	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c src/depth_detile.c tests/test_readback_commands.c -o build/tests/test_readback_commands_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state_sanitized
+	./build/tests/test_image_layout_state_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c src/depth_detile.c src/depth_layout.c tests/test_readback_commands.c -o build/tests/test_readback_commands_sanitized
 	./build/tests/test_readback_commands_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/texture_dma.c src/graphics_sync.c tests/test_upload_commands.c -o build/tests/test_upload_commands_sanitized
 	./build/tests/test_upload_commands_sanitized
@@ -154,6 +167,8 @@ check-sanitize:
 	./build/tests/test_vk_image_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass_sanitized
 	./build/tests/test_vk_render_pass_sanitized
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass2.c -o build/tests/test_vk_render_pass2_sanitized
+	./build/tests/test_vk_render_pass2_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/multiview_witness.c tests/test_multiview_witness.c -o build/tests/test_multiview_witness_sanitized
 	./build/tests/test_multiview_witness_sanitized
 	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Isrc src/platform_host.c src/vk_alloc.c tests/test_multiview_capability.c -o build/tests/test_multiview_capability_sanitized
@@ -178,6 +193,10 @@ check-sanitize:
 	./build/tests/test_vk_memory_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_device.c -o build/tests/test_vk_device_sanitized
 	./build/tests/test_vk_device_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_timeline_device.c -o build/tests/test_timeline_device_sanitized
+	./build/tests/test_timeline_device_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_renderpass2_route.c -o build/tests/test_renderpass2_route_sanitized
+	./build/tests/test_renderpass2_route_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tools/dump_device_reporting.c -o build/tests/dump_device_reporting_sanitized
 	./build/tests/dump_device_reporting_sanitized > /dev/null
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_pipeline_cache.c -o build/tests/test_pipeline_cache_sanitized
@@ -188,6 +207,10 @@ check-sanitize:
 	./build/tests/test_buffer_transfer_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear_sanitized
 	./build/tests/test_image_copy_clear_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tests/test_depth_stencil_api.c -o build/tests/test_depth_stencil_api_sanitized
+	./build/tests/test_depth_stencil_api_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/texture_dma.c src/graphics_sync.c src/color_detile.c src/depth_detile.c src/depth_layout.c tests/test_depth_stencil_executor.c -o build/tests/test_depth_stencil_executor_sanitized
+	./build/tests/test_depth_stencil_executor_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy_sanitized
 	./build/tests/test_bc_subresource_copy_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_integer_readback_diagnostic.c -o build/tests/test_integer_readback_diagnostic_sanitized
@@ -214,6 +237,8 @@ check-sanitize:
 	./build/tests/test_vk_sync_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_queue.c -o build/tests/test_vk_queue_sanitized
 	./build/tests/test_vk_queue_sanitized
+	$(CC) -std=c11 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) src/vk_transfer.c tests/test_vk_timeline.c -o build/tests/test_vk_timeline_sanitized
+	./build/tests/test_vk_timeline_sanitized
 	$(CC) -std=c11 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache_sanitized
 	./build/tests/test_compilation_cache_sanitized
 	$(MAKE) graphics-stage-shaders
@@ -248,7 +273,7 @@ check:
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/image_layout_state.c tests/test_image_layout_state.c -o build/tests/test_image_layout_state
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/texture_dma.c src/graphics_sync.c tests/test_upload_commands.c -o build/tests/test_upload_commands
 	./build/tests/test_upload_commands
-	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c src/depth_detile.c tests/test_readback_commands.c -o build/tests/test_readback_commands
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c src/depth_detile.c src/depth_layout.c tests/test_readback_commands.c -o build/tests/test_readback_commands
 	./build/tests/test_readback_commands
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/color_detile.c src/texture_dma.c tests/test_color_rect_clear.c -o build/tests/test_color_rect_clear
 	./build/tests/test_color_rect_clear
@@ -330,6 +355,8 @@ check:
 	./build/tests/test_vk_image
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass.c -o build/tests/test_vk_render_pass
 	./build/tests/test_vk_render_pass
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/vk_alloc.c src/color_attachment_contract.c src/vk_render_pass.c tests/test_vk_render_pass2.c -o build/tests/test_vk_render_pass2
+	./build/tests/test_vk_render_pass2
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/multiview_witness.c tests/test_multiview_witness.c -o build/tests/test_multiview_witness
 	./build/tests/test_multiview_witness
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/platform_host.c src/vk_alloc.c tests/test_multiview_capability.c -o build/tests/test_multiview_capability
@@ -375,8 +402,15 @@ check:
 	./build/tests/test_vk_memory
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_device.c -o build/tests/test_vk_device
 	./build/tests/test_vk_device
+
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_t09_sampler_negotiation.c -o build/tests/test_t09_sampler_negotiation
 	./build/tests/test_t09_sampler_negotiation
+
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_timeline_device.c -o build/tests/test_timeline_device
+	./build/tests/test_timeline_device
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_renderpass2_route.c -o build/tests/test_renderpass2_route
+	./build/tests/test_renderpass2_route
+
 	# Reporting audit: dump what the public query paths report and check it
 	# against the pinned specification tables and the pinned CTS consumer rules.
 	$(PYTHON) tools/check_reporting_matrix.py --check
@@ -388,6 +422,10 @@ check:
 	./build/tests/test_buffer_transfer
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_image_copy_clear.c -o build/tests/test_image_copy_clear
 	./build/tests/test_image_copy_clear
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/depth_layout.c native/image_ps5.c tests/test_depth_stencil_api.c -o build/tests/test_depth_stencil_api
+	./build/tests/test_depth_stencil_api
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/texture_dma.c src/graphics_sync.c src/color_detile.c src/depth_detile.c src/depth_layout.c tests/test_depth_stencil_executor.c -o build/tests/test_depth_stencil_executor
+	./build/tests/test_depth_stencil_executor
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_bc_subresource_copy.c -o build/tests/test_bc_subresource_copy
 	./build/tests/test_bc_subresource_copy
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/platform_host.c src/depth_layout.c native/image_ps5.c tests/test_integer_readback_diagnostic.c -o build/tests/test_integer_readback_diagnostic
@@ -418,6 +456,8 @@ check:
 	./build/tests/test_vk_sync
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) tests/test_vk_queue.c -o build/tests/test_vk_queue
 	./build/tests/test_vk_queue
+	$(CC) -std=c11 -Wall -Wextra -Werror -pthread $(VULKAN_CFLAGS) -Isrc $(VK_QUEUE_SOURCES) src/vk_transfer.c tests/test_vk_timeline.c -o build/tests/test_vk_timeline
+	./build/tests/test_vk_timeline
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc src/compilation_cache.c tests/test_compilation_cache.c -o build/tests/test_compilation_cache
 	./build/tests/test_compilation_cache
 	$(CC) -std=c11 -Wall -Wextra -Werror -Isrc src/clip_cull_witness.c tests/test_clip_cull_witness.c -o build/tests/test_clip_cull_witness

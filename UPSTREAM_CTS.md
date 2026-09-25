@@ -408,6 +408,8 @@ claimed. The selected synchronization cases establish only the single-queue
 Vulkan 1.0 paths they ran.
 Multi-queue, secondary command buffers, typed/timeline semaphores and
 synchronization2 remain excluded and are not inferred from these results.
+The T09 timeline leaves ran later as a focused selection outside this package
+(see the T09 section below).
 
 ### Fixed-function expansion (2026-09-13)
 
@@ -1524,3 +1526,30 @@ signed eboot, zero missing, unexpected or duplicate cases, and clean title
 closure. Its selection SHA-256 is
 `c5b81c9814f1a993f74ebd2a19ce580d3022f26853a4f3e35216afad07dfe1ab`;
 run `20260923T120459357Z_PPSA99994_upstream-cts_0x1ebf603188bae`.
+
+## T09 focused selection (2026-09-25)
+
+The upstream package now registers four more original factories: the legacy
+timeline-semaphore families, `renderpass2`, `pipeline.monolithic.stencil` and
+`pipeline.monolithic.depth`. `cases.txt` remains the execution filter, so the
+frozen 829-case selection is unchanged and passed 829/829 on the promoted
+shipping build.
+
+A separate focused selection of 50 leaves was checked against the pinned
+sources:
+
+* 16 timeline leaves;
+* 2 `renderpass2.suballocation.attachment_write_mask` leaves;
+* 24 D32S8 stencil state leaves;
+* 8 D32S8 depth compare leaves, with and without `_separate_layouts`.
+
+It passed 50/50 on the measurement build and again on the promoted shipping
+build. These are regression evidence for `timelineSemaphore`,
+`maxTimelineSemaphoreValueDifference` and `separateDepthStencilLayouts`, not a
+full CTS claim.
+
+The `depth-stencil-format-gap` diagnostic above predates the public
+`D32_SFLOAT_S8_UINT` attachment. It has not been re-measured.
+
+Run IDs and hashes are in
+[VALIDATION.md](VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25).

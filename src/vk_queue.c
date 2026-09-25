@@ -88,12 +88,44 @@ static void pin(struct ps5vk_submission *s, int acquire)
     }
 }
 
+static int timeline(VkSemaphore semaphore)
+{ return semaphore->type == VK_SEMAPHORE_TYPE_TIMELINE; }
+
+/* Publish a retired record's signals. The backend has already reported exact
+ * completion with visibility, so this is the first point at which a timeline
+ * payload may advance; it only ever moves forward. */
+static void retire_signals(const struct ps5vk_submission *s)
+{
+    for (uint32_t j = 0; j < s->signal_count; ++j) {
+        VkSemaphore semaphore = s->signals[j];
+        if (!timeline(semaphore)) semaphore->signaled = VK_TRUE;
+        else if (s->signal_values[j] > semaphore->value)
+            semaphore->value = s->signal_values[j];
+    }
+}
+
+/* The queue head is waiting for a timeline value nothing has published yet.
+ * Only a host signal (or retirement of earlier work, which is already done at
+ * the head) can satisfy it, so nothing the queue itself does makes progress. */
+static int head_waits_on_timeline(const VkDevice d)
+{
+    const struct ps5vk_submission *s = d->submission;
+    if (!s || s->waits_consumed) return 0;
+    for (uint32_t j = 0; j < s->wait_count; ++j)
+        if (timeline(s->waits[j]) && s->waits[j]->value < s->wait_values[j]) return 1;
+    return 0;
+}
+
 static VkResult start_submission(VkDevice d)
 {
     while (d->submission) {
         struct ps5vk_submission *s = d->submission;
         if (!s->waits_consumed) {
+            /* An unsatisfied timeline wait leaves the head in place without
+             * consuming anything; it is re-evaluated on every progress call. */
+            if (head_waits_on_timeline(d)) return VK_SUCCESS;
             for (uint32_t j = 0; j < s->wait_count; ++j) {
+                if (timeline(s->waits[j])) continue;
                 if (!s->waits[j]->signaled) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
                 s->waits[j]->signaled = VK_FALSE;
             }
@@ -172,23 +204,26 @@ static VkResult start_submission(VkDevice d)
             return VK_SUCCESS;
         }
         d->queue.completed_serial = s->serial;
-        for (uint32_t j = 0; j < s->signal_count; ++j) s->signals[j]->signaled = VK_TRUE;
+        retire_signals(s);
         if (s->fence) { s->fence->pending_serial = 0; s->fence->signaled = VK_TRUE; }
         d->submission = s->next; free_submission(s);
     }
     return VK_SUCCESS;
 }
 
-VkResult ps5vk_queue_poll(VkDevice d)
+/* Caller holds the device lock. */
+static VkResult poll_locked(VkDevice d)
 {
-    if (!d) return INVALID;
     if (d->lost) {
         QUEUE_DIAG("PS5VK_QUEUE_POLL_DEVICE_ALREADY_LOST");
         return VK_ERROR_DEVICE_LOST;
     }
     struct ps5vk_submission *s = d->submission;
     if (!s) return VK_SUCCESS;
-    if (s->frontend_only) return start_submission(d);
+    /* A head that has not started yet (still waiting on a timeline value) has
+     * no launched job to poll: re-evaluate its waits instead. */
+    if (s->frontend_only || !s->waits_consumed || (s->count && !s->backend_job))
+        return start_submission(d);
     if (!d->submit_backend.poll || !d->submit_backend.release) { d->lost = VK_TRUE; return VK_ERROR_DEVICE_LOST; }
     uint64_t completed = 0;
     VkResult result = d->submit_backend.poll(d, s->backend_job, &completed);
@@ -199,12 +234,41 @@ VkResult ps5vk_queue_poll(VkDevice d)
     d->submit_backend.release(d, s->backend_job);
     pin(s, 0);
     d->queue.completed_serial = s->serial;
-    for (uint32_t j = 0; j < s->signal_count; ++j) s->signals[j]->signaled = VK_TRUE;
+    retire_signals(s);
     if (s->fence) { s->fence->pending_serial = 0; s->fence->signaled = VK_TRUE; }
     d->submission = s->next; free_submission(s);
 
     return start_submission(d);
 }
+
+VkResult ps5vk_queue_poll(VkDevice d)
+{
+    if (!d) return INVALID;
+    ps5vk_device_lock(d);
+    VkResult result = poll_locked(d);
+    ps5vk_device_unlock(d);
+    return result;
+}
+
+/* Retire queued work with the device lock held, releasing it around every
+ * pause so host signals and other waiters can run. With stop_at_timeline_wait
+ * the drain ends as soon as the head waits on a timeline value that only a
+ * later host signal can publish: waiting there would never end when that
+ * signal is issued by the same thread after vkQueueSubmit returns. */
+static VkResult drain_locked(VkDevice d, VkBool32 stop_at_timeline_wait)
+{
+    for (;;) {
+        VkResult result = poll_locked(d);
+        if (result != VK_SUCCESS) return result;
+        if (!d->submission) return VK_SUCCESS;
+        if (stop_at_timeline_wait && head_waits_on_timeline(d)) return VK_SUCCESS;
+        if (!d->progress.pause) return INVALID;
+        ps5vk_device_unlock(d);
+        d->progress.pause(d->progress.context, UINT64_MAX);
+        ps5vk_device_lock(d);
+    }
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue)
 {
     if (!queue || !queue->device) return INVALID;
@@ -213,14 +277,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue)
         QUEUE_DIAG("PS5VK_QUEUE_WAIT_DEVICE_ALREADY_LOST");
         return VK_ERROR_DEVICE_LOST;
     }
-    while (d->submission) {
-        VkResult result = ps5vk_queue_poll(d);
-        if (result != VK_SUCCESS) return result;
-        if (!d->submission) break;
-        if (!d->progress.pause) return INVALID;
-        d->progress.pause(d->progress.context, UINT64_MAX);
-    }
-    return VK_SUCCESS;
+    ps5vk_device_lock(d);
+    VkResult result = drain_locked(d, VK_FALSE);
+    ps5vk_device_unlock(d);
+    return result;
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice d)
 { return d ? vkQueueWaitIdle(&d->queue) : INVALID; }
@@ -346,7 +406,12 @@ static int continuation_child_valid(VkDevice d, VkCommandBuffer primary,
 
 static int command_valid(VkDevice d, VkCommandBuffer c)
 {
-    if (!c || c->pool->device != d || c->state != PS5VK_EXECUTABLE) return 0;
+    /* A simultaneous-use buffer may still be pending when this submission is
+     * queued behind a timeline wait instead of after a full drain. */
+    if (!c || c->pool->device != d ||
+        (c->state != PS5VK_EXECUTABLE &&
+         !(c->state == PS5VK_PENDING &&
+           (c->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)))) return 0;
     VkRenderPass active = NULL;
     VkFramebuffer framebuffer = NULL;
     /* Contents mode of the active pass, read back from the immutable record
@@ -585,7 +650,9 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     }
     return active == NULL && active_query_pool == VK_NULL_HANDLE;
 }
-struct semaphore_state { VkSemaphore semaphore; VkBool32 signaled; };
+/* A semaphore's payload as it will be once everything already queued has
+ * executed: the state a new submission is validated against. */
+struct semaphore_state { VkSemaphore semaphore; VkBool32 signaled; uint64_t value; };
 
 static void discard_chain(VkDevice d, struct ps5vk_submission *head)
 {
@@ -597,31 +664,57 @@ static void discard_chain(VkDevice d, struct ps5vk_submission *head)
     }
 }
 
-static struct semaphore_state *find_state(struct semaphore_state *states,
+static struct semaphore_state *find_state(VkDevice d, struct semaphore_state *states,
     uint32_t *count, VkSemaphore semaphore)
 {
     for (uint32_t j = 0; j < *count; ++j)
         if (states[j].semaphore == semaphore) return &states[j];
-    states[*count].semaphore = semaphore;
-    states[*count].signaled = semaphore->signaled;
-    return &states[(*count)++];
+    struct semaphore_state *state = &states[(*count)++];
+    state->semaphore = semaphore;
+    state->signaled = semaphore->signaled;
+    state->value = semaphore->value;
+    /* Work may still be queued behind a head that waits on a timeline value.
+     * Replay its not-yet-executed operations in queue order: binary waits
+     * that have not been consumed and every pending signal. */
+    for (const struct ps5vk_submission *s = d->submission; s; s = s->next) {
+        if (!s->waits_consumed)
+            for (uint32_t j = 0; j < s->wait_count; ++j)
+                if (s->waits[j] == semaphore && !timeline(semaphore))
+                    state->signaled = VK_FALSE;
+        for (uint32_t j = 0; j < s->signal_count; ++j) {
+            if (s->signals[j] != semaphore) continue;
+            if (!timeline(semaphore)) state->signaled = VK_TRUE;
+            else if (s->signal_values[j] > state->value) state->value = s->signal_values[j];
+        }
+    }
+    return state;
+}
+
+/* waits and signals share one array of handles followed by one array of
+ * timeline values, both sized for every reference of the record. */
+static void layout_references(struct ps5vk_submission *s, size_t refs, uint32_t waits)
+{
+    s->waits = (VkSemaphore *)(s + 1);
+    s->signals = s->waits + waits;
+    s->wait_values = (uint64_t *)(s->waits + refs);
+    s->signal_values = s->wait_values + waits;
 }
 
 static struct ps5vk_submission *allocate_submission(VkDevice d, size_t refs,
     VkResult *result)
 {
-    if (refs > (SIZE_MAX - sizeof(struct ps5vk_submission)) / sizeof(VkSemaphore)) {
+    const size_t per_reference = sizeof(VkSemaphore) + sizeof(uint64_t);
+    if (refs > (SIZE_MAX - sizeof(struct ps5vk_submission)) / per_reference) {
         *result = VK_ERROR_OUT_OF_HOST_MEMORY; return NULL;
     }
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     struct ps5vk_submission *submission = ps5vk_object_alloc(
         d->custom_allocator ? &d->allocator : NULL, NULL,
-        sizeof(*submission) + refs * sizeof(VkSemaphore),
+        sizeof(*submission) + refs * per_reference,
         VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &saved, &custom);
     if (!submission) { *result = VK_ERROR_OUT_OF_HOST_MEMORY; return NULL; }
     submission->allocator = saved; submission->custom_allocator = custom;
-    submission->waits = (VkSemaphore *)(submission + 1);
-    submission->signals = submission->waits;
+    layout_references(submission, refs, 0);
     return submission;
 }
 
@@ -869,21 +962,52 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
             }
         }
         first->wait_count = record->wait_count;
+        layout_references(first, refs, first->wait_count);
         memcpy(first->waits, record->waits, record->wait_count * sizeof(VkSemaphore));
+        memcpy(first->wait_values, record->wait_values, record->wait_count * sizeof(uint64_t));
         last->signal_count = record->signal_count;
-        last->signals = (VkSemaphore *)(last + 1) + last->wait_count;
+        layout_references(last, refs, last->wait_count);
         memcpy(last->signals, record->signals, record->signal_count * sizeof(VkSemaphore));
+        memcpy(last->signal_values, record->signal_values,
+               record->signal_count * sizeof(uint64_t));
     }
     *expanded = head; return VK_SUCCESS;
 fail:
     discard_chain(d, head); return result;
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
+/* The extension structures one VkSubmitInfo may chain, each at most once. */
+struct submit_chain {
+    const VkDeviceGroupSubmitInfo *group;
+    const VkTimelineSemaphoreSubmitInfo *timeline;
+};
+static int parse_submit_chain(VkDevice d, const VkSubmitInfo *info,
+                              struct submit_chain *chain)
+{
+    *chain = (struct submit_chain){0};
+    for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
+         next; next = next->pNext) {
+        if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO &&
+            !chain->group && d->device_group_extension_enabled)
+            chain->group = (const VkDeviceGroupSubmitInfo *)next;
+        else if (next->sType == VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO &&
+                 !chain->timeline && d->timeline_extension_enabled)
+            chain->timeline = (const VkTimelineSemaphoreSubmitInfo *)next;
+        else return 0;
+    }
+    const VkTimelineSemaphoreSubmitInfo *timeline = chain->timeline;
+    /* Value arrays may be absent only when their count is zero. Whether a
+     * count must match is decided per semaphore, once its type is known. */
+    if (timeline && ((timeline->waitSemaphoreValueCount && !timeline->pWaitSemaphoreValues) ||
+                     (timeline->signalSemaphoreValueCount &&
+                      !timeline->pSignalSemaphoreValues)))
+        return 0;
+    return 1;
+}
+
+static VkResult queue_submit_locked(VkDevice d, uint32_t count,
     const VkSubmitInfo *infos, VkFence fence)
 {
-    if (!queue || !queue->device || (count && !infos)) return INVALID;
-    VkDevice d = queue->device;
     if (d->lost) {
         QUEUE_DIAG("PS5VK_QUEUE_SUBMIT_DEVICE_ALREADY_LOST");
         return VK_ERROR_DEVICE_LOST;
@@ -901,13 +1025,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
             UINT32_MAX - reference_count < info->waitSemaphoreCount ||
             UINT32_MAX - reference_count - info->waitSemaphoreCount < info->signalSemaphoreCount)
             return INVALID;
-        if (info->pNext) {
-            const VkDeviceGroupSubmitInfo *group =
-                (const VkDeviceGroupSubmitInfo *)info->pNext;
-            if (!d->device_group_extension_enabled ||
-                group->sType != VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO ||
-                group->pNext ||
-                group->waitSemaphoreCount != info->waitSemaphoreCount ||
+        struct submit_chain chain;
+        if (!parse_submit_chain(d, info, &chain)) return INVALID;
+        if (chain.group) {
+            const VkDeviceGroupSubmitInfo *group = chain.group;
+            if (group->waitSemaphoreCount != info->waitSemaphoreCount ||
                 group->commandBufferCount != info->commandBufferCount ||
                 group->signalSemaphoreCount != info->signalSemaphoreCount ||
                 (group->waitSemaphoreCount && !group->pWaitSemaphoreDeviceIndices) ||
@@ -940,9 +1062,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
     if (!d->queue.next_serial) return INVALID;
 
     /* This implementation has one native batch in flight. Retire the previous
-     * call before validating this call, preserving queue order. */
-    VkResult result = vkQueueWaitIdle(queue);
+     * call before validating this call, preserving queue order - except work
+     * whose head waits on a timeline value no queued operation will publish.
+     * Blocking there would deadlock an application that host-signals the
+     * value after this call returns, so the new records are appended behind
+     * it instead and validated against the queue's pending end state. */
+    VkResult result = drain_locked(d, VK_TRUE);
     if (result != VK_SUCCESS) return result;
+    const VkBool32 queue_blocked = d->submission != NULL;
 
     size_t state_bytes = (size_t)reference_count * sizeof(struct semaphore_state);
     if (reference_count && state_bytes / sizeof(struct semaphore_state) != reference_count)
@@ -963,23 +1090,48 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
         struct ps5vk_submission *s = allocate_submission(d, refs, &result);
         if (!s) goto fail;
         s->wait_count = waits; s->signal_count = signals;
-        s->waits = (VkSemaphore *)(s + 1); s->signals = s->waits + waits;
+        layout_references(s, refs, waits);
         *tail = s; tail = &s->next;
         if (!info) continue;
+        struct submit_chain chain;
+        (void)parse_submit_chain(d, info, &chain);
+        const VkTimelineSemaphoreSubmitInfo *values = chain.timeline;
 
         for (uint32_t k = 0; k < waits; ++k) {
             VkSemaphore semaphore = info->pWaitSemaphores[k];
             if (!semaphore || semaphore->device != d) { result = INVALID; goto fail; }
-            struct semaphore_state *state = find_state(states, &state_count, semaphore);
-            if (!state->signaled) { result = INVALID; goto fail; }
-            state->signaled = VK_FALSE; s->waits[k] = semaphore;
+            struct semaphore_state *state = find_state(d, states, &state_count, semaphore);
+            if (timeline(semaphore)) {
+                /* VUID-VkSubmitInfo-pWaitSemaphores-03239/03240. Any value
+                 * may be waited on, including one not signalled yet. */
+                if (!values || values->waitSemaphoreValueCount != waits) {
+                    result = INVALID; goto fail;
+                }
+                s->wait_values[k] = values->pWaitSemaphoreValues[k];
+            } else {
+                if (!state->signaled) { result = INVALID; goto fail; }
+                state->signaled = VK_FALSE;
+            }
+            s->waits[k] = semaphore;
         }
         for (uint32_t k = 0; k < signals; ++k) {
             VkSemaphore semaphore = info->pSignalSemaphores[k];
             if (!semaphore || semaphore->device != d) { result = INVALID; goto fail; }
-            struct semaphore_state *state = find_state(states, &state_count, semaphore);
-            if (state->signaled) { result = INVALID; goto fail; }
-            state->signaled = VK_TRUE; s->signals[k] = semaphore;
+            struct semaphore_state *state = find_state(d, states, &state_count, semaphore);
+            if (timeline(semaphore)) {
+                /* VUID-VkSubmitInfo-pSignalSemaphores-03241/03242: the value
+                 * must exceed the payload it will find when it executes, i.e.
+                 * the current payload and every signal queued before it. */
+                if (!values || values->signalSemaphoreValueCount != signals ||
+                    values->pSignalSemaphoreValues[k] <= state->value) {
+                    result = INVALID; goto fail;
+                }
+                state->value = s->signal_values[k] = values->pSignalSemaphoreValues[k];
+            } else {
+                if (state->signaled) { result = INVALID; goto fail; }
+                state->signaled = VK_TRUE;
+            }
+            s->signals[k] = semaphore;
         }
         for (uint32_t k = 0; k < info->commandBufferCount; ++k) {
             VkCommandBuffer command = info->pCommandBuffers[k];
@@ -1004,10 +1156,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
     }
     uint32_t segment = 0;
     VkBool32 seen_frontend = VK_FALSE;
+    /* A native job queued behind a timeline wait is prepared only when it
+     * reaches the head: the host may legally write what it reads (indirect
+     * parameters, for one) before issuing the signal that releases it. */
+    VkBool32 behind_timeline_wait = queue_blocked;
     for (struct ps5vk_submission *s = head; s; s = s->next, ++segment) {
         s->serial = d->queue.next_serial + segment;
+        for (uint32_t j = 0; j < s->wait_count; ++j)
+            if (timeline(s->waits[j]) && s->waits[j]->value < s->wait_values[j])
+                behind_timeline_wait = VK_TRUE;
         if (s->frontend_only) seen_frontend = VK_TRUE;
-        else if (seen_frontend) s->deferred_prepare = VK_TRUE;
+        else if (seen_frontend || behind_timeline_wait) s->deferred_prepare = VK_TRUE;
         if (s->count && !s->frontend_only && !s->deferred_prepare) {
             if (!d->submit_backend.prepare || !d->submit_backend.launch ||
                 !d->submit_backend.poll || !d->submit_backend.release) {
@@ -1030,13 +1189,29 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
         pin(s, 1);
     }
     d->queue.next_serial += segments;
-    d->submission = head;
+    struct ps5vk_submission **queue_tail = &d->submission;
+    while (*queue_tail) queue_tail = &(*queue_tail)->next;
+    *queue_tail = head;
     if (fence) fence->pending_serial = last->serial;
-    d->progress.poll = ps5vk_queue_poll;
+    /* Written only when it changes: other threads read the hook unlocked. */
+    if (d->progress.poll != ps5vk_queue_poll) d->progress.poll = ps5vk_queue_poll;
     return start_submission(d);
 
 fail:
     if (states) ps5vk_object_free(states, &state_allocator, state_custom);
     discard_chain(d, head);
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
+    const VkSubmitInfo *infos, VkFence fence)
+{
+    if (!queue || !queue->device || (count && !infos)) return INVALID;
+    VkDevice d = queue->device;
+    /* Validation reads fence, command-buffer and semaphore state that another
+     * thread's progress call may retire concurrently, so it runs locked too. */
+    ps5vk_device_lock(d);
+    VkResult result = queue_submit_locked(d, count, infos, fence);
+    ps5vk_device_unlock(d);
     return result;
 }

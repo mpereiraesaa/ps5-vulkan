@@ -36,6 +36,19 @@ VkResult ps5vk_native_layered_storage_samples(VkFormat format, uint32_t width, u
      * measurement serves. */
     const int color = ps5vk_color_target_format_supported(format);
     const int depth = format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D16_UNORM;
+    /* The combined depth/stencil surface is two planes (src/depth_layout.h),
+     * single-sample and single-layer: its footprint is the stencil plane's end
+     * and its base the planes' shared 64 KiB alignment. */
+    if (format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+        struct ps5vk_depth_stencil_layout planes;
+        if (samples != VK_SAMPLE_COUNT_1_BIT || layers != 1 ||
+            ps5vk_depth_stencil_layout(width, height, &planes))
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        *stride = planes.bytes;
+        *alignment = planes.alignment;
+        *bytes = planes.bytes;
+        return VK_SUCCESS;
+    }
     if ((!color && !depth) || !width || !height) return VK_ERROR_FORMAT_NOT_SUPPORTED;
     /* A multisampled surface stores one plane per sample, so the layer's bytes
      * scale with the count (pinned: ac_estimate_size multiplies each level's
@@ -93,7 +106,15 @@ VkResult ps5vk_native_image_requirements(VkDevice d, const VkImageCreateInfo *in
         *out = (VkMemoryRequirements){layout.bytes, layout.alignment, 1};
         return VK_SUCCESS;
     }
-    int depth = info->format == VK_FORMAT_D32_SFLOAT || info->format == VK_FORMAT_D16_UNORM;
+    int depth = info->format == VK_FORMAT_D32_SFLOAT || info->format == VK_FORMAT_D16_UNORM ||
+        info->format == VK_FORMAT_D32_SFLOAT_S8_UINT;
+    /* One 2D single-mip, single-layer, single-sample combined surface: the
+     * only shape whose two planes the target builder and readback address. */
+    if (info->format == VK_FORMAT_D32_SFLOAT_S8_UINT &&
+        (info->imageType != VK_IMAGE_TYPE_2D || info->extent.depth != 1u ||
+         info->mipLevels != 1u || info->arrayLayers != 1u || info->flags ||
+         info->samples != VK_SAMPLE_COUNT_1_BIT || info->tiling != VK_IMAGE_TILING_OPTIMAL))
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
     if (info->format == VK_FORMAT_D32_SFLOAT &&
         (info->usage & VK_IMAGE_USAGE_SAMPLED_BIT) &&
         (!ps5vk_texture_format_witnessed(info->format,

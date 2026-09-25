@@ -68,6 +68,59 @@ int main(void)
            target.count==PS5_DEPTH_REGISTER_COUNT &&
            target.registers[20].offset==0x010u &&
            (target.registers[20].value&3u)==1u);
+    /* D32_SFLOAT_S8_UINT: the D32 plan byte for byte, plus the stencil plane
+     * at its 64 KiB-aligned offset and DB_STENCIL_INFO.FORMAT = STENCIL_8. */
+    {
+        struct ps5vk_target_registers d32,ds;
+        image.info.extent=(VkExtent3D){128u,128u,1u};
+        image.info.format=view.format=VK_FORMAT_D32_SFLOAT;
+        span_bytes=131072u;
+        assert(ps5vk_native_target(&device,&view,NULL,&d32)==VK_SUCCESS);
+        image.info.format=view.format=VK_FORMAT_D32_SFLOAT_S8_UINT;
+        view.range.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT;
+        VkImageCreateInfo info={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_D32_SFLOAT_S8_UINT,
+            .extent={128,128,1},.mipLevels=1,.arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,
+            .tiling=VK_IMAGE_TILING_OPTIMAL,.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
+        VkMemoryRequirements req;
+        assert(ps5vk_native_image_requirements(&device,&info,&req)==VK_SUCCESS &&
+               req.size==131072u && req.alignment==65536u);
+        info.arrayLayers=2;
+        assert(ps5vk_native_image_requirements(&device,&info,&req)==VK_ERROR_FORMAT_NOT_SUPPORTED);
+        info.arrayLayers=1;info.mipLevels=2;
+        assert(ps5vk_native_image_requirements(&device,&info,&req)==VK_ERROR_FORMAT_NOT_SUPPORTED);
+        info.mipLevels=1;info.usage|=VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        assert(ps5vk_native_image_requirements(&device,&info,&req)==VK_ERROR_FORMAT_NOT_SUPPORTED);
+        {
+        assert(ps5vk_native_target(&device,&view,NULL,&ds)==VK_SUCCESS &&
+               ds.count==PS5_DEPTH_REGISTER_COUNT);
+        const uintptr_t stencil=base+65536u;
+        unsigned changed=0;
+        for(unsigned i=0;i<ds.count;++i) {
+            assert(ds.registers[i].offset==d32.registers[i].offset);
+            switch(ds.registers[i].offset) {
+            case 0x011:
+                assert(ds.registers[i].value==(d32.registers[i].value|1u) &&
+                       ds.registers[i].value==0x20000181u); ++changed; break;
+            case 0x013: case 0x015:
+                assert(ds.registers[i].value==(uint32_t)(stencil>>8)); ++changed; break;
+            case 0x01b: case 0x01d:
+                assert(ds.registers[i].value==(uint32_t)(stencil>>40)); ++changed; break;
+            default:
+                assert(ds.registers[i].value==d32.registers[i].value);
+            }
+        }
+        assert(changed==5u);
+        /* The depth plane is untouched: Z_32_FLOAT at the image base. */
+        assert(ds.registers[20].offset==0x010u && (ds.registers[20].value&3u)==3u);
+        assert(ds.registers[7].offset==0x12u && ds.registers[7].value==(uint32_t)(base>>8));
+        /* A span too small for the stencil plane is refused. */
+        span_bytes=65536u;
+        assert(ps5vk_native_target(&device,&view,NULL,&ds)!=VK_SUCCESS && !ds.count);
+        span_bytes=131072u;
+        }
+        view.range.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;
+    }
     image.info.extent=(VkExtent3D){32u,32u,1u};
     image.info.format=view.format=VK_FORMAT_D32_SFLOAT;
     span_bytes=131072u;

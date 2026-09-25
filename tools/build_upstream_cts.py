@@ -1042,6 +1042,10 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicSemaphoreTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationUtil.cpp",
+        # DXVK262-T09 timelineSemaphore: the original timeline family and the
+        # operation helpers its device/host cases are built from.
+        cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationTimelineSemaphoreTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationOperation.cpp",
         cts_root / "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
@@ -1200,6 +1204,10 @@ def main(argv=None):
         # multisampled-render-to-single-sampled groups), so all of them have to
         # be compiled or the factory links against factories that do not exist.
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleTests.cpp",
+        # DXVK262-T09 separateDepthStencilLayouts: original stencil and depth
+        # families (d32_sfloat_s8_uint and its _separate_layouts twin).
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineStencilTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineDepthTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleImageTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampleShaderFragmentMaskTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineMultisampledRenderToSingleSampledTests.cpp",

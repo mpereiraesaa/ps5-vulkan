@@ -583,7 +583,10 @@ class UpstreamSelectionTests(unittest.TestCase):
     def test_device_capabilities_come_from_the_device_sources(self):
         self.assertEqual([], self.capability_failures)
         self.assertIn("VK_KHR_MULTIVIEW", self.capabilities["extensions"])
-        self.assertNotIn("VK_KHR_CREATE_RENDERPASS_2", self.capabilities["extensions"])
+        # The device source compiles the create_renderpass2 route; whether a
+        # build reports it is the platform's bit (tools/check_dxvk_profile.py
+        # counts only shipping bits).
+        self.assertIn("VK_KHR_CREATE_RENDERPASS_2", self.capabilities["extensions"])
         self.assertFalse(self.capabilities["features"]["multiviewGeometryShader"])
         self.assertFalse(self.capabilities["features"]["multiviewTessellationShader"])
         self.assertIn("occlusionQueryPrecise", self.capabilities["core_features"])

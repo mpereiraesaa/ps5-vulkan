@@ -543,6 +543,28 @@ int main(void)
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
     assert(!properties.bufferFeatures && !properties.linearTilingFeatures);
+    /* The combined depth/stencil attachment (both planes, per-aspect
+     * readback) publishes its witnessed attachment and readback roles. */
+    assert(ps5vk_texture_format_capabilities(VK_FORMAT_D32_SFLOAT_S8_UINT) ==
+        (PS5VK_FORMAT_CAP_DEPTH_STENCIL_ATTACHMENT | PS5VK_FORMAT_CAP_TRANSFER_SRC));
+    ps5vk_texture_format_properties(VK_FORMAT_D32_SFLOAT_S8_UINT, &properties);
+    assert(properties.optimalTilingFeatures ==
+        (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                               VK_FORMAT_FEATURE_TRANSFER_SRC_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    /* No transfer destination (no clear or upload into either plane), no
+     * sampling, and never a buffer or linear role. */
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
+    assert(!properties.bufferFeatures && !properties.linearTilingFeatures);
+    /* D24S8 has no row: Z_24 is not measured on this GPU. */
+    ps5vk_texture_format_properties(VK_FORMAT_D24_UNORM_S8_UINT, &properties);
+    assert(!properties.optimalTilingFeatures);
     ps5vk_texture_format_properties(VK_FORMAT_R32_UINT, &properties);
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |

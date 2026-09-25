@@ -67,7 +67,8 @@ static void polygon_offset(const struct ps5vk_raster_state *raster, VkFormat dep
     /* PAL's GFX9+ depth view uses -16 fixed-point bits for Z_16 and -23
      * with the floating-format bit for Z_32_FLOAT. The D16 diagnostic only
      * accepts zero bias factors until nonzero bias has a native witness. */
-    const uint32_t depth_bias_format = depth_format == VK_FORMAT_D32_SFLOAT ?
+    const uint32_t depth_bias_format = (depth_format == VK_FORMAT_D32_SFLOAT ||
+                                        depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) ?
         (((uint32_t)(-23) & 0xffu) | (1u << 8)) :
         depth_format == VK_FORMAT_D16_UNORM ? ((uint32_t)(-16) & 0xffu) : 0u;
     out[0] = (ps5_agc_register){0x2de, depth_bias_format};
@@ -77,6 +78,45 @@ static void polygon_offset(const struct ps5vk_raster_state *raster, VkFormat dep
     out[4] = (ps5_agc_register){0x2e2, slope};
     out[5] = (ps5_agc_register){0x2e3, offset};
 }
+/* VkStencilOp to the GFX10 StencilOp code (Mesa RADV si_translate_stencil_op):
+ * REPLACE writes the test value, the increments/decrements step by
+ * STENCILOPVAL, which is therefore one. */
+static int stencil_op(VkStencilOp op, uint32_t *out)
+{
+    static const uint32_t codes[8] = {
+        0u, /* KEEP */ 1u, /* ZERO */ 3u, /* REPLACE -> REPLACE_TEST */
+        5u, /* INCREMENT_AND_CLAMP -> ADD_CLAMP */ 6u, /* DECREMENT_AND_CLAMP -> SUB_CLAMP */
+        7u, /* INVERT */ 8u, /* INCREMENT_AND_WRAP -> ADD_WRAP */
+        9u, /* DECREMENT_AND_WRAP -> SUB_WRAP */
+    };
+    if ((unsigned)op >= 8u) return -1;
+    *out = codes[op];
+    return 0;
+}
+
+int ps5vk_stencil_registers(const VkStencilOpState *front, const VkStencilOpState *back,
+    ps5_agc_register out[3])
+{
+    uint32_t ff, fp, fz, bf, bp, bz;
+    if (!front || !back || !out || front->compareOp > VK_COMPARE_OP_ALWAYS ||
+        back->compareOp > VK_COMPARE_OP_ALWAYS ||
+        stencil_op(front->failOp, &ff) || stencil_op(front->passOp, &fp) ||
+        stencil_op(front->depthFailOp, &fz) || stencil_op(back->failOp, &bf) ||
+        stencil_op(back->passOp, &bp) || stencil_op(back->depthFailOp, &bz))
+        return -1;
+    /* DB_STENCIL_CONTROL: FAIL[3:0] ZPASS[7:4] ZFAIL[11:8], then the same
+     * three for the back face at [15:12] [19:16] [23:20]. */
+    out[0] = (ps5_agc_register){0x10b,
+        ff | (fp << 4) | (fz << 8) | (bf << 12) | (bp << 16) | (bz << 20)};
+    /* DB_STENCILREFMASK(_BF): TESTVAL[7:0] MASK[15:8] WRITEMASK[23:16]
+     * OPVAL[31:24]; an 8-bit stencil aspect uses the low byte of each. */
+    out[1] = (ps5_agc_register){0x10c, (front->reference & 0xffu) |
+        ((front->compareMask & 0xffu) << 8) | ((front->writeMask & 0xffu) << 16) | (1u << 24)};
+    out[2] = (ps5_agc_register){0x10d, (back->reference & 0xffu) |
+        ((back->compareMask & 0xffu) << 8) | ((back->writeMask & 0xffu) << 16) | (1u << 24)};
+    return 0;
+}
+
 VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
     const VkRect2D *scissor_state, uint32_t viewport_count,
     const struct ps5vk_raster_state *raster,
@@ -106,7 +146,12 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
         (p->front_face != VK_FRONT_FACE_CLOCKWISE && p->front_face != VK_FRONT_FACE_COUNTER_CLOCKWISE) ||
         p->depth_compare > VK_COMPARE_OP_ALWAYS || p->depth_compare < VK_COMPARE_OP_NEVER)
         PS5VK_DRAW_UNSUPPORTED();
-    int depth_format_supported = p->depth_format == VK_FORMAT_D32_SFLOAT;
+    int depth_format_supported = p->depth_format == VK_FORMAT_D32_SFLOAT ||
+        p->depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT;
+    /* The stencil test needs the stencil plane, which only the combined
+     * target programmes. */
+    if (raster->stencil_test && p->depth_format != VK_FORMAT_D32_SFLOAT_S8_UINT)
+        PS5VK_DRAW_UNSUPPORTED();
     depth_format_supported |= p->depth_format == VK_FORMAT_D16_UNORM &&
         width == 128u && height == 128u;
     if (p->depth_format == VK_FORMAT_UNDEFINED ? depth != NULL :
@@ -296,7 +341,22 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * depth testing is disabled, even if depthWriteEnable was specified. */
     uint32_t depth_control = depth && p->depth_test ?
         2u | (p->depth_write ? 4u : 0u) | ((uint32_t)p->depth_compare << 4) : 0u;
+    /* The stencil test (public GFX10 DB_DEPTH_CONTROL: STENCIL_ENABLE[0],
+     * BACKFACE_ENABLE[7], STENCILFUNC[10:8], STENCILFUNC_BF[22:20]; the
+     * hardware compare codes equal VkCompareOp). Front and back always carry
+     * their own state, so BACKFACE_ENABLE is set whenever the test is. */
+    if (depth && raster->stencil_test) {
+        depth_control |= 1u | (1u << 7) |
+            ((uint32_t)raster->stencil_front.compareOp << 8) |
+            ((uint32_t)raster->stencil_back.compareOp << 20);
+    }
     result.cx[result.cx_count++] = (ps5_agc_register){0x200, depth_control};
+    if (depth && raster->stencil_test) {
+        ps5_agc_register stencil[3];
+        if (ps5vk_stencil_registers(&raster->stencil_front, &raster->stencil_back, stencil))
+            PS5VK_DRAW_UNSUPPORTED();
+        for (unsigned k = 0; k < 3; ++k) result.cx[result.cx_count++] = stencil[k];
+    }
     /* Multisample raster state (DXVK262-T06). The colour target already states
      * its sample geometry in CB_COLOR0_ATTRIB; these are the raster half the
      * same draw needs, and they are written only when the pipeline carries more

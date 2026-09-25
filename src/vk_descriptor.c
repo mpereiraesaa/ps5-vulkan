@@ -79,7 +79,7 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
                     * actual layout remain consumption-time obligations. */
                    if(!v->imageView || v->imageView->device!=d ||
                       !v->imageView->image || v->imageView->image->device!=d ||
-                      !(v->imageView->image->info.usage &
+                      !(ps5vk_image_view_usage(v->imageView) &
                         (storage_image ? VK_IMAGE_USAGE_STORAGE_BIT : VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) ||
                       (v->imageView->view_type!=VK_IMAGE_VIEW_TYPE_2D &&
                        v->imageView->view_type!=VK_IMAGE_VIEW_TYPE_2D_ARRAY) ||
@@ -91,7 +91,7 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
                     continue;
                 }
                 if(!v->sampler || v->sampler->device!=d || !v->imageView || v->imageView->device!=d ||
-                    !v->imageView->image || !(v->imageView->image->info.usage&VK_IMAGE_USAGE_SAMPLED_BIT) ||
+                    !v->imageView->image || !(ps5vk_image_view_usage(v->imageView)&VK_IMAGE_USAGE_SAMPLED_BIT) ||
                     (v->imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && v->imageLayout!=VK_IMAGE_LAYOUT_GENERAL) ||
                     ps5vk_image_span(d,v->imageView->image,&address,&bytes)!=VK_SUCCESS) {
                     ++d->lifetime_errors;return;

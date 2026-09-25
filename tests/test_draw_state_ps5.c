@@ -380,5 +380,50 @@ int main(void)
         /* A depth-only draw still needs a depth target. */
         assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
             &raster,NULL,0,NULL,&area,640,480,0,&rejected)!=VK_SUCCESS && !rejected.cx_count);
+
+        /* T09: the stencil test on the combined D32_SFLOAT_S8_UINT target.
+         * Without the test the draw is the D32 draw word for word (the float
+         * polygon-offset format included); with it, DB_DEPTH_CONTROL gains
+         * STENCIL_ENABLE, BACKFACE_ENABLE and both compare functions, and the
+         * three stencil words follow it. */
+        struct VkPipeline_T ds = depth_only;
+        ds.depth_format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+        struct ps5vk_raster_state stencil_raster = raster;
+        stencil_raster.stencil_test = VK_FALSE;
+        struct ps5vk_draw_state plain, stencilled;
+        assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
+            &stencil_raster,NULL,0,&depth,&area,640,480,0,&only)==VK_SUCCESS);
+        assert(ps5vk_native_draw_state(&ds,&ds.viewport,&ds.scissor,1,
+            &stencil_raster,NULL,0,&depth,&area,640,480,0,&plain)==VK_SUCCESS);
+        assert(plain.cx_count==only.cx_count &&
+               !memcmp(plain.cx,only.cx,plain.cx_count*sizeof(plain.cx[0])));
+        stencil_raster.stencil_test = VK_TRUE;
+        stencil_raster.stencil_front = (VkStencilOpState){VK_STENCIL_OP_ZERO,
+            VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_INCREMENT_AND_WRAP, VK_COMPARE_OP_EQUAL,
+            0x0f, 0xf0, 0x5a};
+        stencil_raster.stencil_back = (VkStencilOpState){VK_STENCIL_OP_INVERT,
+            VK_STENCIL_OP_DECREMENT_AND_CLAMP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_GREATER,
+            0x1ff, 0x3ff, 0x1a5};
+        /* The depth-only target refuses the stencil test: no stencil plane. */
+        assert(ps5vk_native_draw_state(&depth_only,&depth_only.viewport,&depth_only.scissor,1,
+            &stencil_raster,NULL,0,&depth,&area,640,480,0,&rejected)!=VK_SUCCESS &&
+            !rejected.cx_count);
+        assert(ps5vk_native_draw_state(&ds,&ds.viewport,&ds.scissor,1,
+            &stencil_raster,NULL,0,&depth,&area,640,480,0,&stencilled)==VK_SUCCESS);
+        assert(stencilled.cx_count==plain.cx_count+3u &&
+               stencilled.cx_count<=PS5VK_DRAW_CX_CAPACITY);
+        const uint32_t control=last_cx(&plain,0x200);
+        assert(last_cx(&stencilled,0x200)==(control|1u|(1u<<7)|(2u<<8)|(4u<<20)));
+        /* ZERO=1, REPLACE_TEST=3, ADD_WRAP=8 | INVERT=7, SUB_CLAMP=6, KEEP=0. */
+        assert(last_cx(&stencilled,0x10b)==(1u|(3u<<4)|(8u<<8)|(7u<<12)|(6u<<16)|(0u<<20)));
+        assert(last_cx(&stencilled,0x10c)==(0x5au|(0x0fu<<8)|(0xf0u<<16)|(1u<<24)));
+        /* Only the low eight bits of an 8-bit stencil aspect's values count. */
+        assert(last_cx(&stencilled,0x10d)==(0xa5u|(0xffu<<8)|(0xffu<<16)|(1u<<24)));
+        ps5_agc_register words[3];
+        VkStencilOpState bad = stencil_raster.stencil_front;
+        bad.passOp = (VkStencilOp)8;
+        assert(ps5vk_stencil_registers(&bad,&stencil_raster.stencil_back,words));
+        bad = stencil_raster.stencil_front; bad.compareOp = (VkCompareOp)8;
+        assert(ps5vk_stencil_registers(&stencil_raster.stencil_back,&bad,words));
     }
 }

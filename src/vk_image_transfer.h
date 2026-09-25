@@ -227,7 +227,8 @@ static inline VkBool32 ps5vk_depth_attachment_clear_word(VkFormat format,
     float depth, uint32_t *out)
 {
     if (!out || !(depth >= 0.0f && depth <= 1.0f)) return VK_FALSE;
-    if (format == VK_FORMAT_D32_SFLOAT) {
+    /* The depth plane of D32_SFLOAT_S8_UINT is the same Z_32_FLOAT word. */
+    if (format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
         memcpy(out, &depth, sizeof(*out));
         return VK_TRUE;
     }

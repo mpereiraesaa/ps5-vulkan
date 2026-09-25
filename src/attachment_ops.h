@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 #include "color_attachment_contract.h"
 #include "sample_rate_contract.h"
+#include "depth_stencil_layout.h"
 
 struct ps5vk_attachment_plan {
     VkBool32 clear;
@@ -58,6 +59,76 @@ static inline VkResult ps5vk_attachment_plan(const VkAttachmentDescription *a,
         .clear = a->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR,
         .load = a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD,
         .store = a->storeOp == VK_ATTACHMENT_STORE_OP_STORE,
+    };
+    return VK_SUCCESS;
+}
+
+/* The combined depth/stencil attachment (D32_SFLOAT_S8_UINT). Each aspect has
+ * its own load/store operation (loadOp/storeOp for depth,
+ * stencilLoadOp/stencilStoreOp for stencil) and, with
+ * VK_KHR_separate_depth_stencil_layouts, its own initial, subpass and final
+ * layout. The per-aspect layouts are read through the aspect
+ * (ps5vk_layout_for_aspect), so a combined, mixed or separate layout is
+ * accepted exactly when it means an attachment, read-only, GENERAL or
+ * readback state for that aspect:
+ *
+ *   reference  attachment, read-only or GENERAL;
+ *   initial    UNDEFINED or any of those, or TRANSFER_SRC (a surface handed
+ *              back from its readback);
+ *   final      attachment, read-only, GENERAL or TRANSFER_SRC.
+ *
+ * LOAD of an aspect whose initial layout is UNDEFINED is refused: there are
+ * no contents to load. A read-only reference makes the aspect's store a no-op
+ * for the DB, which never writes an aspect the draw state leaves disabled. */
+struct ps5vk_depth_stencil_plan {
+    VkBool32 depth_clear, depth_load, depth_store;
+    VkBool32 stencil_clear, stencil_load, stencil_store;
+};
+
+static inline int ps5vk_depth_stencil_aspect_layout(VkImageLayout layout,
+    VkImageAspectFlags aspect, int initial, int final)
+{
+    VkImageLayout p;
+    if (initial && layout == VK_IMAGE_LAYOUT_UNDEFINED) return 1;
+    if (!ps5vk_layout_for_aspect(layout, aspect, &p)) return 0;
+    if (p == VK_IMAGE_LAYOUT_GENERAL || p == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL ||
+        p == VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL) return 1;
+    return (initial || final) && p == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+}
+
+static inline VkResult ps5vk_depth_stencil_attachment_plan(const VkAttachmentDescription *a,
+    VkFormat format, const struct ps5vk_depth_stencil_layouts *initial,
+    const struct ps5vk_depth_stencil_layouts *reference,
+    const struct ps5vk_depth_stencil_layouts *final,
+    struct ps5vk_depth_stencil_plan *out)
+{
+    if (!a || !out || !initial || !reference || !final || a->format != format ||
+        format != VK_FORMAT_D32_SFLOAT_S8_UINT || a->samples != VK_SAMPLE_COUNT_1_BIT ||
+        a->loadOp < VK_ATTACHMENT_LOAD_OP_LOAD || a->loadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
+        a->storeOp < VK_ATTACHMENT_STORE_OP_STORE || a->storeOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
+        a->stencilLoadOp < VK_ATTACHMENT_LOAD_OP_LOAD ||
+        a->stencilLoadOp > VK_ATTACHMENT_LOAD_OP_DONT_CARE ||
+        a->stencilStoreOp < VK_ATTACHMENT_STORE_OP_STORE ||
+        a->stencilStoreOp > VK_ATTACHMENT_STORE_OP_DONT_CARE ||
+        !ps5vk_depth_stencil_aspect_layout(initial->depth, VK_IMAGE_ASPECT_DEPTH_BIT, 1, 0) ||
+        !ps5vk_depth_stencil_aspect_layout(initial->stencil, VK_IMAGE_ASPECT_STENCIL_BIT, 1, 0) ||
+        !ps5vk_depth_stencil_aspect_layout(reference->depth, VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0) ||
+        !ps5vk_depth_stencil_aspect_layout(reference->stencil, VK_IMAGE_ASPECT_STENCIL_BIT, 0, 0) ||
+        !ps5vk_depth_stencil_aspect_layout(final->depth, VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1) ||
+        !ps5vk_depth_stencil_aspect_layout(final->stencil, VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1) ||
+        (a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD && initial->depth == VK_IMAGE_LAYOUT_UNDEFINED) ||
+        (a->stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD &&
+         initial->stencil == VK_IMAGE_LAYOUT_UNDEFINED))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    *out = (struct ps5vk_depth_stencil_plan){
+        .depth_clear = a->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .depth_load = a->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD,
+        .depth_store = a->storeOp == VK_ATTACHMENT_STORE_OP_STORE,
+        .stencil_clear = a->stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .stencil_load = a->stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD,
+        .stencil_store = a->stencilStoreOp == VK_ATTACHMENT_STORE_OP_STORE,
     };
     return VK_SUCCESS;
 }
