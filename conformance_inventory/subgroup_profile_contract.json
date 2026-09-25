@@ -52,9 +52,9 @@
       "vkGetPhysicalDeviceExternalSemaphoreProperties"
     ],
     "current_public_prototypes": [],
-    "current_core_dispatch": ["vkEnumerateInstanceVersion", "vkEnumeratePhysicalDeviceGroups"],
-    "current_implementations": ["vkEnumerateInstanceVersion", "vkEnumeratePhysicalDeviceGroups"],
-    "note": "The two instance-level commands implement the Vulkan 1.1 instance: vkEnumerateInstanceVersion is global and vkEnumeratePhysicalDeviceGroups resolves only for an instance created with apiVersion 1.1 or later. The physical device still reports 1.0, so the physical-device and device-level core names stay absent; KHR-suffixed entry points do not provide them. This is not a Vulkan 1.1 device claim."
+    "current_core_dispatch": ["vkEnumerateInstanceVersion", "vkEnumeratePhysicalDeviceGroups", "vkGetPhysicalDeviceExternalBufferProperties", "vkGetPhysicalDeviceExternalFenceProperties", "vkGetPhysicalDeviceExternalSemaphoreProperties", "vkGetPhysicalDeviceFeatures2", "vkGetPhysicalDeviceFormatProperties2", "vkGetPhysicalDeviceImageFormatProperties2", "vkGetPhysicalDeviceMemoryProperties2", "vkGetPhysicalDeviceProperties2", "vkGetPhysicalDeviceQueueFamilyProperties2", "vkGetPhysicalDeviceSparseImageFormatProperties2"],
+    "current_implementations": ["vkEnumerateInstanceVersion", "vkEnumeratePhysicalDeviceGroups", "vkGetPhysicalDeviceExternalBufferProperties", "vkGetPhysicalDeviceExternalFenceProperties", "vkGetPhysicalDeviceExternalSemaphoreProperties", "vkGetPhysicalDeviceFeatures2", "vkGetPhysicalDeviceFormatProperties2", "vkGetPhysicalDeviceImageFormatProperties2", "vkGetPhysicalDeviceMemoryProperties2", "vkGetPhysicalDeviceProperties2", "vkGetPhysicalDeviceQueueFamilyProperties2", "vkGetPhysicalDeviceSparseImageFormatProperties2"],
+    "note": "These are the Vulkan 1.1 instance: vkEnumerateInstanceVersion is global; the instance- and physical-device-level names resolve only for an instance created with apiVersion 1.1 or later and answer exactly as the KHR routes do (external handle queries report no support). The physical device still reports 1.0, so the device-level core names (memory-requirements2, bind2, device group, trim, GetDeviceQueue2) stay absent. This is not a Vulkan 1.1 device claim."
   },
   "api12_command_gate": {
     "registry_feature": "VK_BASE_VERSION_1_2",

@@ -28,6 +28,16 @@ static const struct entry entries[] = {
     ENTRY(vkGetPhysicalDeviceSurfacePresentModesKHR, INSTANCE),
     ENTRY(vkEnumeratePhysicalDeviceGroupsKHR, INSTANCE),
     ENTRY(vkEnumeratePhysicalDeviceGroups, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceFeatures2, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceProperties2, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceFormatProperties2, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceImageFormatProperties2, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceQueueFamilyProperties2, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceMemoryProperties2, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties2, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceExternalBufferProperties, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceExternalFenceProperties, INSTANCE),
+    ENTRY(vkGetPhysicalDeviceExternalSemaphoreProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceMemoryProperties, INSTANCE),
     ENTRY(vkGetPhysicalDeviceFeatures, INSTANCE),
@@ -205,6 +215,26 @@ static int gpdp2_command(const char *name)
     return 0;
 }
 
+static int core11_instance_command(const char *name)
+{
+    static const char *const commands[] = {
+        "vkEnumeratePhysicalDeviceGroups",
+        "vkGetPhysicalDeviceFeatures2",
+        "vkGetPhysicalDeviceProperties2",
+        "vkGetPhysicalDeviceFormatProperties2",
+        "vkGetPhysicalDeviceImageFormatProperties2",
+        "vkGetPhysicalDeviceQueueFamilyProperties2",
+        "vkGetPhysicalDeviceMemoryProperties2",
+        "vkGetPhysicalDeviceSparseImageFormatProperties2",
+        "vkGetPhysicalDeviceExternalBufferProperties",
+        "vkGetPhysicalDeviceExternalFenceProperties",
+        "vkGetPhysicalDeviceExternalSemaphoreProperties",
+    };
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        if (!strcmp(name, commands[n])) return 1;
+    return 0;
+}
+
 static int group_creation_command(const char *name)
 { return !strcmp(name, "vkEnumeratePhysicalDeviceGroupsKHR"); }
 
@@ -285,10 +315,10 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
     if (surface_command(name) &&
         (!instance || !instance->surface_extension_enabled))
         return NULL;
-    /* Instance-level core 1.1 command: only for an instance created with
-     * apiVersion 1.1 or later. Physical-device-level core 1.1 names stay
-     * absent because the device reports Vulkan 1.0. */
-    if (!strcmp(name, "vkEnumeratePhysicalDeviceGroups") &&
+    /* Core 1.1 instance- and physical-device-level names: only for an
+     * instance created with apiVersion 1.1 or later. Device-level core 1.1
+     * names stay absent because the device reports Vulkan 1.0. */
+    if (core11_instance_command(name) &&
         (!instance || instance->api_version < VK_API_VERSION_1_1))
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)

@@ -43,7 +43,7 @@ class SubgroupProfileContract(unittest.TestCase):
         dispatch = self.dispatch_source.replace(
             "ENTRY(vkGetPhysicalDeviceFeatures2KHR, INSTANCE),",
             "ENTRY(vkGetPhysicalDeviceFeatures2KHR, INSTANCE),\n"
-            "    ENTRY(vkGetPhysicalDeviceFeatures2, INSTANCE),")
+            "    ENTRY(vkTrimCommandPool, DEVICE),")
         with self.assertRaisesRegex(AssertionError, "core command dispatch"):
             self.validate(dispatch_source=dispatch)
 

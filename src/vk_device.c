@@ -183,8 +183,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
         const VkApplicationInfo *a = info->pApplicationInfo;
         if (a->sType != VK_STRUCTURE_TYPE_APPLICATION_INFO || a->pNext) return INVALID;
         /* A Vulkan 1.1 instance must not return VK_ERROR_INCOMPATIBLE_DRIVER
-         * for any apiVersion. Instance-level behaviour follows the lower of
-         * the request and the instance version. */
+         * for any apiVersion unless an incompatible variant is requested.
+         * Instance-level behaviour follows the lower of the request and the
+         * instance version. */
+        if (VK_API_VERSION_VARIANT(a->apiVersion)) return VK_ERROR_INCOMPATIBLE_DRIVER;
         if (a->apiVersion >= PS5VK_INSTANCE_API_VERSION)
             api_version = PS5VK_INSTANCE_API_VERSION;
     }
@@ -1324,4 +1326,54 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
 void ps5vk_device_enable_runtime_compiler(VkDevice device)
 {
     if (device) device->runtime_compiler_enabled = VK_TRUE;
+}
+/* Core Vulkan 1.1 physical-device-level names that a 1.1 instance resolves.
+ * The spec permits calling them only with a physical device that reports 1.1
+ * or later; this device reports 1.0, so they answer exactly as the
+ * VK_KHR_get_physical_device_properties2 route does and claim nothing more. */
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2(VkPhysicalDevice p,
+    VkPhysicalDeviceFeatures2 *out)
+{ vkGetPhysicalDeviceFeatures2KHR(p, out); }
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2(VkPhysicalDevice p,
+    VkPhysicalDeviceProperties2 *out)
+{ vkGetPhysicalDeviceProperties2KHR(p, out); }
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFormatProperties2(VkPhysicalDevice p,
+    VkFormat format, VkFormatProperties2 *out)
+{ vkGetPhysicalDeviceFormatProperties2KHR(p, format, out); }
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice p,
+    const VkPhysicalDeviceImageFormatInfo2 *info, VkImageFormatProperties2 *out)
+{ return vkGetPhysicalDeviceImageFormatProperties2KHR(p, info, out); }
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice p,
+    uint32_t *count, VkQueueFamilyProperties2 *out)
+{ vkGetPhysicalDeviceQueueFamilyProperties2KHR(p, count, out); }
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice p,
+    VkPhysicalDeviceMemoryProperties2 *out)
+{ vkGetPhysicalDeviceMemoryProperties2KHR(p, out); }
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties2(VkPhysicalDevice p,
+    const VkPhysicalDeviceSparseImageFormatInfo2 *info, uint32_t *count,
+    VkSparseImageFormatProperties2 *out)
+{ vkGetPhysicalDeviceSparseImageFormatProperties2KHR(p, info, count, out); }
+/* No external memory, fence or semaphore handle type is supported: every
+ * query reports empty capabilities. */
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalBufferProperties(VkPhysicalDevice p,
+    const VkPhysicalDeviceExternalBufferInfo *info, VkExternalBufferProperties *out)
+{
+    if (!p || !info || !out) return;
+    out->externalMemoryProperties = (VkExternalMemoryProperties){0};
+}
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFenceProperties(VkPhysicalDevice p,
+    const VkPhysicalDeviceExternalFenceInfo *info, VkExternalFenceProperties *out)
+{
+    if (!p || !info || !out) return;
+    out->exportFromImportedHandleTypes = 0;
+    out->compatibleHandleTypes = 0;
+    out->externalFenceFeatures = 0;
+}
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalSemaphoreProperties(VkPhysicalDevice p,
+    const VkPhysicalDeviceExternalSemaphoreInfo *info, VkExternalSemaphoreProperties *out)
+{
+    if (!p || !info || !out) return;
+    out->exportFromImportedHandleTypes = 0;
+    out->compatibleHandleTypes = 0;
+    out->externalSemaphoreFeatures = 0;
 }
