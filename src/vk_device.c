@@ -525,6 +525,14 @@ static VkBool32 bind_memory2_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_BIND_MEMORY2) != 0;
 }
+/* VK_KHR_maintenance4 depends on VK_VERSION_1_1 in the pinned registry (no
+ * extension alternative): a Vulkan 1.0 device cannot enable it, so the route
+ * opens only when both the platform bit and the device version allow it. */
+static VkBool32 maintenance4_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE4) &&
+        p->platform.properties.apiVersion >= VK_API_VERSION_1_1;
+}
 static VkBool32 separate_depth_stencil_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 &
@@ -622,6 +630,9 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
             ((VkPhysicalDeviceShaderTerminateInvocationFeatures *)next)
                 ->shaderTerminateInvocation = !!(p->platform.supported_features_t09 &
                     PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION);
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES) {
+            ((VkPhysicalDeviceMaintenance4Features *)next)->maintenance4 =
+                maintenance4_supported(p);
 
         }
     }
@@ -670,6 +681,14 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
              * USER_CLIP_PLANES_ONLY relaxation is never claimed. */
             ((VkPhysicalDevicePointClippingProperties *)next)->pointClippingBehavior =
                 VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES) {
+            /* The largest size vkCreateBuffer accepts: its aligned footprint
+             * must fit one allocation. This is the allocator's software
+             * budget, below the 2^30 minimum the extension sets. */
+            const VkDeviceSize alignment =
+                p->platform.properties.limits.minStorageBufferOffsetAlignment;
+            ((VkPhysicalDeviceMaintenance4Properties *)next)->maxBufferSize =
+                alignment ? p->platform.max_allocation & ~(alignment - 1) : 0;
         }
     }
 }
@@ -779,15 +798,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Twenty-one conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Twenty-two conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
      * helper invocation, terminate invocation, get_memory_requirements2,
-     * dedicated_allocation, bind_memory2). Keep headroom so a new entry cannot
-     * overflow the array before this bound is revisited; each push site must
-     * stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 21, DEVICE_EXTENSION_SLOTS = 24 };
+     * dedicated_allocation, bind_memory2, maintenance4). Keep headroom so a new
+     * entry cannot overflow the array before this bound is revisited; each push
+     * site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 22, DEVICE_EXTENSION_SLOTS = 24 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -895,6 +914,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_KHR_BIND_MEMORY_2_SPEC_VERSION};
     }
+    if (maintenance4_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_MAINTENANCE_4_EXTENSION_NAME, VK_KHR_MAINTENANCE_4_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -934,6 +957,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 demote_extension = VK_FALSE, terminate_extension = VK_FALSE;
     VkBool32 memory_requirements2_extension = VK_FALSE;
     VkBool32 dedicated_allocation_extension = VK_FALSE, bind_memory2_extension = VK_FALSE;
+    VkBool32 maintenance4_extension = VK_FALSE, saw_maintenance4 = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -983,6 +1007,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &dedicated_allocation_extension;
         else if (!strcmp(name, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME))
             seen = &bind_memory2_extension;
+        else if (!strcmp(name, VK_KHR_MAINTENANCE_4_EXTENSION_NAME))
+            seen = &maintenance4_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1067,7 +1093,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     if ((memory_requirements2_extension && !memory_requirements2_supported(p)) ||
         (dedicated_allocation_extension &&
          (!dedicated_allocation_supported(p) || !memory_requirements2_extension)) ||
-        (bind_memory2_extension && !bind_memory2_supported(p)))
+        (bind_memory2_extension && !bind_memory2_supported(p)) ||
+        (maintenance4_extension && !maintenance4_supported(p)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
@@ -1333,6 +1360,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
             }
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES) {
+            if (saw_maintenance4) return INVALID;
+            saw_maintenance4 = VK_TRUE;
+            const VkPhysicalDeviceMaintenance4Features *features =
+                (const VkPhysicalDeviceMaintenance4Features *)next;
+            if (!valid_bool(features->maintenance4)) return INVALID;
+            if (features->maintenance4) {
+                if (!maintenance4_extension || !maintenance4_supported(p))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
+            }
         } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;
         }
@@ -1375,6 +1413,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->memory_requirements2_extension_enabled = memory_requirements2_extension;
     d->dedicated_allocation_extension_enabled = dedicated_allocation_extension;
     d->bind_memory2_extension_enabled = bind_memory2_extension;
+    d->maintenance4_extension_enabled = maintenance4_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

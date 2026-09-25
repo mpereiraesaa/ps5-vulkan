@@ -89,6 +89,9 @@ static const struct entry entries[] = {
     ENTRY(vkGetImageSparseMemoryRequirements2KHR, DEVICE),
     ENTRY(vkBindBufferMemory2KHR, DEVICE),
     ENTRY(vkBindImageMemory2KHR, DEVICE),
+    ENTRY(vkGetDeviceBufferMemoryRequirementsKHR, DEVICE),
+    ENTRY(vkGetDeviceImageMemoryRequirementsKHR, DEVICE),
+    ENTRY(vkGetDeviceImageSparseMemoryRequirementsKHR, DEVICE),
     ENTRY(vkCreateImageView, DEVICE),
     ENTRY(vkDestroyImageView, DEVICE),
     ENTRY(vkCreateSampler, DEVICE),
@@ -314,6 +317,14 @@ static int bind_memory2_command(const char *name)
            !strcmp(name, "vkBindImageMemory2KHR");
 }
 
+/* VK_KHR_maintenance4 queries; the core-1.3 names are not entries. */
+static int maintenance4_command(const char *name)
+{
+    return !strcmp(name, "vkGetDeviceBufferMemoryRequirementsKHR") ||
+           !strcmp(name, "vkGetDeviceImageMemoryRequirementsKHR") ||
+           !strcmp(name, "vkGetDeviceImageSparseMemoryRequirementsKHR");
+}
+
 /* VK_KHR_timeline_semaphore host commands, reachable only on a device that
  * enabled the extension. Vulkan 1.0 has no core names for them. */
 static int descriptor_update_template_command(const char *name)
@@ -384,6 +395,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, co
     if (memory_requirements2_command(name) && !device->memory_requirements2_extension_enabled)
         return NULL;
     if (bind_memory2_command(name) && !device->bind_memory2_extension_enabled)
+        return NULL;
+    if (maintenance4_command(name) && !device->maintenance4_extension_enabled)
         return NULL;
     for (size_t j = 0; j < sizeof(entries) / sizeof(entries[0]); ++j)
         if (entries[j].scope == DEVICE && !strcmp(name, entries[j].name)) return entries[j].function;

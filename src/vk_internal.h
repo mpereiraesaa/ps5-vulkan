@@ -185,6 +185,10 @@ enum ps5vk_t09_feature_bits {
     PS5VK_T09_FEATURE_DEDICATED_ALLOCATION = 1u << 10,
     /* VK_KHR_bind_memory2: vkBind{Buffer,Image}Memory2KHR. */
     PS5VK_T09_FEATURE_BIND_MEMORY2 = 1u << 11,
+    /* VK_KHR_maintenance4. The pinned registry makes it depend on Vulkan 1.1
+     * with no extension alternative, so it stays unavailable while the
+     * device reports Vulkan 1.0, whatever the platform reports. */
+    PS5VK_T09_FEATURE_MAINTENANCE4 = 1u << 12,
 };
 
 /* maxTimelineSemaphoreValueDifference, derived from the payload algorithm
@@ -369,6 +373,8 @@ struct VkDevice_T {
     VkBool32 memory_requirements2_extension_enabled;
     VkBool32 dedicated_allocation_extension_enabled;
     VkBool32 bind_memory2_extension_enabled;
+    /* VK_KHR_maintenance4 was enabled: vkGetDevice*MemoryRequirementsKHR. */
+    VkBool32 maintenance4_extension_enabled;
     /* The capability mask the platform reported when this device was created.
      * State that is not a Vulkan feature the application enables - the sample
      * counts a framebuffer may use, for one - is gated on this mask, so the

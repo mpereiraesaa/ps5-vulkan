@@ -419,6 +419,126 @@ static void bind_memory2(void)
     assert(!d.memories && !d.buffers && !d.images);
 }
 
+/* VK_KHR_maintenance4 needs a Vulkan 1.1 device: with the platform bit set
+ * the 1.0 device still lists, reports and accepts nothing. */
+static void maintenance4_closed_on_1_0(void)
+{
+    platform_features_t09 = PS5VK_T09_FEATURE_MAINTENANCE4 |
+        PS5VK_T09_FEATURE_GET_MEMORY_REQUIREMENTS2;
+    VkInstance i; VkPhysicalDevice p = physical(&i);
+    uint32_t count = 0;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, NULL) == VK_SUCCESS);
+    VkExtensionProperties properties[21];
+    assert(count <= 21);
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, properties) == VK_SUCCESS);
+    for (uint32_t n = 0; n < count; ++n)
+        assert(strcmp(properties[n].extensionName, VK_KHR_MAINTENANCE_4_EXTENSION_NAME));
+    VkPhysicalDeviceMaintenance4Features feature = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES, .maintenance4 = 7};
+    VkPhysicalDeviceFeatures2 features = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                          .pNext = &feature};
+    vkGetPhysicalDeviceFeatures2KHR(p, &features);
+    assert(feature.maintenance4 == VK_FALSE);
+    VkPhysicalDeviceMaintenance4Properties limit = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES};
+    VkPhysicalDeviceProperties2 props = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                                         .pNext = &limit};
+    vkGetPhysicalDeviceProperties2KHR(p, &props);
+    const VkDeviceSize alignment = props.properties.limits.minStorageBufferOffsetAlignment;
+    assert(alignment && limit.maxBufferSize == (65536u & ~(alignment - 1)));
+    VkDevice d;
+    const char *const m4 = VK_KHR_MAINTENANCE_4_EXTENSION_NAME;
+    assert(create(p, &m4, 1, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    float priority = 1.0f;
+    VkDeviceQueueCreateInfo q = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueCount = 1, .pQueuePriorities = &priority};
+    feature.maintenance4 = VK_TRUE;
+    VkDeviceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &feature, .queueCreateInfoCount = 1, .pQueueCreateInfos = &q};
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    feature.maintenance4 = VK_FALSE;
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(!d->maintenance4_extension_enabled && !d->enabled_features_t09);
+    assert(!vkGetDeviceProcAddr(d, "vkGetDeviceBufferMemoryRequirementsKHR"));
+    vkDestroyDevice(d, NULL);
+    vkDestroyInstance(i, NULL);
+}
+
+/* The description queries equal create-then-query and leave no object. */
+static void maintenance4_queries(void)
+{
+    struct VkDevice_T d = device();
+    d.maintenance4_extension_enabled = VK_TRUE;
+    static const char *const names[3] = {"vkGetDeviceBufferMemoryRequirementsKHR",
+        "vkGetDeviceImageMemoryRequirementsKHR", "vkGetDeviceImageSparseMemoryRequirementsKHR"};
+    for (size_t n = 0; n < 3; ++n) assert(vkGetDeviceProcAddr(&d, names[n]));
+    assert(!vkGetDeviceProcAddr(&d, "vkGetDeviceBufferMemoryRequirements"));
+
+    VkBufferCreateInfo buffer_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 65536 - 300, .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
+    VkBuffer b;
+    assert(vkCreateBuffer(&d, &buffer_info, NULL, &b) == VK_SUCCESS);
+    VkMemoryRequirements v1;
+    vkGetBufferMemoryRequirements(&d, b, &v1);
+    vkDestroyBuffer(&d, b, NULL);
+    VkMemoryDedicatedRequirements dedicated = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS,
+        .prefersDedicatedAllocation = 3, .requiresDedicatedAllocation = 3};
+    VkMemoryRequirements2 out = {.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+                                 .pNext = &dedicated};
+    VkDeviceBufferMemoryRequirements query = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS, .pCreateInfo = &buffer_info};
+    vkGetDeviceBufferMemoryRequirementsKHR(&d, &query, &out);
+    assert(!memcmp(&v1, &out.memoryRequirements, sizeof(v1)));
+    assert(out.memoryRequirements.size == 65536 - 256 && out.memoryRequirements.alignment == 256 &&
+           out.memoryRequirements.memoryTypeBits == 1);
+    assert(!dedicated.prefersDedicatedAllocation && !dedicated.requiresDedicatedAllocation);
+    assert(!d.buffers);
+    /* A usage vkCreateBuffer refuses (transform feedback), or a size above
+     * one allocation, has no requirements: memoryTypeBits 0. */
+    buffer_info.usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT |
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    vkGetDeviceBufferMemoryRequirementsKHR(&d, &query, &out);
+    assert(!out.memoryRequirements.size && !out.memoryRequirements.memoryTypeBits);
+    buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    buffer_info.size = 65537;
+    vkGetDeviceBufferMemoryRequirementsKHR(&d, &query, &out);
+    assert(!out.memoryRequirements.memoryTypeBits && !d.buffers);
+    buffer_info.size = 64;
+    /* Without the extension the query answers nothing. */
+    d.maintenance4_extension_enabled = VK_FALSE;
+    vkGetDeviceBufferMemoryRequirementsKHR(&d, &query, &out);
+    assert(!out.memoryRequirements.size);
+    d.maintenance4_extension_enabled = VK_TRUE;
+    vkGetDeviceBufferMemoryRequirementsKHR(&d, &query, &out);
+    assert(out.memoryRequirements.size == 256);
+
+    VkImageCreateInfo image_info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {32, 16, 1}, .mipLevels = 1, .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+    VkDeviceImageMemoryRequirements image_query = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS, .pCreateInfo = &image_info};
+    vkGetDeviceImageMemoryRequirementsKHR(&d, &image_query, &out);
+    assert(out.memoryRequirements.size == 2048 && out.memoryRequirements.alignment == 1024 &&
+           out.memoryRequirements.memoryTypeBits == 1);
+    assert(!d.images && !d.graphics_objects);
+    image_query.planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT;
+    vkGetDeviceImageMemoryRequirementsKHR(&d, &image_query, &out);
+    assert(!out.memoryRequirements.size && !out.memoryRequirements.memoryTypeBits);
+    image_query.planeAspect = 0;
+    image_info.flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
+    vkGetDeviceImageMemoryRequirementsKHR(&d, &image_query, &out);
+    assert(!out.memoryRequirements.memoryTypeBits && !d.images);
+    uint32_t count = 4;
+    vkGetDeviceImageSparseMemoryRequirementsKHR(&d, &image_query, &count, NULL);
+    assert(count == 0);
+}
+
 int main(void)
 {
     closed();
@@ -426,7 +546,9 @@ int main(void)
     requirement_queries();
     dedicated_allocation();
     bind_memory2();
+    maintenance4_closed_on_1_0();
+    maintenance4_queries();
     puts("memory requirements2 route: get_memory_requirements2, dedicated_allocation and "
-         "bind_memory2 follow the registry and the 1.0 contracts (host only)");
+         "bind_memory2 follow the registry and the 1.0 contracts; maintenance4 stays closed on the 1.0 device (host only)");
     return 0;
 }
