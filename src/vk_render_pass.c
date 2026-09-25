@@ -943,6 +943,32 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2KHR(VkDevice d,
     *out = VK_NULL_HANDLE;
     if (!d || !info) return VK_ERROR_UNKNOWN;
     if (!d->create_renderpass2_extension_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* VK_KHR_depth_stencil_resolve: a subpass may chain
+     * VkSubpassDescriptionDepthStencilResolve. Every depth attachment of this
+     * device is single-sample, so the only valid form names no resolve
+     * attachment (NULL or VK_ATTACHMENT_UNUSED) and resolves nothing; that form
+     * is stripped here and the translation sees the plain subpass. A resolve
+     * attachment stays refused. */
+    VkRenderPassCreateInfo2 stripped;
+    VkSubpassDescription2 subpasses[PS5VK_MAX_SUBPASSES];
+    if (d->depth_stencil_resolve_extension_enabled && info->pSubpasses &&
+        info->subpassCount && info->subpassCount <= PS5VK_MAX_SUBPASSES) {
+        stripped = *info;
+        for (uint32_t s = 0; s < info->subpassCount; ++s) {
+            subpasses[s] = info->pSubpasses[s];
+            const VkSubpassDescriptionDepthStencilResolve *resolve = subpasses[s].pNext;
+            if (!resolve ||
+                resolve->sType != VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE)
+                continue;
+            if (resolve->pNext ||
+                (resolve->pDepthStencilResolveAttachment &&
+                 resolve->pDepthStencilResolveAttachment->attachment != VK_ATTACHMENT_UNUSED))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            subpasses[s].pNext = NULL;
+        }
+        stripped.pSubpasses = subpasses;
+        info = &stripped;
+    }
     struct ps5vk_render_pass2_translation translation;
     VkResult rc = ps5vk_render_pass2_translate(info, &translation);
     if (rc != VK_SUCCESS) return rc;
