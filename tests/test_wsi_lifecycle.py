@@ -58,11 +58,20 @@ class WsiLifecycleTests(unittest.TestCase):
                    "sha256": hashlib.sha256(log).hexdigest()}
         artifact = {"profile": "vulkan-wsi-native-lifecycle",
                     "eboot_sha256": "a" * 64}
-        self.assertTrue(verify(log, receipt, artifact)["strict_verified"])
+        immediate = verify(log, receipt, artifact)
+        self.assertTrue(immediate["strict_verified"])
+        self.assertFalse(immediate["unregister_deferred_to_close"])
+        deferred = log.replace(b"deferred=0", b"deferred=1")
+        deferred_receipt = {**receipt, "sha256": hashlib.sha256(deferred).hexdigest()}
+        clean_deferred = verify(deferred, deferred_receipt, artifact)
+        self.assertTrue(clean_deferred["strict_verified"])
+        self.assertTrue(clean_deferred["unregister_deferred_to_close"])
         for altered in (log.replace(b"slot=1", b"slot=0"),
                         log.replace(b"WSI_WITNESS_ADAPTER", b"WSI_WITNESS_DIRECT"),
                         log.replace(b"fence=complete", b"fence=timeout", 1),
-                        log.replace(b"deferred=0", b"deferred=1"),
+                        log.replace(b"deferred=0", b"deferred=2"),
+                        log.replace(b"PS5VK_VIDEO_CLOSED", b"PS5VK_VIDEO_RETAIN"),
+                        log + b"PS5VK_VIDEO_SETUP_FAILED\n",
                         log.replace(b"resources=clean", b"resources=leaked")):
             with self.subTest(altered=altered), self.assertRaises(ValueError):
                 verify(altered, {**receipt, "sha256": hashlib.sha256(altered).hexdigest()},

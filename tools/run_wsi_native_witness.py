@@ -50,7 +50,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             len(registered) != 1 or len(presented) != 3 or len(closed) != 1 or
             [int(token) for token in presented] != [1, 2, 3] or
             int(registered[0][0]) < 0 or int(registered[0][1]) < 8912896 or
-            closed[0] != ("3", "0") or
+            closed[0][0] != "3" or closed[0][1] not in ("0", "1") or
             "PS5VK_VIDEO_RETAIN" in content or
             "PS5VK_VIDEO_SETUP_FAILED" in content or
             "WSI_WITNESS_FAILURE" in content):
@@ -69,8 +69,12 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     if [content.index(marker) for marker in markers] != sorted(
             content.index(marker) for marker in markers):
         raise ValueError("witness events out of order")
+    # deferred=1 means unregister reported RESOURCE_BUSY and the successful
+    # VideoOut close retired that registration. CLOSED is emitted only after
+    # close succeeds; clean BYE and absence of RETAIN remain required above.
     return {"strict_verified": True, "run_id": receipt["run_id"],
             "frames": 3, "slots": [0, 1, 0],
+            "unregister_deferred_to_close": closed[0][1] == "1",
             "log_sha256": receipt["sha256"],
             "eboot_sha256": artifact["eboot_sha256"]}
 
