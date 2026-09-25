@@ -382,6 +382,7 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
         at+=n;
     }
     if(entries!=1)goto done;
+    unsigned loose_position=0,loose_point_size=0;
     for(unsigned i=1;i<bound;++i) {
         struct id_info *d=&ids[i];
         if(!d->selected)continue;
@@ -531,6 +532,26 @@ static int reflect(const struct ps5vk_graphics_module_key *m,unsigned model,stru
             if(d->builtin==BUILTIN_SAMPLE_ID) {
                 if(model!=MODEL_FRAGMENT || d->storage!=1u || d->patch ||
                    d->location!=~0u || type->op!=21 || type->count!=32)goto done;
+                continue;
+            }
+            /* A loose gl_Position / gl_PointSize: the same export as the
+             * position block's members, declared as a standalone Output
+             * variable instead of a gl_PerVertex member. DXVK 2.6.2's DXBC
+             * compiler emits this form (a float32 vec4 Output decorated
+             * BuiltIn Position), so a pre-raster stage whose output is not
+             * arrayed - vertex, geometry or tessellation evaluation - accepts
+             * it under the member rules, once per built-in per stage. The
+             * control stage's outputs are per-vertex arrays and keep the
+             * block form. */
+            if((model==MODEL_VERTEX || model==MODEL_GEOMETRY || model==MODEL_TESS_EVAL) &&
+               (d->builtin==BUILTIN_POSITION || d->builtin==BUILTIN_POINT_SIZE)) {
+                unsigned *seen=d->builtin==BUILTIN_POSITION?&loose_position:&loose_point_size;
+                if(d->location!=~0u || d->storage!=3 || d->patch || *seen)goto done;
+                if(d->builtin==BUILTIN_POSITION) {
+                    if(type->op!=23 || type->count!=4 || !type->type || type->type>=bound ||
+                       ids[type->type].op!=22 || ids[type->type].count!=32)goto done;
+                } else if(type->op!=22 || type->count!=32)goto done;
+                *seen=1;
                 continue;
             }
             /* Any other built-in a tessellation stage declares is outside this

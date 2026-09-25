@@ -708,6 +708,55 @@ static void check_helper_derivative_forms(void)
     for(unsigned f=0;f<FORMS;++f)free(code[f]);
 }
 
+/* DXVK 2.6.2's first D3D11 pipeline, exactly as its DXBC compiler emitted it
+ * (SPIR-V 1.6, VulkanMemoryModel, SignedZeroInfNanPreserve). The vertex stage
+ * declares gl_Position as a standalone float32 vec4 Output decorated BuiltIn
+ * Position rather than a gl_PerVertex member, reads VertexIndex and
+ * BaseVertex, and exports o0 at Location 0; the pixel stage reads FragCoord
+ * and writes one vec4 at Location 0, Index 0. The pair must reflect, compile
+ * and export exactly one colour target. */
+static void check_dxvk_loose_position(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("tests/fixtures/dxvk/dxvk262_vs_position.spv"),
+        .fragment=read_module("tests/fixtures/dxvk/dxvk262_fs_color.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15},
+        .feature_mask=PS5VK_FEATURE_VULKAN_MEMORY_MODEL|PS5VK_FEATURE_SHADER_DRAW_PARAMETERS};
+    assert(key.vertex.words[1]==0x00010600u && key.fragment.words[1]==0x00010600u);
+    unsigned clip=9,cull=9,mask=0;int secondary=1;
+    assert(ps5vk_spirv_stage_distance_declarations(&key.vertex,&clip,&cull) && !clip && !cull);
+    assert(ps5vk_spirv_fragment_outputs(&key.fragment,&mask,&secondary) &&
+           mask==1u && !secondary);
+    assert(ps5vk_spirv_graphics_interface(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *program=out;
+    assert(program->vertex.metadata.hardware_stage==PSBC_HW_STAGE_NGG);
+    assert(program->fragment.metadata.hardware_stage==PSBC_HW_STAGE_PIXEL);
+    const PsbcRegisterWrite *format=context_register(
+        (PsbcShaderMetadata *)&program->fragment.metadata,0x1c5u);
+    const PsbcRegisterWrite *shader_mask=context_register(
+        (PsbcShaderMetadata *)&program->fragment.metadata,0x08fu);
+    assert(format && format->value && shader_mask && shader_mask->value==15u);
+    ps5vk_runtime_graphics_free(NULL,out);
+
+    /* The loose form keeps the member rules. A vec4 declared as PointSize,
+     * and a loose Position in the control stage (whose outputs are per-vertex
+     * arrays), are refused. */
+    struct ps5vk_graphics_module_key vertex=key.vertex;
+    uint32_t *copy=malloc(vertex.word_count*sizeof(*copy));assert(copy);
+    memcpy(copy,vertex.words,vertex.word_count*sizeof(*copy));vertex.words=copy;
+    assert(patch_builtin(&vertex,0u,1u));
+    assert(!ps5vk_spirv_stage_distance_declarations(&vertex,&clip,&cull));
+    memcpy(copy,key.vertex.words,vertex.word_count*sizeof(*copy));
+    assert(patch_entry_model(&vertex,1u));
+    assert(!ps5vk_spirv_stage_distance_declarations(&vertex,&clip,&cull));
+    free(copy);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 static void check_clip_cull_distances(void)
 {
     struct ps5vk_graphics_key key={
@@ -2574,6 +2623,7 @@ int main(void)
     check_view_index_builtin();
     check_clip_cull_distances();
     check_depth_only_target();
+    check_dxvk_loose_position();
     check_depth_kill_forms();
     check_helper_derivative_forms();
     check_fragment_distance_read();
