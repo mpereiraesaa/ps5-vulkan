@@ -154,9 +154,9 @@ static int run_witness(void)
     struct image target = {0}, mutable_texture = {0}, srgb_texture = {0};
     VkImageView target_view = VK_NULL_HANDLE, refused_view = VK_NULL_HANDLE;
     VkImageView sampled_views[DRAWS] = {VK_NULL_HANDLE};
-    VkBuffer upload = VK_NULL_HANDLE, readback = VK_NULL_HANDLE;
-    VkDeviceMemory upload_memory = VK_NULL_HANDLE, readback_memory = VK_NULL_HANDLE;
-    uint8_t *upload_bytes = NULL, *readback_bytes = NULL;
+    VkBuffer upload = VK_NULL_HANDLE, readback[DRAWS] = {VK_NULL_HANDLE};
+    VkDeviceMemory upload_memory = VK_NULL_HANDLE, readback_memory[DRAWS] = {VK_NULL_HANDLE};
+    uint8_t *upload_bytes = NULL, *readback_bytes[DRAWS] = {NULL};
     VkSampler sampler = VK_NULL_HANDLE;
     VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
     VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
@@ -257,10 +257,14 @@ static int run_witness(void)
                     &upload_memory, &upload_bytes));
     memcpy(upload_bytes, mutable_view_texels, BYTES);
     TRY(flush_or_invalidate(device, upload_memory, 0));
-    TRY(make_buffer(device, (VkDeviceSize)DRAWS * BYTES, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                    &readback, &readback_memory, &readback_bytes));
-    memset(readback_bytes, 0xcd, (size_t)DRAWS * BYTES);
-    TRY(flush_or_invalidate(device, readback_memory, 0));
+    /* One readback buffer per draw: the tiled colour readback is the whole
+     * surface into buffer offset zero. */
+    for (unsigned n = 0; n < DRAWS; ++n) {
+        TRY(make_buffer(device, BYTES, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                        &readback[n], &readback_memory[n], &readback_bytes[n]));
+        memset(readback_bytes[n], 0xcd, BYTES);
+        TRY(flush_or_invalidate(device, readback_memory[n], 0));
+    }
 
     VkSamplerCreateInfo sampler_info = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .magFilter = VK_FILTER_NEAREST, .minFilter = VK_FILTER_NEAREST,
@@ -405,16 +409,16 @@ static int run_witness(void)
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT);
-        VkBufferImageCopy region = {.bufferOffset = (VkDeviceSize)n * BYTES,
+        VkBufferImageCopy region = {
             .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
             .imageExtent = {EXTENT, EXTENT, 1}};
         vkCmdCopyImageToBuffer(command, target.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               readback, 1, &region);
+                               readback[n], 1, &region);
         VkBufferMemoryBarrier host = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
             .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = readback, .offset = (VkDeviceSize)n * BYTES, .size = BYTES};
+            .buffer = readback[n], .size = VK_WHOLE_SIZE};
         vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
                              0, 0, NULL, 1, &host, 0, NULL);
         TRY(vkEndCommandBuffer(command));
@@ -428,11 +432,11 @@ static int run_witness(void)
         pending = VK_FALSE;
         TRY(vkResetFences(device, 1, &fence));
     }
-    TRY(flush_or_invalidate(device, readback_memory, 1));
+    for (unsigned n = 0; n < DRAWS; ++n)
+        TRY(flush_or_invalidate(device, readback_memory[n], 1));
 
     /* Oracles. */
-    const uint8_t *out[DRAWS] = {readback_bytes, readback_bytes + BYTES,
-                                 readback_bytes + 2 * BYTES};
+    const uint8_t *out[DRAWS] = {readback_bytes[0], readback_bytes[1], readback_bytes[2]};
     uint32_t unorm_mismatches = 0, native_mismatches = 0, over_one = 0, exact = 0;
     uint32_t alpha_mismatches = 0, differing = 0;
     for (uint32_t i = 0; i < BYTES; ++i) {
@@ -476,8 +480,10 @@ cleanup:
     if (descriptor_pool) vkDestroyDescriptorPool(device, descriptor_pool, NULL);
     if (set_layout) vkDestroyDescriptorSetLayout(device, set_layout, NULL);
     if (sampler) vkDestroySampler(device, sampler, NULL);
-    if (readback) vkDestroyBuffer(device, readback, NULL);
-    if (readback_memory) vkFreeMemory(device, readback_memory, NULL);
+    for (unsigned n = 0; n < DRAWS; ++n) {
+        if (readback[n]) vkDestroyBuffer(device, readback[n], NULL);
+        if (readback_memory[n]) vkFreeMemory(device, readback_memory[n], NULL);
+    }
     if (upload) vkDestroyBuffer(device, upload, NULL);
     if (upload_memory) vkFreeMemory(device, upload_memory, NULL);
     for (unsigned n = 0; n < DRAWS; ++n)
