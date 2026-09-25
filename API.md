@@ -755,8 +755,15 @@ before its surface and device. Other display modes, extents, formats, present
 modes, sharing modes and swapchain replacement remain outside this profile.
 The device API version remains Vulkan 1.0; any higher instance loader version
 reported by `vkEnumerateInstanceVersion` does not promote device core features.
-Native acquire/present/close evidence and a DXVK run are separate acceptance
-results; the host contract alone does not establish either.
+An SDK-linked native witness using the pinned DXVK PS5 WSI adapter created a
+display-plane surface, acquired and presented three frames in slots 0/1/0,
+observed three bounded GPU-fence completions and three matching VideoOut flip
+events, then retired the swapchain, device and surface with a successful final
+close. The tested combined candidate's eboot SHA256 was
+`7630c379b11f5d59b96104efec3e21048c6a53198987211d702d7e8347169722`;
+see [the bounded native witness](https://github.com/mpereiraesaa/ps5-vulkan/pull/520).
+Firmware 12.02 is owner reported, not independently measured. This witness
+does not establish a full DXVK device bootstrap or frame-rendering run.
 
 ## Bookkeeping and core command surface
 
