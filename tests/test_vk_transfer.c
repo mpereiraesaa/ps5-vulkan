@@ -45,12 +45,16 @@ int main(void)
     region.imageExtent.width=1;
     assert(command->operations[0].copy_region.imageExtent.width==256);
 
+    /* A colour region narrower than the image is a general readback region
+     * (DXVK262-T10, src/readback_region.h): recorded as given. */
     assert(vkResetCommandBuffer(command,0)==VK_SUCCESS &&
         vkBeginCommandBuffer(command,&begin)==VK_SUCCESS);
     vkCmdCopyImageToBuffer(command,&image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         destination,1,&region);
-    assert(command->state==PS5VK_INVALID && !command->operation_count);
+    assert(command->state==PS5VK_RECORDING && command->operation_count==1 &&
+        command->operations[0].copy_region.imageExtent.width==1);
 
+    /* A row shorter than the region is still refused. */
     assert(vkResetCommandBuffer(command,0)==VK_SUCCESS &&
         vkBeginCommandBuffer(command,&begin)==VK_SUCCESS);
     region.imageExtent.width=256;region.bufferRowLength=255;

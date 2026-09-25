@@ -9,13 +9,21 @@
 #include "color_barrier.h"
 #include "vk_image_transfer.h"
 #include "depth_layout.h"
+#include "readback_region.h"
 
 /* `aspect` is zero for a colour or depth-only surface and names the one
  * aspect a copy reads from the combined depth/stencil attachment. */
 struct ps5vk_readback_plan {
     VkImage image; VkBuffer buffer; VkDeviceSize layer_stride;
     VkImageAspectFlags aspect;
+    /* Set for a general colour region (ps5vk_readback_regions_commands): the
+     * completion path detiles exactly that region instead of the whole surface. */
+    VkBool32 region_copy;
+    VkBufferImageCopy region;
 };
+/* The most image-to-buffer copies one readback may carry: every colour target
+ * of a subpass, or the regions of a general colour readback. */
+enum { PS5VK_MAX_READBACK_REGIONS = 8 };
 
 /* The render-pass module reads back every attachment its pass rendered, in one
  * command buffer: one handover barrier and one whole-surface copy per target,
@@ -24,7 +32,7 @@ struct ps5vk_readback_plan {
  * carries as many targets as a subpass may name, and each target is its own
  * surface and its own buffer. */
 struct ps5vk_readback_set {
-    struct ps5vk_readback_plan target[PS5VK_MAX_COLOR_ATTACHMENTS];
+    struct ps5vk_readback_plan target[PS5VK_MAX_READBACK_REGIONS];
     unsigned count;
 };
 
@@ -156,7 +164,8 @@ static inline VkResult ps5vk_depth_stencil_readback_commands(VkDevice d,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     if(rc!=VK_SUCCESS)return rc;
     *layouts=updated;
-    *out=(struct ps5vk_readback_plan){image,copy->copy_destination,planes.bytes,aspect};
+    *out=(struct ps5vk_readback_plan){.image=image,.buffer=copy->copy_destination,
+        .layer_stride=planes.bytes,.aspect=aspect};
     return VK_SUCCESS;
 }
 
@@ -337,7 +346,8 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
         }
         *layouts=updated;
     }
-    *out=(struct ps5vk_readback_plan){image,copy->copy_destination,stride,0};
+    *out=(struct ps5vk_readback_plan){.image=image,.buffer=copy->copy_destination,
+        .layer_stride=stride};
     return VK_SUCCESS;
 #undef READBACK_REFUSE
 }
@@ -476,4 +486,169 @@ static inline int ps5vk_readback_detile(VkImage image, size_t stride,
             image->info.extent.width,image->info.extent.height))return -1;
     return 0;
 }
+
+/* DXVK262-T10: the general colour readback postlude.
+ *
+ * The strict shapes above are the CTS modules' own sequences. A D3D11 runtime
+ * such as the pinned DXVK 2.6.2 reads a render target back with a different,
+ * equally valid one (measured on its first frame, dxvk_context.cpp:3989-4030
+ * and dxvk_barrier.cpp:444-517): a global dependency from the attachment
+ * writes, the handover of the image to TRANSFER_SRC_OPTIMAL, one or more
+ * vkCmdCopyImageToBuffer2 regions into a sub-allocated staging buffer (a
+ * nonzero bufferOffset and an explicit bufferRowLength/bufferImageHeight), and
+ * one final dependency whose global member publishes the transfer writes to
+ * the host and whose image member returns the image to its attachment layout.
+ *
+ * The postlude is therefore walked in order, and exactly three kinds of
+ * operation are admitted:
+ *
+ *   PS5VK_BARRIER        a global or buffer dependency. It orders work but
+ *                        moves no data; the one that follows the last copy and
+ *                        covers TRANSFER_WRITE -> HOST_READ is the host
+ *                        publication every readback requires.
+ *   PS5VK_IMAGE_BARRIER  a readback colour image handed from its attachment
+ *                        layout (or GENERAL) to TRANSFER_SRC_OPTIMAL, or back.
+ *                        Only the layout moves; the tiled bytes are untouched.
+ *   PS5VK_COPY_IMAGE_BUFFER  one region of a 32-bit colour image in
+ *                        TRANSFER_SRC_OPTIMAL into a buffer, at mip 0, over any
+ *                        layer range and rectangle inside the image, at any
+ *                        texel-aligned bufferOffset, with any row length and
+ *                        image height at least the copied extent.
+ *
+ * Every copy becomes one plan the completion path executes on the CPU after
+ * the job's exact GPU serial, detiling only the region into the buffer bytes
+ * the region addresses. Nothing else - a draw, a clear, an upload, a depth
+ * aspect, a mip level above zero, a region that leaves the image or the
+ * buffer, a destination that overlaps a source image, a copy with no host
+ * publication after it - is admitted; the caller keeps refusing it. */
+struct ps5vk_readback_regions {
+    struct ps5vk_readback_plan target[PS5VK_MAX_READBACK_REGIONS];
+    unsigned count;
+};
+_Static_assert((int)PS5VK_MAX_READBACK_REGIONS >= (int)PS5VK_MAX_COLOR_ATTACHMENTS,
+    "a readback set must hold every colour target");
+
+static inline int ps5vk_readback_region_image(VkImage image)
+{
+    return image && (ps5vk_colour_transfer_image(image) ||
+        ps5vk_basic_colour_readback_image(image) || ps5vk_array_color_image(image)) &&
+        (image->info.format == VK_FORMAT_R8G8B8A8_UNORM ||
+         ps5vk_color_target_integer_served(image->info.format)) &&
+        image->info.mipLevels == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.extent.depth == 1 && image->info.arrayLayers &&
+        (image->info.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+}
+
+static inline VkResult ps5vk_readback_regions_commands(VkDevice d,
+    const struct ps5vk_operation *ops, unsigned count,
+    struct ps5vk_layout_state *layouts, struct ps5vk_readback_regions *out,
+    unsigned *failure_site)
+{
+#define REGIONS_REFUSE(site) do { if (failure_site) *failure_site = (site); \
+    return VK_ERROR_FEATURE_NOT_PRESENT; } while (0)
+    if (!d || !ops || !count || !layouts || !out) REGIONS_REFUSE(40);
+    memset(out, 0, sizeof(*out));
+    struct ps5vk_layout_state updated = *layouts;
+    int published = 1;
+    for (unsigned k = 0; k < count; ++k) {
+        const struct ps5vk_operation *op = &ops[k];
+        if (op->type == PS5VK_BARRIER) {
+            if (op->buffer_barrier.buffer) {
+                /* A buffer member must name a buffer a copy of this postlude
+                 * writes; its access decides whether it publishes. */
+                int named = 0;
+                for (unsigned t = 0; t < out->count; ++t)
+                    named |= out->target[t].buffer == op->buffer_barrier.buffer;
+                if (!named) REGIONS_REFUSE(41);
+            }
+            if ((op->src_stage & VK_PIPELINE_STAGE_TRANSFER_BIT ||
+                 op->src_stage & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT) &&
+                (op->src_access & VK_ACCESS_TRANSFER_WRITE_BIT) &&
+                (op->dst_stage & VK_PIPELINE_STAGE_HOST_BIT) &&
+                (op->dst_access & VK_ACCESS_HOST_READ_BIT))
+                published = 1;
+            continue;
+        }
+        if (op->type == PS5VK_IMAGE_BARRIER) {
+            const VkImageMemoryBarrier *b = &op->image_barrier;
+            const VkImageLayout home = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            const int handover = (b->oldLayout == home || b->oldLayout == VK_IMAGE_LAYOUT_GENERAL) &&
+                b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            const int handback = b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                (b->newLayout == home || b->newLayout == VK_IMAGE_LAYOUT_GENERAL);
+            if (!ps5vk_readback_region_image(b->image) || b->image->device != d ||
+                (!handover && !handback) ||
+                ps5vk_layout_transition(&updated, b->image, b->oldLayout, b->newLayout) != VK_SUCCESS)
+                REGIONS_REFUSE(42);
+            continue;
+        }
+        if (op->type != PS5VK_COPY_IMAGE_BUFFER) REGIONS_REFUSE(43);
+        VkImage image = op->copy_image;
+        const VkBufferImageCopy *r = &op->copy_region;
+        if (out->count == PS5VK_MAX_READBACK_REGIONS || !ps5vk_readback_region_image(image) ||
+            image->device != d || op->copy_layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+            !op->copy_destination ||
+            ps5vk_layout_require(&updated, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) != VK_SUCCESS)
+            REGIONS_REFUSE(44);
+        const uint64_t bytes = ps5vk_readback_region_bytes(image, r);
+        void *source, *destination;
+        VkDeviceSize source_bytes, destination_bytes;
+        const size_t tiled = ps5vk_color_64k_rx_surface_size(4, image->info.extent.width,
+            image->info.extent.height);
+        if (!bytes || tiled == SIZE_MAX ||
+            ps5vk_image_span(d, image, &source, &source_bytes) != VK_SUCCESS ||
+            ps5vk_buffer_span(d, op->copy_destination, 0, VK_WHOLE_SIZE, &destination,
+                &destination_bytes) != VK_SUCCESS ||
+            r->bufferOffset > destination_bytes || bytes > destination_bytes - r->bufferOffset ||
+            source_bytes % image->info.arrayLayers ||
+            source_bytes / image->info.arrayLayers < tiled ||
+            (image->info.arrayLayers > 1 && (source_bytes / image->info.arrayLayers) % 131072u))
+            REGIONS_REFUSE(45);
+        const uintptr_t src = (uintptr_t)source;
+        const uintptr_t dst = (uintptr_t)destination + (uintptr_t)r->bufferOffset;
+        if (src < dst ? source_bytes > dst - src : bytes > src - dst) REGIONS_REFUSE(46);
+        out->target[out->count++] = (struct ps5vk_readback_plan){image, op->copy_destination,
+            source_bytes / image->info.arrayLayers, 0, VK_TRUE, *r};
+        published = 0;
+    }
+    if (!out->count || !published) REGIONS_REFUSE(47);
+    *layouts = updated;
+    return VK_SUCCESS;
+#undef REGIONS_REFUSE
+}
+
+/* Detile exactly one admitted region: every texel of the rectangle, of every
+ * layer, from the 64KB_R_X surface into the buffer at the region's own
+ * offset, row length and image height. Texels outside the region and buffer
+ * bytes outside it are never written. */
+static inline int ps5vk_readback_region_detile(VkImage image, size_t stride,
+    const VkBufferImageCopy *r, void *destination, size_t destination_bytes,
+    const void *source, size_t source_bytes)
+{
+    if (!image || !r || !destination || !source || !stride) return -1;
+    const uint64_t bytes = ps5vk_readback_region_bytes(image, r);
+    if (!bytes || r->bufferOffset > destination_bytes ||
+        bytes > destination_bytes - r->bufferOffset ||
+        (uint64_t)stride * (r->imageSubresource.baseArrayLayer +
+            r->imageSubresource.layerCount) > source_bytes)
+        return -1;
+    const size_t row = r->bufferRowLength ? r->bufferRowLength : r->imageExtent.width;
+    const size_t height = r->bufferImageHeight ? r->bufferImageHeight : r->imageExtent.height;
+    const uint32_t width = image->info.extent.width;
+    for (uint32_t l = 0; l < r->imageSubresource.layerCount; ++l) {
+        const unsigned char *layer = (const unsigned char *)source +
+            (size_t)(r->imageSubresource.baseArrayLayer + l) * stride;
+        unsigned char *out = (unsigned char *)destination + r->bufferOffset +
+            (size_t)l * row * height * 4u;
+        for (uint32_t y = 0; y < r->imageExtent.height; ++y)
+            for (uint32_t x = 0; x < r->imageExtent.width; ++x) {
+                const size_t at = ps5vk_rgba8_64k_rx_offset((uint32_t)r->imageOffset.x + x,
+                    (uint32_t)r->imageOffset.y + y, width);
+                if (at == SIZE_MAX || at > stride - 4u) return -1;
+                memcpy(out + ((size_t)y * row + x) * 4u, layer + at, 4u);
+            }
+    }
+    return 0;
+}
+
 #endif

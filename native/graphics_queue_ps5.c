@@ -173,6 +173,7 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
     unsigned copies=0;
     for(unsigned i=0;i<count;++i)
         copies+=cb->operations[first+i].type==PS5VK_COPY_IMAGE_BUFFER;
+    const struct ps5vk_layout_state before=j->layouts;
     if(copies>1u) {
         /* The render-pass module's readback: one target per attachment it
          * rendered. Its own validator owns the whole shape and the plans it
@@ -191,7 +192,21 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
             j->readback.count=1u;
             j->readback.target[0]=plan;
         }
-    } else rc=ps5vk_upload_commands(d,cb->operations+first,count,NULL,&j->layouts,&cursor,end,cache);
+    }
+    if(copies && rc!=VK_SUCCESS) {
+        /* DXVK262-T10: not a strict CTS sequence - the general colour
+         * readback, from the layout state the strict attempt started with. */
+        struct ps5vk_readback_regions regions;
+        j->layouts=before;
+        rc=ps5vk_readback_regions_commands(d,cb->operations+first,count,&j->layouts,
+            &regions,&readback_site);
+        if(rc==VK_SUCCESS) {
+            j->color=regions.target[0].image;
+            j->readback.count=regions.count;
+            for(unsigned k=0;k<regions.count;++k)j->readback.target[k]=regions.target[k];
+        }
+    }
+    if(!copies) rc=ps5vk_upload_commands(d,cb->operations+first,count,NULL,&j->layouts,&cursor,end,cache);
     if(rc!=VK_SUCCESS) {
         /* Keep a refused upload measurable at the same boundary where it is
          * rejected. The operation index and shape tell an unsupported CTS
@@ -1685,7 +1700,36 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         unsigned readback=0;
         for(unsigned k=0;k<postlude_count;++k)
             readback|=postlude[k].type==PS5VK_COPY_IMAGE_BUFFER;
-        if(readback) {
+        /* DXVK262-T10: a postlude that is not one of the strict CTS readback
+         * sequences - a D3D11 runtime publishes its copies with one global
+         * dependency and hands the image back in the same barrier call - is
+         * the general colour readback, validated and planned as a whole. The
+         * strict sequence is recognised first by its shape alone, before any
+         * of its operations is emitted. */
+        struct ps5vk_readback_partition strict={0};
+        const int strict_shape=readback &&
+            ps5vk_readback_partition(postlude,postlude_count,&strict)==VK_SUCCESS &&
+            strict.readback_count==4 &&
+            postlude[strict.readback_first].type==PS5VK_IMAGE_BARRIER &&
+            postlude[strict.readback_first+1].type==PS5VK_COPY_IMAGE_BUFFER &&
+            postlude[strict.readback_first+2].type==PS5VK_BARRIER &&
+            postlude[strict.readback_first+3].type==PS5VK_BARRIER &&
+            postlude[strict.readback_first+2].buffer_barrier.buffer==
+                postlude[strict.readback_first+1].copy_destination;
+        if(readback && !strict_shape) {
+            struct ps5vk_readback_regions regions;
+            unsigned regions_site=0;
+            rc=ps5vk_readback_regions_commands(d,postlude,postlude_count,&j->layouts,
+                &regions,&regions_site);
+            if(rc!=VK_SUCCESS) {
+                ps5log_printf(PS5LOG_INFO,
+                    "PS5VK_GRAPHICS_READBACK_REGIONS_REFUSED serial=%llu site=%u operations=%u",
+                    (unsigned long long)j->serial,regions_site,postlude_count);
+                draw_site=40;goto fail;
+            }
+            j->readback.count=regions.count;
+            for(unsigned k=0;k<regions.count;++k)j->readback.target[k]=regions.target[k];
+        } else if(readback) {
             struct ps5vk_readback_partition partition={0};
             struct ps5vk_readback_plan plan={0};
             rc=ps5vk_readback_partition(postlude,postlude_count,&partition);
@@ -2071,7 +2115,11 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
             if(!image || ps5vk_image_span(d,image,&source,&source_bytes)!=VK_SUCCESS ||
                ps5vk_buffer_span(d,j->readback.target[r].buffer,0,VK_WHOLE_SIZE,
                     &destination,&destination_bytes)!=VK_SUCCESS ||
-               (j->readback.target[r].aspect ?
+               (j->readback.target[r].region_copy ?
+                ps5vk_readback_region_detile(image,(size_t)j->readback.target[r].layer_stride,
+                    &j->readback.target[r].region,destination,(size_t)destination_bytes,
+                    source,(size_t)source_bytes) :
+                j->readback.target[r].aspect ?
                 ps5vk_depth_stencil_readback_detile(image,j->readback.target[r].aspect,
                     destination,(size_t)destination_bytes,source,source_bytes) :
                 ps5vk_readback_detile(image,(size_t)j->readback.target[r].layer_stride,
