@@ -1,437 +1,161 @@
-# DXVK v2.6.2 implementation backlog
+# DXVK v2.6.2 runtime backlog
 
-This backlog turns the 61 original blockers for
-`VP_DXVK_d3d11_level_11_0_baseline` into 15 ordered implementation tranches.
-The exact baseline membership lives in
-`conformance_inventory/dxvk_v262_backlog.json`; this document explains how to
-execute it.
+The objective is to build and run our pinned DXVK v2.6.2 D3D11/DXGI stack on
+PS5 through ps5vk, create a feature-level 11_0 device, render and read back a
+representative workload, and close and relaunch cleanly. Work follows the next
+observed refusal in that path. A tranche number, profile score, Vulkan version
+label or missing CTS leaf is **not** permission to stop implementing a needed
+dependency. The 15-tranche assignment in
+`conformance_inventory/dxvk_v262_backlog.json` remains an inventory of the
+original 61 blockers, not a serial work schedule or the acceptance test for
+DXVK execution.
 
-Current checkpoint: multiview (T02) has all three requirements satisfied by
-public KHR queries, dedicated floor witnesses and 48 passing original CTS
-leaves within a 165/165 regression; the indirect and indexed draws (T03)
-have all three requirements satisfied by core feature reports, the
-per-command multi-draw expansion, 46 passing original indirect/draw-index CTS
-leaves within a 211/211 regression and the public-SDK indirect witness; the
-four DXVK262-T05 rasterization and viewport features were promoted on
-2026-09-21; and DXVK262-T06 is complete, with all four of its requirements
-satisfied: `fragmentStoresAndAtomics` and `dualSrcBlend` with their four axes,
-`independentBlend` promoted on 2026-09-22, and `sampleRateShading` promoted on
-2026-09-23 - the pixel stage publishes Vulkan's standard sample positions and
-interpolates the position at the iterated sample, the colour-to-texture barrier
-waits for a confirmed writeback, and the feature's own oracle, thirty leaves at
-both served counts, passes inside the frozen acceptance selection, which now
-carries them and passes 494/494. **T04 is implemented, hardware-validated and
-merged into `main`** (PR #158): the default graphics profile exposes geometry,
-tessellation and clip/cull distances, and its integrated native run passed
-403/403 focused upstream cases, including 99 tessellation-related cases. The
-checked matrix is **30/62 ready with 32 blockers**. T07's four resource and
-precise-query features, T08 DeviceScope, and five T09 requirements have public
-routes and artifact-bound witnesses. The combined public SDK probe observed
-32/62 requested values on API 1.0.0. The ordered table preserves the original
-tranche membership.
+## Verified baseline on `main` (2026-09-25)
 
-### DXVK runtime checkpoint (2026-09-25)
+At commit `7885ec6`, `tools/check_dxvk_profile.py --check` reports **30/62
+ready, 32 blockers**. This is an implementation-evidence score, not a DXVK
+runtime result. `tools/check_dxvk_backlog.py --check` reports 30 implementation-
+ready original blockers and 29 profile-satisfied ones (the 62-row score also
+includes the initially satisfied `robustBufferAccess`). The public device
+still reports Vulkan **1.0.0**. The matrix counts geometry and tessellation as
+blockers because their completed T04 native receipts have not been admitted
+to that ledger; this does **not** mean their rendering implementation is
+unfinished. Do not infer a missing DXVK dependency solely from those two rows.
 
-The upstream DXVK v2.6.2 source pinned at commit
-`9d6f54a1ade20d1d27dd421024717a636f3d8c68` builds its native SDL2
-D3D11/DXGI libraries on the host. `tools/run_dxvk_host_smoke.py` calls the
-actual `D3D11CreateDevice` entry point and requires a feature-level 11_0
-device and context. That host run passed with D3D11 library SHA-256
-`cdee9710090ce17334daf16f0df49f03687060d722357513b4f625f6bd3d4190`
-and DXGI library SHA-256
-`998615c138e69bb88d74e3d7b060d82b78d573d8c69ba74ef46d935e11eb5211`.
-It used the host Vulkan driver; DXVK has not run against ps5vk or on PS5.
+The shipping public routes already include the T01–T07 work: draw parameters
+via the Vulkan 1.0 KHR route; multiview; indirect/indexed draws; geometry,
+tessellation and clip/cull distances; raster, blend and multisample features;
+and cube arrays, BC textures, extended gather and precise occlusion. T08 has
+buffer device address, uniform-buffer standard layout and the base/DeviceScope
+memory model through KHR routes. T09 has host query reset, mirror-clamp
+samplers, timeline semaphores and their limit, and separate depth/stencil
+layouts through EXT/KHR routes. `imagelessFramebuffer` is diagnostic only;
+the two T08 subgroup bits remain off. The public API details and restrictions
+are in [API.md](../API.md); exact hardware receipts are in
+[VALIDATION.md](../VALIDATION.md). The frozen 879-case upstream selection
+passed on the shipping build, but that historical regression result is not a
+prerequisite for the next DXVK implementation step.
 
-To repeat from an ignored checkout of that pinned source with its submodules
-and host SDL2 dependencies, configure and build with:
+The DXVK source is pinned to
+`9d6f54a1ade20d1d27dd421024717a636f3d8c68`. On a host Vulkan driver,
+its real `D3D11CreateDevice` entry point created a feature-level 11_0 device
+and context. Against the ps5vk host loader, the same DXVK libraries stopped
+at **`Required Vulkan extension VK_KHR_surface not supported`**: no DXVK
+device or context was created. That run did not reach DXVK's later version or
+feature checks. PS5 cross-compilation and linking of the D3D11/DXGI libraries
+also succeeded. The PS5 display adapter has a host-tested call sequence for a
+fixed 1080p60 monitor using `VK_KHR_display` and
+`vkCreateDisplayPlaneSurfaceKHR`; it is **not** a Vulkan WSI implementation in
+ps5vk. There has been no native DXVK execution on PS5. Reproduce these
+boundaries with `tools/run_dxvk_host_smoke.py`,
+`tools/run_dxvk_ps5vk_host_bootstrap.py` and
+`tools/build_dxvk_ps5_cross_probe.py`, retaining their source and artifact
+identities. Do not call the cross-link result `runtime_ready`.
 
-```sh
-meson setup <checkout>/build-native <checkout> --buildtype debugoptimized \
-  -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false \
-  -Denable_d3d11=true -Denable_dxgi=true \
-  -Dnative_sdl2=enabled -Dnative_sdl3=disabled -Dnative_glfw=disabled
-ninja -C <checkout>/build-native
-python3 tools/run_dxvk_host_smoke.py --dxvk-dir <checkout> \
-  --build-dir <checkout>/build-native
-```
+## Active critical path: follow the executable
 
-The script rejects a different source commit and records the exact built
-library hashes.
+1. **Instance and presentation bootstrap.** Implement the ps5vk side of the
+   surface/display/swapchain route actually consumed by the existing DXVK PS5
+   adapter. Start with DXVK's exact instance-extension query and creation
+   sequence, then display mode/plane, surface capabilities and formats,
+   swapchain image acquisition, present and teardown. Match advertised
+   capabilities to implemented operations; fail closed for unsupported
+   present modes, image usages and surface combinations. A host mock is useful
+   for the call contract, but a native present/readback and clean Close Game
+   prove the path. The first newly observed DXVK refusal replaces the current
+   `VK_KHR_surface` refusal in this backlog.
+2. **Device bootstrap and version boundary.** The pinned DXVK source requests
+   Vulkan 1.3 at instance creation and filters physical devices reporting
+   less than 1.3. ps5vk currently accepts only a 1.0 instance request and
+   reports a 1.0 device. Inspect the exact calls and required feature/extension
+   checks after WSI progresses; implement the contracts DXVK actually uses.
+   An instrumented local DXVK build may bypass a version filter to discover
+   later refusals, but it must be labeled diagnostic. Never make ps5vk report
+   1.3 merely to pass the filter, or claim an unmodified DXVK 2.6.2 run from
+   such a build. A truthful public version change needs the corresponding
+   mandatory API contracts, independently of whether we run full CTS or seek
+   formal conformance.
+3. **First D3D11 workload.** Advance from `D3D11CreateDevice` to a real device
+   and context, texture/render-target creation, shaders, draw/dispatch,
+   synchronization, presentation and deterministic readback. Capture the first
+   failing Vulkan call and its requested shape. Implement that dependency even
+   when it falls outside the old T08–T15 grouping; repeat until the workload
+   renders. Keep feature queries, accepted device-create chains and actual
+   execution aligned. The known fragment-discard bug is a concrete graphics
+   blocker: kill currently fails to suppress depth/stencil writes and can
+   corrupt alpha-tested depth. Give it a bounded native pixel witness and fix
+   it when the DXVK workload reaches that behavior.
+4. **Broaden real use, then stabilize.** Exercise the D3D11 resources and
+   shader forms selected by the running workload, especially the remaining
+   subgroup operations/types, dynamic rendering, synchronization2, descriptor
+   and robustness paths, and transform feedback where DXVK actually requests
+   them. A listed profile feature is a candidate, not automatic proof that
+   this workload needs it. Conversely, a missing format, limit or WSI call
+   outside the 62-row profile must enter the active backlog as soon as DXVK
+   hits it. Finish with repeated launch/render/present/readback/Close Game
+   cycles and bounded resource accounting.
 
-The first ps5vk integration obstacle is the DXVK instance bootstrap:
-`src/dxvk/dxvk_instance.cpp` requires `VK_KHR_surface` and a platform WSI
-extension, and requests Vulkan 1.3; `src/dxvk/dxvk_device_filter.cpp` rejects a
-physical device reporting less than 1.3. The current ps5vk instance lists
-neither Vulkan surface extensions nor Vulkan WSI and rejects a requested
-instance API minor above 0. Its public `apiVersion` remains 1.0. Supporting
-an honest PS5 run requires a real presentation route and the missing Vulkan
-contracts; changing the reported version alone would not pass this boundary.
+Independent host-only work on WSI, compiler, synchronization and resource
+contracts may run in parallel in separate branches/worktrees. Coordinate only
+shared mutable state and short console windows. Do not wait for a whole
+tranche, another Vulkan minor-version announcement or an unrelated CTS suite
+before fixing an independently reproducible DXVK refusal. Integrate small
+PRs serially from current `main`; prefer roughly 3–6 files when a slice can
+be split honestly. Keep partial support private or default-off until its
+public query and native behavior agree.
 
-`tools/run_dxvk_ps5vk_host_bootstrap.py` now measures that boundary with the
-same pinned DXVK libraries and a temporary `libvulkan.so` compiled from
-ps5vk's host SDK sources. On ps5vk commit `5d8c79b`, the loader SHA-256 was
-`70e46a2f0e508f5d2e5f7433ccd0b7e4a6582a9f202378be3e457d3b95d5a696`.
-DXVK's first refusal was `Required Vulkan extension VK_KHR_surface not
-supported`; `D3D11CreateDevice` returned `0x80004005` without a device or
-context. The API 1.3 request and adapter filter are later gates and were not
-reached in this run. This is a host boundary test, not DXVK execution on PS5.
-Run the new script after the same pinned DXVK native build above; it writes a
-compact JSON receipt with `--output <path>`.
+## What remains in the old profile inventory
 
-The next build boundary is now measurable with
-`python3 tools/build_dxvk_ps5_cross_probe.py`. Starting from the same clean,
-pinned DXVK source and configured native Meson build, it cross-compiles 161
-DXVK/PS5-adapter units for `x86_64-sie-ps5` and links D3D11/DXGI using the
-PS5 toolchain. The adapter supplies a fixed 1080p60 monitor, requests
-`VK_KHR_surface`/`VK_KHR_display`, and selects a compatible display mode and
-plane for `vkCreateDisplayPlaneSurfaceKHR`. Its host test exercises the
-successful Vulkan call sequence and rejects a missing entry point, wrong mode
-or unsupported alpha mode.
-SDL2 WSI, the EDID parser and its `libdisplay-info` dependency account for
-the 13 omitted units; an empty EDID result and a diagnostic-only no-op for
-thread naming allow this link check. The linked artifacts have SHA-256
-`7ba72f19613935a504112c2a8f0f2673daf0a08a1d07c80b7274bb563c5957ad`
-(D3D11) and `58d93013638da3e20e4b4ef2cafe882e4b62232f46f67cf343e128ed050b7b76`
-(DXGI). The generated receipt still marks `runtime_ready=false`: ps5vk does
-not implement the Vulkan display-surface/swapchain route, and neither library
-has been packaged or run on PS5. The API-version and required DXVK feature
-gates remain later steps; no public version or feature bit changes here.
+The 32 current matrix blockers are useful leads, not the ordered execution
+queue. Besides the two T04 receipt-reconciliation rows, they comprise the
+Vulkan 1.1 aggregate draw-parameters query, two T08 subgroup features,
+T09 imageless framebuffer, the T10–T14 sync/render/shader/descriptor/
+robustness/transform-feedback families and the API-version row. The exact
+row IDs and axis states are generated in
+`conformance_inventory/dxvk_v262_matrix.json`; do not copy a row's old
+`blocker` verdict into a claim that its implementation is absent. For example,
+the Vulkan 1.1 aggregate `shaderDrawParameters` field is blocked while the
+equivalent Vulkan 1.0 KHR route already works. Similarly, the T08 subgroup
+diagnostics demonstrate only bounded 32-bit and Int8 cases: public subgroup
+properties still report zero stages/operations, and neither feature bit is
+advertised. A future DXVK request for those capabilities needs the exact
+requested type, operation, stage and reporting contract, not a speculative
+blanket bit flip.
 
-T08 remains partially complete. The ordinary build keeps Vulkan 1.0 and both
-`shaderSubgroupExtendedTypes` and `subgroupBroadcastDynamicId` disabled. A
-default-off diagnostic compute route has twice read back 128 exact 32-bit
-`OpGroupNonUniformBroadcast` results with runtime source IDs and clean guards.
-An independent default-off compute IAdd gate now has host pipeline and actual
-witness-shader compiler evidence plus two strict GPU readbacks of 128/128
-exact 32-bit values with clean guards and retirement. Both witnesses passed
-twice again on the combined T07 and Int16 source; current artifact and run
-identities are in `VALIDATION.md`. A separate default-off signed Int8 compute
-IAdd witness passed twice with 128 exact wrapped results, zero guard errors
-and clean retirement on its recorded artifact. This still has no applicable
-original CTS Pass or broad narrow-type, operation and stage coverage.
-The ordinary build at T08 top passed the unchanged 829-case selection twice
-on one signed artifact, with strict identity, complete QPA and clean closure;
-the exact receipts are in `VALIDATION.md`. This checks neutrality of the
-advertised profile, not subgroup conformance.
-The Broadcast result advances implementation evidence only: the Vulkan 1.1
-extended-types contract still needs narrow types and its applicable original
-CTS, while the Vulkan 1.2 dynamic-ID contract still needs a legal public API
-route and applicable original CTS. Neither row is counted ready or satisfied.
+The machine-readable tranche dependencies and final 1.3.204 promotion row
+remain as historical profile bookkeeping. They do not gate parallel
+implementation or the DXVK workload. The matrix's four-axis verdict still
+requires a public route, implementation and artifact-bound native evidence,
+and treats an observed applicable CTS failure as a blocker **for that row's
+profile score**. We do not use that score or a CTS selection as a release
+criterion for the DXVK runtime path. A failing CTS leaf that exposes a real
+DXVK-used defect should be diagnosed and fixed; a missing, unmapped or unrun
+leaf is not a reason to pause. Do not erase or relabel existing CTS failures.
+General Vulkan conformance, whole-suite CTS and certification are outside the
+current goal.
 
-Tranche delivery and DXVK profile scoring are different gates. The current
-matrix still leaves `geometryShader` and `tessellationShader` as blockers:
-their native witness receipts have not been admitted to the DXVK evidence
-ledger, so their native axis is still `reported-not-executed`. This is
-**evidence reconciliation**, not unfinished T04 rendering work. Admit the exact
-receipts (and, optionally, the 99 passing tessellation cases as a
-`cts-focused-pass` record), then regenerate the matrix and rerun its gates
-before changing its count. T07 may proceed using the merged
-T04 implementation; it need not wait for that accounting change. The current
-score is derived from `conformance_inventory/dxvk_v262_matrix.json`.
+## Validation and closure for each runtime slice
 
-The target is deliberately narrow: the pinned DXVK v2.6.2 D3D11 feature-level
-11_0 baseline, and the goal is running our DXVK v2.6.2 build on PS5. Reaching
-62/62 means that this profile has complete API, implementation and native
-evidence with no observed applicable CTS failure. It is **not** Vulkan 1.3 conformance: whole-suite CTS
-and the official conformance process are separate goals that no tranche waits
-for and this project does not claim.
+* Reproduce the exact DXVK call sequence or resource shape in a fast host
+  contract test. Assert both accepted and rejected cases, then run
+  `make check` before the PR. A test harness or a mock alone is not native
+  execution evidence.
+* For GPU, presentation or lifecycle behavior, use one bounded native PS5
+  run with artifact hash, structured `ps5log/1` events, deterministic
+  readback/presentation evidence and confirmed cleanup. Repeat when the
+  result is flaky, timing-sensitive, or the change affects ownership; do not
+  run identical console probes by habit. Keep private captures out of the
+  public repository.
+* Record **old refusal → new behavior or next refusal** and the exact
+  supported query/format/limit. A success on a diagnostic build is not a
+  shipping capability. An observed crash or wrong pixel keeps that path
+  open even if a host test passes. Update API/README claims only after the
+  shipping route is proven, and never silently raise `apiVersion`.
+* A DXVK milestone is closed by the actual pinned DXVK libraries reaching its
+  named outcome on PS5, not by 62/62, a synthetic consumer, a green CTS
+  selection or a cross-link receipt. Capture build identity, first/last
+  Vulkan call, output, and clean shutdown in the final native receipt.
 
-## Ordered tranches
-
-| Order | Tranche | Requirements | Purpose |
-| ---: | --- | ---: | --- |
-| 1 | T01 — Vulkan 1.1 draw-parameter foundation | 1 | BaseVertex, BaseInstance and DrawIndex shader semantics. |
-| 2 | T02 — Vulkan 1.1 multiview | 3 | View masks, ViewIndex and measured multiview limits. |
-| 3 | T03 — Indirect and indexed draws | 3 | First-instance, multi-draw and full 32-bit indices. |
-| 4 | T04 — Programmable graphics stages | 4 | Geometry, tessellation and clip/cull distances. |
-| 5 | T05 — Rasterization and viewport state | 4 | Clamp, non-solid fill and multiple viewports. |
-| 6 | T06 — Fragment output and multisampling | 4 | Blend, fragment stores/atomics and sample-rate behavior. |
-| 7 | T07 — Resources and precise queries | 4 | Cube arrays, BC, gather and precise occlusion. |
-| 8 | T08 — Vulkan 1.2 shader/memory model | 6 | Addresses, layouts, subgroups and memory semantics. |
-| 9 | T09 — Vulkan 1.2 lifecycle/render primitives | 6 | Query reset, framebuffer/layout, sampler and timeline behavior. |
-| 10 | T10 — Vulkan 1.3 sync/dynamic rendering | 5 | synchronization2, dynamic rendering, maintenance4 and cache control. |
-| 11 | T11 — Vulkan 1.3 shader/subgroup behavior | 7 | Required compiler and subgroup semantics. |
-| 12 | T12 — Inline uniform blocks | 7 | Descriptor implementation plus six measured limits. |
-| 13 | T13 — VK_EXT_robustness2 | 3 | Null descriptors and robust resource access. |
-| 14 | T14 — VK_EXT_transform_feedback | 3 | Transform-feedback capture, counters and streams. |
-| 15 | T15 — API 1.3.204 promotion gate | 1 | Final advertisement only after all earlier work, the mandatory 1.0–1.3 core surface and a native run of our DXVK build. |
-
-### T07 combined diagnostic status before public reporting (2026-09-24)
-
-The BC diagnostic route passed three focused original selections: 48/48
-compressed-texture sampling, 128/128 compatible blits and 74/74 copies,
-including mip and array-layer readback. Separate SDK witnesses checked
-interior multi-layer copies and sampled output. A 757-case selection combining
-these 250 BC leaves with the 507 frozen cases is prepared but has not run.
-The cube-array image-view CTS case passed twice; a SDK witness sampled two
-cubes, all six faces and a
-nonzero view base twice each. The original precise-occlusion CTS case passed
-twice and in a 508/508 combined selection, and a native API witness checked
-zero, one and three covered samples with result retrieval and reset. The D32
-comparison-gather leaf passed twice. Exact receipts and artifact hashes are
-recorded in [VALIDATION.md](../VALIDATION.md).
-
-These are bounded diagnostic results. All four T07 feature bits remain off in
-the shipping profile. The cube-compatible sampled colour-attachment role has
-a host-tested tiled descriptor and a packaged render-to-sample witness, but
-that witness has not run on hardware. A 577-case measurement selection now
-includes all 70 applicable original extended-gather leaves alongside the 507
-frozen cases, but it has not run. The complete public feature, frozen CTS and
-combined acceptance audit remain pending.
-
-### T07 public reporting candidate (2026-09-24)
-
-The ordinary build in the T07 candidate now reports `imageCubeArray`,
-`textureCompressionBC`, `shaderImageGatherExtended` and
-`occlusionQueryPrecise` without diagnostic switches. Its public SDK capability
-probe passed with eboot SHA-256
-`c3857792f29221da1e0452c5971ad29c084cd4cf89ed6ec6974104c9699ed3ae`
-in run `20260924T165734913Z_PPSA99994_ps5vk_0x24a81b7608ca2`.
-That probe observed 26/62 requested values; it checks reporting, not execution.
-
-The frozen selection now includes 829 original upstream cases. The ordinary
-CTS package has eboot SHA-256
-`95befcf38c164d38dec0748a9aa88608329fbc5e7681cc36ef70edff4f0f13f1`
-and case-list SHA-256
-`81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`.
-Its strict PS5 acceptance remains pending. The four T07 rows therefore remain
-blocked on the CTS axis, and the checked DXVK matrix stays at 20/62 ready with
-42 blockers. [VALIDATION.md](../VALIDATION.md#t07-public-reporting-candidate-2026-09-24)
-separates the candidate from the earlier diagnostic runs.
-
-### T07 public CTS promotion (2026-09-24)
-
-On owner-reported firmware 12.02, the ordinary package above completed two
-strict 829/829 Pass runs, `run-3158572987094` and `run-3231483363368`, with
-zero Fail, NotSupported, missing, unexpected or duplicate cases. The four
-T07 groups each passed twice: cube arrays 1/1, BC 250/250, extended gather
-70/70 and precise occlusion 1/1. Both reports verified the exact eboot and
-selection hashes, complete QPA, clean log transport and normal title closure.
-The four rows now satisfy API, implementation, original CTS and native-evidence
-axes; after the separate T08 DeviceScope KHR witness and public query, the
-checked matrix is **25/62 ready with 37 blockers**. DeviceScope has no
-applicable original message-passing CTS leaf under API 1.0. The earlier
-candidate paragraph records its status before these runs. Full receipt and
-artifact hashes are in [VALIDATION.md](../VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
-
-For T08's extended subgroup Int16 operands, the pinned original Vulkan 1.0
-compute indexing factory is now packaged as an independent `shaderInt16`
-prerequisite. Its `opaccesschain_u16` leaf reaches the original CTS support
-check, which reports `NotSupported` because the shipping core bit is false.
-The one-leaf diagnostic receipt and artifact identity are in `VALIDATION.md`.
-The current frozen acceptance selection remains 829 cases; the Int16 leaf is
-only in a separate diagnostic selection. A build combining that factory with
-the default-off Int16 diagnostic route passed the original 128-value GPU
-oracle twice after forwarding `shaderInt16` to PSBC. Exact artifact and QPA
-identities are in `VALIDATION.md`. Public `shaderInt16`, subgroup features and
-`apiVersion` stay off; the broader Int16 operand matrix, subgroup properties,
-original subgroup CTS and combined profile still need evidence.
-
-T08 has four satisfied requirements on `main`: buffer device address,
-standard uniform-buffer layout, the base Vulkan memory model and DeviceScope.
-Both subgroup bits remain blockers. The Int8 compute compiler probe is default
-off and supplies no public subgroup, `shaderInt8` or API-version credit. A
-combined runtime GPU readback has passed for bounded 32-bit Broadcast/IAdd and
-Int8 IAdd forms. Broader type, operation and stage behavior still needs
-artifact-bound GPU evidence; any later public promotion also needs the legal
-profile route and applicable original CTS. Work toward DXVK continues on API 1.0.
-
-The table totals the 61 blockers observed at backlog creation: one API-version
-requirement, two extensions, 48 features and ten properties. Their membership
-is stable while readiness and completion are derived from the live matrix, so implemented
-requirements remain auditable in their original tranche. The checker fails if
-a baseline requirement is missing, duplicated or unknown, or if the initially
-satisfied `robustBufferAccess` regresses. It also enforces dependency order and
-the final API promotion gate.
-
-### T09 timeline semaphores and separate depth/stencil layouts (2026-09-25)
-
-Three T09 rows are now ready on all four axes, through Vulkan 1.0 KHR
-extensions. `apiVersion` stays 1.0.
-
-* `timelineSemaphore` and `maxTimelineSemaphoreValueDifference` use
-  `VK_KHR_timeline_semaphore`. The reported difference is `UINT64_MAX`, because
-  payloads are compared at full width.
-* `separateDepthStencilLayouts` uses `VK_KHR_separate_depth_stencil_layouts`
-  over `VK_KHR_create_renderpass2`, `VK_KHR_maintenance2` and
-  `VK_KHR_multiview`.
-
-The public `D32_SFLOAT_S8_UINT` format carries only its witnessed attachment
-and readback roles. Evidence on the promoted shipping build:
-
-* two strict public-SDK witness runs per capability;
-* 50/50 focused original CTS leaves: timeline, renderpass2, and D32S8
-  stencil/depth with and without separate layouts;
-* 829/829 frozen acceptance;
-* afterwards, the same 50 leaves frozen into acceptance and the 879-case
-  selection passed 879/879 on the shipping build;
-* a re-measured capability probe (30/62 query values, 13 extensions).
-
-Run IDs and hashes are in
-[VALIDATION.md](../VALIDATION.md#t09-timeline-semaphores-and-separate-depthstencil-layouts-promotion-2026-09-25).
-DXVK 2.6.2 renders through dynamic rendering, not `vkCreateRenderPass*`. The
-render pass 2 route exists because the registry requires it for the separate
-layouts. It is not a claim that dynamic rendering is available.
-
-The following are still missing for D32S8:
-
-* sampled or single-aspect views;
-* `vkCmdClearDepthStencilImage`;
-* transfer-destination uploads;
-* mip levels and array layers;
-* HTILE compression.
-
-`D24_UNORM_S8_UINT` is not reported.
-
-**Open blocker: fragment discard does not suppress depth/stencil writes.** On
-gfx1013, through this driver's path, a fragment shader that executes
-`discard`/kill still lets the DB write depth and stencil. The compiled shader
-enables kill (`DB_SHADER_CONTROL=0x50`), yet the T09 depth/stencil witness saw
-all 4096 texels written. The root cause is open. This breaks alpha-tested
-depth in DXVK. It needs an owner and a native witness in a later tranche. It
-does not change the three T09 rows above, which do not depend on discard.
-
-### T08 subgroup profile prerequisites
-
-The pinned registry and original CTS impose different routes for the two T08
-subgroup bits. The actionable format and stage matrix is in
-`conformance_inventory/subgroup_profile_contract.json`; its host checker keeps
-the current public reporting closed while these prerequisites are incomplete.
-
-| Requirement | Legal route and original CTS gate | Current state |
-| --- | --- | --- |
-| `shaderSubgroupExtendedTypes` | `VK_KHR_shader_subgroup_extended_types` requires Vulkan 1.1; the feature is core in 1.2. The original CTS also requires `VK_KHR_shader_float16_int8`, which independently depends on Vulkan 1.1 at this registry pin. Broadcast and arithmetic cases need subgroup `supportedStages` for the tested stage and `supportedOperations` with `BALLOT` and `ARITHMETIC` respectively. The 8/16/64-bit integer and 16-bit float formats need their respective shader features, with storage access for 8/16-bit CTS buffers. | Public bit off; API 1.0; no accepted subgroup CTS or complete native witness. |
-| `subgroupBroadcastDynamicId` | Only `VkPhysicalDeviceVulkan12Features` at this registry pin; the original nonconstant broadcast cases require Vulkan 1.2, SPIR-V 1.5, the feature bit, a supported stage and `BALLOT`. | Public bit off; API 1.0; no extension alias or accepted CTS route. |
-
-`VkPhysicalDeviceSubgroupProperties` supplies `subgroupSize`, `supportedStages`,
-`supportedOperations` and `quadOperationsInAllStages` through properties2.
-The current Vulkan 1.0 KHR query explicitly returns zero for all four fields.
-Compute subgroup support is required by the original CTS;
-other stages depend on their reported masks. The quad field does not establish
-broadcast support. Neither subgroup bit nor `apiVersion` changes in this slice.
-
-The same pinned `vk.xml` contains 21 Vulkan 1.1 and seven Vulkan 1.2 core
-command names. None of the 1.1 names has a public prototype, dispatch entry or
-C implementation. Of the 1.2 names, `vkResetQueryPool` has a C implementation
-and dispatch entry gated by the enabled EXT host-query-reset route, but no SDK
-public prototype; the other six names are absent. The exact lists and
-fail-closed source checks are in `subgroup_profile_contract.json`. The seven
-1.2 names cover host query reset, timeline semaphore counter/wait/signal,
-buffer device address and two opaque capture-address queries. KHR/EXT aliases
-used by Vulkan 1.0 routes do not fill the remaining core-name gaps. Version
-promotion must review each command's semantics and the accumulated feature,
-property and limit contracts; structural wiring alone earns no version claim.
-This version gate does not delay extension-route work toward DXVK.
-
-### T09 diagnostic status (2026-09-24)
-
-The codex T09 slice has default-off implementations and artifact-bound native
-measurements for `hostQueryReset` and bounded `imagelessFramebuffer` use. The
-sampler mirror-clamp path passed eight U/V nearest and linear draw witnesses;
-two focused original W CTS leaves stopped in 3D image upload before sampling.
-The ordinary public device reports all three features false, and the DXVK
-matrix remains **25/62 ready with 37 blockers**. The full run identities,
-artifact hashes and remaining KHR dependency and W coverage limits are in
-[VALIDATION.md](../VALIDATION.md#t09-diagnostic-measurements-2026-09-24).
-This tranche does not claim that DXVK itself runs yet.
-
-### T09 public host query reset (2026-09-25)
-
-The ordinary Vulkan 1.0 graphics build exposes `VK_EXT_host_query_reset` and
-reports `hostQueryReset=1` through `VkPhysicalDeviceHostQueryResetFeaturesEXT`.
-A public SDK capability probe strictly verified the EXT route and ten device
-extensions; a separate shipping SDK graphics run completed precise occlusion
-queries, reset them on the host, observed availability zero with preserved old
-result words, and reused the same command buffer for new 1/0/3 results. The
-four-axis row is satisfied and the checked matrix is **26/62 ready with 36
-blockers**. The exact original CTS leaf is identified but has not run; the
-Vulkan 1.2 aggregate and API 1.3 requirement remain unadvertised. Run IDs,
-hashes and lifecycle evidence are in
-[VALIDATION.md](../VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25).
-
-### T09 sampler W native evidence (2026-09-25)
-
-Six strict SDK draws exercised 3D W mirror clamp with nearest and linear
-filtering at negative, inside and positive-edge coordinates. Each matched
-373,248 CPU/readback pixels with a clean lifecycle. Together with the eight
-earlier U/V draws, they move the DXVK sampler row's native axis to
-`native-evidence`. The two focused original 3D CTS leaves still reported
-`Fail` during image upload before W sampling; neither leaf has a PASS. The
-ordinary public sampler feature and KHR extension remain disabled, so the
-requirement is still an API blocker and the matrix remains **26/62 ready with
-36 blockers**. Exact run IDs and hashes are in
-[VALIDATION.md](../VALIDATION.md#t09-sampler-mirror-clamp-diagnostic-measurement-2026-09-24).
-
-### T09 sampler mirror-clamp public KHR promotion (2026-09-25)
-
-The ordinary Vulkan 1.0 SDK probe enumerated
-`VK_KHR_sampler_mirror_clamp_to_edge` and observed the mirror-clamp capability.
-With the public route enabled, separate SDK draws for U nearest and 3D W
-linear each matched all 373,248 pixels against the CPU reference and closed
-cleanly. The compact upstream 3D W address-mode CTS leaf remains a strict 1/1
-PASS. The two larger filtering leaves retain their pre-sampling image-upload
-`Fail` verdicts. At that promotion, the checked matrix was **27/62 ready with 35 blockers**;
-the ordinary capability probe observed 29/62 requested values. Exact current
-artifact, run and receipt hashes are in
-[VALIDATION.md](../VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
-
-## Readiness versus profile completion
-
-For Vulkan 1.1–1.3 rows, implementation can be ready before the device is
-allowed to advertise the target API version. The backlog therefore reports two
-different facts:
-
-* **implementation ready** means real implementation and native evidence are
-  green and no applicable CTS leaf was observed failing; it does not assert
-  that the capability is advertised;
-* **profile satisfied** additionally requires the public API axis and final
-  fail-closed verdict to be green.
-
-This distinction lets the implementation counter advance without weakening the
-final Vulkan 1.3.204 gate or creating a circular dependency.
-
-## Definition of done for a requirement
-
-A row is counted complete only when all three gating axes in the live matrix
-are green and its CTS record shows no observed failure:
-
-1. the public query reports the exact supported value and device creation
-   accepts it;
-2. the implementation is real and fail-closed for unsupported combinations,
-   with host tests for its contract;
-3. an artifact-bound native PS5 run proves execution, output and clean
-   lifecycle through `ps5log/1`; `native-evidence` must name its run ids,
-   artifact SHA-256 and references.
-
-Upstream CTS is regression evidence, not a readiness gate. The matrix records
-it per capability as `cts-pass` (original leaves in the frozen regression
-selection), `cts-focused-pass` (original leaves outside that selection passing
-in a focused run whose run ids, artifact SHA-256 and case-list SHA-256 are
-recorded, with every named case `Pass`), `mapped-not-run` or `not-mapped`.
-A missing, unmapped or unrun leaf does not block an implemented,
-native-witnessed capability. An observed applicable failure, `cts-fail`, stays
-in the ledger and blocks the row until it is explained or fixed. NotSupported,
-Skip and Fail never count as a pass, and no historical report is rewritten.
-Use focused CTS where it validates a concrete contract or helps debugging;
-whole-suite CTS and general Vulkan conformance are not gates for a row or for
-the final API promotion, which instead requires our DXVK v2.6.2 build to create
-its device and run natively.
-
-Properties require measured, defensible values rather than copied profile
-floors. Extensions are enumerated only after every extension capability used by
-the profile meets the same gate. Host tests and mocked packet checks never
-promote a row alone.
-
-## Delivery discipline
-
-Use a fresh branch from current `main` for each PR and wait for merge before
-starting dependent work; stacked PRs make review and evidence attribution
-ambiguous. Prefer 3–6 files per PR. A large tranche may therefore need several
-sequential PRs: contract/tests first, implementation next, and CTS/native
-promotion last. Intermediate PRs must keep reporting false and reject device
-requests until the complete behavior is proven.
-
-Run `make check` before publication. Console work additionally requires the
-shared `console:PS5` and `title:PPSA99994` leases, exact artifact identity,
-structured TCP telemetry and a confirmed clean Close Game/self-exit. No PR may
-raise the reported Vulkan API version merely to let a consumer proceed.
+Historical T01–T09 experiments, case lists, artifact hashes and receipts
+remain in [VALIDATION.md](../VALIDATION.md). Keep the live blocker above
+current; add a dated checkpoint only when a measured DXVK run moves it.
