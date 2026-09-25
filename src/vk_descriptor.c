@@ -145,6 +145,14 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
                     if(!v->sampler || v->sampler->device!=d) {++d->lifetime_errors;return;}
                     continue;
                 }
+                /* nullDescriptor (VK_EXT_robustness2): a null view is a legal
+                 * storage image or combined image (whose sampler stays
+                 * required), never an input attachment. Separate sampled
+                 * images keep refusing it until their encoder handles it. */
+                if(!v->imageView && (d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR) &&
+                   !input && !sampled_image &&
+                   (storage_image || (v->sampler && v->sampler->device==d)))
+                    continue;
                 if(input || storage_image) {
                    /* Both resource-only image descriptors ignore the sampler.
                     * The input attachment permits a subpass read layout; a
@@ -177,6 +185,10 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
             }
             if(texel) {
                 VkBufferView view=w->pTexelBufferView[k];
+                /* nullDescriptor: a null uniform texel view. Storage texel
+                 * views keep refusing it until their encoder handles it. */
+                if(!view && !storage_texel &&
+                   (d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR))continue;
                 if(!view || view->device!=d || !view->buffer ||
                    (storage_texel && !ps5vk_buffer_usage(d,view->buffer,
                         VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT))) {++d->lifetime_errors;return;}
@@ -184,6 +196,12 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
             }
             const VkDescriptorBufferInfo *b = &w->pBufferInfo[k];
             void *address; VkDeviceSize size;
+            /* VUID-VkDescriptorBufferInfo-buffer-02999: a null buffer has
+             * offset zero and range VK_WHOLE_SIZE. */
+            if(!b->buffer && (d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) {
+                if(b->offset || b->range!=VK_WHOLE_SIZE) {++d->lifetime_errors;return;}
+                continue;
+            }
             const VkBufferUsageFlags usage = base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
             const VkDeviceSize alignment = base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?

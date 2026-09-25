@@ -1379,8 +1379,9 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                     if(!set->defined[index]){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=16;goto fail;}
                     if(buffer_type) {
                         /* The encoder resolves and validates the base address;
-                         * a null handle must never be encoded. */
-                        if(!set->buffers[index].buffer) {
+                         * a null handle is encoded only as the zeroed
+                         * nullDescriptor record, on a device that enabled it. */
+                        if(!set->buffers[index].buffer && !(d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) {
                             rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=17;goto fail;
                         }
                         continue;
@@ -1414,6 +1415,11 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                         }
                         continue;
                     }
+                    /* nullDescriptor: a null sampled view has no image, so
+                     * it carries no layout requirement. */
+                    if(!set->images[index].imageView && !set->image_resources[index] &&
+                       (d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR))
+                        continue;
                     if(!set->image_resources[index] ||
                        set->images[index].imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
                         rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=18;goto fail;
