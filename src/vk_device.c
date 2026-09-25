@@ -595,6 +595,16 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES) {
             ((VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures *)next)
                 ->separateDepthStencilLayouts = separate_depth_stencil_supported(p);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES) {
+            ((VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures *)next)
+                ->shaderDemoteToHelperInvocation = !!(p->platform.supported_features_t09 &
+                    PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES) {
+            ((VkPhysicalDeviceShaderTerminateInvocationFeatures *)next)
+                ->shaderTerminateInvocation = !!(p->platform.supported_features_t09 &
+                    PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION);
 
         }
     }
@@ -752,14 +762,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Sixteen conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Eighteen conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
-     * create_renderpass2, separate depth/stencil layouts, swapchain).
-     * Keep headroom so a new entry cannot overflow
-     * the array before this bound is revisited; each push site must stay
-     * below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 16, DEVICE_EXTENSION_SLOTS = 17 };
+     * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
+     * helper invocation, terminate invocation). Keep headroom so a new entry
+     * cannot overflow the array before this bound is revisited; each push site
+     * must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 18, DEVICE_EXTENSION_SLOTS = 20 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -842,6 +852,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
             VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_SPEC_VERSION};
     }
+    if (p->platform.supported_features_t09 &
+        PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION) {
+        properties[total++] = (VkExtensionProperties){
+            VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME,
+            VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_SPEC_VERSION};
+    }
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_SHADER_TERMINATE_INVOCATION_EXTENSION_NAME,
+            VK_KHR_SHADER_TERMINATE_INVOCATION_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -878,6 +899,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 separate_depth_stencil_extension = VK_FALSE;
     VkBool32 maintenance2_extension = VK_FALSE, create_renderpass2_extension = VK_FALSE;
     VkBool32 swapchain_extension = VK_FALSE;
+    VkBool32 demote_extension = VK_FALSE, terminate_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -917,6 +939,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &create_renderpass2_extension;
         else if (!strcmp(name, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
             seen = &swapchain_extension;
+        else if (!strcmp(name, VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME))
+            seen = &demote_extension;
+        else if (!strcmp(name, VK_KHR_SHADER_TERMINATE_INVOCATION_EXTENSION_NAME))
+            seen = &terminate_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -986,6 +1012,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!separate_depth_stencil_supported(p) || !p->instance->features2_extension_enabled ||
          !create_renderpass2_extension))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    /* Both pixel-removal extensions depend, in the pinned registry, on
+     * VK_KHR_get_physical_device_properties2 or Vulkan 1.1. */
+    if (demote_extension &&
+        (!(p->platform.supported_features_t09 &
+           PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (terminate_extension &&
+        (!(p->platform.supported_features_t09 &
+           PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION) ||
+         !p->instance->features2_extension_enabled))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
     uint32_t enabled_features_t09 = sampler_mirror_clamp_extension ?
@@ -1001,6 +1039,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_dynamic_rendering = VK_FALSE;
     VkBool32 saw_timeline = VK_FALSE;
     VkBool32 saw_separate_depth_stencil = VK_FALSE;
+    VkBool32 saw_demote = VK_FALSE, saw_terminate = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO) {
@@ -1224,6 +1263,30 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 if (!separate_depth_stencil_extension || !separate_depth_stencil_supported(p))
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_SEPARATE_DEPTH_STENCIL_LAYOUTS;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES) {
+            if (saw_demote) return INVALID;
+            saw_demote = VK_TRUE;
+            const VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures *features =
+                (const VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures *)next;
+            if (!valid_bool(features->shaderDemoteToHelperInvocation)) return INVALID;
+            if (features->shaderDemoteToHelperInvocation) {
+                if (!demote_extension)
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES) {
+            if (saw_terminate) return INVALID;
+            saw_terminate = VK_TRUE;
+            const VkPhysicalDeviceShaderTerminateInvocationFeatures *features =
+                (const VkPhysicalDeviceShaderTerminateInvocationFeatures *)next;
+            if (!valid_bool(features->shaderTerminateInvocation)) return INVALID;
+            if (features->shaderTerminateInvocation) {
+                if (!terminate_extension)
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
             }
         } else {
             return VK_ERROR_FEATURE_NOT_PRESENT;

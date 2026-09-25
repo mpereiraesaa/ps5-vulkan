@@ -167,6 +167,13 @@ enum ps5vk_t09_feature_bits {
     /* VK_KHR_create_renderpass2 (no feature structure). Enumerated only with
      * its registry dependencies, VK_KHR_multiview and VK_KHR_maintenance2. */
     PS5VK_T09_FEATURE_CREATE_RENDERPASS2 = 1u << 6,
+    /* DXVK262-T11 pixel removal on the Vulkan 1.0 profile.
+     * VK_EXT_shader_demote_to_helper_invocation: OpDemoteToHelperInvocation
+     * keeps the invocation running as a helper for its quad's derivatives.
+     * VK_KHR_shader_terminate_invocation: OpTerminateInvocation. A platform
+     * sets them only once a native pixel witness measured the behaviour. */
+    PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION = 1u << 7,
+    PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION = 1u << 8,
 };
 
 /* maxTimelineSemaphoreValueDifference, derived from the payload algorithm

@@ -405,6 +405,8 @@ check:
 
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_t09_sampler_negotiation.c -o build/tests/test_t09_sampler_negotiation
 	./build/tests/test_t09_sampler_negotiation
+	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_t11_demote_negotiation.c -o build/tests/test_t11_demote_negotiation
+	./build/tests/test_t11_demote_negotiation
 
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_timeline_device.c -o build/tests/test_timeline_device
 	./build/tests/test_timeline_device
