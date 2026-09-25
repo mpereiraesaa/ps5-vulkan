@@ -3,6 +3,7 @@
 #include "vk_image_transfer.h"
 #include "texture_copy.h"
 #include "texture_format.h"
+#include "readback_region.h"
 #include <stdint.h>
 #define invalid ps5vk_command_invalidate
 
@@ -185,7 +186,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
         }
         return;
     }
-    if (count!=1) {invalid(c);return;}
+    /* The depth and depth/stencil readbacks below copy one whole surface;
+     * the colour readback after them admits general regions. */
+    if (count!=1 && (ps5vk_depth_stencil_attachment_image(image) ||
+                     ps5vk_depth_readback_image(image))) {invalid(c);return;}
     /* The depth readback: the same whole-surface shape as the colour one, over
      * the DEPTH aspect of a D32 attachment that declares the transfer source
      * role. It reaches the graphics backend like the colour readback does,
@@ -280,25 +284,29 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
          !ps5vk_colour_transfer_image(image)) ||
         (!array_color && (image->info.usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
          !ps5vk_colour_transfer_image(image))) {invalid(c);return;}
-    const VkBufferImageCopy *r=&regions[0];
-    const uint64_t plane=(uint64_t)image->info.extent.width*image->info.extent.height;
-    if(!image->info.arrayLayers || plane>UINT64_MAX/4/image->info.arrayLayers){invalid(c);return;}
-    const uint64_t pixels=plane*image->info.arrayLayers;
+    /* DXVK262-T10: each region is a rectangle of any layer range at mip 0,
+     * written at a texel-aligned buffer offset with any row length and image
+     * height at least its extent (src/readback_region.h), the shape a D3D11
+     * runtime uses to read a render target into a sub-allocated staging
+     * buffer. The whole-surface copy the CTS modules record is one such
+     * region. Every region must fit the buffer and no region may overlap the
+     * image's own bytes; the native readback re-derives the same bytes. */
     void *src,*dst;VkDeviceSize src_bytes,dst_bytes;
-    if(r->bufferOffset || (r->bufferRowLength && r->bufferRowLength!=image->info.extent.width) ||
-        (r->bufferImageHeight && r->bufferImageHeight!=image->info.extent.height) ||
-        r->imageSubresource.aspectMask!=VK_IMAGE_ASPECT_COLOR_BIT ||
-        r->imageSubresource.mipLevel || r->imageSubresource.baseArrayLayer ||
-        r->imageSubresource.layerCount!=image->info.arrayLayers || r->imageOffset.x || r->imageOffset.y ||
-        r->imageOffset.z || r->imageExtent.width!=image->info.extent.width ||
-        r->imageExtent.height!=image->info.extent.height || r->imageExtent.depth!=1 ||
-        pixels>UINT64_MAX/4 ||
-        ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
-        ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS ||
-        dst_bytes<pixels*4 || overlaps((uintptr_t)src,src_bytes,(uintptr_t)dst,pixels*4)) {invalid(c);return;}
-    struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
-        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,1);
-    if(!op)return;
-    op->copy_destination=destination;op->copy_image=image;
-    op->copy_layout=layout;op->copy_region=*r;
+    if(ps5vk_image_span(d,image,&src,&src_bytes)!=VK_SUCCESS ||
+        ps5vk_buffer_span(d,destination,0,VK_WHOLE_SIZE,&dst,&dst_bytes)!=VK_SUCCESS)
+        {invalid(c);return;}
+    for(uint32_t i=0;i<count;++i) {
+        const VkBufferImageCopy *region=&regions[i];
+        const uint64_t bytes=ps5vk_readback_region_bytes(image,region);
+        if(!bytes || region->bufferOffset>dst_bytes || bytes>dst_bytes-region->bufferOffset ||
+           overlaps((uintptr_t)src,src_bytes,(uintptr_t)dst+(uintptr_t)region->bufferOffset,bytes))
+            {invalid(c);return;}
+    }
+    struct ps5vk_operation *ops=ps5vk_command_reserve_operations(c,PS5VK_COPY_IMAGE_BUFFER,
+        PS5VK_OPERATION_OUTSIDE_RENDER_PASS,count);
+    if(!ops)return;
+    for(uint32_t i=0;i<count;++i) {
+        ops[i].copy_destination=destination;ops[i].copy_image=image;
+        ops[i].copy_layout=layout;ops[i].copy_region=regions[i];
+    }
 }

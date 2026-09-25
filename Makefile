@@ -281,6 +281,8 @@ check:
 	./build/tests/test_upload_commands
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c src/depth_detile.c src/depth_layout.c tests/test_readback_commands.c -o build/tests/test_readback_commands
 	./build/tests/test_readback_commands
+	$(CC) -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined $(VULKAN_CFLAGS) -Inative -Isrc src/image_layout_state.c src/color_detile.c src/depth_detile.c src/depth_layout.c tests/test_readback_regions.c -o build/tests/test_readback_regions
+	./build/tests/test_readback_regions
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Inative -Isrc src/color_detile.c src/texture_dma.c tests/test_color_rect_clear.c -o build/tests/test_color_rect_clear
 	./build/tests/test_color_rect_clear
 	./build/tests/test_image_layout_state
