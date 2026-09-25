@@ -241,6 +241,19 @@ Compute subgroup support is required by the original CTS;
 other stages depend on their reported masks. The quad field does not establish
 broadcast support. Neither subgroup bit nor `apiVersion` changes in this slice.
 
+The same pinned `vk.xml` contains 21 Vulkan 1.1 and seven Vulkan 1.2 core
+command names. None of the 1.1 names has a public prototype, dispatch entry or
+C implementation. Of the 1.2 names, `vkResetQueryPool` has a C implementation
+and dispatch entry gated by the enabled EXT host-query-reset route, but no SDK
+public prototype; the other six names are absent. The exact lists and
+fail-closed source checks are in `subgroup_profile_contract.json`. The seven
+1.2 names cover host query reset, timeline semaphore counter/wait/signal,
+buffer device address and two opaque capture-address queries. KHR/EXT aliases
+used by Vulkan 1.0 routes do not fill the remaining core-name gaps. Version
+promotion must review each command's semantics and the accumulated feature,
+property and limit contracts; structural wiring alone earns no version claim.
+This version gate does not delay extension-route work toward DXVK.
+
 ### T09 diagnostic status (2026-09-24)
 
 The codex T09 slice has default-off implementations and artifact-bound native
