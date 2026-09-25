@@ -32,6 +32,11 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
     subgroup_ops = []
     entry_models = []
     has_int8_type = False
+    storage_variables = set()
+    access_bases = {}
+    load_pointers = {}
+    store_values = {}
+    broadcast_source_id = None
     index = 5
     while index < len(words):
         size, opcode = words[index] >> 16, words[index] & 0xffff
@@ -44,7 +49,17 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
             entry_models.append(operands[0])
         elif opcode == 21 and size == 4 and operands[1] == 8:  # OpTypeInt 8
             has_int8_type = True
-        elif 333 <= opcode <= 366:
+        elif opcode == 59 and size >= 4 and operands[2] == 12:  # OpVariable StorageBuffer
+            storage_variables.add(operands[1])
+        elif opcode in (65, 66) and size >= 4:  # OpAccessChain / OpInBoundsAccessChain
+            access_bases[operands[1]] = operands[2]
+        elif opcode == 61 and size >= 4:  # OpLoad
+            load_pointers[operands[1]] = operands[2]
+        elif opcode == 62 and size == 3:  # OpStore
+            store_values.setdefault(operands[0], []).append(operands[1])
+        elif opcode == 337 and size == 6:  # OpGroupNonUniformBroadcast
+            broadcast_source_id = operands[4]
+        if 333 <= opcode <= 366:
             subgroup_ops.append(opcode)
         index += size
     expected_capabilities = {61, 64 if operation == "broadcast" else 63}
@@ -54,6 +69,29 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
             entry_models != [5] or
             (operation == "iadd_int8") != (39 in capabilities and has_int8_type)):
         raise ValueError(f"shader lacks compute GroupNonUniform{operation} contract")
+    def storage_pointer(pointer: int, seen: set[int]) -> bool:
+        if pointer in seen:
+            return False
+        if pointer in storage_variables:
+            return True
+        base = access_bases.get(pointer)
+        return base is not None and storage_pointer(base, seen | {pointer})
+
+    def storage_value(value: int, seen: set[int]) -> bool:
+        if value in seen:
+            return False
+        pointer = load_pointers.get(value)
+        if pointer is None:
+            return False
+        if storage_pointer(pointer, set()):
+            return True
+        stores = store_values.get(pointer, [])
+        return bool(stores) and all(storage_value(item, seen | {value}) for item in stores)
+
+    if operation == "broadcast" and (words[1] < 0x00010500 or
+                                     broadcast_source_id is None or
+                                     not storage_value(broadcast_source_id, set())):
+        raise ValueError("Broadcast witness requires SPIR-V 1.5 and a storage-buffer-sourced ID")
 
 
 def main() -> None:

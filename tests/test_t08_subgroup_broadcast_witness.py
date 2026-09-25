@@ -1,17 +1,76 @@
 """Bounded Broadcast witness contract and strict receipt verification."""
 
 import hashlib
+import shutil
+import struct
+import subprocess
 import sys
 from pathlib import Path
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from run_t08_subgroup_broadcast_witness import expected_digest, verify
 from build_upstream_cts import tessellation_build_profile
+from build_t08_subgroup_broadcast_witness import checked_spirv
 
 
 class SubgroupWitnessTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("glslangValidator"), "glslangValidator unavailable")
+    def test_broadcast_witness_uses_spirv15_and_runtime_source_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shader = Path(directory) / "broadcast.spv"
+            subprocess.run([
+                "glslangValidator", "-V", "--target-env", "vulkan1.2",
+                str(ROOT / "experiments/compute/t08_subgroup_broadcast_runtime.comp"),
+                "-o", str(shader),
+            ], check=True, capture_output=True)
+            words = list(struct.unpack(f"<{shader.stat().st_size // 4}I",
+                                       shader.read_bytes()))
+        checked_spirv(struct.pack(f"<{len(words)}I", *words))
+        old_version = words[1]
+        words[1] = 0x00010400
+        with self.assertRaisesRegex(ValueError, "SPIR-V 1.5"):
+            checked_spirv(struct.pack(f"<{len(words)}I", *words))
+        words[1] = old_version
+        constant_id = None
+        broadcast_source_offset = None
+        offset = 5
+        while offset < len(words):
+            size, opcode = words[offset] >> 16, words[offset] & 0xffff
+            if opcode == 43 and constant_id is None:
+                constant_id = words[offset + 2]
+            if opcode == 337:
+                broadcast_source_offset = offset + 5
+            offset += size
+        self.assertIsNotNone(constant_id)
+        self.assertIsNotNone(broadcast_source_offset)
+        source_id = words[broadcast_source_offset]
+        words[broadcast_source_offset] = constant_id
+        with self.assertRaisesRegex(ValueError, "storage-buffer-sourced ID"):
+            checked_spirv(struct.pack(f"<{len(words)}I", *words))
+        words[broadcast_source_offset] = source_id
+        source_pointer = None
+        store_value_offset = None
+        offset = 5
+        while offset < len(words):
+            size, opcode = words[offset] >> 16, words[offset] & 0xffff
+            if opcode == 61 and words[offset + 2] == source_id:
+                source_pointer = words[offset + 3]
+            offset += size
+        self.assertIsNotNone(source_pointer)
+        offset = 5
+        while offset < len(words):
+            size, opcode = words[offset] >> 16, words[offset] & 0xffff
+            if opcode == 62 and words[offset + 1] == source_pointer:
+                store_value_offset = offset + 2
+            offset += size
+        self.assertIsNotNone(store_value_offset)
+        words[store_value_offset] = constant_id
+        with self.assertRaisesRegex(ValueError, "storage-buffer-sourced ID"):
+            checked_spirv(struct.pack(f"<{len(words)}I", *words))
+
     def test_diagnostic_switch_has_distinct_cts_build_identity(self):
         ordinary = tessellation_build_profile({})
         diagnostic = tessellation_build_profile({
