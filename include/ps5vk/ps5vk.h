@@ -12,7 +12,7 @@ extern "C" {
  *
  * Supported API Profile:
  * - Standard Vulkan 1.0 Core subset
- * - Target: AMD RDNA2 / GFX10.3 (gfx1013, PS5)
+ * - Target: gfx1013 (GFX10_1, PS5)
  * - Native compute dispatch and pipeline execution
  * - Native runtime SPIR-V compute compilation and bounded compilation cache
  * - Experimental runtime vertex/fragment compilation for procedural triangles;
@@ -204,6 +204,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(
 
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueWaitIdle(VkQueue queue);
 VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice device);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
+    VkDevice device, const VkSwapchainCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchain);
+VKAPI_ATTR void VKAPI_CALL vkDestroySwapchainKHR(
+    VkDevice device, VkSwapchainKHR swapchain,
+    const VkAllocationCallbacks* pAllocator);
+VKAPI_ATTR VkResult VKAPI_CALL vkGetSwapchainImagesKHR(
+    VkDevice device, VkSwapchainKHR swapchain,
+    uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages);
+VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImageKHR(
+    VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
+    VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex);
+VKAPI_ATTR VkResult VKAPI_CALL vkQueuePresentKHR(
+    VkQueue queue, const VkPresentInfoKHR* pPresentInfo);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSemaphore(
     VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo,

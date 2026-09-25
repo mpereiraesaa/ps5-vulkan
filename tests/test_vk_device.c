@@ -44,6 +44,8 @@ static void consumer_log(int level, const char *fmt, ...)
 static unsigned opened, closed;
 static VkResult query_result, open_result;
 static int malformed;
+static VkBool32 mock_wsi_available;
+VkBool32 ps5vk_wsi_present_available(void) { return mock_wsi_available; }
 static VkResult alloc_memory(void *ctx, VkDeviceSize size, void **address, void **backing)
 {
     (void)ctx; *address = malloc(size); *backing = *address;
@@ -2429,10 +2431,139 @@ static void wsi_display_surface_contract(void)
     vkDestroyInstance(plain, NULL);
 }
 
+static VkResult mock_wsi_image_requirements(VkDevice d,
+    const VkImageCreateInfo *info, VkMemoryRequirements *out)
+{
+    (void)d; (void)info;
+    *out = (VkMemoryRequirements){.size = 64u * 1024u * 1024u,
+        .alignment = 65536, .memoryTypeBits = 1};
+    return VK_SUCCESS;
+}
+static void mock_wsi_configure(VkDevice d)
+{
+    d->graphics_enabled = VK_TRUE;
+    d->graphics_submit_enabled = VK_TRUE;
+    d->image_requirements = mock_wsi_image_requirements;
+}
+static void mock_wsi_configure_incomplete(VkDevice d)
+{
+    d->graphics_enabled = VK_TRUE;
+}
+static VkBool32 has_swapchain_extension(VkPhysicalDevice p)
+{
+    VkExtensionProperties properties[32] = {0};
+    uint32_t count = 32;
+    assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, properties) == VK_SUCCESS);
+    for (uint32_t n = 0; n < count; ++n)
+        if (!strcmp(properties[n].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+            return VK_TRUE;
+    return VK_FALSE;
+}
+static void wsi_swapchain_negotiation_contract(void)
+{
+    const char *instance_names[] = {VK_KHR_SURFACE_EXTENSION_NAME,
+                                    VK_KHR_DISPLAY_EXTENSION_NAME};
+    VkInstanceCreateInfo instance_info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .enabledExtensionCount = 2, .ppEnabledExtensionNames = instance_names};
+    VkInstance i = VK_NULL_HANDLE;
+    assert(vkCreateInstance(&instance_info, NULL, &i) == VK_SUCCESS);
+    VkPhysicalDevice p = physical(i);
+    p->platform.queue_flags |= VK_QUEUE_GRAPHICS_BIT;
+    p->platform.format_properties = ps5vk_graphics_format_properties;
+    p->platform.image_properties = ps5vk_graphics_image_properties;
+    p->platform.max_allocation = UINT64_C(128) * 1024 * 1024;
+    p->platform.configure = mock_wsi_configure;
+    VkDisplayPropertiesKHR display = {0};
+    uint32_t count = 1;
+    assert(vkGetPhysicalDeviceDisplayPropertiesKHR(p, &count, &display) == VK_SUCCESS);
+    VkDisplayModePropertiesKHR mode = {0};
+    count = 1;
+    assert(vkGetDisplayModePropertiesKHR(p, display.display, &count, &mode) == VK_SUCCESS);
+    VkDisplaySurfaceCreateInfoKHR surface_info = {
+        .sType = VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR,
+        .displayMode = mode.displayMode, .planeIndex = 0, .planeStackIndex = 0,
+        .transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+        .alphaMode = VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR,
+        .imageExtent = {1920, 1080}};
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    assert(vkCreateDisplayPlaneSurfaceKHR(i, &surface_info, NULL, &surface) == VK_SUCCESS);
+    float priority;
+    VkDeviceQueueCreateInfo queue;
+    VkDeviceCreateInfo device_info_value = device_info(&queue, &priority);
+    const char *device_extension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    device_info_value.enabledExtensionCount = 1;
+    device_info_value.ppEnabledExtensionNames = &device_extension;
+    VkDevice d = VK_NULL_HANDLE;
+    VkBool32 present = VK_TRUE;
+    VkSurfaceCapabilitiesKHR caps = {0};
+
+    assert(!has_swapchain_extension(p));
+    assert(vkGetPhysicalDeviceSurfaceSupportKHR(p, 0, surface, &present) == VK_SUCCESS && !present);
+    assert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(p, surface, &caps) == VK_SUCCESS &&
+           caps.supportedUsageFlags == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    assert(vkCreateDevice(p, &device_info_value, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+
+    mock_wsi_available = VK_TRUE;
+    assert(has_swapchain_extension(p));
+    assert(vkGetPhysicalDeviceSurfaceSupportKHR(p, 0, surface, &present) == VK_SUCCESS && present);
+    assert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(p, surface, &caps) == VK_SUCCESS &&
+           caps.supportedUsageFlags == (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+    p->platform.max_allocation = UINT64_C(64) * 1024 * 1024;
+    assert(!has_swapchain_extension(p));
+    p->platform.max_allocation = UINT64_C(128) * 1024 * 1024;
+    p->platform.queue_flags &= ~VK_QUEUE_GRAPHICS_BIT;
+    assert(!has_swapchain_extension(p));
+    p->platform.queue_flags |= VK_QUEUE_GRAPHICS_BIT;
+    p->platform.image_properties = NULL;
+    assert(!has_swapchain_extension(p));
+    p->platform.image_properties = ps5vk_graphics_image_properties;
+    p->platform.configure = mock_wsi_configure_incomplete;
+    unsigned before_open = opened, before_close = closed;
+    assert(vkCreateDevice(p, &device_info_value, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    assert(opened == before_open + 1 && closed == before_close + 1);
+    p->platform.configure = mock_wsi_configure;
+    assert(vkCreateDevice(p, &device_info_value, NULL, &d) == VK_SUCCESS && d);
+    assert(d->swapchain_extension_enabled);
+    const char *commands[] = {"vkCreateSwapchainKHR", "vkDestroySwapchainKHR",
+        "vkGetSwapchainImagesKHR", "vkAcquireNextImageKHR", "vkQueuePresentKHR"};
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        assert(vkGetDeviceProcAddr(d, commands[n]));
+    d->swapchains = (VkSwapchainKHR)(uintptr_t)1;
+    vkDestroyDevice(d, NULL);
+    assert(d->lifetime_errors == 1 && i->devices == 1);
+    d->swapchains = VK_NULL_HANDLE;
+    vkDestroyDevice(d, NULL);
+
+    device_info_value.enabledExtensionCount = 0;
+    device_info_value.ppEnabledExtensionNames = NULL;
+    assert(vkCreateDevice(p, &device_info_value, NULL, &d) == VK_SUCCESS && d);
+    for (size_t n = 0; n < sizeof(commands) / sizeof(commands[0]); ++n)
+        assert(!vkGetDeviceProcAddr(d, commands[n]));
+    vkDestroyDevice(d, NULL);
+    vkDestroySurfaceKHR(i, surface, NULL);
+    vkDestroyInstance(i, NULL);
+    mock_wsi_available = VK_FALSE;
+
+    instance_info.enabledExtensionCount = 0;
+    assert(vkCreateInstance(&instance_info, NULL, &i) == VK_SUCCESS);
+    p = physical(i);
+    p->platform.queue_flags |= VK_QUEUE_GRAPHICS_BIT;
+    p->platform.format_properties = ps5vk_graphics_format_properties;
+    p->platform.image_properties = ps5vk_graphics_image_properties;
+    p->platform.max_allocation = UINT64_C(128) * 1024 * 1024;
+    p->platform.configure = mock_wsi_configure;
+    mock_wsi_available = VK_TRUE;
+    assert(!has_swapchain_extension(p));
+    vkDestroyInstance(i, NULL);
+    mock_wsi_available = VK_FALSE;
+}
+
 int main(void)
 {
     lifecycle(); negative(); narrow_storage_features(); allocator_lifetimes();
     wsi_display_surface_contract();
+    wsi_swapchain_negotiation_contract();
     consumer_physical_queries();
     tessellation_feature_negotiation();
     shader_int16_core_route();

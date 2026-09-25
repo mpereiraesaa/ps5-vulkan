@@ -311,6 +311,19 @@ def implemented_device_extensions() -> set[str]:
     end = source_text.index("VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties", start)
     tokens = set(re.findall(r'VK_[A-Z0-9_]+_EXTENSION_NAME',
                             source_text[start:end]))
+    # The capability probe creates a Vulkan instance without VK_KHR_surface.
+    # Its device-extension count therefore excludes the surface-dependent WSI
+    # route, even when a native graphics build can offer it to a surface-enabled
+    # instance. Keep the conditional guard explicit so an unconditional
+    # advertisement cannot silently inherit this probe exception.
+    swapchain_token = "VK_KHR_SWAPCHAIN_EXTENSION_NAME"
+    if swapchain_token in tokens:
+        surface_gate = source_text.index("static int swapchain_supported(")
+        if ("if (swapchain_supported(p))" not in source_text[start:end] or
+                "p->instance->surface_extension_enabled" not in
+                source_text[surface_gate:start]):
+            raise ValueError("VK_KHR_swapchain lacks its instance-surface gate")
+        tokens.remove(swapchain_token)
     # The extension is implemented only when the native platform advertises
     # the feature that makes its public query and device-create route usable.
     if "PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT" not in PLATFORM_SOURCE.read_text():
