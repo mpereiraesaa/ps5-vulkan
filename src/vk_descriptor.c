@@ -52,11 +52,15 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
         const VkWriteDescriptorSet *w = &writes[j];
         VkBool32 input=w->descriptorType==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
         VkBool32 storage_image=w->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        VkBool32 image=w->descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || input || storage_image;
+        VkBool32 sampler=w->descriptorType==VK_DESCRIPTOR_TYPE_SAMPLER;
+        VkBool32 sampled_image=w->descriptorType==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        VkBool32 image=w->descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || input ||
+            storage_image || sampler || sampled_image;
         VkDescriptorType base_type=ps5vk_base_buffer_descriptor_type(w->descriptorType);
         VkBool32 buffer=base_type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
             base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        VkBool32 texel=w->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+        VkBool32 storage_texel=w->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+        VkBool32 texel=w->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER || storage_texel;
         uint32_t dst[PS5VK_MAX_DESCRIPTORS];
         if (w->sType != VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET || w->pNext || !w->dstSet ||
             w->dstSet->pool->device != d || w->dstSet->pending ||
@@ -72,6 +76,12 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
             if(image) {
                 const VkDescriptorImageInfo *v=&w->pImageInfo[k];
                 void *address;VkDeviceSize bytes;
+                if(sampler) {
+                    /* A separate sampler: imageView and imageLayout are
+                     * ignored for this type. */
+                    if(!v->sampler || v->sampler->device!=d) {++d->lifetime_errors;return;}
+                    continue;
+                }
                 if(input || storage_image) {
                    /* Both resource-only image descriptors ignore the sampler.
                     * The input attachment permits a subpass read layout; a
@@ -90,7 +100,11 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
                     }
                     continue;
                 }
-                if(!v->sampler || v->sampler->device!=d || !v->imageView || v->imageView->device!=d ||
+                /* A sampled image is the combined record's image half: the
+                 * same view, usage, layout and backing rules, and its sampler
+                 * member is ignored. */
+                if((!sampled_image && (!v->sampler || v->sampler->device!=d)) ||
+                    !v->imageView || v->imageView->device!=d ||
                     !v->imageView->image || !(ps5vk_image_view_usage(v->imageView)&VK_IMAGE_USAGE_SAMPLED_BIT) ||
                     (v->imageLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && v->imageLayout!=VK_IMAGE_LAYOUT_GENERAL) ||
                     ps5vk_image_span(d,v->imageView->image,&address,&bytes)!=VK_SUCCESS) {
@@ -100,7 +114,9 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
             }
             if(texel) {
                 VkBufferView view=w->pTexelBufferView[k];
-                if(!view || view->device!=d || !view->buffer) {++d->lifetime_errors;return;}
+                if(!view || view->device!=d || !view->buffer ||
+                   (storage_texel && !ps5vk_buffer_usage(d,view->buffer,
+                        VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT))) {++d->lifetime_errors;return;}
                 continue;
             }
             const VkDescriptorBufferInfo *b = &w->pBufferInfo[k];
@@ -123,9 +139,14 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_cou
                  * not be able to observe application data this descriptor type
                  * never uses, and a copied descriptor carries the canonical
                  * value too. */
-                if(input || storage_image) stored.sampler = VK_NULL_HANDLE;
+                if(input || storage_image || sampled_image) stored.sampler = VK_NULL_HANDLE;
+                if(sampler) {
+                    stored.imageView = VK_NULL_HANDLE;
+                    stored.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                }
                 w->dstSet->images[dst[k]]=stored;
-                w->dstSet->image_resources[dst[k]]=stored.imageView->image;
+                w->dstSet->image_resources[dst[k]]=
+                    stored.imageView ? stored.imageView->image : VK_NULL_HANDLE;
             } else if(texel) w->dstSet->texel_views[dst[k]]=w->pTexelBufferView[k];
             else w->dstSet->buffers[dst[k]] = w->pBufferInfo[k];
             w->dstSet->defined[dst[k]] = VK_TRUE;
@@ -185,11 +206,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         seen[b->binding] = VK_TRUE;
         VkBool32 input=b->descriptorType==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
         VkBool32 storage_image=b->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        VkBool32 image=b->descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || input;
+        VkBool32 sampled_image=b->descriptorType==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        VkBool32 sampler=b->descriptorType==VK_DESCRIPTOR_TYPE_SAMPLER;
+        VkBool32 image=b->descriptorType==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || input ||
+            sampler;
         VkDescriptorType base_type=ps5vk_base_buffer_descriptor_type(b->descriptorType);
         VkBool32 buffer=base_type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
             base_type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        VkBool32 texel=b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+        VkBool32 texel=b->descriptorType==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
+            b->descriptorType==VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
         /* VUID-VkDescriptorSetLayoutBinding-descriptorType-01510: an input
          * attachment is read by a fragment shader, so its visibility is EITHER
          * nothing or exactly the fragment stage. The empty mask is therefore
@@ -211,8 +236,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
         /* pImmutableSamplers is meaningful only for SAMPLER and
          * COMBINED_IMAGE_SAMPLER; for an input attachment it is IGNORED, so it
          * is neither read nor rejected there. */
-        if (b->descriptorCount && ((image || storage_image) ? (!d->graphics_enabled ||
-                (b->pImmutableSamplers && !input && !storage_image)) :
+        /* Resource-only images (input attachment, storage and sampled image)
+         * ignore pImmutableSamplers. Immutable samplers are not implemented,
+         * so SAMPLER and COMBINED_IMAGE_SAMPLER refuse them. */
+        const VkBool32 resource_image = input || storage_image || sampled_image;
+        if (b->descriptorCount && ((image || resource_image) ? (!d->graphics_enabled ||
+                (b->pImmutableSamplers && !resource_image)) :
                 (!(buffer||texel) || b->pImmutableSamplers)))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (b->descriptorCount > PS5VK_MAX_DESCRIPTORS - signature.count)
@@ -254,10 +283,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(VkDevice d,
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint64_t storage_capacity=0,uniform_capacity=0,dynamic_storage_capacity=0,
         dynamic_uniform_capacity=0,texel_capacity=0,image_capacity=0,input_capacity=0,
-        storage_image_capacity=0;
+        storage_image_capacity=0,sampler_capacity=0,sampled_image_capacity=0,
+        storage_texel_capacity=0;
     for (uint32_t j = 0; j < info->poolSizeCount; ++j) {
         const VkDescriptorPoolSize *size=&info->pPoolSizes[j];
         uint64_t *capacity=size->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE?&storage_image_capacity:
+            size->type==VK_DESCRIPTOR_TYPE_SAMPLER?&sampler_capacity:
+            size->type==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE?&sampled_image_capacity:
+            size->type==VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER?&storage_texel_capacity:
             size->type==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT?&input_capacity:
             size->type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER?&storage_capacity:
             size->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER?&uniform_capacity:
@@ -268,6 +301,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(VkDevice d,
         if (!capacity ||
             ((size->type==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
               size->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
+              size->type==VK_DESCRIPTOR_TYPE_SAMPLER ||
+              size->type==VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
               size->type==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) && !d->graphics_enabled))
             return VK_ERROR_FEATURE_NOT_PRESENT;
         if (!size->descriptorCount) return INVALID;
@@ -286,6 +321,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(VkDevice d,
     pool->texel_capacity=texel_capacity;pool->image_capacity=image_capacity;
     pool->input_capacity=input_capacity;
     pool->storage_image_capacity=storage_image_capacity;
+    pool->sampler_capacity=sampler_capacity;
+    pool->sampled_image_capacity=sampled_image_capacity;
+    pool->storage_texel_capacity=storage_texel_capacity;
     ++d->descriptor_objects; *out = pool;
     return VK_SUCCESS;
 }
@@ -306,6 +344,9 @@ static void free_set(VkDescriptorPool pool, VkDescriptorSet set)
         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: pool->image_used-=count;break;
         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: pool->input_used-=count;break;
         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: pool->storage_image_used-=count;break;
+        case VK_DESCRIPTOR_TYPE_SAMPLER: pool->sampler_used-=count;break;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: pool->sampled_image_used-=count;break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: pool->storage_texel_used-=count;break;
         default: break;
         }
     }
@@ -345,7 +386,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
         return VK_ERROR_OUT_OF_POOL_MEMORY;
     uint64_t storage_needed=0,uniform_needed=0,dynamic_storage_needed=0,
         dynamic_uniform_needed=0,texel_needed=0,image_needed=0,input_needed=0,
-        storage_image_needed=0;
+        storage_image_needed=0,sampler_needed=0,sampled_image_needed=0,storage_texel_needed=0;
     for (uint32_t j = 0; j < info->descriptorSetCount; ++j) {
         VkDescriptorSetLayout layout = info->pSetLayouts[j];
         if (!layout || layout->device != d) return INVALID;
@@ -360,6 +401,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
             case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: image_needed+=count;break;
             case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: input_needed+=count;break;
             case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: storage_image_needed+=count;break;
+            case VK_DESCRIPTOR_TYPE_SAMPLER: sampler_needed+=count;break;
+            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: sampled_image_needed+=count;break;
+            case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: storage_texel_needed+=count;break;
             default: if(count)return INVALID;
             }
         }
@@ -371,7 +415,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
         texel_needed>pool->texel_capacity-pool->texel_used ||
         image_needed>pool->image_capacity-pool->image_used ||
         input_needed>pool->input_capacity-pool->input_used ||
-        storage_image_needed>pool->storage_image_capacity-pool->storage_image_used)
+        storage_image_needed>pool->storage_image_capacity-pool->storage_image_used ||
+        sampler_needed>pool->sampler_capacity-pool->sampler_used ||
+        sampled_image_needed>pool->sampled_image_capacity-pool->sampled_image_used ||
+        storage_texel_needed>pool->storage_texel_capacity-pool->storage_texel_used)
         return VK_ERROR_OUT_OF_POOL_MEMORY;
     VkDescriptorSet pending = NULL;
     for (uint32_t j = 0; j < info->descriptorSetCount; ++j) {
@@ -401,6 +448,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice d,
     pool->texel_used+=texel_needed;pool->image_used+=image_needed;
     pool->input_used+=input_needed;
     pool->storage_image_used+=storage_image_needed;
+    pool->sampler_used+=sampler_needed;
+    pool->sampled_image_used+=sampled_image_needed;
+    pool->storage_texel_used+=storage_texel_needed;
     pool->used_sets += info->descriptorSetCount;
     return VK_SUCCESS;
 }

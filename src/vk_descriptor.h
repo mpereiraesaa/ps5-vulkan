@@ -59,6 +59,12 @@ struct VkDescriptorPool_T {
      * accounting: a pool that sized itself for sampled images does not thereby
      * hold input attachments, exactly as the other roles are kept apart. */
     uint64_t input_capacity, input_used;
+    /* The separate-sampler, sampled-image and storage-texel types DXVK sizes
+     * every pool with. Accepting them here is descriptor bookkeeping only:
+     * no shader table record encodes them yet, so every consumer refuses. */
+    uint64_t sampler_capacity, sampler_used;
+    uint64_t sampled_image_capacity, sampled_image_used;
+    uint64_t storage_texel_capacity, storage_texel_used;
     VkDescriptorSet sets;
 };
 

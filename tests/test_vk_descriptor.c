@@ -1,5 +1,7 @@
+#include "descriptor_table_layout.h"
 #include "vk_descriptor.h"
 #include "vk_image.h"
+#include "vk_sampler.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -691,8 +693,225 @@ static void input_attachments(void)
     assert(!d.descriptor_objects);
 }
 
+/* The separate sampler, sampled image and storage texel buffer types DXVK
+ * 2.6.2 sizes every descriptor pool with and declares for D3D11 samplers,
+ * SRVs and typed UAV buffers. Descriptor bookkeeping only: the shader-table
+ * layout still has no record for them, so every consumer refuses. */
+static void separate_sampler_types(void)
+{
+    struct VkDevice_T d = {.memory = {NULL, backing_alloc, backing_free, cache, cache},
+        .buffer_alignment = 256, .noncoherent_atom = 64, .max_allocation = 4096,
+        .graphics_enabled = VK_TRUE}, other = {.graphics_enabled = VK_TRUE};
+    VkDescriptorSetLayoutBinding bindings[] = {
+        {0, VK_DESCRIPTOR_TYPE_SAMPLER, 2, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+    VkDescriptorSetLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 3, .pBindings = bindings};
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &layout) == VK_SUCCESS);
+    assert(layout->signature.count == 4 && layout->signature.binding[1].first == 2 &&
+           layout->signature.type[0] == VK_DESCRIPTOR_TYPE_SAMPLER &&
+           layout->signature.type[1] == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
+           layout->signature.type[2] == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER);
+    /* No shader-table record exists yet: the consumer-side layout refuses. */
+    struct ps5vk_descriptor_table_layout table;
+    assert(ps5vk_descriptor_table_layout_build(1, &layout->signature, &table) ==
+           VK_ERROR_FEATURE_NOT_PRESENT);
+    VkDescriptorSetLayout refused = VK_NULL_HANDLE;
+    /* Image roles need the graphics backend; the texel role does not. */
+    d.graphics_enabled = VK_FALSE; li.bindingCount = 1;
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &refused) == VK_ERROR_FEATURE_NOT_PRESENT);
+    li.pBindings = &bindings[1];
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &refused) == VK_ERROR_FEATURE_NOT_PRESENT);
+    li.pBindings = &bindings[2];
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &refused) == VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(&d, refused, NULL);
+    d.graphics_enabled = VK_TRUE;
+    /* Immutable samplers are not implemented: refused for SAMPLER, ignored for
+     * a sampled image, refused for a texel buffer. */
+    VkSampler immutable = VK_NULL_HANDLE;
+    VkDescriptorSetLayoutBinding with_immutable = bindings[0];
+    with_immutable.pImmutableSamplers = &immutable; li.pBindings = &with_immutable;
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &refused) == VK_ERROR_FEATURE_NOT_PRESENT && !refused);
+    with_immutable = bindings[1]; with_immutable.pImmutableSamplers = &immutable;
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &refused) == VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(&d, refused, NULL);
+    with_immutable = bindings[2]; with_immutable.pImmutableSamplers = &immutable; refused = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorSetLayout(&d, &li, NULL, &refused) == VK_ERROR_FEATURE_NOT_PRESENT && !refused);
+
+    /* DXVK's pool shape (dxvk_descriptor.cpp): all eight types at once. */
+    VkDescriptorPoolSize dxvk_sizes[] = {
+        {VK_DESCRIPTOR_TYPE_SAMPLER, 64}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 32}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 32}, {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 128}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 32}};
+    VkDescriptorPoolCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 64, .poolSizeCount = 8, .pPoolSizes = dxvk_sizes};
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    assert(vkCreateDescriptorPool(&d, &pi, NULL, &pool) == VK_SUCCESS);
+    assert(pool->sampler_capacity == 64 && pool->sampled_image_capacity == 32 &&
+           pool->storage_texel_capacity == 1 && pool->image_capacity == 16);
+    VkDescriptorSetLayout two[] = {layout, layout};
+    VkDescriptorSetAllocateInfo ai = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = pool, .descriptorSetCount = 2, .pSetLayouts = two};
+    VkDescriptorSet sets[2];
+    /* One storage texel descriptor: the second set does not fit. */
+    assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_ERROR_OUT_OF_POOL_MEMORY && !sets[0]);
+    assert(!pool->sampler_used && !pool->sampled_image_used && !pool->storage_texel_used);
+    ai.descriptorSetCount = 1;
+    assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_SUCCESS);
+    assert(pool->sampler_used == 2 && pool->sampled_image_used == 1 &&
+           pool->storage_texel_used == 1 && !pool->image_used && !pool->texel_used);
+    assert(vkResetDescriptorPool(&d, pool, 0) == VK_SUCCESS);
+    assert(!pool->sampler_used && !pool->sampled_image_used && !pool->storage_texel_used);
+    vkDestroyDescriptorPool(&d, pool, NULL);
+    /* Each role has its own accounting: combined-sampler room is not sampler room. */
+    VkDescriptorPoolSize only_combined = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8};
+    pi.poolSizeCount = 1; pi.pPoolSizes = &only_combined;
+    assert(vkCreateDescriptorPool(&d, &pi, NULL, &pool) == VK_SUCCESS);
+    ai.descriptorPool = pool;
+    assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_ERROR_OUT_OF_POOL_MEMORY);
+    vkDestroyDescriptorPool(&d, pool, NULL);
+    /* Image-role pool sizes need the graphics backend. */
+    d.graphics_enabled = VK_FALSE; pool = VK_NULL_HANDLE;
+    VkDescriptorPoolSize sampler_size = {VK_DESCRIPTOR_TYPE_SAMPLER, 1};
+    pi.pPoolSizes = &sampler_size;
+    assert(vkCreateDescriptorPool(&d, &pi, NULL, &pool) == VK_ERROR_FEATURE_NOT_PRESENT && !pool);
+    sampler_size.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    assert(vkCreateDescriptorPool(&d, &pi, NULL, &pool) == VK_ERROR_FEATURE_NOT_PRESENT && !pool);
+    sampler_size.type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+    assert(vkCreateDescriptorPool(&d, &pi, NULL, &pool) == VK_SUCCESS);
+    vkDestroyDescriptorPool(&d, pool, NULL);
+    d.graphics_enabled = VK_TRUE;
+
+    pi.poolSizeCount = 8; pi.pPoolSizes = dxvk_sizes;
+    assert(vkCreateDescriptorPool(&d, &pi, NULL, &pool) == VK_SUCCESS);
+    ai.descriptorPool = pool; ai.descriptorSetCount = 2;
+    dxvk_sizes[5].descriptorCount = 2;
+    VkDescriptorPool pool2;
+    assert(vkCreateDescriptorPool(&d, &pi, NULL, &pool2) == VK_SUCCESS);
+    ai.descriptorPool = pool2;
+    assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_SUCCESS);
+    VkDescriptorSet set = sets[0];
+
+    /* Resources: two samplers, a bound sampled image and texel buffer views. */
+    struct VkSampler_T sampler_a = {.device = &d}, sampler_b = {.device = &d},
+        foreign_sampler = {.device = &other};
+    VkMemoryAllocateInfo mi = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = 2048};
+    VkDeviceMemory memory;
+    assert(vkAllocateMemory(&d, &mi, NULL, &memory) == VK_SUCCESS);
+    struct VkImage_T image = {0}, unbound = {0};
+    image.device = &d; image.info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.memory = memory; image.requirements.size = 1024;
+    unbound.device = &d; unbound.info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.next = d.images; d.images = &image;
+    struct VkImageView_T view = {0}, unbound_view = {0}, storage_only_view = {0};
+    struct VkImage_T storage_only = image;
+    storage_only.info.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+    view.device = &d; view.image = &image; view.view_type = VK_IMAGE_VIEW_TYPE_2D;
+    unbound_view = view; unbound_view.image = &unbound;
+    storage_only_view = view; storage_only_view.image = &storage_only;
+    /* vkCreateBuffer does not yet admit STORAGE_TEXEL_BUFFER usage, so no
+     * view can satisfy a storage-texel write; only the refusal is reachable. */
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 512,
+        .usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT};
+    VkBuffer uniform_only;
+    assert(vkCreateBuffer(&d, &bi, NULL, &uniform_only) == VK_ERROR_FEATURE_NOT_PRESENT);
+    bi.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+    assert(vkCreateBuffer(&d, &bi, NULL, &uniform_only) == VK_SUCCESS);
+    assert(vkBindBufferMemory(&d, uniform_only, memory, 1536) == VK_SUCCESS);
+    VkBufferViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+        .buffer = uniform_only, .format = VK_FORMAT_R32_UINT, .range = 256};
+    VkBufferView uniform_view;
+    assert(vkCreateBufferView(&d, &vi, NULL, &uniform_view) == VK_SUCCESS);
+
+    /* SAMPLER: imageView and imageLayout are ignored and canonicalized. */
+    VkDescriptorImageInfo samplers[2] = {
+        {.sampler = &sampler_a, .imageView = &view, .imageLayout = VK_IMAGE_LAYOUT_GENERAL},
+        {.sampler = &sampler_b}};
+    VkWriteDescriptorSet w = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set,
+        .dstBinding = 0, .descriptorCount = 2, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+        .pImageInfo = samplers};
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);
+    assert(!d.lifetime_errors && set->defined[0] && set->defined[1]);
+    assert(set->images[0].sampler == &sampler_a && set->images[1].sampler == &sampler_b);
+    assert(!set->images[0].imageView && set->images[0].imageLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+           !set->image_resources[0]);
+    unsigned errors = 0;
+    uint64_t generation = set->generation;
+    samplers[1].sampler = VK_NULL_HANDLE;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);
+    assert(d.lifetime_errors == ++errors);
+    samplers[1].sampler = &foreign_sampler;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);
+    assert(d.lifetime_errors == ++errors && set->generation == generation);
+    assert(set->images[1].sampler == &sampler_b);
+
+    /* SAMPLED_IMAGE: the combined record's image half; sampler ignored. */
+    VkDescriptorImageInfo sampled = {.sampler = &foreign_sampler, .imageView = &view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    w.dstBinding = 1; w.descriptorCount = 1; w.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    w.pImageInfo = &sampled;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);
+    assert(d.lifetime_errors == errors && set->defined[2]);
+    assert(set->images[2].imageView == &view && !set->images[2].sampler &&
+           set->image_resources[2] == &image);
+    generation = set->generation;
+    sampled.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);
+    assert(d.lifetime_errors == ++errors);
+    sampled.imageLayout = VK_IMAGE_LAYOUT_GENERAL; sampled.imageView = &unbound_view;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);          /* no bound memory */
+    assert(d.lifetime_errors == ++errors);
+    sampled.imageView = &storage_only_view;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);          /* no SAMPLED usage */
+    assert(d.lifetime_errors == ++errors);
+    sampled.imageView = VK_NULL_HANDLE;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);          /* null view (no nullDescriptor) */
+    assert(d.lifetime_errors == ++errors && set->generation == generation);
+    assert(set->images[2].imageView == &view);
+    /* A combined write naming a sampled-image binding is a type mismatch. */
+    sampled = (VkDescriptorImageInfo){&sampler_a, &view, VK_IMAGE_LAYOUT_GENERAL};
+    w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);
+    assert(d.lifetime_errors == ++errors);
+
+    /* STORAGE_TEXEL_BUFFER: the view's buffer needs STORAGE_TEXEL usage. */
+    w.dstBinding = 2; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+    w.pImageInfo = NULL; w.pTexelBufferView = &uniform_view;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);
+    assert(d.lifetime_errors == ++errors && !set->defined[3]);
+    /* A uniform-texel write naming the storage-texel binding is refused. */
+    w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    vkUpdateDescriptorSets(&d, 1, &w, 0, NULL);
+    assert(d.lifetime_errors == ++errors && !set->defined[3]);
+
+    /* Copies carry every role's payload. */
+    VkCopyDescriptorSet c = {.sType = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET, .srcSet = set,
+        .srcBinding = 0, .dstSet = sets[1], .dstBinding = 0, .descriptorCount = 3};
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &c);
+    assert(d.lifetime_errors == ++errors); /* samplers then a sampled image: one type per copy */
+    c.descriptorCount = 2;
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &c);
+    c.srcBinding = c.dstBinding = 1; c.descriptorCount = 1;
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &c);
+    assert(d.lifetime_errors == errors);
+    assert(sets[1]->images[1].sampler == &sampler_b && sets[1]->images[2].imageView == &view &&
+           sets[1]->image_resources[2] == &image && !sets[1]->images[2].sampler);
+    assert(sets[1]->defined[0] && sets[1]->defined[2] && !sets[1]->defined[3]);
+
+    vkDestroyDescriptorPool(&d, pool, NULL); vkDestroyDescriptorPool(&d, pool2, NULL);
+    vkDestroyDescriptorSetLayout(&d, layout, NULL);
+    vkDestroyBufferView(&d, uniform_view, NULL); vkDestroyBuffer(&d, uniform_only, NULL);
+    d.images = image.next;
+    vkFreeMemory(&d, memory, NULL);
+    assert(!d.descriptor_objects && !d.buffers && !d.buffer_views && !d.memories);
+}
+
 int main(void)
 {
     lifecycle(); rollback(); negative(); bda_cts_output_layout(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources(); input_attachments();
+    separate_sampler_types();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }
