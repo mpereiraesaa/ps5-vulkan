@@ -411,6 +411,38 @@ VkResult compat_create_device(PFN_vkCreateDevice real, VkPhysicalDevice physical
         extensions.push_back(name);
         added.emplace_back(name);
     };
+    /* DXVK 2.6.2 assumes Vulkan 1.3, so it never enables device extensions
+     * promoted to core without a feature bit, yet uses their behaviour (e.g.
+     * mutable-format images with VkImageFormatListCreateInfo, *2 commands).
+     * Enable every such extension ps5vk enumerates. */
+    static const char *const kImplicitCore[] = {
+        "VK_KHR_maintenance1", "VK_KHR_maintenance2", "VK_KHR_maintenance3",
+        "VK_KHR_multiview", "VK_KHR_image_format_list", "VK_KHR_format_feature_flags2",
+        "VK_KHR_get_memory_requirements2", "VK_KHR_dedicated_allocation",
+        "VK_KHR_bind_memory2", "VK_KHR_copy_commands2", "VK_KHR_create_renderpass2",
+        "VK_KHR_depth_stencil_resolve", "VK_KHR_descriptor_update_template",
+        "VK_KHR_storage_buffer_storage_class", "VK_KHR_driver_properties",
+        "VK_KHR_shader_float_controls",
+    };
+    for (const char *name : kImplicitCore)
+        if (has(supported, name)) add_extension(name);
+    /* Vulkan 1.3 made extendedDynamicState core functionality with no feature
+     * bit, so DXVK declares its dynamic states without enabling anything.
+     * Route it through VK_EXT_extended_dynamic_state when ps5vk reports it. */
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds = {};
+    eds.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+    bool eds_route = false;
+    if (has(supported, "VK_EXT_extended_dynamic_state")) {
+        VkPhysicalDeviceFeatures2 query = {};
+        query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        query.pNext = &eds;
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        eds.pNext = nullptr;
+        if (eds.extendedDynamicState) {
+            add_extension("VK_EXT_extended_dynamic_state");
+            eds_route = true;
+        }
+    }
     /* Existing per-extension structs DXVK chained itself are kept as is. */
     std::vector<std::pair<VkBaseOutStructure *, VkBaseOutStructure *>> saved;
     auto *root = reinterpret_cast<VkBaseOutStructure *>(const_cast<VkDeviceCreateInfo *>(info));
@@ -448,6 +480,12 @@ VkResult compat_create_device(PFN_vkCreateDevice real, VkPhysicalDevice physical
         }
     }
     kept_tail->pNext = extra.link(nullptr);
+    if (eds_route && !find_in_chain(root, eds.sType)) {
+        VkBaseOutStructure *tail = root;
+        while (tail->pNext) tail = tail->pNext;
+        tail->pNext = reinterpret_cast<VkBaseOutStructure *>(&eds);
+        routed.push_back("vk13.extendedDynamicState(implicit-core)");
+    }
     std::string list;
     for (const std::string &entry : routed) list += (list.empty() ? "" : ",") + entry;
     std::string ext_list;

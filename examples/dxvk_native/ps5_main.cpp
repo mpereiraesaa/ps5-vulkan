@@ -192,12 +192,15 @@ void emit_identity()
     dxvk_telemetry_emit("MARK",
         "DXVK_NATIVE_IDENTITY variant=%s label=%s diagnostic=%d dxvk_commit=%s ps5vk_commit=%s "
         "ps5vk_dirty=%d patches=%s eboot_sha256=%s eboot_bytes=%llu vs_sha256=%s ps_sha256=%s "
-        "oracle_expected_checksum=%08x compat_layer=%d",
-        DXVK_NATIVE_VARIANT, DXVK_NATIVE_DIAGNOSTIC ? "DIAGNOSTIC" : "UNMODIFIED",
+        "oracle_expected_checksum=%08x compat_layer=%d integration=%s sdk_switches=%s",
+        DXVK_NATIVE_VARIANT,
+        strcmp(DXVK_NATIVE_INTEGRATION, "none") ? "DIAGNOSTIC-INTEGRATION" :
+            DXVK_NATIVE_DIAGNOSTIC ? "DIAGNOSTIC" : "UNMODIFIED",
         DXVK_NATIVE_DIAGNOSTIC, DXVK_NATIVE_DXVK_COMMIT, DXVK_NATIVE_PS5VK_COMMIT,
         DXVK_NATIVE_PS5VK_DIRTY, DXVK_NATIVE_PATCHES, eboot, bytes, DXVK_NATIVE_VS_SHA256_BUILD,
         DXVK_NATIVE_PS_SHA256_BUILD, dxvk_oracle_expected_checksum(),
-        DXVK_NATIVE_COMPAT_LAYER ? DXVK_NATIVE_COMPAT_LAYER_VERSION : 0);
+        DXVK_NATIVE_COMPAT_LAYER ? DXVK_NATIVE_COMPAT_LAYER_VERSION : 0,
+        DXVK_NATIVE_INTEGRATION, DXVK_NATIVE_SDK_SWITCHES);
     std::string env;
     for (const auto &entry : g_environment)
         env += std::string(env.empty() ? "" : ",") + entry[0] + "=" + entry[1];
@@ -373,7 +376,8 @@ int main(void)
         "DXVK_NATIVE_RESULT outcome=%s variant=%s label=%s last_stage=%s create_hr=0x%08x "
         "feature_level=0x%04x device_refs=%u context_refs=%u",
         outcomes[outcome >= 0 && outcome <= 2 ? outcome : 1], DXVK_NATIVE_VARIANT,
-        DXVK_NATIVE_DIAGNOSTIC ? "DIAGNOSTIC" : "UNMODIFIED", summary.last_stage,
+        strcmp(DXVK_NATIVE_INTEGRATION, "none") ? "DIAGNOSTIC-INTEGRATION" :
+            DXVK_NATIVE_DIAGNOSTIC ? "DIAGNOSTIC" : "UNMODIFIED", summary.last_stage,
         summary.create_hresult, summary.feature_level, summary.device_refs_at_release,
         summary.context_refs_at_release);
     {

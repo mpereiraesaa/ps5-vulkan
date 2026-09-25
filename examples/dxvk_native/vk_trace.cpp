@@ -22,8 +22,11 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 extern "C" {
+/* ps5vk diagnostic: the last graphics-pipeline refusal site (0 if none). */
+unsigned ps5vk_pipeline_refusal_site(void);
 void *dlopen(const char *name, int flags);
 void *dlsym(void *handle, const char *name);
 int dlclose(void *handle);
@@ -215,6 +218,7 @@ REAL(vkWaitSemaphores);
 REAL(vkCreateRenderPass);
 REAL(vkCreateRenderPass2);
 REAL(vkCreateFramebuffer);
+REAL(vkCmdPipelineBarrier2);
 
 /* ---- global and instance commands ---- */
 
@@ -393,6 +397,13 @@ VKAPI_ATTR VkResult VKAPI_CALL t_vkCreateImage(VkDevice d, const VkImageCreateIn
               unsigned(i->tiling), i->usage, i->flags, unsigned(i->sharingMode),
               unsigned(i->initialLayout));
         t.chain(i->pNext);
+        for (auto *s = static_cast<const VkBaseInStructure *>(i->pNext); s; s = s->pNext) {
+            if (s->sType != VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) continue;
+            const auto *list = reinterpret_cast<const VkImageFormatListCreateInfo *>(s);
+            t.add(" view_formats=");
+            for (uint32_t n = 0; n < list->viewFormatCount && list->pViewFormats; ++n)
+                t.add("%s%u", n ? "," : "", unsigned(list->pViewFormats[n]));
+        }
     }
     return record("vkCreateImage", real_vkCreateImage(d, i, a, o), t, true);
 }
@@ -524,8 +535,43 @@ VKAPI_ATTR VkResult VKAPI_CALL t_vkCreateGraphicsPipelines(VkDevice d, VkPipelin
               i[0].pDynamicState ? i[0].pDynamicState->dynamicStateCount : 0u);
         describe_stages(t, i[0].stageCount, i[0].pStages);
         t.chain(i[0].pNext);
+        const VkGraphicsPipelineCreateInfo &g = i[0];
+        if (g.pDynamicState) {
+            t.add(" dyn=");
+            for (uint32_t s = 0; s < g.pDynamicState->dynamicStateCount; ++s)
+                t.add("%s%u", s ? "," : "", unsigned(g.pDynamicState->pDynamicStates[s]));
+        }
+        for (auto *s = static_cast<const VkBaseInStructure *>(g.pNext); s; s = s->pNext)
+            if (s->sType == VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO) {
+                const auto *r = reinterpret_cast<const VkPipelineRenderingCreateInfo *>(s);
+                t.add(" rendering=view%u:c%u:d%u:s%u", r->viewMask, r->colorAttachmentCount,
+                      unsigned(r->depthAttachmentFormat), unsigned(r->stencilAttachmentFormat));
+            }
+        if (g.pRasterizationState) {
+            const auto *r = g.pRasterizationState;
+            t.add(" raster=clamp%u:discard%u:poly%u:cull%u:front%u:bias%u", r->depthClampEnable,
+                  r->rasterizerDiscardEnable, unsigned(r->polygonMode), r->cullMode,
+                  unsigned(r->frontFace), r->depthBiasEnable);
+            t.add(" raster_chain");
+            t.chain(r->pNext);
+        }
+        if (g.pMultisampleState) t.add(" ms=%u:mask%d", unsigned(g.pMultisampleState->rasterizationSamples),
+                                       g.pMultisampleState->pSampleMask != nullptr);
+        if (g.pDepthStencilState) t.add(" ds=test%u:write%u:op%u:bounds%u:stencil%u",
+            g.pDepthStencilState->depthTestEnable, g.pDepthStencilState->depthWriteEnable,
+            unsigned(g.pDepthStencilState->depthCompareOp), g.pDepthStencilState->depthBoundsTestEnable,
+            g.pDepthStencilState->stencilTestEnable);
+        if (g.pVertexInputState) { t.add(" vi_chain"); t.chain(g.pVertexInputState->pNext); }
+        if (g.pColorBlendState) t.add(" blend=att%u:logic%u", g.pColorBlendState->attachmentCount,
+                                      g.pColorBlendState->logicOpEnable);
+        if (g.pViewportState) t.add(" viewport=%u:%u", g.pViewportState->viewportCount,
+                                    g.pViewportState->scissorCount);
+        if (g.pTessellationState) t.add(" tess=1");
+        t.add(" layout=%d", g.layout != VK_NULL_HANDLE);
     }
-    return record("vkCreateGraphicsPipelines", real_vkCreateGraphicsPipelines(d, c, n, i, a, o), t, true);
+    VkResult result = real_vkCreateGraphicsPipelines(d, c, n, i, a, o);
+    if (result < 0) t.add(" ps5vk_pipeline_site=%u", ps5vk_pipeline_refusal_site());
+    return record("vkCreateGraphicsPipelines", result, t, true);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL t_vkCreateComputePipelines(VkDevice d, VkPipelineCache c,
@@ -795,6 +841,33 @@ VKAPI_ATTR VkResult VKAPI_CALL t_vkCreateFramebuffer(VkDevice d, const VkFramebu
     return record("vkCreateFramebuffer", real_vkCreateFramebuffer(d, i, a, o), t, true);
 }
 
+VKAPI_ATTR void VKAPI_CALL t_vkCmdPipelineBarrier2(VkCommandBuffer c, const VkDependencyInfo *info)
+{
+    static std::atomic<unsigned> logged{0};
+    if (info && logged++ < 24) {
+        Text t;
+        t.add(" flags=0x%x memory=%u buffer=%u image=%u", info->dependencyFlags,
+              info->memoryBarrierCount, info->bufferMemoryBarrierCount, info->imageMemoryBarrierCount);
+        for (uint32_t i = 0; i < info->memoryBarrierCount && i < 2; ++i) {
+            const VkMemoryBarrier2 &m = info->pMemoryBarriers[i];
+            t.add(" m%u=%llx:%llx>%llx:%llx", i, (unsigned long long)m.srcStageMask,
+                  (unsigned long long)m.srcAccessMask, (unsigned long long)m.dstStageMask,
+                  (unsigned long long)m.dstAccessMask);
+        }
+        for (uint32_t i = 0; i < info->imageMemoryBarrierCount && i < 3; ++i) {
+            const VkImageMemoryBarrier2 &m = info->pImageMemoryBarriers[i];
+            t.add(" i%u=%llx:%llx>%llx:%llx layout=%u>%u aspect=0x%x mip=%u+%u layer=%u+%u", i,
+                  (unsigned long long)m.srcStageMask, (unsigned long long)m.srcAccessMask,
+                  (unsigned long long)m.dstStageMask, (unsigned long long)m.dstAccessMask,
+                  unsigned(m.oldLayout), unsigned(m.newLayout), m.subresourceRange.aspectMask,
+                  m.subresourceRange.baseMipLevel, m.subresourceRange.levelCount,
+                  m.subresourceRange.baseArrayLayer, m.subresourceRange.layerCount);
+        }
+        dxvk_telemetry_emit("INFO", "DXVK_VK_BARRIER2%s", t.data);
+    }
+    real_vkCmdPipelineBarrier2(c, info);
+}
+
 /* ---- lookup ---- */
 
 struct Hook {
@@ -863,14 +936,53 @@ const Hook g_hooks[] = {
     HOOK(vkCreateRenderPass2),
     HOOK_ALIAS(vkCreateRenderPass2KHR, vkCreateRenderPass2),
     HOOK(vkCreateFramebuffer),
+    HOOK(vkCmdPipelineBarrier2),
+    HOOK_ALIAS(vkCmdPipelineBarrier2KHR, vkCmdPipelineBarrier2),
 };
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL t_vkGetDeviceProcAddr(VkDevice device, const char *name);
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL t_vkGetInstanceProcAddr(VkInstance instance, const char *name);
 
-PFN_vkVoidFunction resolve(const char *scope, PFN_vkVoidFunction found, const char *name)
+#if DXVK_NATIVE_COMPAT_LAYER
+/* DIAGNOSTIC compat layer: a core command name ps5vk does not expose (the
+ * device reports Vulkan 1.0) resolves to the same command of an extension
+ * route ps5vk does expose, e.g. vkQueueSubmit2 -> vkQueueSubmit2KHR. */
+PFN_vkVoidFunction compat_alias(const char *scope, const char *name, VkInstance instance,
+                                VkDevice device)
+{
+    size_t length = std::strlen(name);
+    if (length > 3 && (!std::strcmp(name + length - 3, "KHR") ||
+                       !std::strcmp(name + length - 3, "EXT")))
+        return nullptr;
+    for (const char *suffix : {"KHR", "EXT"}) {
+        char alias[128];
+        std::snprintf(alias, sizeof(alias), "%s%s", name, suffix);
+        PFN_vkVoidFunction found = device
+            ? (real_vkGetDeviceProcAddr ? real_vkGetDeviceProcAddr(device, alias)
+                                        : vkGetDeviceProcAddr(device, alias))
+            : vkGetInstanceProcAddr(instance, alias);
+        if (found) {
+            dxvk_telemetry_emit("WARN", "DXVK_COMPAT_ALIAS scope=%s name=%s target=%s",
+                                scope, name, alias);
+            return found;
+        }
+    }
+    return nullptr;
+}
+#endif
+
+PFN_vkVoidFunction resolve(const char *scope, PFN_vkVoidFunction found, const char *name,
+                           VkInstance instance = VK_NULL_HANDLE,
+                           VkDevice device = VK_NULL_HANDLE)
 {
     if (!name) return nullptr;
+#if DXVK_NATIVE_COMPAT_LAYER
+    if (!found && (instance || device))
+        found = compat_alias(scope, name, instance, device);
+#else
+    (void)instance;
+    (void)device;
+#endif
     if (!found) {
         unsigned index = g_missing++;
         if (index < 1024)
@@ -894,14 +1006,15 @@ PFN_vkVoidFunction resolve(const char *scope, PFN_vkVoidFunction found, const ch
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL t_vkGetInstanceProcAddr(VkInstance instance, const char *name)
 {
-    return resolve(instance ? "instance" : "global", vkGetInstanceProcAddr(instance, name), name);
+    return resolve(instance ? "instance" : "global", vkGetInstanceProcAddr(instance, name), name,
+                   instance);
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL t_vkGetDeviceProcAddr(VkDevice device, const char *name)
 {
     PFN_vkVoidFunction found = real_vkGetDeviceProcAddr ? real_vkGetDeviceProcAddr(device, name)
                                                         : vkGetDeviceProcAddr(device, name);
-    return resolve("device", found, name);
+    return resolve("device", found, name, VK_NULL_HANDLE, device);
 }
 
 bool is_vulkan_library(const char *name)

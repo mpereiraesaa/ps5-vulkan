@@ -265,6 +265,23 @@ ARTIFACT = {"profile": build.PROFILE, "variant": "unmodified", "label": "UNMODIF
             "ps5vk_commit": "abc", "eboot_sha256": "ee"}
 
 
+class DiagnosticIntegrationRecipe(unittest.TestCase):
+    def test_only_switches_the_sdk_build_knows_are_applied(self):
+        present, absent = build.diagnostic_integration_switches(
+            'for name in ("PS5VK_DXVK_RENDER_DIAGNOSTIC", "PS5VK_ROBUSTNESS2_DIAGNOSTIC"):')
+        self.assertEqual(present, ["PS5VK_ROBUSTNESS2_DIAGNOSTIC", "PS5VK_DXVK_RENDER_DIAGNOSTIC"])
+        self.assertEqual(len(present) + len(absent), len(build.DXVK_DIAGNOSTIC_SWITCHES))
+        self.assertNotIn("PS5VK_DXVK_RENDER_DIAGNOSTIC", absent)
+
+    def test_every_switch_is_a_default_off_diagnostic(self):
+        for name in build.DXVK_DIAGNOSTIC_SWITCHES:
+            self.assertTrue(name.startswith("PS5VK_") and name.endswith("_DIAGNOSTIC"), name)
+
+    def test_the_payload_keeps_no_thread_stack_wrap(self):
+        self.assertNotIn("pthread_create", build.LINK_WRAPS)
+        self.assertNotIn("pthread_create", (SOURCE / "ps5_main.cpp").read_text())
+
+
 class ReceiptParser(unittest.TestCase):
     def test_surface_refusal_run(self):
         log = ps5log([
@@ -333,6 +350,22 @@ class ReceiptParser(unittest.TestCase):
         self.assertEqual(summary["first_refusal"]["params"], "apiVersion=1.3.0 app=eboot.bin")
         self.assertEqual(summary["oracle"]["mismatches"], 0)
         self.assertEqual(summary["oracle"]["checksum"], f"{EXPECTED_CHECKSUM:08x}")
+        self.assertIsNone(summary["vk_first_call"])
+
+    def test_first_last_call_and_shutdown(self):
+        log = ps5log([
+            IDENTITY,
+            ("INFO", "DXVK_VK_CALL call=vkEnumerateInstanceExtensionProperties result=0(VK_SUCCESS)"),
+            ("INFO", "DXVK_VK_CALL call=vkCreateImage result=0(VK_SUCCESS) type=1"),
+            ("MARK", "DXVK_NATIVE_STAGE stage=shutdown state=begin"),
+            ("MARK", "DXVK_NATIVE_STAGE stage=shutdown state=ok device_refs=0 context_refs=0"),
+        ])
+        summary = runner.parse_log(log)
+        self.assertEqual(summary["vk_first_call"], "vkEnumerateInstanceExtensionProperties")
+        self.assertEqual(summary["vk_last_call"], "vkCreateImage")
+        receipt = runner.receipt_for(summary, ARTIFACT, None, "ff", True)
+        self.assertEqual(receipt["shutdown"], "device_refs=0 context_refs=0")
+        self.assertEqual(receipt["vk_last_call"], "vkCreateImage")
 
     def test_compat_translation_records(self):
         log = ps5log([

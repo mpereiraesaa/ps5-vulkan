@@ -193,6 +193,7 @@ def parse_log(log: str) -> dict:
         "extensions": {}, "loader": [], "ps5vk_diagnostics": [], "first_refusal": None,
         "first_refusal_candidate": None, "oracle": None, "result": None, "crash": None,
         "trace": None, "gpu_hang_suspected": False, "features": [],
+        "vk_first_call": None, "vk_last_call": None,
         "compat": {"refusals": [], "translations": []},
     }
     for seq, level, text in records:
@@ -235,6 +236,9 @@ def parse_log(log: str) -> dict:
             summary["vk_missing"].append(fields(text).get("name"))
         elif text.startswith("DXVK_VK_CALL "):
             summary["vk_calls_logged"] += 1
+            call = fields(text).get("call")
+            summary["vk_first_call"] = summary["vk_first_call"] or call
+            summary["vk_last_call"] = call
         elif text.startswith("DXVK_VK_PROPERTIES "):
             summary["vk_properties"] = summary["vk_properties"] or text.split(" ", 1)[1]
         elif text.startswith("DXVK_VK_EXTENSIONS "):
@@ -306,6 +310,12 @@ def receipt_for(summary: dict, artifact: dict, run_receipt: dict | None,
         "first_refusal": summary["first_refusal"] or summary["first_refusal_candidate"],
         "fl_gate": feature_level_gate(summary, list(artifact.get("dxvk_source_patches", []))),
         "oracle": summary["oracle"],
+        "vk_first_call": summary["vk_first_call"],
+        "vk_last_call": summary["vk_last_call"],
+        "shutdown": next((s["detail"] for s in summary["stages"]
+                          if s["stage"] == "shutdown" and s["state"] == "ok"), None),
+        "sdk_switches": artifact.get("sdk_switches", []),
+        "patch_list_sha256": artifact.get("patch_list_sha256"),
         "crash": summary["crash"],
         "gpu_hang_suspected": summary["gpu_hang_suspected"],
         "lifecycle_ok": lifecycle_ok,
