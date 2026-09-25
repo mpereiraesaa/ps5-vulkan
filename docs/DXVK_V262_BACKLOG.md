@@ -47,11 +47,61 @@ feature checks. PS5 cross-compilation and linking of the D3D11/DXGI libraries
 also succeeded. The PS5 display adapter has a host-tested call sequence for a
 fixed 1080p60 monitor using `VK_KHR_display` and
 `vkCreateDisplayPlaneSurfaceKHR`; it is **not** a Vulkan WSI implementation in
-ps5vk. There has been no native DXVK execution on PS5. Reproduce these
+ps5vk. That was the state before the checkpoint below. Reproduce these
 boundaries with `tools/run_dxvk_host_smoke.py`,
 `tools/run_dxvk_ps5vk_host_bootstrap.py` and
 `tools/build_dxvk_ps5_cross_probe.py`, retaining their source and artifact
 identities. Do not call the cross-link result `runtime_ready`.
+
+## Checkpoint: diagnostic render on PS5 (2026-09-25)
+
+Built from `main` at `9c133ef` with
+`tools/build_dxvk_ps5_native.py --diagnostic-integration`, the pinned DXVK
+renders its FL 11_0 offscreen workload on PS5 (receipts in
+[VALIDATION.md](../VALIDATION.md#dxvk-262-d3d11-diagnostic-render-on-ps5-2026-09-25)).
+The unmodified variant of the same build stops at DXVK's
+`Skipping Vulkan 1.0 adapter` (`src/dxvk/dxvk_device_filter.cpp:39`) after
+`vkEnumeratePhysicalDevices`; that is the current first refusal on the truthful
+route. The measured refusal sequence that led here was: `VK_KHR_surface`
+missing → `vkCreateInstance(apiVersion 1.3)` returning
+`VK_ERROR_INCOMPATIBLE_DRIVER` (fixed by the Vulkan 1.1 instance) → the 1.0
+adapter filter → FL 11_0 gate (demote, then transform feedback) → required
+`VK_EXT_robustness2` → `vk13.synchronization2` → image-format-list/EDS
+enabling → DXVK's loose `Position` output → compile stack exhaustion on
+DXVK's worker threads → barrier-only initialization submissions → oracle
+pass.
+
+**What the diagnostic configuration still supplies, i.e. the contracts missing
+for an unmodified, truthful route:**
+
+1. **Device API version 1.3.** DXVK filters every device below 1.3.
+   `tools/check_core_version_contract.py` blocks raising the reported
+   version while any mandatory 1.1/1.2/1.3 item is missing; run it with
+   `--assume-version 1.N` to list them. The largest items are
+   `maxPerSetDescriptors` ≥ 1024 (128 today; needs set-owned descriptor
+   tables) and `maxMemoryAllocationSize`/`maxBufferSize` ≥ 2^30, which the
+   256 MiB device heap cannot satisfy without a larger memory budget.
+2. **Transform feedback.** The FL 10_0+ gate requires `transformFeedback`
+   and `geometryStreams`. Capture-interface reflection has landed; bind,
+   begin/end, counters, streams and the native witness have not.
+3. **Promotion of the measured routes now behind default-off switches:**
+   synchronization2, dynamic rendering and depth/stencil resolve, extended
+   dynamic state (dynamic topology and vertex stride are still refused),
+   maintenance1, copy commands 2, format feature flags 2 and image format
+   lists (RGBA8 UNORM/SRGB only), robustness2, descriptor update templates,
+   memory requirements 2, dedicated allocation, bind memory 2, storage texel
+   buffer views, and a host-coherent memory type. Each has a passing
+   native witness except where the witness is weaker than the claim: the
+   host-coherent control did not observe stale data without cache
+   maintenance, and maintenance4 cannot be exposed on a 1.0 device.
+4. **Core-named commands and the Vulkan 1.1/1.2/1.3 query structures.**
+   DXVK uses only core names and the aggregate structures; the diagnostic
+   payload translates them onto the extension routes. The driver-side
+   version answers become active only when the device version is raised.
+
+Items 1 and 2 need no DXVK change once implemented; item 3 is a per-route
+promotion through the capability probe. The diagnostic build is evidence that
+the executed Vulkan paths work, not a claim of unmodified DXVK support.
 
 ## Active critical path: follow the executable
 
