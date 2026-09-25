@@ -9,6 +9,7 @@
 #define QUEUE_DIAG(...) ((void)0)
 #endif
 #include "vk_image_transfer.h"
+#include <stdlib.h>
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -1215,5 +1216,125 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count,
     ps5vk_device_lock(d);
     VkResult result = queue_submit_locked(d, count, infos, fence);
     ps5vk_device_unlock(d);
+    return result;
+}
+
+/* The single-queue backend already implements ordered binary/timeline waits,
+ * command execution and signals in vkQueueSubmit. Keep the synchronization2
+ * submission shape on that same path, with the scope and metadata limited to
+ * forms whose semantics the backend can preserve. This helper stays internal
+ * until the remaining synchronization2 commands and feature route exist. */
+struct submit2_legacy {
+    VkSubmitInfo submit;
+    VkTimelineSemaphoreSubmitInfo timeline;
+    VkSemaphore *waits, *signals;
+    VkPipelineStageFlags *stages;
+    VkCommandBuffer *commands;
+    uint64_t *wait_values, *signal_values;
+};
+
+static void free_submit2_legacy(struct submit2_legacy *entries, uint32_t count)
+{
+    if (!entries) return;
+    for (uint32_t i = 0; i < count; ++i) {
+        free(entries[i].waits); free(entries[i].signals);
+        free(entries[i].stages); free(entries[i].commands);
+        free(entries[i].wait_values); free(entries[i].signal_values);
+    }
+    free(entries);
+}
+
+static void *submit2_array(uint32_t count, size_t size)
+{
+    return count && (size_t)count <= SIZE_MAX / size ? calloc(count, size) : NULL;
+}
+
+static int submit2_stage(VkPipelineStageFlags2 stage, VkBool32 wait,
+                         VkPipelineStageFlags *legacy)
+{
+    /* DXVK's queue submits use TOP_OF_PIPE for waits and BOTTOM_OF_PIPE
+     * for signals. ALL_COMMANDS is also serially equivalent here. A wait at
+     * BOTTOM_OF_PIPE or signal at TOP_OF_PIPE would require partial-batch
+     * scheduling; serializing the entire batch would change its scope. */
+    if (stage != VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT &&
+        stage != (wait ? VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT :
+                         VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)) return 0;
+    *legacy = (VkPipelineStageFlags)stage;
+    return 1;
+}
+
+VkResult ps5vk_queue_submit2_bounded(VkQueue queue, uint32_t count,
+    const VkSubmitInfo2 *infos, VkFence fence)
+{
+    if (!queue || !queue->device || (count && !infos)) return INVALID;
+    VkDevice d = queue->device;
+    struct submit2_legacy *entries = count ? submit2_array(count, sizeof(*entries)) : NULL;
+    VkSubmitInfo *submits = count ? submit2_array(count, sizeof(*submits)) : NULL;
+    if (count && (!entries || !submits)) {
+        free(entries); free(submits); return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    VkResult result = INVALID;
+    for (uint32_t i = 0; i < count; ++i) {
+        const VkSubmitInfo2 *src = &infos[i];
+        struct submit2_legacy *dst = &entries[i];
+        if (src->sType != VK_STRUCTURE_TYPE_SUBMIT_INFO_2 || src->pNext || src->flags ||
+            (src->waitSemaphoreInfoCount && !src->pWaitSemaphoreInfos) ||
+            (src->commandBufferInfoCount && !src->pCommandBufferInfos) ||
+            (src->signalSemaphoreInfoCount && !src->pSignalSemaphoreInfos) ||
+            src->commandBufferInfoCount > PS5VK_MAX_SUBMITTED_BUFFERS)
+            goto done;
+        const uint32_t nw = src->waitSemaphoreInfoCount;
+        const uint32_t nc = src->commandBufferInfoCount;
+        const uint32_t ns = src->signalSemaphoreInfoCount;
+        dst->waits = submit2_array(nw, sizeof(*dst->waits));
+        dst->stages = submit2_array(nw, sizeof(*dst->stages));
+        dst->wait_values = submit2_array(nw, sizeof(*dst->wait_values));
+        dst->commands = submit2_array(nc, sizeof(*dst->commands));
+        dst->signals = submit2_array(ns, sizeof(*dst->signals));
+        dst->signal_values = submit2_array(ns, sizeof(*dst->signal_values));
+        if ((nw && (!dst->waits || !dst->stages || !dst->wait_values)) ||
+            (nc && !dst->commands) ||
+            (ns && (!dst->signals || !dst->signal_values))) {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY; goto done;
+        }
+        for (uint32_t j = 0; j < nw; ++j) {
+            const VkSemaphoreSubmitInfo *s = &src->pWaitSemaphoreInfos[j];
+            if (s->sType != VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO || s->pNext ||
+                s->deviceIndex || !submit2_stage(s->stageMask, VK_TRUE,
+                    &dst->stages[j])) goto done;
+            dst->waits[j] = s->semaphore; dst->wait_values[j] = s->value;
+        }
+        for (uint32_t j = 0; j < nc; ++j) {
+            const VkCommandBufferSubmitInfo *c = &src->pCommandBufferInfos[j];
+            /* DXVK leaves deviceMask zero on its single-device submissions.
+             * Vulkan's non-device-group path treats that as device zero. */
+            if (c->sType != VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO || c->pNext ||
+                (c->deviceMask != 0 && c->deviceMask != 1)) goto done;
+            dst->commands[j] = c->commandBuffer;
+        }
+        for (uint32_t j = 0; j < ns; ++j) {
+            const VkSemaphoreSubmitInfo *s = &src->pSignalSemaphoreInfos[j];
+            VkPipelineStageFlags stage;
+            if (s->sType != VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO || s->pNext ||
+                s->deviceIndex || !submit2_stage(s->stageMask, VK_FALSE,
+                    &stage)) goto done;
+            dst->signals[j] = s->semaphore; dst->signal_values[j] = s->value;
+        }
+        dst->timeline = (VkTimelineSemaphoreSubmitInfo){
+            .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+            .waitSemaphoreValueCount = nw, .pWaitSemaphoreValues = dst->wait_values,
+            .signalSemaphoreValueCount = ns, .pSignalSemaphoreValues = dst->signal_values};
+        dst->submit = (VkSubmitInfo){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = d->timeline_extension_enabled ? &dst->timeline : NULL,
+            .waitSemaphoreCount = nw,
+            .pWaitSemaphores = dst->waits, .pWaitDstStageMask = dst->stages,
+            .commandBufferCount = nc, .pCommandBuffers = dst->commands,
+            .signalSemaphoreCount = ns, .pSignalSemaphores = dst->signals};
+        submits[i] = dst->submit;
+    }
+    /* Conversion and rejection are complete before touching queue state. */
+    result = vkQueueSubmit(queue, count, submits, fence);
+done:
+    free(submits); free_submit2_legacy(entries, count);
     return result;
 }

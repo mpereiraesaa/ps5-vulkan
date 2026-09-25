@@ -39,6 +39,9 @@ static inline uint32_t ps5vk_submission_operation_count(
         submission->operation_count[buffer] : submission->buffers[buffer]->operation_count;
 }
 VkResult ps5vk_queue_poll(VkDevice device);
+/* Internal DXVK-shaped synchronization2 conversion; no public feature route. */
+VkResult ps5vk_queue_submit2_bounded(VkQueue queue, uint32_t count,
+                                    const VkSubmitInfo2 *infos, VkFence fence);
 void ps5vk_queue_router_configure(VkDevice, struct ps5vk_queue_backend,
                                 struct ps5vk_queue_backend);
 #endif

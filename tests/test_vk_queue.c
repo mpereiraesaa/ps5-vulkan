@@ -78,6 +78,83 @@ static void recover_fixture(VkDevice d, struct fixture *f)
     f->launch_result = f->poll_result = VK_SUCCESS; f->wrong = 0; f->complete = 1;
     d->lost = VK_FALSE; assert(ps5vk_queue_poll(d) == VK_SUCCESS);
 }
+
+static void submit2_dxvk_shape(void)
+{
+    struct fixture f = {0};
+    struct VkDevice_T d = {.progress = {&f, ps5vk_queue_poll, clock_ns, pause_wait},
+        .submit_backend = {prepare, launch, poll_backend, release},
+        .timeline_extension_enabled = VK_TRUE,
+        .enabled_features_t09 = PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE};
+    d.queue.device = &d; d.queue.next_serial = 1;
+    VkCommandPoolCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    VkCommandPool pool;
+    assert(vkCreateCommandPool(&d, &pi, NULL, &pool) == VK_SUCCESS);
+    VkCommandBufferAllocateInfo ai = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
+    VkCommandBuffer command;
+    assert(vkAllocateCommandBuffers(&d, &ai, &command) == VK_SUCCESS);
+    record_empty(command, 0);
+    VkSemaphoreTypeCreateInfo ti = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE};
+    VkSemaphoreCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &ti};
+    VkSemaphore timeline;
+    assert(vkCreateSemaphore(&d, &si, NULL, &timeline) == VK_SUCCESS);
+    VkCommandBufferSubmitInfo cb = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .commandBuffer = command}; /* DXVK leaves deviceMask at zero. */
+    VkSemaphoreSubmitInfo signal = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = timeline, .value = 4,
+        .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT};
+    VkSubmitInfo2 submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .commandBufferInfoCount = 1, .pCommandBufferInfos = &cb,
+        .signalSemaphoreInfoCount = 1, .pSignalSemaphoreInfos = &signal};
+    assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    assert(f.prepares == 1 && command->pending_count == 1);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+    assert(timeline->value == 4 && !command->pending_count);
+
+    VkSemaphoreSubmitInfo wait = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = timeline, .value = 4,
+        .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT};
+    submit.waitSemaphoreInfoCount = 1; submit.pWaitSemaphoreInfos = &wait;
+    signal.value = 5;
+    assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && timeline->value == 5);
+
+    /* The acquire/present side of the same DXVK submit uses binary value 0. */
+    VkSemaphoreCreateInfo binary_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VkSemaphore binary;
+    assert(vkCreateSemaphore(&d, &binary_info, NULL, &binary) == VK_SUCCESS);
+    submit.waitSemaphoreInfoCount = 0; submit.pWaitSemaphoreInfos = NULL;
+    signal.semaphore = binary; signal.value = 0;
+    assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && binary->signaled);
+    wait.semaphore = binary; wait.value = 0;
+    submit.waitSemaphoreInfoCount = 1; submit.pWaitSemaphoreInfos = &wait;
+    submit.signalSemaphoreInfoCount = 0; submit.pSignalSemaphoreInfos = NULL;
+    assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS && !binary->signaled);
+
+    const uint64_t serial = d.queue.next_serial;
+    const unsigned prepares = f.prepares;
+    cb.deviceMask = 2;
+    assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN);
+    cb.deviceMask = 0;
+    wait.stageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN);
+    wait.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN);
+    wait.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    submit.flags = VK_SUBMIT_PROTECTED_BIT;
+    assert(ps5vk_queue_submit2_bounded(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN);
+    assert(d.queue.next_serial == serial && f.prepares == prepares && !d.submission);
+
+    vkDestroySemaphore(&d, binary, NULL);
+    vkDestroySemaphore(&d, timeline, NULL);
+    vkDestroyCommandPool(&d, pool, NULL);
+    assert(!d.semaphores && !d.command_pools && !d.submission);
+}
 static void imageless_two_view_clear_recording(void)
 {
     struct VkDevice_T d = {.graphics_enabled = VK_TRUE,
@@ -145,6 +222,7 @@ static void imageless_two_view_clear_recording(void)
 }
 int main(void)
 {
+    submit2_dxvk_shape();
     imageless_two_view_clear_recording();
     struct fixture f = {0};
     struct VkDevice_T d = {.progress = {&f, ps5vk_queue_poll, clock_ns, pause_wait},
