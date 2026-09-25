@@ -194,11 +194,47 @@ static void open_route(void)
     vkDestroyInstance(i, NULL);
 }
 
+/* VK_KHR_descriptor_update_template follows its platform bit alone: absent
+ * and refused without it, enumerated, accepted and dispatched with it. */
+static void descriptor_update_template_route(void)
+{
+    static const char *const DUT = VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME;
+    platform_features = 0;
+    platform_features_t09 = 0;
+    VkInstance i = make_instance(0);
+    VkPhysicalDevice p = physical(i);
+    assert(!lists(p, DUT));
+    VkDevice d;
+    assert(create(p, &DUT, 1, VK_FALSE, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+    vkDestroyInstance(i, NULL);
+
+    platform_features_t09 = PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE;
+    i = make_instance(0);
+    p = physical(i);
+    assert(lists(p, DUT));
+    assert(create(p, NULL, 0, VK_FALSE, &d) == VK_SUCCESS);
+    assert(!d->descriptor_update_template_extension_enabled &&
+           !vkGetDeviceProcAddr(d, "vkCreateDescriptorUpdateTemplateKHR"));
+    vkDestroyDevice(d, NULL);
+    assert(create(p, &DUT, 1, VK_FALSE, &d) == VK_SUCCESS);
+    assert(d->descriptor_update_template_extension_enabled);
+    assert(vkGetDeviceProcAddr(d, "vkCreateDescriptorUpdateTemplateKHR") &&
+           vkGetDeviceProcAddr(d, "vkDestroyDescriptorUpdateTemplateKHR") &&
+           vkGetDeviceProcAddr(d, "vkUpdateDescriptorSetWithTemplateKHR") &&
+           !vkGetDeviceProcAddr(d, "vkCreateDescriptorUpdateTemplate"));
+    vkDestroyDevice(d, NULL);
+    const char *const twice[2] = {DUT, DUT};
+    assert(create(p, twice, 2, VK_FALSE, &d) != VK_SUCCESS && !d);
+    vkDestroyInstance(i, NULL);
+    platform_features_t09 = 0;
+}
+
 int main(void)
 {
     closed();
     partial();
     open_route();
+    descriptor_update_template_route();
     puts("renderpass2 route: maintenance2, create_renderpass2 and separate layouts follow the registry dependencies");
     return 0;
 }

@@ -799,15 +799,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Twenty-two conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Twenty-three conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
      * helper invocation, terminate invocation, get_memory_requirements2,
-     * dedicated_allocation, bind_memory2, maintenance4). Keep headroom so a new
-     * entry cannot overflow the array before this bound is revisited; each push
-     * site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 22, DEVICE_EXTENSION_SLOTS = 24 };
+     * dedicated_allocation, bind_memory2, maintenance4, descriptor update
+     * template). Keep headroom so a new entry cannot overflow the array before
+     * this bound is revisited; each push site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 23, DEVICE_EXTENSION_SLOTS = 24 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -919,6 +919,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_KHR_MAINTENANCE_4_EXTENSION_NAME, VK_KHR_MAINTENANCE_4_SPEC_VERSION};
     }
+    /* Descriptor update templates are a host-side recording of descriptor
+     * writes: every update goes through vkUpdateDescriptorSets. */
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME,
+            VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -959,6 +966,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 memory_requirements2_extension = VK_FALSE;
     VkBool32 dedicated_allocation_extension = VK_FALSE, bind_memory2_extension = VK_FALSE;
     VkBool32 maintenance4_extension = VK_FALSE, saw_maintenance4 = VK_FALSE;
+    VkBool32 descriptor_update_template_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -1010,6 +1018,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &bind_memory2_extension;
         else if (!strcmp(name, VK_KHR_MAINTENANCE_4_EXTENSION_NAME))
             seen = &maintenance4_extension;
+        else if (!strcmp(name, VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME))
+            seen = &descriptor_update_template_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1071,6 +1081,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     /* Every enabled extension's registry dependencies must be enabled too
      * (VUID-vkCreateDevice-ppEnabledExtensionNames-01387). */
     if (maintenance2_extension && !maintenance2_supported(p))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (descriptor_update_template_extension &&
+        !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (create_renderpass2_extension &&
         (!create_renderpass2_supported(p) || !multiview_extension || !maintenance2_extension))
@@ -1415,6 +1428,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->dedicated_allocation_extension_enabled = dedicated_allocation_extension;
     d->bind_memory2_extension_enabled = bind_memory2_extension;
     d->maintenance4_extension_enabled = maintenance4_extension;
+    d->descriptor_update_template_extension_enabled = descriptor_update_template_extension;
     d->platform_features = p->platform.supported_features;
     d->compiler = p->platform.compiler;
     d->buffer_alignment = p->platform.properties.limits.minStorageBufferOffsetAlignment;

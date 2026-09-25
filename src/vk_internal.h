@@ -198,6 +198,10 @@ enum ps5vk_t09_feature_bits {
      * measured it. Bits 20-21 are the range coordinated for this tranche. */
     PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 = 1u << 20,
     PS5VK_T09_FEATURE_NULL_DESCRIPTOR = 1u << 21,
+    /* VK_KHR_descriptor_update_template (no feature structure): a host-side
+     * recording of descriptor writes. Enumerated only when the platform sets
+     * it, which the shipping platform does not yet. */
+    PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE = 1u << 15,
 };
 
 /* robust{Storage,Uniform}BufferAccessSizeAlignment. GFX10 raw buffer records
