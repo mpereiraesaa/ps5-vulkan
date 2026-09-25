@@ -24,6 +24,7 @@ def main():
                 lab / "projects/logging_server/client"]
     for source in (ROOT / "src/vk_alloc.c", ROOT / "src/vk_device.c",
                    ROOT / "src/vk_dispatch.c",
+                   ROOT / "src/vk_core_version.c",
                    ROOT / "src/vk_descriptor.c",
                    ROOT / "src/vk_pipeline.c",
                    ROOT / "src/vk_graphics_pipeline.c",
