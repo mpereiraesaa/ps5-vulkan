@@ -24,23 +24,30 @@ static VkBool32 valid_descriptor_stages(VkShaderStageFlags stages)
     return stages == VK_SHADER_STAGE_ALL || (stages && !(stages & ~core));
 }
 
+/* Slot indices of a (binding, element, count) range, with Vulkan's rollover
+ * into consecutive bindings of the same type and stages. */
+static int signature_indices(const struct ps5vk_set_signature *signature, uint32_t binding,
+    uint32_t element, uint32_t count, uint32_t out[PS5VK_MAX_DESCRIPTORS])
+{
+    if (!count || count > PS5VK_MAX_DESCRIPTORS || binding >= PS5VK_MAX_BINDINGS ||
+        element >= signature->binding[binding].count) return 0;
+    VkShaderStageFlags stages = signature->binding[binding].stages;
+    VkDescriptorType type = signature->type[binding];
+    for (uint32_t j = 0; j < count; ++j) {
+        while (binding < PS5VK_MAX_BINDINGS && element == signature->binding[binding].count) {
+            ++binding; element = 0;
+        }
+        if (binding == PS5VK_MAX_BINDINGS || signature->binding[binding].stages != stages ||
+            signature->type[binding] != type)
+            return 0;
+        out[j] = signature->binding[binding].first + element++;
+    }
+    return 1;
+}
 static int indices(VkDescriptorSet set, uint32_t binding, uint32_t element,
                    uint32_t count, uint32_t out[PS5VK_MAX_DESCRIPTORS])
 {
-    if (!set || !count || count > PS5VK_MAX_DESCRIPTORS || binding >= PS5VK_MAX_BINDINGS ||
-        element >= set->signature.binding[binding].count) return 0;
-    VkShaderStageFlags stages = set->signature.binding[binding].stages;
-    VkDescriptorType type = set->signature.type[binding];
-    for (uint32_t j = 0; j < count; ++j) {
-        while (binding < PS5VK_MAX_BINDINGS && element == set->signature.binding[binding].count) {
-            ++binding; element = 0;
-        }
-        if (binding == PS5VK_MAX_BINDINGS || set->signature.binding[binding].stages != stages ||
-            set->signature.type[binding] != type)
-            return 0;
-        out[j] = set->signature.binding[binding].first + element++;
-    }
-    return 1;
+    return set && signature_indices(&set->signature, binding, element, count, out);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice d, uint32_t write_count,
@@ -525,4 +532,121 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipelineLayout(VkDevice d, VkPipelineLayout 
     if (!d || !layout || layout->device != d) return;
     VkAllocationCallbacks saved = layout->allocator; VkBool32 custom = layout->custom_allocator;
     --d->descriptor_objects; ps5vk_object_free(layout, &saved, custom);
+}
+
+/* Descriptor update templates (VK_KHR_descriptor_update_template). A template
+ * is a recorded list of VkWriteDescriptorSet shapes: an update gathers each
+ * entry's elements from pData at offset + k * stride and applies them through
+ * vkUpdateDescriptorSets, so templates and direct writes share one validation
+ * and one storage path. Only DESCRIPTOR_SET templates exist here; push
+ * descriptors are not implemented. */
+static VkBool32 template_image_type(VkDescriptorType type)
+{
+    return type == VK_DESCRIPTOR_TYPE_SAMPLER ||
+        type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+        type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+        type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
+        type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+}
+static VkBool32 template_texel_type(VkDescriptorType type)
+{
+    return type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
+        type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+}
+static VkBool32 template_buffer_type(VkDescriptorType type)
+{
+    VkDescriptorType base = ps5vk_base_buffer_descriptor_type(type);
+    return base == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || base == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplateKHR(VkDevice d,
+    const VkDescriptorUpdateTemplateCreateInfo *info, const VkAllocationCallbacks *a,
+    VkDescriptorUpdateTemplate *out)
+{
+    if (!out) return INVALID;
+    *out = VK_NULL_HANDLE;
+    if (!d || !info || info->sType != VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO ||
+        !info->descriptorUpdateEntryCount || !info->pDescriptorUpdateEntries)
+        return INVALID;
+    if (info->pNext || info->flags ||
+        info->templateType != VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkDescriptorSetLayout layout = info->descriptorSetLayout;
+    if (!layout || layout->device != d) return INVALID;
+    uint32_t slots[PS5VK_MAX_DESCRIPTORS];
+    for (uint32_t j = 0; j < info->descriptorUpdateEntryCount; ++j) {
+        const VkDescriptorUpdateTemplateEntry *e = &info->pDescriptorUpdateEntries[j];
+        /* Each entry is a legal write range of the layout: the starting
+         * binding's type, then rollover through same-typed bindings. */
+        if (e->dstBinding >= PS5VK_MAX_BINDINGS ||
+            layout->signature.type[e->dstBinding] != e->descriptorType ||
+            !(template_image_type(e->descriptorType) || template_texel_type(e->descriptorType) ||
+              template_buffer_type(e->descriptorType)) ||
+            !signature_indices(&layout->signature, e->dstBinding, e->dstArrayElement,
+                               e->descriptorCount, slots))
+            return INVALID;
+    }
+    VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
+    VkDescriptorUpdateTemplate t = alloc(d, a, sizeof(*t) +
+        (size_t)info->descriptorUpdateEntryCount * sizeof(VkDescriptorUpdateTemplateEntry),
+        &saved, &custom);
+    if (!t) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    t->device = d; t->allocator = saved; t->custom_allocator = custom;
+    t->signature = layout->signature;
+    t->entry_count = info->descriptorUpdateEntryCount;
+    memcpy(t->entries, info->pDescriptorUpdateEntries,
+           t->entry_count * sizeof(VkDescriptorUpdateTemplateEntry));
+    ++d->descriptor_objects; *out = t;
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorUpdateTemplateKHR(VkDevice d,
+    VkDescriptorUpdateTemplate t, const VkAllocationCallbacks *a)
+{
+    (void)a;
+    if (!d || !t || t->device != d) return;
+    /* An update copies descriptor values; nothing keeps the template's address. */
+    VkAllocationCallbacks saved = t->allocator; VkBool32 custom = t->custom_allocator;
+    --d->descriptor_objects; ps5vk_object_free(t, &saved, custom);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplateKHR(VkDevice d,
+    VkDescriptorSet set, VkDescriptorUpdateTemplate t, const void *data)
+{
+    if (!d) return;
+    /* The set must be compatible with the template's layout: the same
+     * canonical signature the template was validated against. */
+    if (!set || !set->pool || set->pool->device != d || !t || t->device != d || !data ||
+        memcmp(&set->signature, &t->signature, sizeof(set->signature))) {
+        ++d->lifetime_errors; return;
+    }
+    const unsigned char *bytes = data;
+    for (uint32_t j = 0; j < t->entry_count; ++j) {
+        const VkDescriptorUpdateTemplateEntry *e = &t->entries[j];
+        VkDescriptorImageInfo images[PS5VK_MAX_DESCRIPTORS];
+        VkDescriptorBufferInfo buffers[PS5VK_MAX_DESCRIPTORS];
+        VkBufferView views[PS5VK_MAX_DESCRIPTORS];
+        VkWriteDescriptorSet w = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = set, .dstBinding = e->dstBinding, .dstArrayElement = e->dstArrayElement,
+            .descriptorCount = e->descriptorCount, .descriptorType = e->descriptorType};
+        /* The application's pData is not necessarily aligned for these
+         * structures, so every element is copied, never dereferenced. */
+        for (uint32_t k = 0; k < e->descriptorCount; ++k) {
+            const unsigned char *element = bytes + e->offset + (size_t)k * e->stride;
+            if (template_image_type(e->descriptorType))
+                memcpy(&images[k], element, sizeof(images[k]));
+            else if (template_texel_type(e->descriptorType))
+                memcpy(&views[k], element, sizeof(views[k]));
+            else
+                memcpy(&buffers[k], element, sizeof(buffers[k]));
+        }
+        if (template_image_type(e->descriptorType)) w.pImageInfo = images;
+        else if (template_texel_type(e->descriptorType)) w.pTexelBufferView = views;
+        else w.pBufferInfo = buffers;
+        unsigned before = d->lifetime_errors;
+        vkUpdateDescriptorSets(d, 1, &w, 0, NULL);
+        /* Like a write array, an invalid entry stops the update; entries
+         * already applied stay applied. */
+        if (d->lifetime_errors != before) return;
+    }
 }

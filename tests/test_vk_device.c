@@ -2283,6 +2283,28 @@ static void create_renderpass2_command_gate(void)
     assert(!vkGetDeviceProcAddr(&d, "vkCmdEndRenderPass2"));
 }
 
+static void descriptor_update_template_command_gate(void)
+{
+    static const char *const commands[] = {
+        "vkCreateDescriptorUpdateTemplateKHR", "vkDestroyDescriptorUpdateTemplateKHR",
+        "vkUpdateDescriptorSetWithTemplateKHR"};
+    const PFN_vkVoidFunction functions[] = {
+        (PFN_vkVoidFunction)vkCreateDescriptorUpdateTemplateKHR,
+        (PFN_vkVoidFunction)vkDestroyDescriptorUpdateTemplateKHR,
+        (PFN_vkVoidFunction)vkUpdateDescriptorSetWithTemplateKHR};
+    struct VkDevice_T d = {0};
+    for (size_t n = 0; n < 3; ++n) assert(!vkGetDeviceProcAddr(&d, commands[n]));
+    d.descriptor_update_template_extension_enabled = VK_TRUE;
+    for (size_t n = 0; n < 3; ++n)
+        assert(vkGetDeviceProcAddr(&d, commands[n]) == functions[n]);
+    /* This device still reports Vulkan 1.0: no core-1.1 command alias, and
+     * no push-descriptor template command. */
+    assert(!vkGetDeviceProcAddr(&d, "vkCreateDescriptorUpdateTemplate"));
+    assert(!vkGetDeviceProcAddr(&d, "vkDestroyDescriptorUpdateTemplate"));
+    assert(!vkGetDeviceProcAddr(&d, "vkUpdateDescriptorSetWithTemplate"));
+    assert(!vkGetDeviceProcAddr(&d, "vkCmdPushDescriptorSetWithTemplateKHR"));
+}
+
 static void buffer_address_khr_device_route(void)
 {
     const char *instance_names[] = {
@@ -2704,7 +2726,7 @@ int main(void)
     vulkan11_instance_version();
     buffer_address_command_gate();
     device_group_dispatch_command_gate();
-    create_renderpass2_command_gate();
+    create_renderpass2_command_gate(); descriptor_update_template_command_gate();
     buffer_address_khr_device_route();
     uniform_buffer_standard_layout_route();
     puts("Vulkan device lifecycle: pass (host backend only)");

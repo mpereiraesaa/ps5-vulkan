@@ -81,6 +81,16 @@ static inline VkDescriptorType ps5vk_base_buffer_descriptor_type(VkDescriptorTyp
         type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ?
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : type;
 }
+/* A DESCRIPTOR_SET update template: validated entries plus the layout
+ * signature a compatible set must carry. */
+struct VkDescriptorUpdateTemplate_T {
+    VkDevice device;
+    VkAllocationCallbacks allocator;
+    VkBool32 custom_allocator;
+    struct ps5vk_set_signature signature;
+    uint32_t entry_count;
+    VkDescriptorUpdateTemplateEntry entries[];
+};
 struct VkPipelineLayout_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
