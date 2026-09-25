@@ -5577,3 +5577,35 @@ source-log SHA-256:
 `106d61194a9f65021088c4fa1b96af838c14d08951452c5b6c2555b6508b9442`.
 The two larger 3D filtering leaves above remain `Fail` at image upload before
 sampling; this compact PASS does not change their recorded verdicts.
+
+### T09 sampler mirror clamp public KHR promotion (2026-09-25)
+
+The shipping graphics profile advertises `VK_KHR_sampler_mirror_clamp_to_edge`
+on Vulkan 1.0 and enables mirror clamp through the ordinary device extension
+route. The SDK-linked public capability probe observed the route and reported
+29/62 requested values, with 33 query blockers. Its strict verifier accepted
+the log and clean lifecycle. Signed eboot SHA-256:
+`b88157ffa829add85acc213a25a40840256825ab1180f839a0f556f32c7d6b60`;
+run ID: `20260924T235311412Z_PPSA99994_ps5vk_0x14ceeba58a1e`;
+source-log SHA-256:
+`2c5997d112288f768b6ad1b2c631e7e39843c204d40773c4c2bc02a9af7522c2`;
+strict receipt SHA-256:
+`a0e2a60e7c15d7e329fb09633641aa6c17a187978a1d8315da1d8aa42fea42d4`;
+pre-promotion matrix SHA-256:
+`e4bad3e4fac18113effd6b02fa85e38fa5a215eea32d70df188f1da7fc1c6628`.
+
+Two further SDK-linked shipping draws used the same public bit without a
+sampler diagnostic build switch. Both passed the strict CPU/readback oracle:
+373,248 expected pixels, zero other pixels, completed submission and clean
+resource retirement. Firmware was not re-probed for these runs.
+
+| Case | Filter/coordinate | Run ID | Eboot SHA-256 | Source-log SHA-256 | Strict receipt SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| 8 | U nearest, -0.25 | `20260924T235846865Z_PPSA99994_ps5vk_0x151d05eafcc2` | `2fcf57f73b48a8d4078a762fc275dfe0790fae231462c8b835679a534f47bae4` | `4ebc318ab873524e03225bc64735cbbb5332b143ca7d4cd68054fb0f6ea7f25a` | `c6fd0b2e56f9bac4ac41247ae4f7214b874fc9b3705e51472bd342cc2dabd3a9` |
+| 23 | W linear, -0.375 | `20260924T235706586Z_PPSA99994_ps5vk_0x1505ace25712` | `3358b78774f99678c39a9f247dab6208ef8c026dedeab8e6c9697906a16d08b8` | `dd5022ec4d62bd6172506e9d950dc41e79a6a44431b2684c785c39dfd4907eed` | `d5518610f27c080b4aa050abea264b0a4905fd049ed0f3c25d8f69fd8553ec82` |
+
+The earlier 14/14 default-off U/V/W draw results and compact original CTS
+3D W address-mode 1/1 PASS remain separate evidence. The two larger 3D
+filtering leaves remain `Fail` at image upload before sampling. The checked
+four-axis DXVK matrix now records **27/62 ready with 35 blockers**; its score
+is distinct from the public probe's 29/62 query count.

@@ -245,7 +245,6 @@ def implemented_device_extensions() -> set[str]:
     # its preprocessor boundary is malformed rather than counting its bits.
     for name in (
         "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
-        "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
     ):
         guard = f"#if defined({name}) && {name}"
         if guard in platform_source:

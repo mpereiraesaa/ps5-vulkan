@@ -30,16 +30,16 @@ mean the driver advertises them; the reported device version remains Vulkan
 
 The ordinary Vulkan 1.0 build exposes `VK_EXT_host_query_reset` and its
 `VkPhysicalDeviceHostQueryResetFeaturesEXT` opt-in, backed by a completed
-precise-query reset/reuse witness. The Vulkan 1.2 aggregate remains unadvertised.
-T09 diagnostic builds can enable `imagelessFramebuffer` and
-`samplerMirrorClampToEdge` independently for bounded SDK tests. Imageless
-framebuffers have a native API witness, and mirror clamp has bounded U/V and W
-draw witnesses. Two original 3D W CTS leaves failed during image upload before
-sampling and have not passed. The mirror-clamp public feature and KHR extension
-remain disabled. `VK_KHR_imageless_framebuffer` also requires
+precise-query reset/reuse witness. It also exposes
+`VK_KHR_sampler_mirror_clamp_to_edge` through device extension enumeration and
+opt-in, backed by U/V/W native pixel witnesses and one compact 3D W CTS PASS.
+The Vulkan 1.2 aggregate remains unadvertised. A T09 diagnostic build can
+enable `imagelessFramebuffer` for its bounded native API witness. Two larger
+3D filtering CTS leaves failed during image upload before sampling and remain
+recorded as failures. `VK_KHR_imageless_framebuffer` also requires
 the Vulkan 1.0 extension dependency chain before it can be advertised. These
 measurements do not claim that DXVK can create a device or run yet; see
-[the exact T09 evidence](VALIDATION.md#t09-host-query-reset-public-ext-promotion-2026-09-25).
+[the sampler T09 evidence](VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
 
 ## Core feature negotiation
 
@@ -302,8 +302,8 @@ per axis. Two byte-identical hardware runs deterministically verified mirrored
 repeat, transparent-black, opaque-black and opaque-white border results, then
 separate nearest-versus-linear magnification and minification discriminators;
 both float and integer variants of the six fixed `VkBorderColor` enums map to
-those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` remains
-unadvertised and rejected. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
+those three native values. `VK_KHR_sampler_mirror_clamp_to_edge` is enumerated
+and accepted by device creation when enabled. `VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT`
 is advertised only for the 40 validated filterable rows. Valid sampled
 images can carry complete mip chains up to the per-type query limit. A
 public-SDK-linked 2D RGBA8 witness uploaded three levels and selected all three

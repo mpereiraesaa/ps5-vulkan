@@ -40,6 +40,15 @@ def unassigned_format_table_digest(rows):
 
 
 class TestReportingMatrix(unittest.TestCase):
+    def test_sampler_mirror_clamp_khr_is_graphics_only(self):
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        extension = "VK_KHR_sampler_mirror_clamp_to_edge"
+        graphics = data["profiles"]["graphics"]
+        compute = data["profiles"]["compute"]
+        self.assertEqual(4194304, graphics["apiVersion"])
+        self.assertIn(extension, graphics["device_extensions"])
+        self.assertNotIn(extension, compute["device_extensions"])
+
     def test_device_scope_uses_public_khr_query_without_core_version_change(self):
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         for profile in ("graphics", "compute"):

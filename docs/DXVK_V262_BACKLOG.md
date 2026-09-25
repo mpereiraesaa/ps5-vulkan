@@ -24,11 +24,15 @@ carries them and passes 494/494. **T04 is implemented, hardware-validated and
 merged into `main`** (PR #158): the default graphics profile exposes geometry,
 tessellation and clip/cull distances, and its integrated native run passed
 403/403 focused upstream cases, including 99 tessellation-related cases. The
-live matrix is 26/62 ready with 36 blockers after T07's four resource and
+live matrix is 27/62 ready with 35 blockers after T07's four resource and
 precise-query features passed the ordinary 829-case selection twice, T08
 DeviceScope passed its SDK KHR witness, and T09 host query reset passed its
 public EXT query and shipping reset/reuse witness. The ordered table preserves the
 original tranche membership.
+
+The sampler mirror-clamp public KHR route then passed the ordinary SDK
+capability probe and shipping U-nearest/W-linear pixel witnesses. The probe
+observed 29/62 requested values, while the four-axis matrix is 27/62 ready.
 
 Tranche delivery and DXVK profile scoring are different gates. The current
 matrix still leaves `geometryShader` and `tessellationShader` as blockers:
@@ -200,6 +204,19 @@ ordinary public sampler feature and KHR extension remain disabled, so the
 requirement is still an API blocker and the matrix remains **26/62 ready with
 36 blockers**. Exact run IDs and hashes are in
 [VALIDATION.md](../VALIDATION.md#t09-sampler-mirror-clamp-diagnostic-measurement-2026-09-24).
+
+### T09 sampler mirror-clamp public KHR promotion (2026-09-25)
+
+The ordinary Vulkan 1.0 SDK probe enumerated
+`VK_KHR_sampler_mirror_clamp_to_edge` and observed the mirror-clamp capability.
+With the public route enabled, separate SDK draws for U nearest and 3D W
+linear each matched all 373,248 pixels against the CPU reference and closed
+cleanly. The compact upstream 3D W address-mode CTS leaf remains a strict 1/1
+PASS. The two larger filtering leaves retain their pre-sampling image-upload
+`Fail` verdicts. The current checked matrix is **27/62 ready with 35 blockers**;
+the ordinary capability probe observed 29/62 requested values. Exact current
+artifact, run and receipt hashes are in
+[VALIDATION.md](../VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
 
 ## Readiness versus profile completion
 

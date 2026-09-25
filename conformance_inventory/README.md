@@ -334,7 +334,7 @@ A row is satisfied when the API, implementation and native axes are positive
 and no applicable CTS leaf was observed failing. CTS is regression evidence: a
 missing or unrun leaf does not block, an observed failure does. Unknown or
 absent API, implementation or native evidence is a blocker. The checked
-matrix currently records 26/62 satisfied (`robustBufferAccess`, three multiview requirements, the three indirect and
+matrix currently records 27/62 satisfied (`robustBufferAccess`, three multiview requirements, the three indirect and
 indexed draw features `drawIndirectFirstInstance`, `multiDrawIndirect` and
 `fullDrawIndexUint32`, the `shaderClipDistance`/`shaderCullDistance` pair,
 `fragmentStoresAndAtomics`, `dualSrcBlend`, `independentBlend`,
@@ -344,18 +344,18 @@ and bounded `bufferDeviceAddress` through their Vulkan 1.0 KHR routes,
 `hostQueryReset` through its Vulkan 1.0 EXT route, and the four rasterization and viewport features
 `depthClamp`, `depthBiasClamp`, `fillModeNonSolid` and `multiViewport`, plus
 `imageCubeArray`, `textureCompressionBC`, `shaderImageGatherExtended` and
-`occlusionQueryPrecise`) and 36
+`occlusionQueryPrecise` and `samplerMirrorClampToEdge` through its Vulkan 1.0 KHR route) and 35
 blockers.
 
 The T09 `hostQueryReset` row is public through `VK_EXT_host_query_reset` with
 an ordinary SDK probe and shipping native reset/reuse witness. The
 `imagelessFramebuffer` row has a bounded, default-off implementation and native
 witness but remains an API blocker.
-`samplerMirrorClampToEdge` has eight passing U/V and six passing W draw
-witnesses, so its native axis is `native-evidence`. The two focused original
-3D CTS leaves failed in image upload before W sampling; neither leaf has a PASS.
-Its ordinary public feature and KHR extension remain disabled, so these
-diagnostic runs do not increase the satisfied count.
+`samplerMirrorClampToEdge` has eight passing U/V and six passing W diagnostic
+draw witnesses, two passing shipping draws, and one compact 3D W CTS PASS.
+Its public KHR extension was also observed by the ordinary SDK probe. The two
+larger 3D filtering CTS leaves remain `Fail` at image upload before sampling;
+those verdicts do not measure W sampling.
 
 T04's implementation and focused native validation are
 complete and merged (PR #158), but its `geometryShader` and

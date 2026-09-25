@@ -139,8 +139,10 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
                                         PS5VK_FEATURE_TEXTURE_COMPRESSION_BC |
                                         PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE |
                                         PS5VK_FEATURE_SHADER_IMAGE_GATHER_EXTENDED;
-    if (graphics_submit)
+    if (graphics_submit) {
         platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
+        platform->supported_features_t09 |= PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE;
+    }
     platform->max_allocation = ps5vk_device_profile_heap_bytes(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);

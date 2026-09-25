@@ -27493,6 +27493,15 @@
       },
       "deviceID": 0,
       "deviceName": "ps5vk gfx1013 experimental compute profile",
+      "device_extensions": [
+        "VK_KHR_storage_buffer_storage_class",
+        "VK_KHR_8bit_storage",
+        "VK_KHR_16bit_storage",
+        "VK_KHR_vulkan_memory_model",
+        "VK_KHR_device_group",
+        "VK_KHR_buffer_device_address",
+        "VK_KHR_uniform_buffer_standard_layout"
+      ],
       "host_query_reset_query": {
         "hostQueryReset": false,
         "route": "VK_EXT_host_query_reset"
@@ -27524,6 +27533,15 @@
       },
       "deviceID": 0,
       "deviceName": "ps5vk gfx1013 experimental graphics profile",
+      "device_extensions": [
+        "VK_KHR_multiview",
+        "VK_KHR_vulkan_memory_model",
+        "VK_KHR_device_group",
+        "VK_KHR_buffer_device_address",
+        "VK_KHR_uniform_buffer_standard_layout",
+        "VK_EXT_host_query_reset",
+        "VK_KHR_sampler_mirror_clamp_to_edge"
+      ],
       "host_query_reset_query": {
         "hostQueryReset": true,
         "route": "VK_EXT_host_query_reset"

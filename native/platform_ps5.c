@@ -324,9 +324,9 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
 #if defined(PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC) && PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
 #endif
-#if defined(PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC) && PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC
+    /* Nearest/linear U, V and W SDK readback plus the compact original 3D
+     * address-mode CTS leaf support the Vulkan 1.0 KHR extension route. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE;
-#endif
 #endif
 #else
     platform->compiler = (struct ps5vk_compiler){&ps5vk_compiled_library, ps5vk_program_resolve, NULL};

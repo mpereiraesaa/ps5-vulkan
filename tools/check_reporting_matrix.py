@@ -1358,6 +1358,7 @@ def main() -> int:
         },
         "profiles": {profile: {"deviceName": dump["deviceName"], "apiVersion": dump["apiVersion"],
                                "vendorID": dump["vendorID"], "deviceID": dump["deviceID"],
+                               "device_extensions": dump["extensions"],
                                "multiview_query": dump["multiviewQuery"],
                                "standard_ubo_query": dump["standardUBOQuery"],
                                "memory_model_query": dump["memoryModelQuery"],

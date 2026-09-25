@@ -61,7 +61,6 @@ class MirrorSamplerVerifier(unittest.TestCase):
             "sampler_mirror_case": case,
             "image_target": "3d" if axis == "w" else None,
             "geometry_fixture": "sampler-mirror-w-3d" if axis == "w" else "sampler-core-addressing",
-            "t09_diagnostics": {"PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC": True},
             "termination": "shell-close-after-cleanup",
             "graphics": {"source": "experiments/graphics/scene3d-mirror-w.pipe" if axis == "w"
                          else "experiments/graphics/scene3d.pipe"},

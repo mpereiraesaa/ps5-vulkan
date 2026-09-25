@@ -245,10 +245,7 @@ def main():
             raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC must be 0 or 1")
         if sample_rate_diagnostic == "1":
             native_cflags.append("-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=1")
-        for name in (
-            "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
-            "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC",
-        ):
+        for name in ("PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",):
             value = os.environ.get(name, "0")
             if value not in ("0", "1"):
                 raise SystemExit(f"{name} must be 0 or 1")

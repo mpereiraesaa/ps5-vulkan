@@ -77,8 +77,6 @@ def validate(run, manifest_path, artifact_path):
             manifest.get("geometry_fixture") == (
                 "sampler-mirror-w-3d" if is_w else "sampler-core-addressing") and
             (not is_w or manifest.get("image_target") == "3d") and
-            manifest.get("t09_diagnostics", {}).get(
-                "PS5VK_SAMPLER_MIRROR_CLAMP_DIAGNOSTIC") is True and
             manifest.get("termination") == "shell-close-after-cleanup" and
             manifest.get("graphics", {}).get("source") == (
                 "experiments/graphics/scene3d-mirror-w.pipe" if is_w else

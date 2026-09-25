@@ -22,6 +22,21 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_sampler_mirror_clamp_shipping_khr_route_and_native_axes(self):
+        document = matrix.generate()
+        row = next(item for item in document["requirements"]
+                   if item["id"] == matrix.SAMPLER_MIRROR_CLAMP_ID)
+        self.assertEqual("VK_KHR_sampler_mirror_clamp_to_edge", row["api"]["via"])
+        self.assertEqual(("satisfied", "implemented", "cts-focused-pass",
+                          "native-evidence", "satisfied"),
+                         tuple(row[axis]["state"] for axis in
+                               ("api", "implementation", "cts", "native")) +
+                         (row["verdict"],))
+        self.assertEqual(16, len(row["native"]["run_ids"]))
+        evidence = json.loads(matrix.EVIDENCE.read_text())
+        self.assertIn(matrix.SAMPLER_MIRROR_CLAMP_ID,
+                      evidence["capability_probe"]["satisfied_ids"])
+
     def test_host_query_reset_ext_route_is_shipping_and_bounded(self):
         retired = "PS5VK_HOST_QUERY_RESET_" + "DIAGNOSTIC"
         for relative in ("native/platform_ps5.c", "tools/build_native.py",
@@ -216,8 +231,8 @@ class DxvkMatrixTests(unittest.TestCase):
         # independently witnessed fragment-storage and dual-source features, and
         # the four T05 rasterization and viewport features, and the four T07
         # resource/query features advance; API 1.3 remains a separate blocker.
-        self.assertEqual(26, document["summary"]["satisfied"])
-        self.assertEqual(36, document["summary"]["blocker"])
+        self.assertEqual(27, document["summary"]["satisfied"])
+        self.assertEqual(35, document["summary"]["blocker"])
 
     def test_t07_public_rows_have_all_four_axes_and_original_cts_cases(self):
         rows = {row["id"]: row for row in matrix.generate()["requirements"]}
@@ -243,8 +258,8 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in profile["requirements"]],
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
-        self.assertEqual(26, document["summary"]["satisfied"])
-        self.assertEqual(36, document["summary"]["blocker"])
+        self.assertEqual(27, document["summary"]["satisfied"])
+        self.assertEqual(35, document["summary"]["blocker"])
         self.assertEqual(
             [
                          "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
@@ -268,6 +283,7 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceVulkan11Features:multiview",
                          "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
                          "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+                         "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
                          "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
                          "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
                          "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
@@ -316,8 +332,8 @@ class DxvkMatrixTests(unittest.TestCase):
                                      row["native"]["run_ids"], row["id"])
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
-                self.assertEqual(26, document["summary"]["satisfied"])
-                self.assertEqual(36, document["summary"]["blocker"])
+                self.assertEqual(27, document["summary"]["satisfied"])
+                self.assertEqual(35, document["summary"]["blocker"])
             finally:
                 matrix.EVIDENCE = original
 
