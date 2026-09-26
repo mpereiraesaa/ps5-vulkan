@@ -716,14 +716,17 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
     for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext; next;
          next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES) {
-            /* The Vulkan 1.0 profile has no reported subgroup stages or
-             * operations. Answer all fields rather than retaining the
-             * caller's previous values as apparent capabilities. */
+            /* Only what the platform measured: compute BASIC on the fixed
+             * wave32 compute dispatch, or nothing at all. Every field is
+             * answered so no caller value survives as an apparent
+             * capability. */
             VkPhysicalDeviceSubgroupProperties *properties =
                 (VkPhysicalDeviceSubgroupProperties *)next;
-            properties->subgroupSize = 0u;
-            properties->supportedStages = 0u;
-            properties->supportedOperations = 0u;
+            const int basic = !!(p->platform.supported_features_t09 &
+                                 PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE);
+            properties->subgroupSize = basic ? 32u : 0u;
+            properties->supportedStages = basic ? VK_SHADER_STAGE_COMPUTE_BIT : 0u;
+            properties->supportedOperations = basic ? VK_SUBGROUP_FEATURE_BASIC_BIT : 0u;
             properties->quadOperationsInAllStages = VK_FALSE;
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES) {
             /* ONLY the floors this profile measured, and zero when the platform

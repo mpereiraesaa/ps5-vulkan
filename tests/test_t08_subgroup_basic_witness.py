@@ -101,13 +101,13 @@ class SubgroupBasicWitness(unittest.TestCase):
             # native run executed.
             self.assertIn("load_vector_arg_amd", final)
 
-    def test_diagnostic_switch_is_private_and_default_off(self):
+    def test_basic_is_shipping_with_its_exact_report(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertIn("#if defined(PS5VK_SUBGROUP_BASIC_DIAGNOSTIC) && "
-                      "PS5VK_SUBGROUP_BASIC_DIAGNOSTIC", platform)
-        self.assertNotIn("SUBGROUP_BASIC", (ROOT / "src/vk_device.c").read_text())
-        self.assertIn('"PS5VK_SUBGROUP_BASIC_DIAGNOSTIC"',
-                      (ROOT / "tools/build_upstream_cts.py").read_text())
+        self.assertIn("platform->supported_features_t09 |= "
+                      "PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;", platform)
+        device = (ROOT / "src/vk_device.c").read_text()
+        self.assertIn("basic ? VK_SUBGROUP_FEATURE_BASIC_BIT : 0u", device)
+        self.assertIn("basic ? VK_SHADER_STAGE_COMPUTE_BIT : 0u", device)
 
 
 if __name__ == "__main__":

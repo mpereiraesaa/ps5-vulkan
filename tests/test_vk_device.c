@@ -1983,6 +1983,15 @@ static void unadvertised_subgroup_properties(void)
     assert(!subgroup.subgroupSize && !subgroup.supportedStages &&
            !subgroup.supportedOperations && !subgroup.quadOperationsInAllStages);
     assert(properties.properties.apiVersion == VK_API_VERSION_1_0);
+    /* A platform that measured compute BASIC reports exactly that. */
+    p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    subgroup.quadOperationsInAllStages = VK_TRUE;
+    vkGetPhysicalDeviceProperties2KHR(p, &properties);
+    assert(subgroup.subgroupSize == 32u &&
+           subgroup.supportedStages == VK_SHADER_STAGE_COMPUTE_BIT &&
+           subgroup.supportedOperations == VK_SUBGROUP_FEATURE_BASIC_BIT &&
+           !subgroup.quadOperationsInAllStages);
+    p->platform.supported_features_t09 &= ~PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
     vkDestroyInstance(i, NULL);
 }
 

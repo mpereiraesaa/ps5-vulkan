@@ -78,8 +78,7 @@ def main() -> None:
     sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk),
                    PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC="0",
                    PS5VK_SUBGROUP_IADD_DIAGNOSTIC="0",
-                   PS5VK_SHADER_INT8_DIAGNOSTIC="0",
-                   PS5VK_SUBGROUP_BASIC_DIAGNOSTIC="1")
+                   PS5VK_SHADER_INT8_DIAGNOSTIC="0")
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t08_subgroup_basic_witness/main.c"

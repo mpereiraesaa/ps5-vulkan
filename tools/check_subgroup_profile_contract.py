@@ -167,9 +167,12 @@ def check_reporting(contract, report, matrix, profile_source, device_source,
         assignments = re.findall(
             r"properties->(subgroupSize|supportedStages|supportedOperations|"
             r"quadOperationsInAllStages)\s*=\s*([^;]+);", device_source)
-        require(assignments == [("subgroupSize", "0u"),
-                                ("supportedStages", "0u"),
-                                ("supportedOperations", "0u"),
+        # The reviewed report: compute BASIC at wave32 when the platform
+        # carries the measured bit, nothing otherwise.
+        require("PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE" in query and
+                assignments == [("subgroupSize", "basic ? 32u : 0u"),
+                                ("supportedStages", "basic ? VK_SHADER_STAGE_COMPUTE_BIT : 0u"),
+                                ("supportedOperations", "basic ? VK_SUBGROUP_FEATURE_BASIC_BIT : 0u"),
                                 ("quadOperationsInAllStages", "VK_FALSE")],
                 "new subgroup query route requires contract review")
     rows = {row["id"]: row for row in matrix["requirements"]}
