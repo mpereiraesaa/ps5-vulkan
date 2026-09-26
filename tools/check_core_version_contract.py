@@ -16,8 +16,8 @@ conformance_inventory/core_version_contract.json holds, per core version:
   behaviours) with a status and the evidence behind it.
 
 The physical device reports PS5VK_DEVICE_API_VERSION
-(src/physical_device_profile.h). Raising it is one source edit, and this gate
-refuses it unless, for every core version up to the reported one:
+(src/physical_device_profile.h). In default full-inventory audit mode, this
+checker rejects coverage unless, for every core version up to the reported one:
 
 * every command of the version resolves by its core name through
   vkGetDeviceProcAddr/vkGetInstanceProcAddr (a core ENTRY in

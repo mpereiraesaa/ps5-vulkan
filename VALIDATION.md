@@ -14,7 +14,7 @@ a reason to withhold an otherwise measured bounded capability. A real failing
 applicable CTS result must remain visible and be investigated; this policy
 does not turn failures into passes. None of these project checks is a claim of
 Vulkan conformance or a complete core-version implementation. The ordinary
-device still reports Vulkan 1.0.
+device reports the experimental, non-conformant Vulkan 1.3 profile below.
 
 ## Reading the current checkpoint (2026-09-26)
 
@@ -24,10 +24,34 @@ shipping promotions include transform feedback, compute subgroup BASIC,
 1024-descriptor capacity, synchronization2, imageless framebuffer,
 robustness2, memory/template routes, dynamic rendering and host-coherent
 memory, followed by extended dynamic state. Their bounded witnesses are
-separate from an end-to-end DXVK rerun. The current DXVK builder retains only
-maintenance4 in its driver diagnostic-switch recipe; its consumer patches
-and core-name/query translation still need to be recorded for each run.
+separate from an end-to-end DXVK rerun. The clean Vulkan 1.3 workload below
+now uses the ordinary SDK, with no diagnostic switches, API-version bypass
+or external core-name/query translation.
 Do not rewrite older receipts to describe the newly promoted configuration.
+
+## Experimental Vulkan 1.3 native DXVK
+
+On 2026-09-26, pinned DXVK 2.6.2 (`9d6f54a1ade20d1d27dd421024717a636f3d8c68`)
+ran against the ordinary SDK from clean source
+`0e57778ac8c6062decd87b4153b7969e2fd35865`. The instance and physical-device
+profile report Vulkan 1.3; the native trace directly measured device API 1.3.0.
+Original DXVK version and feature-level checks were retained. No consumer
+source patches, SDK diagnostic switches or external core/KHR translation were
+used. Necessary PS5 static-link and platform/WSI overlays remain part of the
+native build; this is not an unmodified desktop binary.
+
+- Eboot SHA-256: `e044ffe26cc80026ae5b4beac8890e2d677e7c0ae5f682265126d68a640b8818`.
+- Run: `20260926T084924349Z_PPSA99994_ps5vk_0x80a5f39b798a`.
+- D3D11 feature level 11_0 device creation and offscreen rendering succeeded.
+- Readback: 4096 pixels, zero mismatches, checksum `6e17a4c5` matching the oracle.
+- Strict artifact identity and clean-source verification passed; finalized
+  execution and shutdown passed, with no recorded refusal, crash or GPU hang.
+- The strict Vulkan 1.3 consumer acceptance verifier returned `passed=true`.
+
+This proves the measured 64-by-64 offscreen workload, not arbitrary games,
+onscreen DXVK presentation, all Vulkan 1.3 contracts or conformance. General
+core coverage remains a separate audit. Implemented command/feature paths and
+remaining resource limits are listed in [API.md](API.md).
 
 The compute BASIC promotion (#569) used the ordinary SDK, eboot SHA-256
 `367a0e166bbca1fa5c5da45b19f2781db8ca65d20a00310019db87d596fecc96`, run

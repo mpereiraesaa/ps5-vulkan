@@ -23,7 +23,7 @@ physical-device-level names (`vkEnumeratePhysicalDeviceGroups`, the seven
 `vkGetPhysicalDevice*2` queries and the three external handle queries, which
 report no support). Aggregate Vulkan 1.1/1.2/1.3 feature and property queries
 reflect the same implemented capabilities as their extension counterparts.
-Promoted core command names resolve directly for the requested API version;
+Implemented promoted core command names resolve directly for the requested API version;
 device creation validates requested features rather than enabling every feature
 associated with that version. Feature-specific extension routes remain available.
 
@@ -129,9 +129,9 @@ have a native witness. This does not report BALLOT, ARITHMETIC,
   (`ALL_CLIP_PLANES`) and upper-left tessellation domain origin.
 - The graphics build reports `shaderDemoteToHelperInvocation` through
   `VK_EXT_shader_demote_to_helper_invocation` and `shaderTerminateInvocation`
-  through `VK_KHR_shader_terminate_invocation`. Each needs
-  `VK_KHR_get_physical_device_properties2` on the instance and its own
-  extension for its own feature structure. `OpKill`, `OpTerminateInvocation`
+  through `VK_KHR_shader_terminate_invocation`. Older API requests use the
+  properties2 and feature-specific extension routes; promoted core requests
+  use the equivalent core structures. `OpKill`, `OpTerminateInvocation`
   and `OpDemoteToHelperInvocation` (SPIR-V 1.6 core, or the 1.3 EXT form) keep
   removed pixels out of the colour, depth and stencil targets. A demoted
   invocation keeps running as a helper, so derivatives its quad takes after the

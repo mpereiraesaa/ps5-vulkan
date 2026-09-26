@@ -1,6 +1,6 @@
 {
  "schema": "ps5vk-core-version-contract/1",
- "purpose": "Mandatory Vulkan 1.1-1.3 device contract that gates PS5VK_DEVICE_API_VERSION. Statuses describe the shipping graphics profile on main; 'in-progress' marks routes that exist unadvertised or in review. Vulkan 1.0 floors stay governed by tools/check_reporting_matrix.py.",
+ "purpose": "Separate full-core Vulkan 1.1-1.3 contract audit, not the experimental consumer profile delivery gate. Rows retain their recorded evidence and may lag newer bounded consumer measurements; they do not certify the reported API version. Vulkan 1.0 floors stay governed by tools/check_reporting_matrix.py.",
  "registry": {
   "path": "third_party/vulkan-headers/registry/vk.xml",
   "commit": "b51f6b865c18fc5b33990d12f75e8dfd672cede6"
