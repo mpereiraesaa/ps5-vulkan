@@ -4,6 +4,7 @@
  * BlackBearReloaded's ps5-opengl ps5_agc_package.c (GPL-3.0-or-later).
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include "runtime_shader.h"
+#include "descriptor_table_layout.h"
 #include <string.h>
 
 static void *relative(void *field, void *target)
@@ -148,6 +149,9 @@ static ps5_agc_register convert(PsbcRegisterWrite r)
 
 static int descriptors_valid(const PsbcShaderMetadata *m)
 {
+    /* One set's table: maxPerSetDescriptors records at the widest (combined,
+     * 48-byte) stride, the same bound the per-draw table builder sizes to. */
+    enum { TABLE_BYTES=PS5VK_MAX_TABLE_DWORDS*4 };
     if(m->descriptor_binding_count>PSBC_MAX_DESCRIPTOR_BINDINGS ||
        m->descriptor_set0_valid!=m->descriptor_set_valid[0] ||
        m->descriptor_set0_user_data_dword!=m->descriptor_set_user_data_dword[0])return 0;
@@ -170,9 +174,9 @@ static int descriptors_valid(const PsbcShaderMetadata *m)
         default:return 0;
         }
         if(b->set>=PSBC_MAX_DESCRIPTOR_SETS || b->binding>=32 || !b->array_size ||
-           b->array_size>128 || b->stride!=stride || b->offset%16 ||
-           b->offset>6144 || b->array_size>(6144-b->offset)/stride)return 0;
-        counts[b->set]+=b->array_size;if(counts[b->set]>128)return 0;
+           b->array_size>PS5VK_MAX_DESCRIPTORS || b->stride!=stride || b->offset%16 ||
+           b->offset>TABLE_BYTES || b->array_size>(TABLE_BYTES-b->offset)/stride)return 0;
+        counts[b->set]+=b->array_size;if(counts[b->set]>PS5VK_MAX_DESCRIPTORS)return 0;
         uint32_t end=b->offset+b->array_size*stride;
         for(unsigned j=0;j<i;++j) {
             const PsbcDescriptorBinding *a=&m->descriptor_bindings[j];

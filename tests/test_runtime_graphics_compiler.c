@@ -1310,6 +1310,43 @@ static void check_geometry_output_components(void)
  * The same binding on a pipeline without a geometry stage is still refused,
  * because the stage projection would drop it and the draw would read a table the
  * caller never bound. */
+/* maxPerSetDescriptors on the graphics path: the capacity witness's own
+ * fragment module reads every one of 1024 sampled images in one set through a
+ * constant index. It compiles, and the compiled program keeps the whole table:
+ * the header builder once capped a pixel-stage table at 128 records, which
+ * refused this pair on hardware after the compiler had accepted it. */
+static void check_full_set_fragment_compilation(void)
+{
+    static struct ps5vk_set_signature sets[1];
+    memset(sets,0,sizeof(sets));
+    sets[0].count=PS5VK_MAX_DESCRIPTORS;
+    sets[0].binding[0].count=PS5VK_MAX_DESCRIPTORS;
+    sets[0].binding[0].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+    sets[0].type[0]=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)sets[0].binding[b].first=PS5VK_MAX_DESCRIPTORS;
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/test-shaders/descriptor-capacity/descriptor_capacity_vert_spirv.spv"),
+        .fragment=read_module("build/test-shaders/descriptor-capacity/descriptor_capacity_frag_spirv.spv"),
+        .descriptor_set_count=1,.descriptor_sets=sets,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_supported(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->fragment.machine_code_size);
+    const PsbcShaderMetadata *m=&p->fragment.metadata;
+    assert(m->descriptor_set_valid[0] && m->descriptor_binding_count==1);
+    assert(m->descriptor_bindings[0].array_size==PS5VK_MAX_DESCRIPTORS &&
+           m->descriptor_bindings[0].stride==32 && m->descriptor_bindings[0].offset==0);
+    struct ps5vk_runtime_shader header;
+    assert(!ps5vk_runtime_shader_build(&header,&p->fragment));
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 /* The per-sample fetch stage the pinned multisample oracle compiles
  * (DXVK262-T06): a multisampled subpass input read whose sample index comes
  * from the uniform block, exactly as upstream declares it. Measured with the
@@ -2686,6 +2723,7 @@ int main(void)
     check_t08_compiler_options();
     check_flat_interfaces();
     check_descriptor_options(); check_separate_sampler_options();
+    check_full_set_fragment_compilation();
     check_input_attachment_descriptors();
     check_input_attachment_probe_pipelines();
     check_fragment_store_atomic_contract();
