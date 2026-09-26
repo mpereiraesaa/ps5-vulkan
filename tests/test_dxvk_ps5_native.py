@@ -266,13 +266,21 @@ ARTIFACT = {"profile": build.PROFILE, "variant": "unmodified", "label": "UNMODIF
 
 
 class DiagnosticIntegrationRecipe(unittest.TestCase):
-    def test_only_switches_the_sdk_build_knows_are_applied(self):
+    def test_sdk_build_does_not_inherit_unrecorded_overrides(self):
+        env = build.sdk_build_environment({"PATH": "/bin", "PS5VK_TESS_GE_CNTL": "42",
+            "PS5VK_MAINTENANCE4_DIAGNOSTIC": "1"}, Path("/sdk"), [])
+        self.assertEqual(env, {"PATH": "/bin", "PS5_PAYLOAD_SDK": "/sdk"})
+        self.assertEqual(build.sdk_build_environment({}, Path("/sdk"),
+            ["PS5VK_MAINTENANCE4_DIAGNOSTIC"])["PS5VK_MAINTENANCE4_DIAGNOSTIC"], "1")
+
+    def test_integration_recipe_needs_no_sdk_measurement_switches(self):
         present, absent = build.diagnostic_integration_switches(
             'for name in ("PS5VK_MAINTENANCE4_DIAGNOSTIC",):')
-        self.assertEqual(present, ["PS5VK_MAINTENANCE4_DIAGNOSTIC"])
-        self.assertEqual(len(present) + len(absent), len(build.DXVK_DIAGNOSTIC_SWITCHES))
+        self.assertEqual((present, absent), ([], []))
         present, absent = build.diagnostic_integration_switches("")
-        self.assertEqual(absent, ["PS5VK_MAINTENANCE4_DIAGNOSTIC"])
+        self.assertEqual((present, absent), ([], []))
+        self.assertNotIn("PS5VK_MAINTENANCE4_DIAGNOSTIC",
+                         (ROOT / "tools/build_sdk.py").read_text())
 
     def test_every_switch_is_a_default_off_diagnostic(self):
         for name in build.DXVK_DIAGNOSTIC_SWITCHES:
@@ -284,6 +292,53 @@ class DiagnosticIntegrationRecipe(unittest.TestCase):
 
 
 class ReceiptParser(unittest.TestCase):
+    def test_vulkan13_acceptance_requires_complete_unmodified_run(self):
+        artifact = dict(ARTIFACT, sdk_switches=[], integration=None, sdk_rebuilt=True,
+                        ps5vk_dirty=False)
+        summary = runner.parse_log(ps5log([
+            (IDENTITY[0], IDENTITY[1] + " compat_layer=0 integration=none sdk_switches=none"),
+            ("INFO", "DXVK_VK_PROPERTIES apiVersion=1.3.0 deviceName=test"),
+            ("MARK", "DXVK_ORACLE checked=4096 mismatches=0 checksum=6e17a4c5 expected_checksum=6e17a4c5"),
+            ("MARK", "DXVK_NATIVE_STAGE stage=shutdown state=ok device_refs=0 context_refs=0"),
+            ("INFO", "DXVK_VK_TRACE calls=200 refusals=0 missing_entry_points=20"),
+            ("MARK", "DXVK_NATIVE_RESULT outcome=rendered create_hr=0x00000000 feature_level=0xb000 device_refs=0 context_refs=0"),
+        ]))
+        self.assertTrue(runner.vulkan13_acceptance(summary, artifact, True, True)["passed"])
+        import copy
+        mutations = [
+            ("vk_properties", "apiVersion=1.0.0"),
+            ("oracle", dict(summary["oracle"], checked=0)),
+            ("oracle", dict(summary["oracle"], mismatches=1)),
+            ("oracle", dict(summary["oracle"], checksum="00000000", expected_checksum="00000000")),
+            ("result", dict(summary["result"], outcome="refused")),
+            ("result", dict(summary["result"], device_refs="1")),
+            ("result", dict(summary["result"], feature_level="0xa000")),
+            ("stages", []), ("crash", "SIGSEGV"), ("gpu_hang_suspected", True),
+            ("compat", {"translations": ["translated"], "refusals": []}),
+            ("identity", dict(summary["identity"], compat_layer="1")),
+            ("identity", dict(summary["identity"], eboot_sha256="wrong")),
+            ("first_refusal", {"source": "vulkan"}), ("trace", {"refusals": 1}),
+            ("trace", None),
+        ]
+        for key, value in mutations:
+            with self.subTest(key=key, value=value):
+                changed = copy.deepcopy(summary)
+                changed[key] = value
+                self.assertFalse(runner.vulkan13_acceptance(changed, artifact, True, True)["passed"])
+        for key, value in [("sdk_switches", ["PS5VK_MAINTENANCE4_DIAGNOSTIC"]),
+                           ("integration", "diagnostic"), ("diagnostic", True),
+                           ("sdk_rebuilt", False), ("ps5vk_dirty", True),
+                           ("dxvk_source_patches", ["bypass"]), ("variant", "diagnostic-compat")]:
+            self.assertFalse(runner.vulkan13_acceptance(summary, dict(artifact, **{key: value}), True, True)["passed"])
+        self.assertFalse(runner.vulkan13_acceptance(summary, artifact, False, True)["passed"])
+        self.assertFalse(runner.vulkan13_acceptance(summary, artifact, True, False)["passed"])
+
+    def test_normal_compat_preserves_upstream_feature_level_gate(self):
+        self.assertNotIn("src/d3d11/d3d11_device.cpp:fl-gate-transform-feedback-relaxed",
+                         build.VARIANTS["diagnostic-compat"]["patches"])
+        self.assertFalse(build.VARIANTS["diagnostic-compat"].get("relax_demote"))
+        self.assertTrue(build.VARIANTS["diagnostic-compat-fl-relaxed"]["relax_demote"])
+
     def test_surface_refusal_run(self):
         log = ps5log([
             IDENTITY,

@@ -10,15 +10,13 @@ SDK, into one SDK-linked eboot. Each variant is its own executable:
 * ``diagnostic-version-filter``: DIAGNOSTIC. Identical, plus one patched copy
   of ``src/dxvk/dxvk_device_filter.cpp`` that logs instead of skipping an
   adapter reporting Vulkan < 1.3. Never report it as unmodified DXVK.
-* ``diagnostic-compat``: DIAGNOSTIC. The version-filter patch; a patched
-  ``src/d3d11/d3d11_device.cpp`` whose feature-level gate requests transform
-  feedback only when the device reports it; and the payload translation layer
+* ``diagnostic-compat``: DIAGNOSTIC. The version-filter patch and the payload translation layer
   (examples/dxvk_native/compat_layer.cpp) between DXVK's Vulkan 1.1/1.2/1.3
   aggregate structures and ps5vk's per-extension structures. The layer only
   copies what ps5vk reports and refuses, by name, any enabled feature without a
   ps5vk route.
 * ``diagnostic-compat-fl-relaxed``: DIAGNOSTIC. ``diagnostic-compat`` whose
-  feature-level gate also requests demote-to-helper only when reported, to
+  feature-level gate requests transform feedback and demote-to-helper only when reported, to
   observe the refusals beyond that gate.
 
 Why static: DXVK's native loader dlopen()s "libvulkan.so" and dlsym()s
@@ -62,7 +60,6 @@ VARIANTS = {
         "diagnostic": True,
         "compat_layer": True,
         "patches": ("src/dxvk/dxvk_device_filter.cpp:bypass-apiVersion-1.3-filter",
-                    "src/d3d11/d3d11_device.cpp:fl-gate-transform-feedback-relaxed",
                     "payload:compat-translation-layer-v1"),
     },
     "diagnostic-compat-fl-relaxed": {
@@ -114,9 +111,7 @@ FILTER_DIAGNOSTIC = """    if (properties.apiVersion < VK_MAKE_API_VERSION(0, 1,
 # The measurement switches the native DXVK DIAGNOSTIC runs use: every
 # default-off route DXVK 2.6.2 reaches before its first readback. Only the
 # ones tools/build_sdk.py knows are applied; the rest are recorded as absent.
-DXVK_DIAGNOSTIC_SWITCHES = (
-    "PS5VK_MAINTENANCE4_DIAGNOSTIC",
-)
+DXVK_DIAGNOSTIC_SWITCHES: tuple[str, ...] = ()
 
 
 def diagnostic_integration_switches(build_sdk_source: str) -> tuple[list[str], list[str]]:
@@ -126,6 +121,13 @@ def diagnostic_integration_switches(build_sdk_source: str) -> tuple[list[str], l
     present = [name for name in DXVK_DIAGNOSTIC_SWITCHES if name in known]
     absent = [name for name in DXVK_DIAGNOSTIC_SWITCHES if name not in known]
     return present, absent
+
+
+def sdk_build_environment(environ: dict, sdk: Path, switches: list[str]) -> dict:
+    """Only explicit, recorded profile overrides may affect the SDK build."""
+    env = {key: value for key, value in environ.items() if not key.startswith("PS5VK_")}
+    env.update(PS5_PAYLOAD_SDK=str(sdk), **{name: "1" for name in switches})
+    return env
 
 
 def run(argv: list, **kwargs) -> subprocess.CompletedProcess:
@@ -315,7 +317,7 @@ def compile_dxvk(variant: str, dxvk: Path, build: Path, work: Path, cc: Path, cx
             patched = overlays / "dxvk_device_filter.cpp"
             patched.write_text(patch_device_filter((build / entry["file"]).read_text()))
             entry = overlay_entry(entry, patched, dxvk / "src/dxvk")
-        if (VARIANTS[variant].get("compat_layer") and
+        if (VARIANTS[variant].get("relax_demote") and
                 entry["file"].endswith("/d3d11/d3d11_device.cpp")):
             patched = overlays / "d3d11_device.cpp"
             patched.write_text(patch_feature_level_xfb(
@@ -414,7 +416,7 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
             (ROOT / "tools/build_sdk.py").read_text())
         switches = sorted(set(switches) | set(present))
     if not args.skip_sdk:
-        env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **{name: "1" for name in switches})
+        env = sdk_build_environment(os.environ, sdk, switches)
         subprocess.run([sys.executable, str(ROOT / "tools/build_sdk.py")], cwd=ROOT, env=env,
                        check=True)
     staged = ROOT / "dist-sdk"
@@ -486,6 +488,7 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
                   "DIAGNOSTIC" if config["diagnostic"] else "UNMODIFIED"),
         "integration": None if integration_label(args) == "none" else integration_label(args),
         "sdk_switches": switches,
+        "sdk_rebuilt": not args.skip_sdk,
         "sdk_switches_unavailable": absent,
         "patch_list_sha256": sha256_bytes("\n".join(
             list(config["patches"]) + list(PLATFORM_OVERLAYS)).encode()),
