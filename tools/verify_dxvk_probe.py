@@ -18,9 +18,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = ROOT / "conformance_inventory/dxvk_v262_profile.json"
 EXPECTED_PROFILE = "VP_DXVK_d3d11_level_11_0_baseline"
 EXPECTED_ARTIFACT_PROFILE = "dxvk-v262-capability-probe"
-# Single-feature extension routes (tools/check_dxvk_profile.py EXTENSION_ROUTES):
-# requirement id -> (extension, feature field, first core version of the field).
-# The probe logs each as one DXVK262_EXTENSION_ROUTE_QUERY line.
+# Extension feature routes (tools/check_dxvk_profile.py EXTENSION_ROUTES):
+# requirement id -> (extension, feature field, first core version of the field;
+# None when the feature never became core). The probe logs one
+# DXVK262_EXTENSION_ROUTE_QUERY line per extension carrying every routed field
+# of that extension.
 EXTENSION_ROUTES = {
     "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation":
         ("VK_EXT_shader_demote_to_helper_invocation", "shaderDemoteToHelperInvocation",
@@ -29,7 +31,16 @@ EXTENSION_ROUTES = {
         ("VK_KHR_shader_terminate_invocation", "shaderTerminateInvocation", (1, 3, 0)),
     "feature:VkPhysicalDeviceVulkan13Features:synchronization2":
         ("VK_KHR_synchronization2", "synchronization2", (1, 3, 0)),
+    "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback":
+        ("VK_EXT_transform_feedback", "transformFeedback", None),
+    "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams":
+        ("VK_EXT_transform_feedback", "geometryStreams", None),
 }
+
+
+def route_fields(extension: str) -> set[str]:
+    """Every routed feature field one extension's query line carries."""
+    return {field for name, field, _ in EXTENSION_ROUTES.values() if name == extension}
 
 
 def require(condition: object, message: str) -> None:
@@ -243,8 +254,8 @@ def validate(run: Path, artifact_manifest: Path, artifact_path: Path,
             "unknown or duplicated extension route")
     for identifier, (extension, field, core) in EXTENSION_ROUTES.items():
         rows = [row for row in extension_routes if row.get("route") == extension]
-        if rows or (version < core and observed[identifier]):
-            require(len(rows) == 1 and set(rows[0]) == {"route", field} and
+        if rows or ((core is None or version < core) and observed[identifier]):
+            require(len(rows) == 1 and set(rows[0]) == {"route"} | route_fields(extension) and
                     rows[0][field] == str(observed[identifier]),
                     f"explicit {extension} query route")
 

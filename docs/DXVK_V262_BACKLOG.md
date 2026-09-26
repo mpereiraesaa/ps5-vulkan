@@ -12,10 +12,11 @@ DXVK execution.
 
 ## Verified baseline on `main` (2026-09-25)
 
-After the synchronization2 promotion, `tools/check_dxvk_profile.py --check`
-reports **33/62 ready, 29 blockers**. This is an implementation-evidence score,
-not a DXVK runtime result. `tools/check_dxvk_backlog.py --check` reports 33
-implementation-ready original blockers and 32 profile-satisfied ones (the 62-row score also
+After the synchronization2 and T14 transform feedback promotions,
+`tools/check_dxvk_profile.py --check` reports **36/62 ready, 26 blockers**. This
+is an implementation-evidence score, not a DXVK runtime result.
+`tools/check_dxvk_backlog.py --check` reports 36 implementation-ready original
+blockers and 35 profile-satisfied ones (the 62-row score also
 includes the initially satisfied `robustBufferAccess`). The public device
 still reports Vulkan **1.0.0**. The matrix counts geometry and tessellation as
 blockers because their completed T04 native receipts have not been admitted
@@ -81,9 +82,13 @@ for an unmodified, truthful route:**
    `maxPerSetDescriptors` ≥ 1024 (128 today; needs set-owned descriptor
    tables). `maxMemoryAllocationSize`/`maxBufferSize` ≥ 2^30 are answered by
    the 1.25 GiB graphics heap (one 1 GiB allocation plus headroom).
-2. **Transform feedback.** The FL 10_0+ gate requires `transformFeedback`
-   and `geometryStreams`. Capture-interface reflection has landed; bind,
-   begin/end, counters, streams and the native witness have not.
+2. **Transform feedback — promoted (T14).** The FL 10_0+ gate requires
+   `transformFeedback` and `geometryStreams`; both are public through
+   `VK_EXT_transform_feedback` with the geometry-stage capture path,
+   counters, streams, DrawIndirectByteCount and stream queries, on the
+   public-SDK capture witness. A D3D11 stream-output shader with no pixel
+   shader bound still needs a pipeline without a fragment stage, which the
+   frontend refuses.
 3. **Promotion of the measured routes now behind default-off switches:**
    synchronization2, dynamic rendering and depth/stencil resolve, extended
    dynamic state (dynamic topology and vertex stride are still refused),
@@ -158,11 +163,11 @@ public query and native behavior agree.
 
 ## What remains in the old profile inventory
 
-The 30 current matrix blockers are useful leads, not the ordered execution
+The 27 current matrix blockers are useful leads, not the ordered execution
 queue. Besides the two T04 receipt-reconciliation rows, they comprise the
 Vulkan 1.1 aggregate draw-parameters query, two T08 subgroup features,
-T09 imageless framebuffer, the remaining T10–T14 sync/render/shader/descriptor/
-robustness/transform-feedback families and the API-version row. The exact
+T09 imageless framebuffer, the remaining T10–T13 sync/render/shader/descriptor/
+robustness families and the API-version row. The exact
 row IDs and axis states are generated in
 `conformance_inventory/dxvk_v262_matrix.json`; do not copy a row's old
 `blocker` verdict into a claim that its implementation is absent. For example,
