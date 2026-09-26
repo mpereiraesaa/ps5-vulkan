@@ -356,6 +356,7 @@ static int run_witness(void)
     TRY(make_buffer(device, IMAGES * 4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &output));
     memset(output.host, 0xcd, IMAGES * 4u);
     TRY(sync_memory(device, output.memory, 0));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP output");
     VkDescriptorSetLayoutBinding compute_bindings[2] = {
         {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, COMPUTE_IMAGES, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
@@ -367,6 +368,7 @@ static int run_witness(void)
         {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, IMAGES, VK_SHADER_STAGE_FRAGMENT_BIT, NULL};
     set_layout_info.bindingCount = 1; set_layout_info.pBindings = &pixel_binding;
     TRY(vkCreateDescriptorSetLayout(device, &set_layout_info, NULL, &pixel_set_layout));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP layouts");
     VkDescriptorPoolSize pool_sizes[] = {
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, COMPUTE_IMAGES + IMAGES},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
@@ -377,6 +379,7 @@ static int run_witness(void)
     VkDescriptorSetAllocateInfo set_info = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = descriptor_pool, .descriptorSetCount = 2, .pSetLayouts = set_layouts};
     TRY(vkAllocateDescriptorSets(device, &set_info, sets));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP sets");
     VkDescriptorBufferInfo output_info = {output.buffer, 0, VK_WHOLE_SIZE};
     VkWriteDescriptorSet writes[3] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = sets[0], .dstBinding = 0,
@@ -389,10 +392,12 @@ static int run_witness(void)
          .descriptorCount = IMAGES, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
          .pImageInfo = infos}};
     vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP written");
 
     VkShaderModuleCreateInfo shader_info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = sizeof(descriptor_capacity_comp_spirv), .pCode = descriptor_capacity_comp_spirv};
     TRY(vkCreateShaderModule(device, &shader_info, NULL, &compute_module));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP compute_module");
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1, .pSetLayouts = &compute_set_layout};
     TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &compute_layout));
@@ -404,14 +409,17 @@ static int run_witness(void)
                   .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = compute_module, .pName = "main"},
         .layout = compute_layout};
     TRY(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &compute_info, NULL, &compute_pipeline));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP compute_pipeline");
     TRY(make_graphics(device, pixel_layout, descriptor_capacity_frag_spirv,
                       sizeof(descriptor_capacity_frag_spirv), SIDE, SIDE, VK_FALSE, &g));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP graphics_pipeline");
     TRY(make_image(device, SIDE, SIDE, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &target, &target_memory, &target_view));
     VkFramebufferCreateInfo framebuffer_info = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = g.pass, .attachmentCount = 1, .pAttachments = &target_view,
         .width = SIDE, .height = SIDE, .layers = 1};
     TRY(vkCreateFramebuffer(device, &framebuffer_info, NULL, &framebuffer));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP framebuffer");
     TRY(make_buffer(device, SIDE * SIDE * 4u, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &readback));
     memset(readback.host, 0xcd, SIDE * SIDE * 4u);
     TRY(sync_memory(device, readback.memory, 0));
@@ -423,9 +431,11 @@ static int run_witness(void)
     vkCmdDispatch(command, 1, 1, 1);
     host_barrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
     TRY(vkEndCommandBuffer(command));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP dispatch_recorded");
     TRY(submit_wait(device, queue, fence, command, &pending));
     TRY(vkResetCommandBuffer(command, 0));
 
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP dispatch_done");
     TRY(vkBeginCommandBuffer(command, &begin));
     VkClearValue clear = {.color = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}}};
     VkRenderPassBeginInfo pass_begin = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
