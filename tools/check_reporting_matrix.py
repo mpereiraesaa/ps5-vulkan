@@ -366,6 +366,18 @@ ADVERTISED_FEATURES["shaderDemoteToHelperInvocation"] = {
     "profiles": ("graphics",),
     "cts": (),
 }
+ADVERTISED_FEATURES["synchronization2"] = {
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;"),
+        ("src/vk_device.c", "VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME"),
+        ("src/vk_sync2.c", "vkCmdPipelineBarrier2KHR("),
+    ),
+    "detail": ("the Vulkan 1.0 KHR query and opt-in route converts barrier2, event2 and "
+               "submit2 onto the 1.0 barrier and submit paths; the public-SDK sync2 "
+               "witness ordered three compute phases with zero mismatches"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
 ADVERTISED_FEATURES["shaderTerminateInvocation"] = {
     "citations": (
         ("native/platform_ps5.c", "PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;"),
@@ -1328,7 +1340,7 @@ def main() -> int:
                      "vulkanMemoryModelDeviceScope", "bufferDeviceAddress",
                      "hostQueryReset", "timelineSemaphore",
                      "separateDepthStencilLayouts", "shaderDemoteToHelperInvocation",
-                     "shaderTerminateInvocation"):
+                     "shaderTerminateInvocation", "synchronization2"):
 
             value = dump["extensionFeatures"][name]
             verdict, detail = evaluate_feature(name, value, profile)

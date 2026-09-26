@@ -1928,8 +1928,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
-the code path that enforces them, 148 mandatory format-feature cells satisfied
-with 514 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 151 mandatory format-feature cells satisfied
+with 511 documented per-format blockers, 60 format-query consistency
 checks, and eighteen shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
@@ -6194,4 +6194,47 @@ structure; it only renames. This is evidence that the Vulkan paths DXVK
 executes for this workload work on hardware. It is **not** an unmodified DXVK
 result and does not change any public claim; the contracts still missing are
 listed in [docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md).
+
+## Diagnostic route promotion: sync2, formats, storage texel (2026-09-26)
+
+Three measurement switches are retired and their routes ship:
+`PS5VK_SYNCHRONIZATION2_DIAGNOSTIC` (`VK_KHR_synchronization2`),
+`PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC` (`VK_KHR_format_feature_flags2` and
+`VK_KHR_image_format_list` with the RGBA8 UNORM/SRGB mutable views) and
+`PS5VK_STORAGE_TEXEL_DIAGNOSTIC` (the storage-texel-buffer role on R32_UINT,
+R8G8B8A8_UNORM and R32G32B32A32_SFLOAT). `tests/test_retired_diagnostic_switches.py`
+forbids the switches from returning.
+
+The measurement-build witnesses that justified each route are unchanged
+evidence (sync2 eboot
+`454bffab2d37f20e74512543992af92daac5dccdd0fbbd0731d1df3018a5c961`, run
+`20260925T160735208Z_PPSA99994_ps5vk_0x49fae568a1b6`; mutable view eboot
+`71ce3f3769aaac01fe01ccb9a0dd03a4b27f6fb18b1983c42a3d202b8c25d5ed`, run
+`20260925T104209123Z_PPSA99994_ps5vk_0x3838b10382df`; separate sampler eboot
+`2d17854f63427bb7f537841b99f0d276bd68812b6249391152288439b76ffaa0`, run
+`20260925T151958910Z_PPSA99994_ps5vk_0x4761df2981c9`). The same three
+witnesses, rebuilt on the ordinary SDK with no switch, passed again strictly:
+sync2 eboot `7d720e28a18b59bda27af6d8878dce1c3b2d6a856e152e10f4835a2fd2ef3fec`,
+run `20260925T232900572Z_PPSA99994_ps5vk_0x62116a183b59`; mutable view eboot
+`4d8b7f1a05aebb4c9157eaca83b6f7538c6639e85ab701ca2a38f2a29c153dc4`, run
+`20260925T232908925Z_PPSA99994_ps5vk_0x62135bedb1dd`; separate sampler eboot
+`a992105c3670507befc360c76f000c4615de86deb0d488116834b64c9f70d5c7`, run
+`20260925T232919263Z_PPSA99994_ps5vk_0x6215c41e8b66`. Timestamp2 stays
+refused with every timestamp (timestampValidBits is zero); R32_SINT keeps only
+the uniform-texel role.
+
+The frozen acceptance selection on this tree (eboot
+`b2fe8d26f72ade220fbd4d598da63b06e9989a140edebb7673d52d575dfa5026`, run
+`20260925T232806141Z_PPSA99994_upstream-cts_0x6204bdc010aa`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`ebcf7eb50f99aa206596c9d072108c051e2961f6a4e0fe34e85040914454a5df` (rebuilt
+byte-identically from the committed tree), build-time matrix snapshot SHA-256
+`fcc26d7bdcd279d86b429acf7d12271c3335c8ac2692a693de484991446acaf1`, run
+`20260925T232646238Z_PPSA99994_ps5vk_0x61f222c41344`, log SHA-256
+`1ebe72cd18d7857c766514e48e940ed6ff1f7605c8717371d384eda09bac9bbe`.
+`tools/verify_dxvk_probe.py` verified it strictly: API 1.0.0, 20 device
+extensions, 35/62 query values, with `synchronization2` through an explicit
+`VK_KHR_synchronization2` route query. The joined DXVK matrix has **33/62
+ready and 29 blockers**.
 

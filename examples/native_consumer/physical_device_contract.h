@@ -104,9 +104,11 @@ static void report_physical_device_contract(VkInstance instance,
              * usage is a transfer destination. */
             rgba.linearTilingFeatures ==
                 (VK_FORMAT_FEATURE_TRANSFER_DST_BIT | bc_blit_dst) &&
-            /* RGBA8 also carries the witnessed uniform-texel-buffer role. */
+            /* RGBA8 also carries the witnessed uniform- and
+             * storage-texel-buffer roles. */
             rgba.bufferFeatures == (VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
-                                    VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT) &&
+                                    VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT |
+                                    VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT) &&
             rgba.optimalTilingFeatures ==
                 (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
@@ -126,7 +128,8 @@ static void report_physical_device_contract(VkInstance instance,
                  VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) &&
             texel.bufferFeatures == (VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT |
-                                     VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) &&
+                                     VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
+                                     VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT) &&
             !texel.linearTilingFeatures &&
             texel.optimalTilingFeatures == (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                                             VK_FORMAT_FEATURE_TRANSFER_DST_BIT |

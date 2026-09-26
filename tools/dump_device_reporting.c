@@ -159,6 +159,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         platform->supported_features_t09 |=
             PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION |
             PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
+    /* Mirroring native/platform_ps5.c: synchronization2 and the format routes
+     * (VkFormatProperties3, image format list) on the graphics submit path. */
+    if (graphics_submit)
+        platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2 |
+            PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2 | PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST;
 
     platform->max_allocation = ps5vk_device_profile_max_allocation(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
@@ -619,6 +624,8 @@ int main(int argc, char **argv)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES};
     VkPhysicalDeviceShaderTerminateInvocationFeatures terminate = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES};
+    VkPhysicalDeviceSynchronization2Features synchronization2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};
 
     VkPhysicalDeviceMultiviewProperties multiview_properties = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
@@ -645,6 +652,7 @@ int main(int argc, char **argv)
     timeline.pNext = &separate_layouts;
     separate_layouts.pNext = &demote;
     demote.pNext = &terminate;
+    terminate.pNext = &synchronization2;
     multiview_properties.pNext = &timeline_properties;
 
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -699,10 +707,13 @@ int main(int argc, char **argv)
                     "    \"VK_EXT_shader_demote_to_helper_invocation\": "
                     "{\"shaderDemoteToHelperInvocation\": %s},\n"
                     "    \"VK_KHR_shader_terminate_invocation\": "
-                    "{\"shaderTerminateInvocation\": %s}\n"
+                    "{\"shaderTerminateInvocation\": %s},\n"
+                    "    \"VK_KHR_synchronization2\": "
+                    "{\"synchronization2\": %s}\n"
                     "  },\n",
         demote.shaderDemoteToHelperInvocation ? "true" : "false",
-        terminate.shaderTerminateInvocation ? "true" : "false");
+        terminate.shaderTerminateInvocation ? "true" : "false",
+        synchronization2.synchronization2 ? "true" : "false");
 
     fprintf(stdout, "  \"extensionCount\": %u,\n", extensions);
     fputs("  \"extensions\": [", stdout);
@@ -728,7 +739,8 @@ int main(int argc, char **argv)
                     "    \"timelineSemaphore\": %s,\n"
                     "    \"separateDepthStencilLayouts\": %s,\n"
                     "    \"shaderDemoteToHelperInvocation\": %s,\n"
-                    "    \"shaderTerminateInvocation\": %s\n"
+                    "    \"shaderTerminateInvocation\": %s,\n"
+                    "    \"synchronization2\": %s\n"
 
                     "  },\n",
         storage8.storageBuffer8BitAccess ? "true" : "false",
@@ -749,7 +761,8 @@ int main(int argc, char **argv)
         timeline.timelineSemaphore ? "true" : "false",
         separate_layouts.separateDepthStencilLayouts ? "true" : "false",
         demote.shaderDemoteToHelperInvocation ? "true" : "false",
-        terminate.shaderTerminateInvocation ? "true" : "false");
+        terminate.shaderTerminateInvocation ? "true" : "false",
+        synchronization2.synchronization2 ? "true" : "false");
 
     free(extension_names);
     free(extension_properties);

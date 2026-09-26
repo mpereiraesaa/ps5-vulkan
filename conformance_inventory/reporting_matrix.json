@@ -2207,6 +2207,19 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
+      "detail": "the Vulkan 1.0 KHR query and opt-in route converts barrier2, event2 and submit2 onto the 1.0 barrier and submit paths; the public-SDK sync2 witness ordered three compute phases with zero mismatches",
+      "feature": "synchronization2",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
       "detail": "alphaToOneEnable is rejected (src/vk_graphics_pipeline.c)",
       "feature": "alphaToOne",
       "kind": "feature",
@@ -3444,6 +3457,19 @@
       },
       "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "shaderTerminateInvocation",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "synchronization2",
       "kind": "extension-feature",
       "profile": "compute",
       "reported": false,
@@ -5363,7 +5389,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R8G8B8A8_UNORM lacks mandatory VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R8G8B8A8_UNORM reports VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R8G8B8A8_UNORM",
       "kind": "format-cell",
@@ -5371,7 +5397,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-4byte",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -8118,7 +8144,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32_UINT lacks mandatory VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32_UINT reports VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R32_UINT",
       "kind": "format-cell",
@@ -8126,7 +8152,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -9206,7 +9232,7 @@
         "note": "mandatory format families are not implemented; no selected case covers them",
         "status": "not-selected"
       },
-      "detail": "advertised format VK_FORMAT_R32G32B32A32_SFLOAT lacks mandatory VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT in bufferFeatures (capability not implemented)",
+      "detail": "VK_FORMAT_R32G32B32A32_SFLOAT reports VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT in bufferFeatures",
       "feature": "VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT",
       "format": "VK_FORMAT_R32G32B32A32_SFLOAT",
       "kind": "format-cell",
@@ -9214,7 +9240,7 @@
       "scope": "bufferFeatures",
       "symbol": "{sym1}",
       "table": "formats-mandatory-features-32bit",
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "applicable_cts": {
@@ -27663,6 +27689,9 @@
         },
         "VK_KHR_shader_terminate_invocation": {
           "shaderTerminateInvocation": false
+        },
+        "VK_KHR_synchronization2": {
+          "synchronization2": false
         }
       },
       "host_query_reset_query": {
@@ -27718,7 +27747,10 @@
         "VK_KHR_create_renderpass2",
         "VK_KHR_separate_depth_stencil_layouts",
         "VK_EXT_shader_demote_to_helper_invocation",
-        "VK_KHR_shader_terminate_invocation"
+        "VK_KHR_shader_terminate_invocation",
+        "VK_KHR_format_feature_flags2",
+        "VK_KHR_image_format_list",
+        "VK_KHR_synchronization2"
       ],
       "extension_route_queries": {
         "VK_EXT_shader_demote_to_helper_invocation": {
@@ -27726,6 +27758,9 @@
         },
         "VK_KHR_shader_terminate_invocation": {
           "shaderTerminateInvocation": true
+        },
+        "VK_KHR_synchronization2": {
+          "synchronization2": true
         }
       },
       "host_query_reset_query": {
@@ -28138,15 +28173,15 @@
   ],
   "summary": {
     "features": {
-      "satisfied": 128
+      "satisfied": 130
     },
     "format_query_consistency": {
       "satisfied": 60
     },
     "formats": {
-      "blocker": 514,
+      "blocker": 511,
       "not-applicable": 2,
-      "satisfied": 148
+      "satisfied": 151
     },
     "limits": {
       "blocker": 60,

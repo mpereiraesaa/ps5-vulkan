@@ -101,13 +101,10 @@ class SeparateSamplerWitness(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify(log, receipt, fixture_artifact())
 
-    def test_switch_is_default_off_and_forwarded(self):
-        sdk = (ROOT / "tools/build_sdk.py").read_text()
-        self.assertIn('"PS5VK_STORAGE_TEXEL_DIAGNOSTIC"', sdk)
+    def test_role_is_shipping(self):
+        self.assertIsNone(SWITCH)
         rows = (ROOT / "src/texture_format.c").read_text()
-        self.assertIn("#if defined(PS5VK_STORAGE_TEXEL_DIAGNOSTIC) && "
-                      "PS5VK_STORAGE_TEXEL_DIAGNOSTIC", rows)
-        self.assertIn("#define STEXEL_ENABLED 0u", rows)
+        self.assertIn("#define STEXEL_ENABLED PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER", rows)
 
 
 if __name__ == "__main__":

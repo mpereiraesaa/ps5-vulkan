@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build the bounded public-SDK separate-sampler and texel-buffer witness.
 
-The SDK is built with the default-off PS5VK_STORAGE_TEXEL_DIAGNOSTIC switch,
-which enables the storage-texel-buffer role on R32_UINT, R8G8B8A8_UNORM and
-R32G32B32A32_SFLOAT so the witness can create typed UAV buffer views through
-the public API. The switch is a measurement build, never the shipping profile.
+The ordinary staged SDK serves the storage-texel-buffer role on R32_UINT,
+R8G8B8A8_UNORM and R32G32B32A32_SFLOAT; the witness creates typed UAV buffer
+views through the public API. It is the regression witness for the promoted
+role, so it selects no measurement switch.
 """
 
 import hashlib
@@ -23,7 +23,7 @@ from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
 PROFILE = "dxvk-separate-sampler-public-sdk-witness"
-SWITCH = "PS5VK_STORAGE_TEXEL_DIAGNOSTIC"
+SWITCH = None
 WIDTH, HEIGHT = 8, 4
 TEXELS = WIDTH * HEIGHT
 SHADERS = {
@@ -160,7 +160,7 @@ def main() -> None:
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
     (build / "dxvk_separate_sampler_data.h").write_text(data_header(), encoding="utf-8")
 
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **{SWITCH: "1"})
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **({SWITCH: "1"} if SWITCH else {}))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/dxvk_separate_sampler_witness/main.c"

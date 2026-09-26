@@ -48,14 +48,10 @@
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED), GPL, 1, 1, (bpt) }
 /* The storage-texel-buffer role (DXVK typed UAV buffers, RWBuffer<>): the same
- * typed V# the uniform-texel role reads, written with a format store. It is
- * implemented on the three rows below and enabled only in the default-off
- * measurement build until the storage-texel witness passes on the console. */
-#if defined(PS5VK_STORAGE_TEXEL_DIAGNOSTIC) && PS5VK_STORAGE_TEXEL_DIAGNOSTIC
+ * typed V# the uniform-texel role reads, written with a format store, on the
+ * three rows below. The SDK-linked separate-sampler witness wrote and read
+ * back every one of them with zero mismatches. */
 #define STEXEL_ENABLED PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER
-#else
-#define STEXEL_ENABLED 0u
-#endif
 #define SAMPLED_STEXEL(f, bpt, word, s0, s1, s2, s3, EXTRA, ENABLED) \
     { (f), (bpt), (word), {(s0), (s1), (s2), (s3)}, \
       CAP_SAMP | CAP_DST | (EXTRA) | (ENABLED) | PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER, \

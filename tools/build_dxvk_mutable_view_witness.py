@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Build the bounded public-SDK mutable-format view witness executable.
 
-The SDK is built with the default-off PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC
-switch, which makes the platform report VK_KHR_format_feature_flags2 and
-VK_KHR_image_format_list (with the RGBA8 UNORM <-> SRGB mutable views) so the
-witness can negotiate them through the public API. The switch is a
-measurement build, never the shipping profile."""
+The ordinary staged SDK reports VK_KHR_format_feature_flags2 and
+VK_KHR_image_format_list (with the RGBA8 UNORM <-> SRGB mutable views); the
+witness negotiates them through the public API. It is the regression witness
+for the promoted routes, so it selects no measurement switch."""
 
 import hashlib
 import json
@@ -23,7 +22,7 @@ from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
 PROFILE = "dxvk-mutable-view-public-sdk-witness"
-SWITCH = "PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC"
+SWITCH = None
 EXTENT = 16
 PIXELS = EXTENT * EXTENT
 SHADERS = {
@@ -131,7 +130,7 @@ def main() -> None:
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
     (build / "dxvk_mutable_view_data.h").write_text(data_header(), encoding="utf-8")
 
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **{SWITCH: "1"})
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **({SWITCH: "1"} if SWITCH else {}))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/dxvk_mutable_view_witness/main.c"

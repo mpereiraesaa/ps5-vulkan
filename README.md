@@ -45,7 +45,8 @@ the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 ## In progress
 
 The Vulkan 1.0 profile exposes selected newer features through their EXT/KHR
-routes, including shader demote and terminate invocation. A native
+routes, including shader demote and terminate invocation, synchronization2,
+VkFormatProperties3 and the image format list. A native
 surface/swapchain adapter has completed acquire, graphics submit and
 presentation on PS5.
 
