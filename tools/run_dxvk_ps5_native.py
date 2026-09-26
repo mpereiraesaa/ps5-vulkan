@@ -287,6 +287,48 @@ def check_identity(summary: dict, artifact: dict) -> list[str]:
     return problems
 
 
+def vulkan13_acceptance(summary: dict, artifact: dict, finalized: bool,
+                        lifecycle_ok: bool) -> dict:
+    """Consumer acceptance, not a Vulkan conformance claim or presentation test."""
+    problems = check_identity(summary, artifact)
+    identity = summary.get("identity") or {}
+    if (artifact.get("variant") != "unmodified" or artifact.get("diagnostic") is not False or
+            artifact.get("label") != "UNMODIFIED" or artifact.get("dxvk_source_patches") != [] or
+            artifact.get("sdk_switches") != [] or artifact.get("integration") is not None or
+            artifact.get("sdk_rebuilt") is not True or artifact.get("ps5vk_dirty") is not False):
+        problems.append("artifact is not the unmodified shipping-SDK route")
+    for key, expected in {"diagnostic": "0", "patches": "none", "compat_layer": "0",
+                          "integration": "none", "sdk_switches": "none", "ps5vk_dirty": "0"}.items():
+        if identity.get(key) != expected:
+            problems.append(f"run identity {key} is not {expected}")
+    version = re.search(r"\bapiVersion=(\d+)\.(\d+)\.(\d+)\b",
+                        summary.get("vk_properties") or "")
+    if not version or tuple(map(int, version.groups())) < (1, 3, 0):
+        problems.append("device did not report Vulkan 1.3 or later")
+    result = summary.get("result") or {}
+    if any(result.get(key) != value for key, value in {
+            "outcome": "rendered", "create_hr": "0x00000000", "feature_level": "0xb000",
+            "device_refs": "0", "context_refs": "0"}.items()):
+        problems.append("D3D11 FL11_0 render and release did not complete")
+    oracle = summary.get("oracle") or {}
+    if any(oracle.get(key) != value for key, value in {
+            "checked": 4096, "mismatches": 0, "checksum": "6e17a4c5",
+            "expected_checksum": "6e17a4c5"}.items()):
+        problems.append("4096-pixel oracle did not match the fixed workload")
+    if not any(stage["stage"] == "shutdown" and stage["state"] == "ok"
+               for stage in summary.get("stages", [])):
+        problems.append("shutdown completion missing")
+    if not finalized or not lifecycle_ok:
+        problems.append("telemetry or title lifecycle did not complete cleanly")
+    if (summary.get("crash") or summary.get("gpu_hang_suspected") or
+            summary.get("compat", {}).get("translations") or
+            summary.get("compat", {}).get("refusals")):
+        problems.append("crash, GPU hang or compatibility translation observed")
+    if summary.get("first_refusal") or (summary.get("trace") or {}).get("refusals") != 0:
+        problems.append("driver or consumer refusal observed, or trace completion missing")
+    return {"passed": not problems, "problems": problems}
+
+
 def receipt_for(summary: dict, artifact: dict, run_receipt: dict | None,
                 log_sha: str, lifecycle_ok: bool) -> dict:
     result = summary.get("result") or {}
@@ -320,6 +362,9 @@ def receipt_for(summary: dict, artifact: dict, run_receipt: dict | None,
         "gpu_hang_suspected": summary["gpu_hang_suspected"],
         "lifecycle_ok": lifecycle_ok,
         "summary": summary,
+        "vulkan13_acceptance": vulkan13_acceptance(
+            summary, artifact, bool(run_receipt and run_receipt.get("bye")
+                                    and run_receipt.get("clean")), lifecycle_ok),
     }
 
 
@@ -348,6 +393,9 @@ def main() -> int:
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument("--require-vulkan13", action="store_true",
+                        help="Require unmodified DXVK on the shipping SDK, Vulkan 1.3, "
+                             "the fixed pixel oracle and clean lifecycle")
     args = parser.parse_args()
     artifact = json.loads(args.artifact.read_text())
     eboot = args.dist / "eboot.bin"
@@ -393,6 +441,8 @@ def main() -> int:
     print(json.dumps(brief, indent=2))
     if not lifecycle_ok:
         raise RuntimeError("payload title did not stop")
+    if args.require_vulkan13:
+        return 0 if receipt.get("vulkan13_acceptance", {}).get("passed") else 1
     return 0 if log_path is not None and not receipt.get("identity_mismatches") else 1
 
 
