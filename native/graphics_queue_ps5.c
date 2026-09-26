@@ -90,6 +90,10 @@ struct graphics_job {
         VkQueryPool pool;
         uint32_t query;
         uint64_t *counters;
+        /* A transform feedback stream query: its slot holds four dwords,
+         * the stream's generated and emitted primitive counts at begin and
+         * at end, copied from the capture session's control block. */
+        unsigned xfb;
     } queries[PS5VK_QUERY_SLOTS];
     struct ps5vk_prepared_draw draws[PS5VK_MAX_OPERATIONS];
     /* The draws the DRIVER emits for its own resolve boundaries (DXVK262-T06).
@@ -1165,6 +1169,7 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     uint32_t subpass_index=0;
     int active_query_slot=-1;
     unsigned xfb_session=0,xfb_capture_draws=0;
+    int xfb_query_slot=-1;
     /* Counters an END of this job writes. A byte-count draw is resolved on
      * the CPU when the job is prepared, so it cannot read a counter this same
      * job has yet to write; that shape is refused instead of drawing a stale
@@ -1249,6 +1254,43 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
             ps5log_printf(PS5LOG_MARK,"PS5VK_XFB_END serial=%llu session=%u counters=%u",
                 (unsigned long long)j->serial,xfb_session,copies);
             xfb_session=0;
+            continue;
+        }
+        if((recorded->type==PS5VK_QUERY_BEGIN || recorded->type==PS5VK_QUERY_END) &&
+           recorded->query_pool &&
+           recorded->query_pool->query_type==VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
+            /* Snapshot the session's counts for the stream after every
+             * capture before this point has drained. */
+            const int begin=recorded->type==PS5VK_QUERY_BEGIN;
+            if(!xfb_session || recorded->query_stream>=4u ||
+               (begin ? (xfb_query_slot>=0 || j->query_count>=PS5VK_QUERY_SLOTS) :
+                        (xfb_query_slot<0 || j->queries[xfb_query_slot].pool!=recorded->query_pool ||
+                         j->queries[xfb_query_slot].query!=recorded->query_first)))
+                {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=53;goto fail;}
+            if(begin) {
+                xfb_query_slot=(int)j->query_count++;
+                j->queries[xfb_query_slot].pool=recorded->query_pool;
+                j->queries[xfb_query_slot].query=recorded->query_first;
+                j->queries[xfb_query_slot].counters=(uint64_t *)((uint8_t *)j->query_arena.address+
+                    (size_t)xfb_query_slot*PS5VK_QUERY_SLOT_BYTES);
+                j->queries[xfb_query_slot].xfb=1;
+            }
+            const uint64_t control=(uintptr_t)j->xfb.address+
+                (size_t)xfb_session*PS5VK_XFB_SESSION_BYTES+PS5VK_XFB_CONTROL_OFFSET;
+            const uint64_t slot=(uintptr_t)j->queries[xfb_query_slot].counters+(begin?0u:8u);
+            BATCH_RESERVE(PS5VK_DRAW_BATCH_INITIAL_RESERVE*2u+2u*PS5VK_XFB_DMA_WORDS);
+            size_t n=ps5vk_graphics_release_wait(cursor,(size_t)(end-cursor),
+                (uintptr_t)(ps5vk_draw_batch_open_label(&j->chain)+7),(i+1u)|(1u<<30));
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=54;goto fail;}cursor+=n;
+            if(!ps5vk_xfb_copy_dword(cursor,control+PS5VK_XFB_GENERATED_OFFSET+4u*recorded->query_stream,slot))
+                {rc=VK_ERROR_UNKNOWN;draw_site=54;goto fail;}
+            cursor+=PS5VK_XFB_DMA_WORDS;
+            if(!ps5vk_xfb_copy_dword(cursor,control+PS5VK_XFB_EMITTED_OFFSET+4u*recorded->query_stream,slot+4u))
+                {rc=VK_ERROR_UNKNOWN;draw_site=54;goto fail;}
+            cursor+=PS5VK_XFB_DMA_WORDS;
+            n=ps5vk_graphics_acquire(cursor,(size_t)(end-cursor));
+            if(!n){rc=VK_ERROR_UNKNOWN;draw_site=54;goto fail;}cursor+=n;
+            if(!begin)xfb_query_slot=-1;
             continue;
         }
         if(recorded->type==PS5VK_QUERY_BEGIN) {
@@ -2360,6 +2402,18 @@ static VkResult poll(VkDevice d,void *opaque,uint64_t *completed)
             for(unsigned q=0;q<j->query_count;++q) {
                 uint64_t *pair=j->queries[q].counters;
                 cache(pair,PS5VK_QUERY_SLOT_BYTES);
+                if(j->queries[q].xfb) {
+                    /* generated/emitted at begin, then at end; 32-bit
+                     * counters, so the difference is taken modulo 2^32. */
+                    const uint32_t *w=(const uint32_t *)pair;
+                    const uint32_t needed=w[2]-w[0],written=w[3]-w[1];
+                    if(ps5vk_query_publish_xfb(d,j->queries[q].pool,j->queries[q].query,
+                           written,needed)!=VK_SUCCESS)return VK_ERROR_DEVICE_LOST;
+                    ps5log_printf(PS5LOG_MARK,
+                        "PS5VK_XFB_QUERY serial=%llu query=%u written=%u needed=%u available=1",
+                        (unsigned long long)j->serial,j->queries[q].query,written,needed);
+                    continue;
+                }
                 uint64_t sum=0;
                 unsigned available=0;
                 for(unsigned rb=0;rb<PS5VK_QUERY_COUNTER_PAIRS;++rb) {

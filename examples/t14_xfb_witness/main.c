@@ -19,6 +19,8 @@
  *   instanced 3 points, 2 instances: 6 records, instance 0 then instance 1
  *   drawauto  vkCmdDrawIndirectByteCountEXT with counter 128, counterOffset 32
  *             and stride 32: 3 vertices drawn and captured, counter 96
+ *   query     a stream-0 query around 16 points into a 320-byte binding:
+ *             written 10, needed 16, counter 320
  * Every submission waits on a 300 ms fence; no shader loops.
  */
 #define _DEFAULT_SOURCE 1
@@ -154,6 +156,8 @@ static int run_witness(void)
     VkCommandPool pool = VK_NULL_HANDLE;
     VkCommandBuffer command = VK_NULL_HANDLE;
     VkFence fence = VK_NULL_HANDLE;
+    VkQueryPool query_pool = VK_NULL_HANDLE;
+    uint64_t query_result[2] = {0, 0};
     struct host_buffer buffer0 = {0}, buffer1 = {0}, counters = {0};
     unsigned completed = 0, passed = 0;
 
@@ -218,7 +222,12 @@ static int run_witness(void)
     PFN_vkCmdDrawIndirectByteCountEXT draw_auto =
         (PFN_vkCmdDrawIndirectByteCountEXT)vkGetDeviceProcAddr(device,
             "vkCmdDrawIndirectByteCountEXT");
-    REQUIRE(bind_xfb && begin_xfb && end_xfb && draw_auto, "transform feedback entry points");
+    PFN_vkCmdBeginQueryIndexedEXT begin_query =
+        (PFN_vkCmdBeginQueryIndexedEXT)vkGetDeviceProcAddr(device, "vkCmdBeginQueryIndexedEXT");
+    PFN_vkCmdEndQueryIndexedEXT end_query =
+        (PFN_vkCmdEndQueryIndexedEXT)vkGetDeviceProcAddr(device, "vkCmdEndQueryIndexedEXT");
+    REQUIRE(bind_xfb && begin_xfb && end_xfb && draw_auto && begin_query && end_query,
+            "transform feedback entry points");
 
     VkAttachmentDescription attachment = {
         .format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -342,10 +351,15 @@ static int run_witness(void)
     TRY(vkAllocateCommandBuffers(device, &command_info, &command));
     VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     TRY(vkCreateFence(device, &fence_info, NULL, &fence));
+    VkQueryPoolCreateInfo query_info = {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .queryType = VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT, .queryCount = 1};
+    TRY(vkCreateQueryPool(device, &query_info, NULL, &query_pool));
 
-    enum { INACTIVE, SMALL, ORDER, RESUME, OVERFLOW, STREAMS, INSTANCED, DRAWAUTO, CASES };
+    enum { INACTIVE, SMALL, ORDER, RESUME, OVERFLOW, STREAMS, INSTANCED, DRAWAUTO, QUERY,
+           CASES };
     static const char *const names[CASES] = {"inactive", "small", "order", "resume",
-                                             "overflow", "streams", "instanced", "drawauto"};
+                                             "overflow", "streams", "instanced", "drawauto",
+                                             "query"};
     for (unsigned c = 0; c < CASES; ++c) {
         /* Sentinel every capture word; counters start at 0 (64 for resume). */
         for (uint32_t w = 0; w < CAPTURE_BYTES / 4u; ++w)
@@ -367,12 +381,14 @@ static int run_witness(void)
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = pass,
             .framebuffer = framebuffer, .renderArea = {{0, 0}, {EXTENT, EXTENT}},
             .clearValueCount = 1, .pClearValues = &clear};
+        if (c == QUERY) vkCmdResetQueryPool(command, query_pool, 0, 1);
         vkCmdBeginRenderPass(command, &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           c == STREAMS ? streams : capture);
         const VkBuffer bound[2] = {buffer0.buffer, buffer1.buffer};
         const VkDeviceSize offsets[2] = {0, 0};
-        const VkDeviceSize sizes[2] = {c == OVERFLOW ? 320u : VK_WHOLE_SIZE, VK_WHOLE_SIZE};
+        const VkDeviceSize sizes[2] = {c == OVERFLOW || c == QUERY ? 320u : VK_WHOLE_SIZE,
+                                       VK_WHOLE_SIZE};
         const VkBuffer counter_buffers[4] = {counters.buffer, counters.buffer,
                                              VK_NULL_HANDLE, VK_NULL_HANDLE};
         const VkDeviceSize counter_offsets[4] = {0, 4, 0, 0};
@@ -382,9 +398,11 @@ static int run_witness(void)
         }
         const uint32_t points = c == INACTIVE || c == SMALL || c == RESUME ||
             c == INSTANCED || c == DRAWAUTO ? 3u : c == ORDER ? ORDER_POINTS :
-            c == OVERFLOW ? 16u : 4u;
+            c == OVERFLOW || c == QUERY ? 16u : 4u;
+        if (c == QUERY) begin_query(command, query_pool, 0, 0, 0);
         if (c == DRAWAUTO) draw_auto(command, 1, 0, counters.buffer, 8, 32, 32);
         else vkCmdDraw(command, points, c == INSTANCED ? 2u : 1u, 0, 0);
+        if (c == QUERY) end_query(command, query_pool, 0, 0);
         if (c == RESUME) vkCmdDraw(command, 2, 1, 3, 0);
         if (c != INACTIVE) end_xfb(command, 0, 4, counter_buffers, counter_offsets);
         vkCmdEndRenderPass(command);
@@ -398,6 +416,9 @@ static int run_witness(void)
         TRY(observe(device, &buffer0));
         TRY(observe(device, &buffer1));
         TRY(observe(device, &counters));
+        if (c == QUERY)
+            TRY(vkGetQueryPoolResults(device, query_pool, 0, 1, sizeof(query_result),
+                query_result, sizeof(query_result), VK_QUERY_RESULT_64_BIT));
 
         struct tally t0, t1 = {0, UINT32_MAX, 0, 0};
         uint32_t want0 = 0, want1 = 0;
@@ -409,6 +430,7 @@ static int run_witness(void)
             want0 = ORDER_POINTS * 32u; break;
         case RESUME: t0 = score(buffer0.words, 64, 5, 0, 32, 0, 4096); want0 = 64 + 160; break;
         case OVERFLOW: t0 = score(buffer0.words, 0, 10, 0, 32, 0, 4096); want0 = 320; break;
+        case QUERY: t0 = score(buffer0.words, 0, 10, 0, 32, 0, 4096); want0 = 320; break;
         case DRAWAUTO: t0 = score(buffer0.words, 0, 3, 0, 32, 0, 4096); want0 = 96; break;
         case INSTANCED:
             t0 = score_instances(buffer0.words, 0, 6, 0, 32, 0, 4096, 3); want0 = 192; break;
@@ -420,19 +442,22 @@ static int run_witness(void)
         const uint32_t counter0 = counters.words[0], counter1 = counters.words[1];
         const int counters_ok = c == INACTIVE ? counter0 == 0 && counter1 == 0 :
             counter0 == want0 && counter1 == want1;
+        const int query_ok = c != QUERY || (query_result[0] == 10 && query_result[1] == 16);
         const int ok = !t0.mismatches && !t0.sentinel_bad && !t0.before_bad &&
-            !t1.mismatches && !t1.sentinel_bad && counters_ok;
+            !t1.mismatches && !t1.sentinel_bad && counters_ok && query_ok;
         passed += ok ? 1u : 0u;
         ps5log_printf(PS5LOG_MARK,
             "T14_XFB_WITNESS_CASE name=%s points=%u ok=%d mismatches=%u first_bad=%d "
             "sentinel_bad=%u before_bad=%u counter0=%u want0=%u stream1_mismatches=%u "
             "stream1_sentinel_bad=%u counter1=%u want1=%u w0=%08x,%08x,%08x,%08x "
-            "digest=%08x fence=complete",
+            "written=%llu needed=%llu digest=%08x fence=complete",
             names[c], points, ok, t0.mismatches,
             t0.first_bad == UINT32_MAX ? -1 : (int)t0.first_bad,
             t0.sentinel_bad, t0.before_bad, counter0, want0, t1.mismatches, t1.sentinel_bad,
             counter1, want1, buffer0.words[0], buffer0.words[1], buffer0.words[2],
             buffer0.words[3],
+            c == QUERY ? (unsigned long long)query_result[0] : 0ull,
+            c == QUERY ? (unsigned long long)query_result[1] : 0ull,
             digest_bytes(UINT32_C(2166136261), buffer0.words, 8192));
     }
     ps5log_printf(PS5LOG_MARK, "T14_XFB_WITNESS_RESULT cases=%u passed=%u submissions=%u",
@@ -448,6 +473,7 @@ cleanup:
         destroy_buffer(device, &buffer1);
         destroy_buffer(device, &counters);
         if (fence) vkDestroyFence(device, fence, NULL);
+        if (query_pool) vkDestroyQueryPool(device, query_pool, NULL);
         if (pool) vkDestroyCommandPool(device, pool, NULL);
         if (capture) vkDestroyPipeline(device, capture, NULL);
         if (streams) vkDestroyPipeline(device, streams, NULL);
