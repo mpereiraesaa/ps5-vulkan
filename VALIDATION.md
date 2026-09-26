@@ -6330,3 +6330,14 @@ API 1.0.0, 21 device extensions, 36/62, with `imagelessFramebuffer` through an
 explicit `VK_KHR_imageless_framebuffer` route query. The DXVK matrix has
 **34/62 ready and 28 blockers**.
 
+
+**Combined probe after rebasing onto the transform feedback promotion.** The
+probe above predates the synchronization2 and transform feedback promotions.
+The capability probe was rebuilt from the rebased tree (eboot SHA-256
+`829ddacfa0cb688d51913d2ba6cdc3d4c98460f82ae0aa9baf7b2b9b7435aca1`) and run
+`20260926T024716317Z_PPSA99994_ps5vk_0x6ce3120b9d3b` (log SHA-256
+`a2d75c52e7661cd1f4eae429b58447482fdc601ab339c5f1738353958515c185`) was
+verified strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 22 device
+extensions, 39/62 requested query values met, with the synchronization2,
+transform feedback and imageless framebuffer routes queried explicitly. The
+joined four-axis DXVK matrix has **37/62 ready and 25 blockers**.

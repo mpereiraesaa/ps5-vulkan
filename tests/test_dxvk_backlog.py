@@ -45,9 +45,9 @@ class DxvkBacklogTests(unittest.TestCase):
         # T11 demote and terminate are public through their EXT/KHR routes.
         # sync2 and imageless (KHR routes) and T14 VK_EXT_transform_feedback
         # are public.
-        self.assertEqual(@IR@, summary["implementation_ready"])
-        self.assertEqual(@PS@, summary["profile_satisfied"])
-        self.assertEqual(@RB@, summary["remaining_profile_blockers"])
+        self.assertEqual(36, summary["implementation_ready"])
+        self.assertEqual(36, summary["profile_satisfied"])
+        self.assertEqual(25, summary["remaining_profile_blockers"])
 
         self.assertEqual({
             "api-version": 1,

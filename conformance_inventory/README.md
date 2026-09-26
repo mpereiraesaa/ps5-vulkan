@@ -334,7 +334,7 @@ A row is satisfied when the API, implementation and native axes are positive
 and no applicable CTS leaf was observed failing. CTS is regression evidence: a
 missing or unrun leaf does not block, an observed failure does. Unknown or
 absent API, implementation or native evidence is a blocker. The checked matrix
-records **@S@/62 satisfied and @B@ blockers**. `synchronization2` and
+records **37/62 satisfied and 25 blockers**. `synchronization2` and
 `imagelessFramebuffer` are satisfied through `VK_KHR_synchronization2` and
 `VK_KHR_imageless_framebuffer`. T14 contributes
 `VK_EXT_transform_feedback` with `transformFeedback` and `geometryStreams`
@@ -358,7 +358,7 @@ Its public KHR extension was also observed by the ordinary SDK probe. The two
 larger 3D filtering CTS leaves remain `Fail` at image upload before sampling;
 those verdicts do not measure W sampling.
 The timeline and separate depth/stencil rows have public SDK witnesses, and
-their 50 focused original CTS leaves are now in the frozen 879-case selection. A probe of the combined build (synchronization2, transform feedback and imageless framebuffer) observed @Q@/62
+their 50 focused original CTS leaves are now in the frozen 879-case selection. A probe of the combined build (synchronization2, transform feedback and imageless framebuffer) observed 39/62
 requested query values; query success alone does not establish GPU execution.
 
 T04's implementation and focused native validation are

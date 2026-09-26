@@ -2,7 +2,7 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "54dff6e7393e52b8b95b4ce4d17d95403dad4ab93b80e06d135f26faf56adbd5",
+    "artifact_sha256": "829ddacfa0cb688d51913d2ba6cdc3d4c98460f82ae0aa9baf7b2b9b7435aca1",
     "satisfied_ids": [
       "extension:VK_EXT_transform_feedback",
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
@@ -46,8 +46,8 @@
     ],
     "runs": [
       {
-        "id": "20260926T021915145Z_PPSA99994_ps5vk_0x6b5ba59f5b7d",
-        "log_sha256": "34e5bada22c5555bcc4a666e7ec94ca58bb54919d3d2825ec80a0bfd1c84e5e3"
+        "id": "20260926T024716317Z_PPSA99994_ps5vk_0x6ce3120b9d3b",
+        "log_sha256": "a2d75c52e7661cd1f4eae429b58447482fdc601ab339c5f1738353958515c185"
       }
     ],
     "transport": "ps5log/1",
@@ -105,14 +105,18 @@
         "route": "VK_EXT_transform_feedback",
         "transformFeedback": "1",
         "geometryStreams": "1"
+      },
+      {
+        "route": "VK_KHR_imageless_framebuffer",
+        "imagelessFramebuffer": "1"
       }
     ],
     "requirements": 62,
-    "satisfied": 38,
-    "blockers": 24,
+    "satisfied": 39,
+    "blockers": 23,
     "device_api": "1.0.0",
-    "device_extensions": 21,
-    "source_matrix_sha256": "39c0b6b65f1c4ab60c6c1b61eb4d4f9b2e12a27b50866de367232076d2808d65"
+    "device_extensions": 22,
+    "source_matrix_sha256": "ba3097f9bcd818acb214827d5e7750a1db3284adcf28e4c29a80968b4503d1e2"
   },
   "historical_capability_probes": [
     {
