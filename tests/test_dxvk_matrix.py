@@ -286,8 +286,8 @@ class DxvkMatrixTests(unittest.TestCase):
         # the four T05 rasterization and viewport features, and the four T07
         # resource/query features advance; API 1.3 remains a separate blocker.
 
-        self.assertEqual(36, document["summary"]["satisfied"])
-        self.assertEqual(26, document["summary"]["blocker"])
+        self.assertEqual(@S@, document["summary"]["satisfied"])
+        self.assertEqual(@B@, document["summary"]["blocker"])
 
 
     def test_t07_public_rows_have_all_four_axes_and_original_cts_cases(self):
@@ -315,8 +315,8 @@ class DxvkMatrixTests(unittest.TestCase):
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
 
-        self.assertEqual(36, document["summary"]["satisfied"])
-        self.assertEqual(26, document["summary"]["blocker"])
+        self.assertEqual(@S@, document["summary"]["satisfied"])
+        self.assertEqual(@B@, document["summary"]["blocker"])
 
         self.assertEqual(
             [
@@ -342,6 +342,7 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
 
                          "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+                         "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
                          "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
 
                          "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
@@ -446,8 +447,8 @@ class DxvkMatrixTests(unittest.TestCase):
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
 
-                self.assertEqual(36, document["summary"]["satisfied"])
-                self.assertEqual(26, document["summary"]["blocker"])
+                self.assertEqual(@S@, document["summary"]["satisfied"])
+                self.assertEqual(@B@, document["summary"]["blocker"])
 
             finally:
                 matrix.EVIDENCE = original

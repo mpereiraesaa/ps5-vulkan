@@ -497,6 +497,16 @@ static VkBool32 maintenance2_supported(VkPhysicalDevice p)
 /* VK_KHR_create_renderpass2 depends, in the pinned registry, on
  * VK_KHR_multiview and VK_KHR_maintenance2 (or Vulkan 1.1, which this 1.0
  * profile is not), so it is reported only when both are. */
+static VkBool32 create_renderpass2_supported(VkPhysicalDevice p);
+/* VK_KHR_imageless_framebuffer depends, in the pinned registry, on
+ * VK_KHR_maintenance2 and VK_KHR_image_format_list (and properties2 or
+ * Vulkan 1.1), so it is reported only with both. */
+static VkBool32 imageless_framebuffer_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER) &&
+        (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST) &&
+        maintenance2_supported(p);
+}
 static VkBool32 create_renderpass2_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_CREATE_RENDERPASS2) &&
@@ -663,7 +673,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES) {
             ((VkPhysicalDeviceImagelessFramebufferFeatures *)next)->imagelessFramebuffer =
-                !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER);
+                imageless_framebuffer_supported(p);
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES) {
             ((VkPhysicalDeviceTimelineSemaphoreFeatures *)next)->timelineSemaphore =
@@ -976,10 +986,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
      * dedicated_allocation, bind_memory2, maintenance4, descriptor update
      * template, robustness2, extended dynamic state, maintenance1,
      * copy_commands2, depth/stencil resolve, dynamic rendering, format feature
-     * flags 2, image format list, synchronization2, transform feedback). Keep
-     * headroom so a new entry cannot overflow the array before this bound is revisited; each push
-     * site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 33, DEVICE_EXTENSION_SLOTS = 36 };
+     * flags 2, image format list, synchronization2, transform feedback,
+     * imageless framebuffer). Keep headroom so a new entry cannot overflow the
+     * array before this bound is revisited; each push site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 34, DEVICE_EXTENSION_SLOTS = 36 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -1144,6 +1154,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME, VK_EXT_TRANSFORM_FEEDBACK_SPEC_VERSION};
     }
+    if (imageless_framebuffer_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME,
+            VK_KHR_IMAGELESS_FRAMEBUFFER_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -1192,6 +1207,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 copy_commands2_extension = VK_FALSE;
     VkBool32 depth_stencil_resolve_extension = VK_FALSE, dynamic_rendering_extension = VK_FALSE;
     VkBool32 format_feature_flags2_extension = VK_FALSE, image_format_list_extension = VK_FALSE;
+    VkBool32 imageless_framebuffer_extension = VK_FALSE;
     VkBool32 synchronization2_extension = VK_FALSE;
     VkBool32 transform_feedback_extension = VK_FALSE;
 
@@ -1263,6 +1279,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &format_feature_flags2_extension;
         else if (!strcmp(name, VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME))
             seen = &image_format_list_extension;
+        else if (!strcmp(name, VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME))
+            seen = &imageless_framebuffer_extension;
         else if (!strcmp(name, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME))
             seen = &synchronization2_extension;
         else if (!strcmp(name, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME))
@@ -1400,6 +1418,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (image_format_list_extension &&
         !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (imageless_framebuffer_extension &&
+        (!imageless_framebuffer_supported(p) || !p->instance->features2_extension_enabled ||
+         !maintenance2_extension || !image_format_list_extension))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
@@ -1569,11 +1591,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 (const VkPhysicalDeviceImagelessFramebufferFeatures *)next;
             if (!valid_bool(features->imagelessFramebuffer)) return INVALID;
             if (features->imagelessFramebuffer) {
-                /* Diagnostic execution only. The Vulkan 1.0 KHR extension is
-                 * not enumerated until maintenance2 and image_format_list are
-                 * implemented as public dependencies. */
-                if (!(p->platform.supported_features_t09 &
-                      PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER))
+                /* The Vulkan 1.0 route: VK_KHR_imageless_framebuffer, enabled
+                 * with its maintenance2 and image_format_list dependencies. */
+                if (!imageless_framebuffer_extension)
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
             }

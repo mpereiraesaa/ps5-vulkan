@@ -12,11 +12,11 @@ DXVK execution.
 
 ## Verified baseline on `main` (2026-09-25)
 
-After the synchronization2 and T14 transform feedback promotions,
-`tools/check_dxvk_profile.py --check` reports **36/62 ready, 26 blockers**. This
-is an implementation-evidence score, not a DXVK runtime result.
-`tools/check_dxvk_backlog.py --check` reports 36 implementation-ready original
-blockers and 35 profile-satisfied ones (the 62-row score also
+After the synchronization2, T14 transform feedback and imageless framebuffer
+promotions, `tools/check_dxvk_profile.py --check` reports **@S@/62 ready, @B@
+blockers**. This is an implementation-evidence score, not a DXVK runtime
+result. `tools/check_dxvk_backlog.py --check` reports @IR@ implementation-ready
+original blockers and @PS@ profile-satisfied ones (the 62-row score also
 includes the initially satisfied `robustBufferAccess`). The public device
 still reports Vulkan **1.0.0**. The matrix counts geometry and tessellation as
 blockers because their completed T04 native receipts have not been admitted
@@ -31,8 +31,8 @@ buffer device address, uniform-buffer standard layout and the base/DeviceScope
 memory model through KHR routes. T11 has demote to helper invocation and
 terminate invocation through EXT/KHR routes. T09 has host query reset, mirror-clamp
 samplers, timeline semaphores and their limit, and separate depth/stencil
-layouts through EXT/KHR routes. `imagelessFramebuffer` is diagnostic only;
-the two T08 subgroup bits remain off. The public API details and restrictions
+layouts and the imageless framebuffer through EXT/KHR routes; the two T08
+subgroup bits remain off. The public API details and restrictions
 are in [API.md](../API.md); exact hardware receipts are in
 [VALIDATION.md](../VALIDATION.md). The frozen 879-case upstream selection
 passed on the shipping build, but that historical regression result is not a
@@ -166,7 +166,7 @@ public query and native behavior agree.
 The 27 current matrix blockers are useful leads, not the ordered execution
 queue. Besides the two T04 receipt-reconciliation rows, they comprise the
 Vulkan 1.1 aggregate draw-parameters query, two T08 subgroup features,
-T09 imageless framebuffer, the remaining T10–T13 sync/render/shader/descriptor/
+the remaining T10–T13 sync/render/shader/descriptor/
 robustness families and the API-version row. The exact
 row IDs and axis states are generated in
 `conformance_inventory/dxvk_v262_matrix.json`; do not copy a row's old

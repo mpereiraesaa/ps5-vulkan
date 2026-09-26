@@ -12,6 +12,7 @@
       "VK_KHR_device_group",
       "VK_KHR_format_feature_flags2",
       "VK_KHR_image_format_list",
+      "VK_KHR_imageless_framebuffer",
       "VK_KHR_maintenance2",
       "VK_KHR_multiview",
       "VK_KHR_sampler_mirror_clamp_to_edge",
@@ -119,6 +120,7 @@
         "feature:VkPhysicalDeviceVulkan11Features:multiview",
         "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
         "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+        "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
         "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
         "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
         "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
@@ -2524,10 +2526,11 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
+        "detail": "VK_KHR_imageless_framebuffer feature query on Vulkan 1.0; the VkPhysicalDeviceVulkan12Features aggregate is unadvertised.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied",
+        "via": "VK_KHR_imageless_framebuffer"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -2548,28 +2551,32 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
       "implementation": {
-        "detail": "Bounded implementation exists in a diagnostic build; public API and native evidence remain independent, and observed CTS failures stay visible.",
+        "detail": "Reviewed KHR feature query and opt-in with the maintenance2 and image_format_list dependencies; attachments bind at render-pass begin through VkRenderPassAttachmentBeginInfo.",
         "refs": [
-          "src/vk_command.c",
+          "native/platform_ps5.c",
           "src/vk_device.c",
-          "src/vk_framebuffer.c"
+          "src/vk_framebuffer.c",
+          "src/vk_command.c",
+          "conformance_inventory/reporting_matrix.json"
         ],
         "state": "implemented"
       },
       "kind": "feature",
       "name": "imagelessFramebuffer",
       "native": {
-        "artifact_sha256": "0de8621154ed3da156d192631cf31cbd416876bce8a23252f7d2ae1531664cd3",
-        "note": "Default-off SDK draw/readback witness bound two image views to one imageless framebuffer in separate completed submissions: two draws, 2048 drawn and 6144 clear pixels checked, zero mismatches. An independent one-leaf original CTS measurement returned NotSupported before rendering because the public KHR extension is unadvertised; this is not a CTS pass. Firmware was not queried.",
+        "artifact_sha256": "2ac95461c666315413f66ba04190e8a82c8f7ec42b38b3883bdeabc99c79944c",
+        "note": "Public-SDK draw/readback witness negotiated VK_KHR_imageless_framebuffer with maintenance2 and image_format_list on the ordinary SDK and bound two image views to one imageless framebuffer: two draws, 2048 drawn and 6144 clear pixels, zero mismatches (the earlier diagnostic run is kept as history).",
         "refs": [
+          "VALIDATION.md#imageless-framebuffer-public-khr-promotion-2026-09-26",
           "VALIDATION.md#t09-imageless-framebuffer-diagnostic-measurement-2026-09-24"
         ],
         "run_ids": [
+          "20260926T011005066Z_PPSA99994_ps5vk_0x679564ac8fd7",
           "20260924T225116620Z_PPSA99994_ps5vk_0x116e03cca98b"
         ],
         "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {

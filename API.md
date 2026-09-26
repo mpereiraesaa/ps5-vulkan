@@ -45,11 +45,12 @@ The ordinary Vulkan 1.0 build exposes `VK_EXT_host_query_reset` and its
 precise-query reset/reuse witness. It also exposes
 `VK_KHR_sampler_mirror_clamp_to_edge` through device extension enumeration and
 opt-in, backed by U/V/W native pixel witnesses and one compact 3D W CTS PASS.
-The Vulkan 1.2 aggregate remains unadvertised. A T09 diagnostic build can
-enable `imagelessFramebuffer` for its bounded native API witness. Two larger
-3D filtering CTS leaves failed during image upload before sampling and remain
-recorded as failures. `VK_KHR_imageless_framebuffer` also requires
-the Vulkan 1.0 extension dependency chain before it can be advertised. These
+The Vulkan 1.2 aggregate remains unadvertised. Two larger 3D filtering CTS
+leaves failed during image upload before sampling and remain recorded as
+failures. `imagelessFramebuffer` is reported through
+`VK_KHR_imageless_framebuffer`, which is enumerated only with its registry
+dependencies `VK_KHR_maintenance2` and `VK_KHR_image_format_list`; device
+creation refuses it without both. These
 measurements do not claim that DXVK can create a device or run yet; see
 [the sampler T09 evidence](VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
 

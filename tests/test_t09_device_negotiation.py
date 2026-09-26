@@ -29,23 +29,37 @@ int main(void)
     assert(feature.imagelessFramebuffer == VK_FALSE);
     feature.imagelessFramebuffer = VK_TRUE;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT);
-    p->platform.supported_features_t09 = PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
+    /* The bit alone is not enough: the registry dependencies must be there. */
+    const uint32_t base = p->platform.supported_features_t09;
+    p->platform.supported_features_t09 = base | PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
+    feature.imagelessFramebuffer = VK_TRUE;
+    vkGetPhysicalDeviceFeatures2KHR(p, &chain);
+    assert(feature.imagelessFramebuffer == VK_FALSE);
+    p->platform.supported_features_t09 = base | PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER |
+        PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST | PS5VK_T09_FEATURE_MAINTENANCE2;
     feature.imagelessFramebuffer = VK_FALSE;
     vkGetPhysicalDeviceFeatures2KHR(p, &chain);
     assert(feature.imagelessFramebuffer == VK_TRUE);
     feature.imagelessFramebuffer = 2;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN);
-    feature.imagelessFramebuffer = VK_TRUE;
+    /* A second structure is refused whatever the first one asks for. */
+    feature.imagelessFramebuffer = VK_FALSE;
     VkPhysicalDeviceImagelessFramebufferFeatures duplicate = feature;
     feature.pNext = &duplicate;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_UNKNOWN);
     feature.pNext = NULL;
-    const char *extension = VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME;
+    feature.imagelessFramebuffer = VK_TRUE;
+    /* The feature needs the public extension on this Vulkan 1.0 profile. */
+    assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_FEATURE_NOT_PRESENT);
+    const char *alone[] = {VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME};
     info.enabledExtensionCount = 1;
-    info.ppEnabledExtensionNames = &extension;
+    info.ppEnabledExtensionNames = alone;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_ERROR_EXTENSION_NOT_PRESENT);
-    info.enabledExtensionCount = 0;
-    info.ppEnabledExtensionNames = NULL;
+    const char *extensions[] = {VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME,
+                                VK_KHR_MAINTENANCE2_EXTENSION_NAME,
+                                VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME};
+    info.enabledExtensionCount = 3;
+    info.ppEnabledExtensionNames = extensions;
     assert(vkCreateDevice(p, &info, NULL, &device) == VK_SUCCESS);
     assert(device->enabled_features_t09 & PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER);
     vkDestroyDevice(device, NULL);

@@ -6302,3 +6302,31 @@ extensions, 35/62 query values, with `synchronization2` through an explicit
 `VK_KHR_synchronization2` route query. The joined DXVK matrix has **33/62
 ready and 29 blockers**.
 
+## Imageless framebuffer public KHR promotion (2026-09-26)
+
+`PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC` is retired. `imagelessFramebuffer` is
+reported through `VK_KHR_imageless_framebuffer`, which the pinned registry
+makes depend on `VK_KHR_maintenance2` and `VK_KHR_image_format_list`; the
+extension is enumerated only when both are, and `vkCreateDevice` refuses it
+without both (and without `VK_KHR_get_physical_device_properties2` on the
+instance). The SDK consumer's imageless witness now negotiates exactly that
+public route on the ordinary SDK: eboot SHA-256
+`2ac95461c666315413f66ba04190e8a82c8f7ec42b38b3883bdeabc99c79944c`, run
+`20260926T011005066Z_PPSA99994_ps5vk_0x679564ac8fd7`, log SHA-256
+`b27f0fc08ea1f2ceb1be0afd367ad5fc349b2072195c1d99b5c67ccc16fa881a`,
+strictly verified with zero mismatches.
+
+The frozen acceptance selection on this tree (eboot
+`ab727cfc5037fff04e5703528510b62d61194945edaf65ab1ec9af8160436c17`, run
+`20260926T011024300Z_PPSA99994_upstream-cts_0x6799df21f52b`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`3b59eae4883fa14d838132e28ed3f77f5aaf2af965840bcf478772c4a750a87f`, build-time
+matrix snapshot SHA-256
+`06de9a0d42ca7ba462b7d234592a9a68ad24012890e3e7933e50e584f62c0cbe`, run
+`20260926T011013573Z_PPSA99994_ps5vk_0x67975fc4de05`, log SHA-256
+`4dafe380b421ea8e2603426809dd4e477bfbf8cbafd8bd6d50be4d2bc4caa24c`:
+API 1.0.0, 21 device extensions, 36/62, with `imagelessFramebuffer` through an
+explicit `VK_KHR_imageless_framebuffer` route query. The DXVK matrix has
+**34/62 ready and 28 blockers**.
+

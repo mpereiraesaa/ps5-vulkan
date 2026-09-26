@@ -339,7 +339,7 @@ class NativeDiagnosticOptions(unittest.TestCase):
     def test_t09_diagnostics_are_bounded_and_graphics_only(self):
         from tools.build_upstream_cts import tessellation_build_profile
 
-        for name in ("PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",):
+        for name in ("PS5VK_ROBUSTNESS2_DIAGNOSTIC",):
             with self.subTest(name=name):
                 self.rejected({name: "1"}, "requires the graphics profile API")
                 self.rejected({"PS5VK_GRAPHICS_API": "unused", name: "2"},

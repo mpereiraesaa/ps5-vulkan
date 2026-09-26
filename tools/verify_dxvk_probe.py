@@ -35,6 +35,8 @@ EXTENSION_ROUTES = {
         ("VK_EXT_transform_feedback", "transformFeedback", None),
     "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams":
         ("VK_EXT_transform_feedback", "geometryStreams", None),
+    "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer":
+        ("VK_KHR_imageless_framebuffer", "imagelessFramebuffer", (1, 2, 0)),
 }
 
 

@@ -30,6 +30,7 @@
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
       "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
       "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+      "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
       "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
       "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
       "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
@@ -114,6 +115,110 @@
     "source_matrix_sha256": "39c0b6b65f1c4ab60c6c1b61eb4d4f9b2e12a27b50866de367232076d2808d65"
   },
   "historical_capability_probes": [
+    {
+      "artifact_sha256": "ebcf7eb50f99aa206596c9d072108c051e2961f6a4e0fe34e85040914454a5df",
+      "satisfied_ids": [
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+        "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
+        "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+        "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+        "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
+        "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
+        "feature:VkPhysicalDeviceVulkan13Features:synchronization2",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+      ],
+      "runs": [
+        {
+          "id": "20260925T232646238Z_PPSA99994_ps5vk_0x61f222c41344",
+          "log_sha256": "1ebe72cd18d7857c766514e48e940ed6ff1f7605c8717371d384eda09bac9bbe"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        },
+        {
+          "route": "VK_KHR_uniform_buffer_standard_layout",
+          "uniformBufferStandardLayout": "1"
+        },
+        {
+          "route": "VK_KHR_vulkan_memory_model",
+          "vulkanMemoryModel": "1",
+          "vulkanMemoryModelDeviceScope": "1"
+        },
+        {
+          "route": "VK_KHR_buffer_device_address",
+          "bufferDeviceAddress": "1"
+        },
+        {
+          "route": "VK_EXT_host_query_reset",
+          "hostQueryReset": "1"
+        },
+        {
+          "route": "VK_KHR_sampler_mirror_clamp_to_edge",
+          "samplerMirrorClampToEdge": "1"
+        },
+        {
+          "route": "VK_KHR_timeline_semaphore",
+          "timelineSemaphore": "1",
+          "maxTimelineSemaphoreValueDifference": "18446744073709551615"
+        },
+        {
+          "route": "VK_KHR_separate_depth_stencil_layouts",
+          "separateDepthStencilLayouts": "1"
+        },
+        {
+          "route": "VK_EXT_shader_demote_to_helper_invocation",
+          "shaderDemoteToHelperInvocation": "1"
+        },
+        {
+          "route": "VK_KHR_shader_terminate_invocation",
+          "shaderTerminateInvocation": "1"
+        },
+        {
+          "route": "VK_KHR_synchronization2",
+          "synchronization2": "1"
+        }
+      ],
+      "requirements": 62,
+      "satisfied": 35,
+      "blockers": 27,
+      "device_api": "1.0.0",
+      "device_extensions": 20,
+      "source_matrix_sha256": "fcc26d7bdcd279d86b429acf7d12271c3335c8ac2692a693de484991446acaf1"
+    },
     {
       "artifact_sha256": "40ff50ee5f22a6197b5c31bee1156adb2b35ce0d7f15560759710b38079c3d0e",
       "satisfied_ids": [
@@ -2537,13 +2642,15 @@
       "native": {
         "state": "native-evidence",
         "run_ids": [
+          "20260926T011005066Z_PPSA99994_ps5vk_0x679564ac8fd7",
           "20260924T225116620Z_PPSA99994_ps5vk_0x116e03cca98b"
         ],
-        "artifact_sha256": "0de8621154ed3da156d192631cf31cbd416876bce8a23252f7d2ae1531664cd3",
+        "artifact_sha256": "2ac95461c666315413f66ba04190e8a82c8f7ec42b38b3883bdeabc99c79944c",
         "refs": [
+          "VALIDATION.md#imageless-framebuffer-public-khr-promotion-2026-09-26",
           "VALIDATION.md#t09-imageless-framebuffer-diagnostic-measurement-2026-09-24"
         ],
-        "note": "Default-off SDK draw/readback witness bound two image views to one imageless framebuffer in separate completed submissions: two draws, 2048 drawn and 6144 clear pixels checked, zero mismatches. An independent one-leaf original CTS measurement returned NotSupported before rendering because the public KHR extension is unadvertised; this is not a CTS pass. Firmware was not queried."
+        "note": "Public-SDK draw/readback witness negotiated VK_KHR_imageless_framebuffer with maintenance2 and image_format_list on the ordinary SDK and bound two image views to one imageless framebuffer: two draws, 2048 drawn and 6144 clear pixels, zero mismatches (the earlier diagnostic run is kept as history)."
       },
       "cts_measurement": {
         "state": "not-supported",

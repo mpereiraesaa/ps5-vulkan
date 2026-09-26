@@ -323,6 +323,19 @@ static int run_dxvk262_capability_probe(void)
             "transformFeedback=%u geometryStreams=%u",
             routed.transformFeedback, routed.geometryStreams);
     }
+    if (properties.apiVersion < VK_API_VERSION_1_2 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME)) {
+        VkPhysicalDeviceImagelessFramebufferFeatures imageless = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &imageless};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features12.imagelessFramebuffer = imageless.imagelessFramebuffer;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_EXTENSION_ROUTE_QUERY route=VK_KHR_imageless_framebuffer "
+            "imagelessFramebuffer=%u", imageless.imagelessFramebuffer);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",
