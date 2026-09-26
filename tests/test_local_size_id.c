@@ -84,8 +84,8 @@ static uint32_t constant_id(const uint32_t *w, size_t count, uint32_t value)
             return w[i + 2];
     return 0;
 }
-static VkResult build(VkDevice device, VkPipelineLayout layout, const uint32_t *words,
-                      size_t bytes, VkPipeline *out)
+static VkResult build_specialized(VkDevice device, VkPipelineLayout layout, const uint32_t *words,
+                      size_t bytes, const VkSpecializationInfo *specialization, VkPipeline *out)
 {
     VkShaderModuleCreateInfo smci = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = bytes, .pCode = words};
@@ -93,11 +93,41 @@ static VkResult build(VkDevice device, VkPipelineLayout layout, const uint32_t *
     assert(vkCreateShaderModule(device, &smci, NULL, &module) == VK_SUCCESS);
     VkComputePipelineCreateInfo cpci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
         .layout = layout, .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = module, .pName = "main"}};
+            .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = module, .pName = "main",
+            .pSpecializationInfo = specialization}};
     *out = VK_NULL_HANDLE;
     VkResult result = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL, out);
     vkDestroyShaderModule(device, module, NULL);
     return result;
+}
+static VkResult build(VkDevice device, VkPipelineLayout layout, const uint32_t *words,
+                      size_t bytes, VkPipeline *out)
+{
+    return build_specialized(device, layout, words, bytes, NULL, out);
+}
+
+/* Turn the X dimension into a decorated OpSpecConstant without changing the
+ * module's ID space. Annotations precede types, as required by SPIR-V. */
+static uint32_t *specialize_dimension(const uint32_t *words, size_t count, uint32_t id)
+{
+    size_t types = 5;
+    while (types < count && (words[types] & 0xffff) != 19)
+        types += words[types] >> 16;
+    assert(types < count);
+    uint32_t *out = malloc((count + 4) * sizeof(*out));
+    assert(out);
+    memcpy(out, words, types * sizeof(*out));
+    uint32_t decoration[4] = {4u << 16 | 71u, id, 1u, 7u};
+    memcpy(out + types, decoration, sizeof(decoration));
+    memcpy(out + types + 4, words + types, (count - types) * sizeof(*out));
+    unsigned found = 0;
+    for (size_t i = 5; i < count + 4; i += out[i] >> 16)
+        if ((out[i] & 0xffff) == 43 && out[i] >> 16 == 4 && out[i + 2] == id) {
+            out[i] = 4u << 16 | 50u;
+            ++found;
+        }
+    assert(found == 1);
+    return out;
 }
 
 int main(void)
@@ -151,8 +181,8 @@ int main(void)
            reference->program.local_size[2] == 1);
     /* Without maintenance4 the LocalSizeId form is refused. */
     assert(build(device, layout, by_id, bytes, &pipeline) != VK_SUCCESS && !pipeline);
-    /* With it (set directly: the 1.0 device cannot enable the extension) the
-     * compiled program has the same workgroup and code as the literal form. */
+    /* Set the feature directly to isolate shader admission from device
+     * negotiation. The compiled workgroup/code equal the literal form. */
     device->enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
     assert(build(device, layout, by_id, bytes, &pipeline) == VK_SUCCESS);
     assert(!memcmp(pipeline->program.local_size, reference->program.local_size,
@@ -162,6 +192,46 @@ int main(void)
                    reference->program.code_words * 4));
     VkPipeline refused;
     assert(build(device, layout, spec, bytes, &refused) != VK_SUCCESS && !refused);
+
+    uint32_t *specialized = specialize_dimension(by_id, count, id64);
+    VkPipeline default_size, size32, size16, warm32;
+    assert(build(device, layout, specialized, bytes + 16, &default_size) == VK_SUCCESS);
+    assert(default_size->program.local_size[0] == 64);
+    uint32_t x = 32;
+    VkSpecializationMapEntry map = {.constantID = 7, .offset = 0, .size = sizeof(x)};
+    VkSpecializationInfo specialization = {.mapEntryCount = 1, .pMapEntries = &map,
+        .dataSize = sizeof(x), .pData = &x};
+    assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
+                             &size32) == VK_SUCCESS);
+    assert(size32->program.local_size[0] == 32 && size32->program.local_size[1] == 1 &&
+           size32->program.local_size[2] == 1);
+    x = 16;
+    assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
+                             &size16) == VK_SUCCESS);
+    assert(size16->program.local_size[0] == 16);
+    x = 32;
+    assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
+                             &warm32) == VK_SUCCESS);
+    assert(warm32->program.local_size[0] == 32);
+    map.size = 2;
+    assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
+                             &refused) != VK_SUCCESS && !refused);
+    map.size = sizeof(x); map.offset = sizeof(x);
+    assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
+                             &refused) != VK_SUCCESS && !refused);
+    map.offset = 0;
+    VkSpecializationMapEntry duplicates[2] = {map, map};
+    specialization.mapEntryCount = 2; specialization.pMapEntries = duplicates;
+    assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
+                             &refused) != VK_SUCCESS && !refused);
+    specialization.mapEntryCount = 1; specialization.pMapEntries = NULL;
+    assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
+                             &refused) != VK_SUCCESS && !refused);
+    vkDestroyPipeline(device, warm32, NULL);
+    vkDestroyPipeline(device, size16, NULL);
+    vkDestroyPipeline(device, size32, NULL);
+    vkDestroyPipeline(device, default_size, NULL);
+    free(specialized);
     vkDestroyPipeline(device, pipeline, NULL);
     vkDestroyPipeline(device, reference, NULL);
     vkDestroyPipelineLayout(device, layout, NULL);
@@ -169,7 +239,7 @@ int main(void)
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     free(literal); free(by_id); free(spec);
-    puts("LocalSizeId: compute workgroup from OpExecutionModeId constants under maintenance4 "
+    puts("LocalSizeId: constants and direct specialization workgroup dimensions under maintenance4 "
          "(host compiler, no GPU evidence)");
     return 0;
 }

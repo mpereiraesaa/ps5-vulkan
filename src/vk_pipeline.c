@@ -119,23 +119,53 @@ VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
     if (found != 1) return VK_FALSE;
     *out = id; return VK_TRUE;
 }
-/* The value of a 32-bit OpConstant (opcode 43). A specialization constant is
- * not resolved here: it is refused rather than read at its default. */
-static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value)
+/* Resolve a scalar 32-bit integer, including a directly specialized workgroup
+ * dimension. Keep this in agreement with the compiler's specialization input:
+ * defaults apply only when the application did not supply that SpecId. */
+static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
+                          const VkSpecializationInfo *specialization)
 {
+    uint32_t type = 0, spec_id = 0;
+    int is_spec = 0, found = 0, decorated = 0;
     for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
         const uint32_t *w = module->words + i;
-        if ((w[0] & 0xffff) == 43 && w[0] >> 16 == 4 && w[2] == id) {
-            *value = w[3]; return 1;
+        uint32_t op = w[0] & 0xffff;
+        if ((op == 43 || op == 50) && w[0] >> 16 == 4 && w[2] == id) {
+            type = w[1]; *value = w[3]; is_spec = op == 50; ++found;
+        }
+        if (op == 71 && w[0] >> 16 == 4 && w[1] == id && w[2] == 1) {
+            spec_id = w[3]; ++decorated;
         }
     }
-    return 0;
+    if (found != 1 || decorated > 1) return 0;
+    int integer = 0;
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        if ((w[0] & 0xffff) == 21 && w[0] >> 16 == 4 && w[1] == type && w[2] == 32)
+            ++integer;
+    }
+    if (integer != 1) return 0;
+    if (!is_spec || !decorated || !specialization) return 1;
+    if (specialization->mapEntryCount > PS5VK_MAX_SPECIALIZATION_CONSTANTS ||
+        (specialization->mapEntryCount && !specialization->pMapEntries)) return 0;
+    unsigned matches = 0;
+    for (uint32_t i = 0; i < specialization->mapEntryCount; ++i) {
+        const VkSpecializationMapEntry *entry = &specialization->pMapEntries[i];
+        if (entry->constantID != spec_id) continue;
+        if (++matches > 1 || entry->size != sizeof(*value) || !specialization->pData ||
+            entry->offset > specialization->dataSize ||
+            entry->size > specialization->dataSize - entry->offset) return 0;
+        memcpy(value, (const uint8_t *)specialization->pData + entry->offset, sizeof(*value));
+    }
+    return 1;
 }
 /* LocalSize (OpExecutionMode, mode 17) or, when the device enabled
  * maintenance4, LocalSizeId (OpExecutionModeId 331, mode 38) whose three
- * operands are 32-bit OpConstants. Exactly one of them names the entry. */
+ * operands are 32-bit constants or direct specialization constants. Exactly
+ * one execution mode names the entry. Compound OpSpecConstantOp expressions
+ * remain rejected, rather than guessed from their defaults. */
 static int local_size(VkShaderModule module, const char *name, uint32_t dims[3],
-                      VkBool32 local_size_id)
+                      VkBool32 local_size_id, const VkSpecializationInfo *specialization)
 {
     uint32_t id;
     if (!ps5vk_shader_entry(module, VK_SHADER_STAGE_COMPUTE_BIT, name, &id)) return 0;
@@ -147,7 +177,7 @@ static int local_size(VkShaderModule module, const char *name, uint32_t dims[3],
         } else if ((w[0] & 0xffff) == 331 && w[0] >> 16 == 6 && w[1] == id && w[2] == 38) {
             if (!local_size_id) return 0;
             for (unsigned n = 0; n < 3; ++n)
-                if (!constant_value(module, w[3 + n], &dims[n])) return 0;
+                if (!constant_value(module, w[3 + n], &dims[n], specialization)) return 0;
             ++found;
         }
     }
@@ -345,7 +375,8 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
         return VK_ERROR_FEATURE_NOT_PRESENT;
     uint32_t dims[3];
     if (!local_size(info->stage.module, info->stage.pName, dims,
-                    !!(d->enabled_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE4)))
+                    !!(d->enabled_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE4),
+                    info->stage.pSpecializationInfo))
         return VK_ERROR_UNKNOWN;
 
     const struct ps5vk_compiled_program *program = NULL;
