@@ -1,28 +1,31 @@
 # Supported API profile
 
-`ps5-vulkan` exposes a deliberately bounded Vulkan-style API over the native
-PlayStation 5 graphics stack. The object model follows Vulkan 1.0 closely. Each
+`ps5-vulkan` exposes an experimental Vulkan 1.3 API over the native
+PlayStation 5 graphics stack. This implementation is non-conformant. Each
 capability below states its evidence boundary when it is narrower than native
 hardware acceptance.
 
-This document describes the current ordinary Vulkan 1.0 build, including the
-T08 and T09 extension routes. Earlier measurements below are dated history,
+This document describes the current ordinary Vulkan 1.3 build, including its
+core and extension routes. Earlier measurements below are dated history,
 not the current advertised profile. A missing focused CTS result is not, by
 itself, a reason to reject an otherwise implemented and strictly GPU-witnessed
-capability; an observed CTS failure remains a defect to investigate. The public
-device still reports Vulkan 1.0, and no complete 1.1/1.2/1.3 core contract is
-claimed.
+capability; an observed CTS failure remains a defect to investigate. Reporting
+1.3 selects the consumer negotiation path; it is not a blanket guarantee that
+every core contract, format or resource shape is supported. Unsupported shapes
+remain explicitly bounded below rather than inferred from the version number.
 
-The instance is a Vulkan 1.1 instance: `vkEnumerateInstanceVersion` reports
-1.1, `vkCreateInstance` accepts any variant-0 `VkApplicationInfo::apiVersion`
+`vkEnumerateInstanceVersion` and the physical device report Vulkan 1.3.
+`vkCreateInstance` accepts any variant-0 `VkApplicationInfo::apiVersion`
 instead of returning `VK_ERROR_INCOMPATIBLE_DRIVER` (DXVK 2.6.2 requests 1.3;
 a non-zero variant is still incompatible), and an
 instance created with 1.1 or later resolves the core 1.1 instance- and
 physical-device-level names (`vkEnumeratePhysicalDeviceGroups`, the seven
 `vkGetPhysicalDevice*2` queries and the three external handle queries, which
-report no support). The physical device still reports 1.0, so those queries
-answer exactly as the `VK_KHR_get_physical_device_properties2` route does, and
-device-level core 1.1 names stay unresolved.
+report no support). Aggregate Vulkan 1.1/1.2/1.3 feature and property queries
+reflect the same implemented capabilities as their extension counterparts.
+Implemented promoted core command names resolve directly for the requested API version;
+device creation validates requested features rather than enabling every feature
+associated with that version. Feature-specific extension routes remain available.
 
 ## Capability introspection
 
@@ -36,23 +39,23 @@ DXVK profile. It uses only the public `<ps5vk/ps5vk.h>` ABI and emits one
 The probe is observational: it does not create a device, submit GPU work or
 promote a capability. Its strict verifier recomputes every result from the
 pinned profile and rejects missing, duplicated, reordered or self-inconsistent
-records. Current Vulkan 1.1+ structures being queryable as C types does not
-mean the driver advertises them; the reported device version remains Vulkan
-1.0 until their contracts are implemented and validated.
+records. Query support is not evidence of executing every reported combination;
+the native workload receipts identify the combinations actually measured.
 
-The ordinary Vulkan 1.0 build exposes `VK_EXT_host_query_reset` and its
+The ordinary build exposes `VK_EXT_host_query_reset` and its
 `VkPhysicalDeviceHostQueryResetFeaturesEXT` opt-in, backed by a completed
 precise-query reset/reuse witness. It also exposes
 `VK_KHR_sampler_mirror_clamp_to_edge` through device extension enumeration and
 opt-in, backed by U/V/W native pixel witnesses and one compact 3D W CTS PASS.
-The Vulkan 1.2 aggregate remains unadvertised. Two larger 3D filtering CTS
-leaves failed during image upload before sampling and remain recorded as
+The equivalent fields are also available through the Vulkan 1.2 aggregate.
+Two larger 3D filtering CTS leaves failed during image upload before sampling and remain recorded as
 failures. `imagelessFramebuffer` is reported through
 `VK_KHR_imageless_framebuffer`, which is enumerated only with its registry
 dependencies `VK_KHR_maintenance2` and `VK_KHR_image_format_list`; device
-creation refuses it without both. These measurements alone do not establish
-DXVK execution; the separately recorded diagnostic D3D11 render is not an
-unmodified-DXVK result. See
+creation requires those dependencies through extensions or their promoted
+core versions. These individual witnesses do not by themselves
+establish DXVK execution; see the separate
+[Vulkan 1.3 native workload](VALIDATION.md#experimental-vulkan-13-native-dxvk) and
 [the sampler T09 evidence](VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
 
 ## Core feature negotiation
@@ -126,14 +129,14 @@ have a native witness. This does not report BALLOT, ARITHMETIC,
   (`ALL_CLIP_PLANES`) and upper-left tessellation domain origin.
 - The graphics build reports `shaderDemoteToHelperInvocation` through
   `VK_EXT_shader_demote_to_helper_invocation` and `shaderTerminateInvocation`
-  through `VK_KHR_shader_terminate_invocation`. Each needs
-  `VK_KHR_get_physical_device_properties2` on the instance and its own
-  extension for its own feature structure. `OpKill`, `OpTerminateInvocation`
+  through `VK_KHR_shader_terminate_invocation`. Older API requests use the
+  properties2 and feature-specific extension routes; promoted core requests
+  use the equivalent core structures. `OpKill`, `OpTerminateInvocation`
   and `OpDemoteToHelperInvocation` (SPIR-V 1.6 core, or the 1.3 EXT form) keep
   removed pixels out of the colour, depth and stencil targets. A demoted
   invocation keeps running as a helper, so derivatives its quad takes after the
   demote stay defined; after `OpTerminateInvocation` they are undefined, as the
-  specification states. The Vulkan 1.3 aggregate remains unadvertised.
+  specification states. Both fields are mirrored in the Vulkan 1.3 aggregate.
 - Multiple logical devices share one serialized process-level AGC session and
   direct-memory budget. The module and shared graphics compiler cache are
   released only after the final device closes; each device still owns and must
@@ -387,7 +390,8 @@ smaller incompatible layer pitches. The graphics profile reports
 
 ## Compute
 
-- The reported core API remains Vulkan 1.0. Narrow storage is negotiated through
+- Narrow storage is negotiated through the Vulkan 1.1/1.2 aggregate structures,
+  or through
   `VK_KHR_get_physical_device_properties2`,
   `VK_KHR_storage_buffer_storage_class`, `VK_KHR_8bit_storage` and
   `VK_KHR_16bit_storage`.
@@ -398,12 +402,12 @@ smaller incompatible layer pitches. The graphics profile reports
   `uniformAndStorageBuffer8BitAccess`, `storagePushConstant8`,
   `uniformAndStorageBuffer16BitAccess`, `storagePushConstant16` and
   `storageInputOutput16` remain false.
-- The Vulkan 1.0 profile exposes bounded `bufferDeviceAddress` through
+- The profile exposes bounded `bufferDeviceAddress` through
   `VK_KHR_buffer_device_address`, and `vulkanMemoryModel` plus
   `vulkanMemoryModelDeviceScope` through `VK_KHR_vulkan_memory_model`. Each
-  requires its KHR feature structure and explicit device opt-in; DeviceScope
-  additionally requires the base memory model. The Vulkan 1.2 aggregate
-  feature structure is not exposed. Address use is limited to live, bound
+  uses its KHR feature structure or the Vulkan 1.2 aggregate with explicit
+  device opt-in; DeviceScope additionally requires the base memory model.
+  Address use is limited to live, bound
   shader-address buffers, including nonzero bind offsets; capture replay,
   multi-device addressing and memory-model availability/visibility chains
   remain unsupported. The DeviceScope witness covers bounded same-dispatch
@@ -432,8 +436,8 @@ smaller incompatible layer pitches. The graphics profile reports
   this API state machine; hardware evidence is stated only when a corresponding
   native receipt is listed in `VALIDATION.md`.
 - One descriptor set holds up to 1024 descriptors (`maxPerSetDescriptors`,
-  answered through the Vulkan 1.1 maintenance3 structure once that version is
-  reported). The graphics profile reports `maxPerStageDescriptorSampledImages`,
+  answered through the maintenance3 and aggregate property structures).
+  The graphics profile reports `maxPerStageDescriptorSampledImages`,
   `maxDescriptorSetSampledImages` and `maxPerStageResources` at 1024: a native
   witness reads 1024 distinct sampled images from one fragment-stage set, and
   1023 sampled images or 1023 uniform texel buffers from a 1024-descriptor
@@ -474,9 +478,8 @@ smaller incompatible layer pitches. The graphics profile reports
   advance.
   `maxTimelineSemaphoreValueDifference` is `UINT64_MAX` because every value is
   ordered with full-width comparisons. The extension and its feature are
-  reported by the shipping build on Vulkan 1.0 through
-  `VK_KHR_get_physical_device_properties2`; `vkCreateDevice` refuses the
-  extension without that instance extension.
+  reported through the core Vulkan 1.2 aggregate or the KHR query/opt-in
+  route. Older API requests retain the extension dependency checks.
 - Vulkan 1.0 events support host and recorded device set/reset plus waits inside
   or across primary command buffers. Event transitions are segmented from GPU
   jobs, and `vkCmdWaitEvents` preserves its validated memory dependency without
@@ -806,8 +809,8 @@ pending work with a bounded wait, consumes signaled binary wait semaphores and
 presents an image in `VK_IMAGE_LAYOUT_PRESENT_SRC_KHR`. Destroy the swapchain
 before its surface and device. Other display modes, extents, formats, present
 modes, sharing modes and swapchain replacement remain outside this profile.
-The device API version remains Vulkan 1.0; any higher instance loader version
-reported by `vkEnumerateInstanceVersion` does not promote device core features.
+Instance and device API versions are 1.3; the bounded presentation contract
+does not expand with that version number.
 An SDK-linked native witness using the pinned DXVK PS5 WSI adapter created a
 display-plane surface, acquired and presented three frames in slots 0/1/0,
 observed three bounded GPU-fence completions and three matching VideoOut flip
@@ -823,7 +826,7 @@ requires the former) and `VK_KHR_bind_memory2` are Vulkan 1.0 extension routes
 reported by the PS5 platform, together with `VK_KHR_descriptor_update_template`;
 a public-SDK witness exercises all four on hardware. `vkCreateDevice` accepts
 them with their dependencies and the five `*2KHR` commands become visible; the
-core-1.1 names stay absent. The
+equivalent promoted core names are available with the corresponding API version. The
 queries return exactly the Vulkan 1.0 requirements, and
 `VkMemoryDedicatedRequirements` reports neither a preference nor a requirement.
 `VkMemoryDedicatedAllocateInfo` must name one live, unbound resource and its
@@ -831,20 +834,22 @@ exact size; that memory then binds only that resource, at offset 0. The bind
 commands validate every element before binding any, and accept only the
 single-device group structures.
 
-`VK_KHR_maintenance4` depends on Vulkan 1.1 in the pinned registry, with no
-extension alternative, so this Vulkan 1.0 device neither lists nor accepts it
-and reports `maintenance4` false. Its three `vkGetDevice*MemoryRequirementsKHR`
-queries are implemented for when the device version allows the route: they
+The ordinary profile reports `maintenance4` through its Vulkan 1.3 feature
+structure and `VK_KHR_maintenance4`. Its three
+`vkGetDevice*MemoryRequirements` commands and KHR aliases
 answer exactly what creating the described object and querying it would, and
 zero (including `memoryTypeBits`) for a description `vkCreateBuffer` or
 `vkCreateImage` refuses. `VkPhysicalDeviceMaintenance4Properties::maxBufferSize`
 is the single-allocation budget (1 GiB on the graphics profile, the extension's
 minimum). With `maintenance4` enabled, compute pipelines accept
-`LocalSizeId` whose operands are 32-bit `OpConstant`s (specialization
-constants are refused). A default-off diagnostic build switch,
-`PS5VK_MAINTENANCE4_DIAGNOSTIC`, opens the route on the 1.0 device for
-diagnostic DXVK measurement only; such a build is knowingly non-conformant and
-never ships.
+`LocalSizeId` whose operands are 32-bit integer `OpConstant`s or direct
+`OpSpecConstant`s; the latter use the supplied specialization map or their
+declared defaults. Compound `OpSpecConstantOp` workgroup expressions remain
+unsupported. The old maintenance4 SDK diagnostic switch has been retired.
+The graphics interface still requires matching producer/consumer vector widths;
+a wider producer vector is not admitted through maintenance4's relaxed matching
+rule. Thus the feature's bounded memory-query and compute routes do not imply
+general maintenance4 conformance.
 The ordinary graphics profile exposes the second memory type with the same
 heap and backing as type 0 plus `HOST_COHERENT`; its diagnostic switch has
 been retired. The driver keeps it coherent instead of the application:
@@ -865,7 +870,7 @@ The public driver interface exposes standard Vulkan 1.0 bookkeeping entry points
 - `vkGetDeviceMemoryCommitment`: Queries memory commitment in `*pCommittedMemoryInBytes`. Because ps5vk exposes no memory type with `VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT` and does not support lazily allocated memory, ordinary allocations are not reported as lazily committed, and the query safely reports 0 bytes committed (`*pCommittedMemoryInBytes = 0`).
 - `vkGetImageSubresourceLayout`: Queries image subresource layout. Tiled images report a zeroed structure (`*pLayout = {0}`) rather than a fabricated linear row or depth pitch. The one linear image this profile creates - the RGBA8 transfer-destination staging image described above - reports its real padded linear `offset`, `rowPitch`, `depthPitch`, `arrayPitch` and `size`; any other subresource of it, and every subresource of a tiled image, is zeroed.
 - `vkGetRenderAreaGranularity`: Returns `(1, 1)` pixel render area granularity for valid render passes (`offset = 0`, full pixel granularity).
-- Render-pass `pNext`: exactly one `VkRenderPassMultiviewCreateInfo` is understood and owned. View-mask counts must match the pass; an omitted view-offset array (count zero) means zero offsets. Non-zero offsets require valid view-local dependencies between distinct subpasses. Masks must be all zero or all non-zero; correlation masks must be disjoint. Unknown or duplicate chained structures fail closed. The measured graphics/runtime-compiler path exposes `VK_KHR_multiview`, `multiview=true`, `maxMultiviewViewCount=6` and `maxMultiviewInstanceIndex=134217727`. The bounded path supports up to eight ordered subpasses and vertex/fragment ViewIndex, array attachment clears and readback. Geometry/tessellation multiview remains false. Correlation masks remain hints, not commands. This does not enable Vulkan 1.2 aggregate query structures or change the Vulkan 1.0 API version. See [native validation](VALIDATION.md#multiview-native-acceptance).
+- Render-pass `pNext`: exactly one `VkRenderPassMultiviewCreateInfo` is understood and owned. View-mask counts must match the pass; an omitted view-offset array (count zero) means zero offsets. Non-zero offsets require valid view-local dependencies between distinct subpasses. Masks must be all zero or all non-zero; correlation masks must be disjoint. Unknown or duplicate chained structures fail closed. The measured graphics/runtime-compiler path exposes `VK_KHR_multiview`, `multiview=true`, `maxMultiviewViewCount=6` and `maxMultiviewInstanceIndex=134217727`. The bounded path supports up to eight ordered subpasses and vertex/fragment ViewIndex, array attachment clears and readback. Geometry/tessellation multiview remains false. Correlation masks remain hints, not commands. The core Vulkan 1.1 aggregate mirrors those same bounded capabilities. See [native validation](VALIDATION.md#multiview-native-acceptance).
 - `vkResetDescriptorPool`: Resets all descriptor sets allocated from a descriptor pool back to the pool, preserving pool allocation state without requiring pool destruction.
 
 ## Queries and sparse image queries

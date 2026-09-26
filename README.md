@@ -18,12 +18,12 @@
   <a href="https://github.com/mpereiraesaa/ps5-vulkan/issues">Report an issue</a>
 </p>
 
-An experimental, hardware-accelerated Vulkan-style graphics and compute API
+An experimental, hardware-accelerated Vulkan 1.3 implementation
 for native PlayStation 5 homebrew, targeting the console's **gfx1013 GPU**.
 It provides a static SDK, runtime SPIR-V compilation and native 1080p
-presentation. The public device reports **Vulkan 1.0**, with selected newer
-features exposed through explicit extension routes—not a complete core-version
-or Vulkan conformance claim.
+presentation. The instance and device report **Vulkan 1.3**. This is a
+**non-conformant experimental implementation**; the supported features,
+formats and resource limits are documented in [API.md](API.md).
 
 ## What works
 
@@ -55,19 +55,19 @@ Host CI alone does not establish hardware correctness.
 
 ## Current runtime milestone
 
-Pinned DXVK 2.6.2 D3D11/DXGI has rendered an offscreen workload on PS5 in a
-labelled **diagnostic configuration**: feature-level 11_0 device creation,
-shaders, draw, staging copy and readback, with all 4096 pixels matching the
-oracle and clean shutdown/relaunch.
+The Vulkan 1.3 route exposes promoted feature queries and commands directly,
+including synchronization2, dynamic rendering and maintenance4. The pinned
+DXVK 2.6.2 D3D11/DXGI workload no longer needs the old version-filter bypass,
+feature-level relaxation, or payload-side core/extension translation.
+Platform build and WSI adaptations remain separate from DXVK's rendering logic.
 
-That measured configuration used consumer patches and core-name/query
-translation. Its driver routes have since shipped except maintenance4;
-the combined workload needs a fresh measurement with the remaining adaptations
-recorded. **Unmodified DXVK still stops at the Vulkan 1.0 device filter.**
-The offscreen result is not a presented DXVK frame or general game compatibility.
+The acceptance workload creates a feature-level 11_0 device, renders and reads
+back 4096 pixels, and checks clean teardown. Its artifact-bound status is in the
+[native result](VALIDATION.md#experimental-vulkan-13-native-dxvk).
+An offscreen result is not a presented DXVK frame or general game compatibility.
 
-Read the [native result](VALIDATION.md#dxvk-262-d3d11-diagnostic-render-on-ps5-2026-09-25)
-and [runtime backlog](docs/DXVK_V262_BACKLOG.md) for the remaining work.
+Read the [runtime backlog](docs/DXVK_V262_BACKLOG.md)
+for the remaining work.
 There is no Vulkan loader/ICD. Focused [CTS results](UPSTREAM_CTS.md) are
 diagnostic evidence, not a full conformance claim or a blanket delivery gate.
 
