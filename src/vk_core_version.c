@@ -471,19 +471,19 @@ VkResult ps5vk_core_version_enable(VkPhysicalDevice p, const VkBaseInStructure *
     memset(&reported, 0, sizeof(reported));
     switch (next->sType) {
     case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
-        size = sizeof(VkPhysicalDeviceVulkan11Features);
+        size = offsetof(VkPhysicalDeviceVulkan11Features, shaderDrawParameters) + sizeof(VkBool32);
         first = offsetof(VkPhysicalDeviceVulkan11Features, storageBuffer16BitAccess);
         minimum = VK_API_VERSION_1_2; flag = 1u;
         fill_vulkan11_features(p, &reported.v11);
         break;
     case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
-        size = sizeof(VkPhysicalDeviceVulkan12Features);
+        size = offsetof(VkPhysicalDeviceVulkan12Features, subgroupBroadcastDynamicId) + sizeof(VkBool32);
         first = offsetof(VkPhysicalDeviceVulkan12Features, samplerMirrorClampToEdge);
         minimum = VK_API_VERSION_1_2; flag = 2u;
         fill_vulkan12_features(p, &reported.v12);
         break;
     case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
-        size = sizeof(VkPhysicalDeviceVulkan13Features);
+        size = offsetof(VkPhysicalDeviceVulkan13Features, maintenance4) + sizeof(VkBool32);
         first = offsetof(VkPhysicalDeviceVulkan13Features, robustImageAccess);
         minimum = VK_API_VERSION_1_3; flag = 4u;
         fill_vulkan13_features(p, &reported.v13);

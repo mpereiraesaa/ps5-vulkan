@@ -236,6 +236,9 @@ static void graphics_core13_negotiation(void)
     assert(v13.dynamicRendering && v13.dynamicRendering == rendering.dynamicRendering);
     assert(!v13.maintenance4 && !v13.privateData && !v13.robustImageAccess);
     v13.pNext = NULL;
+    /* ABI tail padding is not a requested feature and may contain any bytes. */
+    const size_t last = offsetof(VkPhysicalDeviceVulkan13Features, maintenance4) + sizeof(VkBool32);
+    memset((unsigned char *)&v13 + last, 0xa5, sizeof(v13) - last);
     VkDevice d = VK_NULL_HANDLE;
     assert(create(p, &v13, &d) == VK_SUCCESS);
     assert(d->enabled_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2);
