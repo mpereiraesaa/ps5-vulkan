@@ -123,6 +123,15 @@ EXTENSION_ROUTES = {
         "detail": ("Reviewed EXT feature query and opt-in; VK_NULL_HANDLE descriptors and vertex "
                    "buffers become all-zero records that read zero."),
     },
+    "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering": {
+        "extension": "VK_KHR_dynamic_rendering",
+        "field": "dynamicRendering",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_dynamic_rendering.c",
+                 "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed KHR feature query and opt-in with the depth_stencil_resolve "
+                   "dependency; vkCmdBeginRenderingKHR records onto the render-pass path "
+                   "and pipelines take their formats from VkPipelineRenderingCreateInfo."),
+    },
 }
 DIAGNOSTIC_IMPLEMENTATIONS = {
     "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge": (
@@ -448,7 +457,7 @@ def implemented_device_extensions() -> set[str]:
     for name in (
 
 
-        "PS5VK_DXVK_RENDER_DIAGNOSTIC",
+        "PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC",
 
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",

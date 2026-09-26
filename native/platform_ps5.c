@@ -368,13 +368,18 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features_t09 |=
         PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION |
         PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
-#if defined(PS5VK_DXVK_RENDER_DIAGNOSTIC) && PS5VK_DXVK_RENDER_DIAGNOSTIC
-    /* Private measurement build (DXVK262-T10): report the DXVK first-draw
-     * recording routes so the witness negotiates them through the public API
-     * before any shipping platform advertises them. */
-    platform->supported_features_t09 |= PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE |
-        PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
-        PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1;
+    /* DXVK's first-draw recording routes (DXVK262-T10): dynamic rendering
+     * with its depth/stencil resolve dependency, copy commands 2 and
+     * maintenance1 (negative viewport height); the SDK-linked render witness
+     * rendered, copied back and compared through all of them. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_COPY_COMMANDS2 |
+        PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE | PS5VK_T09_FEATURE_DYNAMIC_RENDERING |
+        PS5VK_T09_FEATURE_MAINTENANCE1;
+#if defined(PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC) && PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC
+    /* Private measurement build only: VK_EXT_extended_dynamic_state. Dynamic
+     * primitive topology and vertex input binding stride are still refused, so
+     * the ordinary profile does not report it. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE;
 #endif
     /* DXVK262-T14 transform feedback on the graphics path. The public-SDK
      * capture witness verified, on the pinned compiler's ordered no-GDS

@@ -403,6 +403,18 @@ ADVERTISED_FEATURES["nullDescriptor"] = {
     "profiles": ("graphics",),
     "cts": (),
 }
+ADVERTISED_FEATURES["dynamicRendering"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_T09_FEATURE_DYNAMIC_RENDERING |"),
+        ("src/vk_device.c", "VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME"),
+        ("src/vk_dynamic_rendering.c", "vkCmdBeginRenderingKHR"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR route with its depth_stencil_resolve dependency records "
+               "vkCmdBeginRenderingKHR onto the render-pass path; the public-SDK render "
+               "witness drew, copied back and compared through it"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
 ADVERTISED_FEATURES["synchronization2"] = {
     "citations": (
         ("native/platform_ps5.c", "platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;"),
@@ -1402,7 +1414,8 @@ def main() -> int:
                      "separateDepthStencilLayouts", "shaderDemoteToHelperInvocation",
                      "shaderTerminateInvocation", "synchronization2", "transformFeedback", "geometryStreams",
                      "imagelessFramebuffer",
-                     "robustBufferAccess2", "nullDescriptor"):
+                     "robustBufferAccess2", "nullDescriptor",
+                     "dynamicRendering"):
 
             value = dump["extensionFeatures"][name]
             verdict, detail = evaluate_feature(name, value, profile)

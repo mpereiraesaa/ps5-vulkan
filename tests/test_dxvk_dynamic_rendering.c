@@ -190,6 +190,13 @@ static void negotiation(void)
     vkDestroyDevice(d, NULL); d = VK_NULL_HANDLE;
     assert(create(p, 3, VK_FALSE, &d) == VK_SUCCESS && d);
     assert(!vkGetDeviceProcAddr(d, "vkCmdBeginRenderingKHR"));
+    vkDestroyDevice(d, NULL); d = VK_NULL_HANDLE;
+    /* The pinned CTS multiview device shape: the queried chain (feature now
+     * true) with only the multiview dependencies enabled. It is created, and
+     * the feature enables nothing without the extension. */
+    assert(create(p, 3, VK_TRUE, &d) == VK_SUCCESS && d);
+    assert(!d->dynamic_rendering_extension_enabled && !d->dynamic_rendering_enabled);
+    assert(!vkGetDeviceProcAddr(d, "vkCmdBeginRenderingKHR"));
     vkDestroyDevice(d, NULL);
     vkDestroyInstance(i, NULL);
 }

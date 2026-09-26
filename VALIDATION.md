@@ -6440,3 +6440,47 @@ The frozen acceptance selection on this tree (eboot
 `780569182278a664dffb21711a01ac39100933bb6e27d5e73169c73c6917a843`: API 1.0.0,
 24 device extensions, 35/62. The DXVK matrix is unchanged at **33/62 ready and
 29 blockers**.
+
+## Render route promotion: dynamic rendering, copy2, maintenance1 (2026-09-26)
+
+`PS5VK_DXVK_RENDER_DIAGNOSTIC` is retired. The ordinary profile enumerates
+`VK_KHR_dynamic_rendering` with its `VK_KHR_depth_stencil_resolve` dependency,
+`VK_KHR_copy_commands2` and `VK_KHR_maintenance1`, and reports
+`dynamicRendering` through an explicit `VK_KHR_dynamic_rendering` route query.
+`VK_EXT_extended_dynamic_state` does not ship: dynamic primitive topology and
+vertex input binding stride are still refused, so it moved onto its own
+measurement switch, `PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC`.
+
+The pinned CTS multiview device copies the queried feature chain, so once
+`dynamicRendering` is reported it arrives true with only `VK_KHR_multiview`
+enabled. The first acceptance run of this tree refused that device
+(48 multiview query leaves, `VK_ERROR_FEATURE_NOT_PRESENT`, eboot
+`f9fc0285492d90031e9984435573bb02daafde52cd14c60056c8e2155a97350b`, run
+`20260926T021558452Z_PPSA99994_upstream-cts_0x6b2dda13d14e`). A reported
+`dynamicRendering` without the extension is now accepted and enables nothing,
+because the commands stay unreachable without it; an unreported one is still
+refused. `tests/test_dxvk_dynamic_rendering.c` reproduces the CTS shape.
+
+The public-SDK render witness (the ordinary routes plus the extended dynamic
+state switch, which it uses to toggle cull mode and front face) draws with
+`vkCmdBeginRenderingKHR`, a negative-height viewport, and reads the target back
+with `vkCmdCopyImageToBuffer2KHR`: eboot SHA-256
+`134c43570a7a6a3884e99390e59756c480a082a1eef70475f2c3d904d1b9a8d9`, run
+`20260926T021545840Z_PPSA99994_ps5vk_0x6b2aea5c885d`, log SHA-256
+`df5e46667313dd007425bcc9a04353ce5ed39ff2320b655248a502ec7004f78c`, strict:
+zero full, sub-rectangle and sentinel mismatches, four visible markers,
+digest `2da9cdc5`.
+
+The frozen acceptance selection on the fixed tree (eboot
+`34c3c6ae32d73e8986d569ebd73bb95ae9f014a325ac9d95d023bb676389b4b3`, run
+`20260926T022757688Z_PPSA99994_upstream-cts_0x6bd54f5f311a`, log SHA-256 `3ca3741d1de0debc701d8713eafef6e9c7db2c47cff46336c6e04cd836bbb22c`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`a295d0eb7b7e39c79f557865adb0bcda2bbae8ca14587a1962e013f58c467607`, run
+`20260926T021539591Z_PPSA99994_ps5vk_0x6b2975cfcf67`, log SHA-256
+`b455edbd68f6d58a0e18796fa45ffddd837b7d2ba7a149bc8c995e5c917990d2`: API 1.0.0,
+24 device extensions, 36/62. The probe and the render witness predate the
+`vkCreateDevice` fix above, which only admits a reported feature without its
+extension; neither the reporting they measured nor the extension-enabled route
+the witness drove changes. The DXVK matrix has **34/62 ready and 28
+blockers**.
