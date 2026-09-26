@@ -28,20 +28,23 @@ IMAGES = 1024
 SIDE = 32
 DRAWS, STRIDE = 4, 256
 VERTEX = "experiments/graphics/consumer_cube_array.vert"
-PROFILES = {"capacity": "descriptor-capacity-public-sdk-witness",
+BISECT = (128, 256, 512, 768, 1023)
+PROFILES = {"bisect": "descriptor-bisect-public-sdk-witness",
+            "capacity": "descriptor-capacity-public-sdk-witness",
             "dynamic": "descriptor-dynamic-public-sdk-witness"}
-CONTENT = {"capacity": "UP9000-PPSA99994_00-PS5VKDSCAP000001",
+CONTENT = {"bisect": "UP9000-PPSA99994_00-PS5VKDSBIS000001",
+           "capacity": "UP9000-PPSA99994_00-PS5VKDSCAP000001",
            "dynamic": "UP9000-PPSA99994_00-PS5VKDSDYN000001"}
 
 
-def capacity_compute_source() -> str:
+def capacity_compute_source(images: int = IMAGES - 1) -> str:
     lines = ["#version 450", "#extension GL_EXT_samplerless_texture_functions : require",
              "layout(local_size_x=1) in;",
-             f"layout(set=0,binding=0) uniform texture2D images[{IMAGES - 1}];",
+             f"layout(set=0,binding=0) uniform texture2D images[{images}];",
              "layout(set=0,binding=1,std430) writeonly buffer Out { uint v[]; } o;",
              "void main()", "{"]
     lines += [f"    o.v[{k}]=packUnorm4x8(texelFetch(images[{k}],ivec2(0),0));"
-              for k in range(IMAGES - 1)]
+              for k in range(images)]
     return "\n".join(lines + ["}"]) + "\n"
 
 
@@ -83,7 +86,9 @@ def shader_sources() -> dict:
             "descriptor_capacity_frag_spirv": ("frag", capacity_fragment_source()),
             "descriptor_dynamic_comp_spirv": ("comp", DYNAMIC_COMPUTE),
             "descriptor_dynamic_frag_spirv": ("frag", DYNAMIC_FRAGMENT),
-            "descriptor_capacity_vert_spirv": ("vert", (ROOT / VERTEX).read_text())}
+            "descriptor_capacity_vert_spirv": ("vert", (ROOT / VERTEX).read_text()),
+            **{f"descriptor_bisect_{n}_spirv": ("comp", capacity_compute_source(images))
+               for n, images in enumerate(BISECT)}}
 
 
 def compile_shaders(glslang: str, build: Path) -> dict:
@@ -147,6 +152,7 @@ def main() -> None:
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         "-MD", "-MP", "-MF", str(dep),
         *(["-DDESCRIPTOR_WITNESS_DYNAMIC=1"] if variant == "dynamic" else []),
+        *(["-DDESCRIPTOR_WITNESS_BISECT=1"] if variant == "bisect" else []),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger), "-c", str(source), "-o", str(obj), env=sdk_env)
     dependencies = dep.read_text()

@@ -34,7 +34,15 @@
 #include <time.h>
 #include <unistd.h>
 
-#if defined(DESCRIPTOR_WITNESS_DYNAMIC)
+#if defined(DESCRIPTOR_WITNESS_BISECT)
+/* The bisect variant uses only pipeline creation. */
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-const-variable"
+#endif
+
+#if defined(DESCRIPTOR_WITNESS_BISECT)
+#define MARK "DESCRIPTOR_BISECT_WITNESS"
+#elif defined(DESCRIPTOR_WITNESS_DYNAMIC)
 #define MARK "DESCRIPTOR_DYNAMIC_WITNESS"
 #else
 #define MARK "DESCRIPTOR_CAPACITY_WITNESS"
@@ -252,7 +260,86 @@ static VkResult submit_wait(VkDevice device, VkQueue queue, VkFence fence,
     return vkResetFences(device, 1, &fence);
 }
 
-#if !defined(DESCRIPTOR_WITNESS_DYNAMIC)
+#if defined(DESCRIPTOR_WITNESS_BISECT)
+#include <stdlib.h>
+/* Heap headroom, then compute pipelines over sets of 128..1023 sampled
+ * images (plus the output buffer), each compiled on its own, no dispatch.
+ * The last STEP line names the largest size that compiled. */
+static const uint32_t *const bisect_code[] = {descriptor_bisect_0_spirv, descriptor_bisect_1_spirv,
+    descriptor_bisect_2_spirv, descriptor_bisect_3_spirv, descriptor_bisect_4_spirv};
+static const size_t bisect_bytes[] = {sizeof(descriptor_bisect_0_spirv),
+    sizeof(descriptor_bisect_1_spirv), sizeof(descriptor_bisect_2_spirv),
+    sizeof(descriptor_bisect_3_spirv), sizeof(descriptor_bisect_4_spirv)};
+static const uint32_t bisect_images[] = {128, 256, 512, 768, 1023};
+static int run_witness(void)
+{
+    VkResult result = VK_SUCCESS;
+    const char *failed = NULL;
+#define TRY(call) do { result = (call); if (result != VK_SUCCESS) { \
+    failed = #call; goto cleanup; } } while (0)
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    for (unsigned mib = 16; mib <= 1024; mib *= 2) {
+        void *probe = malloc((size_t)mib << 20);
+        ps5log_printf(PS5LOG_MARK, MARK "_HEAP mib=%u ok=%d", mib, probe != NULL);
+        if (!probe) break;
+        memset(probe, 0x5a, (size_t)mib << 20);
+        free(probe);
+    }
+    VkInstanceCreateInfo instance_info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    TRY(vkCreateInstance(&instance_info, NULL, &instance));
+    uint32_t count = 1;
+    VkPhysicalDevice physical = VK_NULL_HANDLE;
+    TRY(vkEnumeratePhysicalDevices(instance, &count, &physical));
+    float priority = 1.0f;
+    VkDeviceQueueCreateInfo queue_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = 0, .queueCount = 1, .pQueuePriorities = &priority};
+    VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info};
+    TRY(vkCreateDevice(physical, &device_info, NULL, &device));
+    ps5log_printf(PS5LOG_MARK, MARK "_START sizes=128,256,512,768,1023");
+    for (unsigned n = 0; n < 5; ++n) {
+        VkDescriptorSetLayoutBinding bindings[2] = {
+            {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, bisect_images[n], VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+            {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+        VkDescriptorSetLayoutCreateInfo set_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = 2, .pBindings = bindings};
+        VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkShaderModule module = VK_NULL_HANDLE;
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        TRY(vkCreateDescriptorSetLayout(device, &set_info, NULL, &set_layout));
+        VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .setLayoutCount = 1, .pSetLayouts = &set_layout};
+        TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
+        VkShaderModuleCreateInfo shader_info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = bisect_bytes[n], .pCode = bisect_code[n]};
+        TRY(vkCreateShaderModule(device, &shader_info, NULL, &module));
+        ps5log_printf(PS5LOG_MARK, MARK "_STEP compile images=%u", bisect_images[n]);
+        VkComputePipelineCreateInfo compute_info = {
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                      .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = module, .pName = "main"},
+            .layout = layout};
+        result = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &compute_info, NULL, &pipeline);
+        ps5log_printf(PS5LOG_MARK, MARK "_STEP compiled images=%u result=%d", bisect_images[n], (int)result);
+        if (pipeline) vkDestroyPipeline(device, pipeline, NULL);
+        vkDestroyShaderModule(device, module, NULL);
+        vkDestroyPipelineLayout(device, layout, NULL);
+        vkDestroyDescriptorSetLayout(device, set_layout, NULL);
+        if (result != VK_SUCCESS) { failed = "vkCreateComputePipelines"; goto cleanup; }
+    }
+cleanup:
+    if (device) vkDestroyDevice(device, NULL);
+    if (instance) vkDestroyInstance(instance, NULL);
+    if (result == VK_SUCCESS) ps5log_printf(PS5LOG_MARK, MARK "_RETIRED resources=clean");
+    else ps5log_printf(PS5LOG_ERR, MARK "_FAILURE call=%s result=%d retirement=attempted",
+                       failed ? failed : "unknown", (int)result);
+    return result == VK_SUCCESS ? 0 : 1;
+#undef TRY
+}
+#elif !defined(DESCRIPTOR_WITNESS_DYNAMIC)
 enum { IMAGES = 1024, COMPUTE_IMAGES = IMAGES - 1, SIDE = 32, BATCH = 16 };
 
 static uint32_t texel(uint32_t k)
