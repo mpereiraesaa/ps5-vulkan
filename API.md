@@ -52,8 +52,8 @@ Two larger 3D filtering CTS leaves failed during image upload before sampling an
 failures. `imagelessFramebuffer` is reported through
 `VK_KHR_imageless_framebuffer`, which is enumerated only with its registry
 dependencies `VK_KHR_maintenance2` and `VK_KHR_image_format_list`; device
-creation on the extension route refuses it without both; the core route uses
-the promoted contracts. These individual witnesses do not by themselves
+creation requires those dependencies through extensions or their promoted
+core versions. These individual witnesses do not by themselves
 establish DXVK execution; see the separate
 [Vulkan 1.3 native workload](VALIDATION.md#experimental-vulkan-13-native-dxvk) and
 [the sampler T09 evidence](VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
