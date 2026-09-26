@@ -33,6 +33,13 @@ enum ps5vk_runtime_fragment_export {
  * pipeline carries the enabled dualSrcBlend contract. */
 int ps5vk_runtime_fragment_export(const PsbcShaderMetadata *metadata);
 
+/* VK_EXT_transform_feedback (DXVK262-T14): whether a compiled pre-raster
+ * program captures into exactly the XfbBuffer mask `buffers` (zero: captures
+ * nothing). A capture is described only for the merged vertex+geometry
+ * program: its streamout table pointer in a user-data dword, a stride for
+ * every written buffer, and each buffer on one stream. */
+int ps5vk_runtime_streamout_matches(const PsbcShaderMetadata *metadata, uint32_t buffers);
+
 /* Header construction only. Code upload, cache publication, AGC creation and
  * linking remain caller responsibilities. The bounded profile permits the
  * compiler-described vertex-buffer table and one fragment combined-image

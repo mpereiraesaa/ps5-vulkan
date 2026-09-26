@@ -551,6 +551,8 @@ test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 		--compiler $(GLSLANG)
 	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -Ibuild/resolve -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c native/resolve_program.c src/color_attachment_contract.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
 	./build/tests/test_runtime_graphics_compiler
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -Ibuild/resolve -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c native/resolve_program.c src/color_attachment_contract.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_xfb_compile.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_xfb_compile
+	./build/tests/test_xfb_compile
 .PHONY: test-runtime-graphics-native
 test-runtime-graphics-native:
 	mkdir -p build/tests
@@ -627,6 +629,10 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_probe.vert -o build/runtime-graphics/geometry_probe.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_geometry_identity.vert -o build/runtime-graphics/geometry_identity.vert.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_probe.geom -o build/runtime-graphics/geometry_probe.geom.spv
+	$(GLSLANG) -V experiments/graphics/xfb_capture.vert -o build/runtime-graphics/xfb_capture.vert.spv
+	$(GLSLANG) -V experiments/graphics/xfb_capture.frag -o build/runtime-graphics/xfb_capture.frag.spv
+	$(GLSLANG) -V -S geom experiments/graphics/xfb_capture.geom -o build/runtime-graphics/xfb_capture.geom.spv
+	$(GLSLANG) -V -S geom experiments/graphics/xfb_streams.geom -o build/runtime-graphics/xfb_streams.geom.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_envelope.geom -o build/runtime-graphics/geometry_envelope.geom.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_invocations.geom -o build/runtime-graphics/geometry_invocations.geom.spv
 	$(GLSLANG) -V -S geom experiments/graphics/runtime_geometry_primitive_id.geom -o build/runtime-graphics/geometry_primitive_id.geom.spv

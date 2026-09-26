@@ -526,10 +526,14 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * interval itself is PA_SC_VPORT_ZMIN/ZMAX, already programmed above from
      * the viewport's ordered min/max depth, and DB_RENDER_OVERRIDE keeps the
      * viewport clamp enabled. Lateral clipping and the W semantics are
-     * untouched. Negative-one-to-one depth and rasterizer discard are not
-     * supported by this profile. */
+     * untouched. Negative-one-to-one depth is not supported by this profile.
+     * Rasterizer discard, admitted only for a transform feedback capture
+     * pipeline (DXVK262-T14), is DX_RASTERIZATION_KILL (bit 22), exactly as
+     * RADV programs it: the pre-raster program still runs and captures, and
+     * no primitive reaches the scan converter. */
     result.cx[result.cx_count++] = (ps5_agc_register){0x204, (1u << 19) | (1u << 24) |
-        (raster->depth_clamp ? (1u << 26) | (1u << 27) : 0u)};
+        (raster->depth_clamp ? (1u << 26) | (1u << 27) : 0u) |
+        (p->rasterizer_discard ? (1u << 22) : 0u)};
     /* Compiler PAL PA_SU_VTX_CNTL, packed with the pinned Mesa schema:
      * pixel center 1, round-to-even 2, 1/256 quantization mode 5. Do not rely
      * on an inherited AGC initialization value for rasterization precision. */

@@ -219,6 +219,33 @@ static int merged_source_valid(const PsbcShaderMetadata *m)
     return 0;
 }
 
+/* The buffers a described capture writes: the metadata mask carries one
+ * nibble per stream (RADV so.enabled_stream_buffers_mask), and a buffer that
+ * appears on two streams is not a capture this ABI describes. Zero when the
+ * capture is not described at all. */
+static uint32_t streamout_buffers(const PsbcShaderMetadata *m)
+{
+    if(!m->streamout_valid || m->source_stage!=PSBC_STAGE_GEOMETRY || !m->merged_geometry ||
+       m->hardware_stage!=PSBC_HW_STAGE_NGG ||
+       m->streamout_buffer_table_user_data_dword>=m->user_sgpr_count ||
+       !m->streamout_enabled_stream_buffers_mask ||
+       m->streamout_enabled_stream_buffers_mask>0xffffu)return 0;
+    uint32_t written=0;
+    for(unsigned s=0;s<4;++s) {
+        const uint32_t nibble=(m->streamout_enabled_stream_buffers_mask>>(4u*s))&15u;
+        if(written&nibble)return 0;
+        written|=nibble;
+    }
+    for(unsigned b=0;b<4;++b)
+        if(!!(written&(1u<<b))!=!!m->streamout_strides_dwords[b])return 0;
+    return written;
+}
+int ps5vk_runtime_streamout_matches(const PsbcShaderMetadata *m, uint32_t buffers)
+{
+    if(!m)return 0;
+    if(!buffers)return !m->streamout_valid;
+    return buffers<=0xfu && streamout_buffers(m)==buffers;
+}
 static int draw_abi_build(const PsbcShaderMetadata *v,
     const PsbcShaderMetadata *f,struct ps5vk_runtime_draw_abi *out,int hull)
 {
@@ -285,6 +312,13 @@ static int draw_abi_build(const PsbcShaderMetadata *v,
          * slot is recorded now and the owner fills the two words in once the
          * block exists. A stage that declares no table leaves all four fields
          * zero, which the value builder rejects if any of them is set. */
+        /* The capture table (DXVK262-T14): four buffer records and the
+         * begin's control block, addressed by one 32-bit pointer whose high
+         * half is address32_hi. The address belongs to the transform
+         * feedback session the draw runs in, so only the slot is recorded
+         * here and the queue supplies the low word per draw. */
+        .streamout_valid=streamout_buffers(v)?1u:0u,
+        .streamout_slot=streamout_buffers(v)?v->streamout_buffer_table_user_data_dword:0u,
         .ring_table_valid=v->ps5_ring_table_valid,
         .ring_table_slot=v->ps5_ring_table_valid?
             v->ps5_ring_table_user_data_dword:0u,
@@ -358,7 +392,8 @@ int ps5vk_runtime_shader_build(struct ps5vk_runtime_shader *d, const PsbcShaderO
     if ((!vs && !fs) || m->version!=PSBC_SHADER_METADATA_VERSION || m->target!=PSBC_TARGET_PS5 ||
         !merged_source_valid(m) ||
         m->address32_hi!=2 || m->user_sgpr_count>16 || m->scratch_valid ||
-        m->scratch_bytes_per_wave || m->scratch_size_per_thread || m->streamout_valid ||
+        m->scratch_bytes_per_wave || m->scratch_size_per_thread ||
+        (m->streamout_valid && !streamout_buffers(m)) ||
         m->input_semantic_count>PSBC_MAX_SEMANTICS || m->output_semantic_count>PSBC_MAX_SEMANTICS ||
         (vs && m->input_semantic_count) || (fs && m->output_semantic_count) ||
         (m->unresolved_fields & ~(PSBC_UNRESOLVED_PROGRAM_CHECKSUM |
