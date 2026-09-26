@@ -13,10 +13,10 @@ DXVK execution.
 ## Verified baseline on `main` (2026-09-25)
 
 After the synchronization2 and T14 transform feedback promotions,
-`tools/check_dxvk_profile.py --check` reports **@S@/62 ready, @B@ blockers**. This
+`tools/check_dxvk_profile.py --check` reports **36/62 ready, 26 blockers**. This
 is an implementation-evidence score, not a DXVK runtime result.
-`tools/check_dxvk_backlog.py --check` reports @IR@ implementation-ready original
-blockers and @PS@ profile-satisfied ones (the 62-row score also
+`tools/check_dxvk_backlog.py --check` reports 36 implementation-ready original
+blockers and 35 profile-satisfied ones (the 62-row score also
 includes the initially satisfied `robustBufferAccess`). The public device
 still reports Vulkan **1.0.0**. The matrix counts geometry and tessellation as
 blockers because their completed T04 native receipts have not been admitted

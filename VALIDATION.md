@@ -6210,6 +6210,17 @@ strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 18 device extensions,
 explicitly. The joined four-axis DXVK matrix has **35/62 ready and 27
 blockers**. The measurement switch is retired and a test forbids its return.
 
+**Combined probe after rebasing onto the synchronization2 promotion.** The
+probe above predates the synchronization2 promotion. The capability probe was
+rebuilt from the rebased tree (eboot SHA-256
+`54dff6e7393e52b8b95b4ce4d17d95403dad4ab93b80e06d135f26faf56adbd5`) and run
+`20260926T021915145Z_PPSA99994_ps5vk_0x6b5ba59f5b7d` (log SHA-256
+`34e5bada22c5555bcc4a666e7ec94ca58bb54919d3d2825ec80a0bfd1c84e5e3`) was
+verified strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 21 device
+extensions, 38/62 requested query values met, with both the synchronization2
+and transform feedback routes queried explicitly. The joined four-axis DXVK
+matrix has **36/62 ready and 26 blockers**.
+
 ## DXVK 2.6.2 D3D11 diagnostic render on PS5 (2026-09-25)
 
 **Scope.** The pinned DXVK `9d6f54a1ade20d1d27dd421024717a636f3d8c68`
