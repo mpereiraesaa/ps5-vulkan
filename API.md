@@ -50,11 +50,18 @@ leaves failed during image upload before sampling and remain recorded as
 failures. `imagelessFramebuffer` is reported through
 `VK_KHR_imageless_framebuffer`, which is enumerated only with its registry
 dependencies `VK_KHR_maintenance2` and `VK_KHR_image_format_list`; device
-creation refuses it without both. These
-measurements do not claim that DXVK can create a device or run yet; see
+creation refuses it without both. These measurements alone do not establish
+DXVK execution; the separately recorded diagnostic D3D11 render is not an
+unmodified-DXVK result. See
 [the sampler T09 evidence](VALIDATION.md#t09-sampler-mirror-clamp-public-khr-promotion-2026-09-25).
 
 ## Core feature negotiation
+
+The graphics/runtime-compiler profile reports compute subgroup BASIC:
+`subgroupSize=32`, `supportedStages=COMPUTE`, `supportedOperations=BASIC`
+and `quadOperationsInAllStages=false`. Elect, subgroup barriers and built-ins
+have a native witness. This does not report BALLOT, ARITHMETIC,
+`shaderSubgroupExtendedTypes` or `subgroupBroadcastDynamicId`.
 
 - `robustBufferAccess` is reported true. Device creation accepts it through
   either `pEnabledFeatures` or the `VkPhysicalDeviceFeatures2` chain, rejects
@@ -765,8 +772,9 @@ allocations. Descriptor ranges and images keep a 256 MiB per-resource bound.
 These are software safety limits, not a measurement of total console memory.
 Flush, invalidate, completion and retirement operations are explicit.
 
-The graphics profile reports one device-local, host-visible, non-coherent
-memory type and one device-local heap. It does not advertise `HOST_COHERENT`.
+The graphics profile reports two device-local, host-visible memory types over
+one device-local heap: non-coherent type 0 and driver-maintained
+`HOST_COHERENT` type 1 for buffers. Images remain on type 0.
 Physical-device limits are derived from allocator, descriptor and command
 encoder bounds and validated fail-closed during instance creation. The exact
 values, query semantics, format matrix and known Vulkan 1.0 deficits are in
@@ -837,16 +845,17 @@ constants are refused). A default-off diagnostic build switch,
 `PS5VK_MAINTENANCE4_DIAGNOSTIC`, opens the route on the 1.0 device for
 diagnostic DXVK measurement only; such a build is knowingly non-conformant and
 never ships.
-A diagnostic build switch (`PS5VK_HOST_COHERENT_DIAGNOSTIC`, off by default)
-appends a second memory type: the same heap and backing as type 0 plus
-`HOST_COHERENT`. The driver keeps it coherent instead of the application:
+The ordinary graphics profile exposes the second memory type with the same
+heap and backing as type 0 plus `HOST_COHERENT`; its diagnostic switch has
+been retired. The driver keeps it coherent instead of the application:
 mapping invalidates and unmapping writes back the CPU caches for the mapped
 range, every mapped coherent range is written back before each GPU submission
 launches and invalidated after its completion is observed, and each GPU
 submission already starts with a full GPU cache invalidate and ends with an L2
 writeback. Buffers may use either type; images stay on type 0. The ordinary
-profile does not report the type until the bounded native witness
-(`tools/build_coherent_memory_witness.py`) passes on the console.
+profile reports the type on the bounded native witness recorded in
+[VALIDATION.md](VALIDATION.md). The negative control did not observe stale
+data on type 0 either; it does not justify removing cache maintenance.
 
 ## Bookkeeping and core command surface
 

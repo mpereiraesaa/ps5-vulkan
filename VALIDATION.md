@@ -16,6 +16,25 @@ does not turn failures into passes. None of these project checks is a claim of
 Vulkan conformance or a complete core-version implementation. The ordinary
 device still reports Vulkan 1.0.
 
+## Reading the current checkpoint (2026-09-26)
+
+The September 25 diagnostic DXVK render below remains evidence for its exact
+artifact and configuration, not a test of every later commit. Subsequent
+shipping promotions include transform feedback, compute subgroup BASIC,
+1024-descriptor capacity, synchronization2, imageless framebuffer,
+robustness2, memory/template routes, dynamic rendering and host-coherent
+memory, followed by extended dynamic state. Their bounded witnesses are
+separate from an end-to-end DXVK rerun. The current DXVK builder retains only
+maintenance4 in its driver diagnostic-switch recipe; its consumer patches
+and core-name/query translation still need to be recorded for each run.
+Do not rewrite older receipts to describe the newly promoted configuration.
+
+The compute BASIC promotion (#569) used the ordinary SDK, eboot SHA-256
+`367a0e166bbca1fa5c5da45b19f2781db8ca65d20a00310019db87d596fecc96`, run
+`20260926T005334401Z_PPSA99994_ps5vk_0x66aebd64c59f`: 896 outputs,
+zero mismatches, digest `6bd1999d`, strictly verified. It establishes the
+32/COMPUTE/BASIC subgroup report, not the extended subgroup feature bits.
+
 The experimental procedural graphics profile was tested on an owned PS5 with
 firmware 12.02 on 2026-09-12, using the packaged native SDK and PSBC/ACO gfx1013.
 

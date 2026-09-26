@@ -10,7 +10,7 @@ dependency. The 15-tranche assignment in
 original 61 blockers, not a serial work schedule or the acceptance test for
 DXVK execution.
 
-## Verified baseline on `main` (2026-09-25)
+## Verified baseline on `main` (2026-09-26)
 
 After the synchronization2, T14 transform feedback, imageless framebuffer,
 robustness2 and dynamic rendering promotions, `tools/check_dxvk_profile.py
@@ -39,20 +39,11 @@ passed on the shipping build, but that historical regression result is not a
 prerequisite for the next DXVK implementation step.
 
 The DXVK source is pinned to
-`9d6f54a1ade20d1d27dd421024717a636f3d8c68`. On a host Vulkan driver,
-its real `D3D11CreateDevice` entry point created a feature-level 11_0 device
-and context. Against the ps5vk host loader, the same DXVK libraries stopped
-at **`Required Vulkan extension VK_KHR_surface not supported`**: no DXVK
-device or context was created. That run did not reach DXVK's later version or
-feature checks. PS5 cross-compilation and linking of the D3D11/DXGI libraries
-also succeeded. The PS5 display adapter has a host-tested call sequence for a
-fixed 1080p60 monitor using `VK_KHR_display` and
-`vkCreateDisplayPlaneSurfaceKHR`; it is **not** a Vulkan WSI implementation in
-ps5vk. That was the state before the checkpoint below. Reproduce these
-boundaries with `tools/run_dxvk_host_smoke.py`,
-`tools/run_dxvk_ps5vk_host_bootstrap.py` and
-`tools/build_dxvk_ps5_cross_probe.py`, retaining their source and artifact
-identities. Do not call the cross-link result `runtime_ready`.
+`9d6f54a1ade20d1d27dd421024717a636f3d8c68`. Earlier host bootstrap
+stopped at missing `VK_KHR_surface`; that is historical, not the current
+refusal. Native surface/swapchain acquisition, submission and presentation
+have since passed their bounded witnesses. The instance accepts DXVK's 1.3
+request; the public physical device still reports 1.0.
 
 ## Checkpoint: diagnostic render on PS5 (2026-09-25)
 
@@ -72,13 +63,18 @@ enabling → DXVK's loose `Position` output → compile stack exhaustion on
 DXVK's worker threads → barrier-only initialization submissions → oracle
 pass.
 
-**What the diagnostic configuration still supplies, i.e. the contracts missing
-for an unmodified, truthful route:**
+**Current status after the subsequent promotions.** The dated render above
+does not automatically certify a new combined artifact. Rebuild and measure
+the pinned workload from current `main` before claiming a new end-to-end
+result. The outstanding boundary and completed dependencies are:
 
 1. **Device API version 1.3.** DXVK filters every device below 1.3.
    `tools/check_core_version_contract.py` blocks raising the reported
    version while any mandatory 1.1/1.2/1.3 item is missing; run it with
-   `--assume-version 1.N` to list them. `maxPerSetDescriptors` ≥ 1024 is
+   `--assume-version 1.N` to inspect its inventory. That inventory contains
+   lagging evidence rows as well as real gaps; verify each against the code
+   and native receipts rather than treating its count as an implementation
+   queue or requiring general CTS. `maxPerSetDescriptors` ≥ 1024 is
    satisfied: sets are layout-sized and the descriptor capacity witness reads
    full 1024-descriptor sets on hardware. `maxMemoryAllocationSize`/`maxBufferSize` ≥ 2^30 are answered by
    the 1.25 GiB graphics heap (one 1 GiB allocation plus headroom).
@@ -89,8 +85,8 @@ for an unmodified, truthful route:**
    public-SDK capture witness. A D3D11 stream-output shader with no pixel
    shader bound still needs a pipeline without a fragment stage, which the
    frontend refuses.
-3. **What is still behind a default-off switch, and why.** Every measured
-   route DXVK 2.6.2's D3D11 path reaches ships with a passing native witness:
+3. **What is still behind a default-off switch, and why.** These measured
+   routes now ship with their bounded native witnesses:
    extended dynamic state (including dynamic topology and stride),
    synchronization2, format feature flags 2 and image format lists (RGBA8
    UNORM/SRGB only), storage texel buffer views, imageless framebuffer,
@@ -99,21 +95,23 @@ for an unmodified, truthful route:**
    maintenance1, copy commands 2 and the host-coherent memory type (whose
    control did not observe stale data without cache maintenance, see
    VALIDATION.md). The switches left are either not routes or cannot be
-   reported truthfully yet, and none gates anything the pinned DXVK's D3D11
-   path requests (it never asks for `shaderInt16` or `shaderInt8`, and its
-   DXBC translation emits no subgroup operations):
+   reported truthfully yet. The current native DXVK builder still enables
+   `PS5VK_MAINTENANCE4_DIAGNOSTIC`; the other switches below are not enabled
+   by that recipe. Do not generalize this bounded workload to every D3D11
+   shader or application:
    - `PS5VK_MAINTENANCE4_DIAGNOSTIC`: `VK_KHR_maintenance4` requires a
-     Vulkan 1.1 device and has no Vulkan 1.0 route. It ships with the device
-     version (item 1).
+     Vulkan 1.1 device and has no Vulkan 1.0 route. Public exposure still
+     depends on the device-version boundary (item 1), not a missing CTS run.
    - `PS5VK_SHADER_INT16_DIAGNOSTIC`: core `shaderInt16` allows the `Int16`
      capability in every stage. Only the compute adapter forwards the
      compiler's Int16 option, and the evidence is one original compute CTS
      leaf. Missing: the graphics adapter's Int16 option and a vertex/fragment
-     Int16 witness with applicable original CTS.
+     Int16 witness. Applicable CTS may diagnose defects, but is not a
+     prerequisite for this runtime goal.
    - `PS5VK_SHADER_INT8_DIAGNOSTIC`: a compute-only compiler probe. Public
      `shaderInt8` (Vulkan 1.2, or `VK_KHR_shader_float16_int8`) covers every
-     stage. Missing: the graphics path and the KHR extension route. Only
-     DXVK's D3D9 front end enables it.
+     stage. Missing: the graphics path and the KHR extension route. It is not
+     enabled by the current native DXVK measurement recipe.
    - `PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC` and `PS5VK_SUBGROUP_IADD_DIAGNOSTIC`:
      compute-only broadcast and integer-add measurements (bounded typed
      witnesses and original CTS in VALIDATION.md). The public
@@ -121,7 +119,8 @@ for an unmodified, truthful route:**
      operation and ARITHMETIC every operation over every supported type,
      including floats. The DXVK rows `subgroupBroadcastDynamicId` and
      `shaderSubgroupExtendedTypes` are Vulkan 1.2 features and wait for the
-     device version.
+     device version for their core reporting route as well as completion of
+     their operation/type contracts. A version change alone cannot enable them.
    - `PS5VK_SAMPLE_RATE_DIAGNOSTIC`: not a route. `sampleRateShading` ships;
      the switch is the register-override instrument that measured it.
    - `PS5VK_OPTIONAL_STAGE_DIAGNOSTIC`: not a route. Geometry and tessellation
@@ -133,53 +132,32 @@ for an unmodified, truthful route:**
    payload translates them onto the extension routes. The driver-side
    version answers become active only when the device version is raised.
 
-Items 1 and 2 need no DXVK change once implemented; item 3 is a per-route
-promotion through the capability probe. The diagnostic build is evidence that
-the executed Vulkan paths work, not a claim of unmodified DXVK support.
+The diagnostic build is evidence that its executed Vulkan paths work, not a
+claim of unmodified DXVK support. Transform feedback's promotion means its
+old feature-level bypass must be re-evaluated, not treated as a missing
+implementation or assumed removed from the existing diagnostic executable.
 
 ## Active critical path: follow the executable
 
-1. **Instance and presentation bootstrap.** Implement the ps5vk side of the
-   surface/display/swapchain route actually consumed by the existing DXVK PS5
-   adapter. Start with DXVK's exact instance-extension query and creation
-   sequence, then display mode/plane, surface capabilities and formats,
-   swapchain image acquisition, present and teardown. Match advertised
-   capabilities to implemented operations; fail closed for unsupported
-   present modes, image usages and surface combinations. A host mock is useful
-   for the call contract, but a native present/readback and clean Close Game
-   prove the path. The first newly observed DXVK refusal replaces the current
-   `VK_KHR_surface` refusal in this backlog.
-2. **Device bootstrap and version boundary.** The pinned DXVK source requests
-   Vulkan 1.3 at instance creation and filters physical devices reporting
-   less than 1.3. ps5vk currently accepts only a 1.0 instance request and
-   reports a 1.0 device. Inspect the exact calls and required feature/extension
-   checks after WSI progresses; implement the contracts DXVK actually uses.
-   An instrumented local DXVK build may bypass a version filter to discover
-   later refusals, but it must be labeled diagnostic. Never make ps5vk report
-   1.3 merely to pass the filter, or claim an unmodified DXVK 2.6.2 run from
-   such a build. A truthful public version change needs the corresponding
-   mandatory API contracts, independently of whether we run full CTS or seek
-   formal conformance.
-3. **First D3D11 workload.** Advance from `D3D11CreateDevice` to a real device
-   and context, texture/render-target creation, shaders, draw/dispatch,
-   synchronization, presentation and deterministic readback. Capture the first
-   failing Vulkan call and its requested shape. Implement that dependency even
-   when it falls outside the old T08–T15 grouping; repeat until the workload
-   renders. Keep feature queries, accepted device-create chains and actual
-   execution aligned. The fragment-discard defect (kill did not suppress
-   depth/stencil writes) is fixed: a removing pixel program that exports
-   nothing now gets MRT0 export memory, measured by the public-SDK
-   pixel-removal witness (see
-   [VALIDATION.md](../VALIDATION.md#t11-demote-and-terminate-public-extension-promotion-2026-09-25)).
-4. **Broaden real use, then stabilize.** Exercise the D3D11 resources and
-   shader forms selected by the running workload, especially the remaining
-   subgroup operations/types, dynamic rendering, synchronization2, descriptor
-   and robustness paths, and transform feedback where DXVK actually requests
-   them. A listed profile feature is a candidate, not automatic proof that
-   this workload needs it. Conversely, a missing format, limit or WSI call
-   outside the 62-row profile must enter the active backlog as soon as DXVK
-   hits it. Finish with repeated launch/render/present/readback/Close Game
-   cycles and bounded resource accounting.
+1. **Refresh the end-to-end measurement on the combined shipping routes.**
+   Rebuild the pinned DXVK workload from current `main`, recording every
+   remaining patch, translation and diagnostic switch. Re-test the feature
+   gate without the old transform-feedback bypass now that both required
+   bits ship. Retain the version-filter bypass only as an explicitly
+   diagnostic consumer configuration, not a reason to pause implementation.
+2. **Implement the next actual consumer dependency.** Capture the exact
+   failing Vulkan call and requested shape. Complete it even if outside the
+   old tranche labels; add a fast host regression and one bounded native
+   witness. A known outstanding shape is stream output without a fragment
+   stage. Keep core-name/query translation and maintenance4's version
+   boundary explicit; do not silently raise `apiVersion` to pass the filter.
+   An unmodified-DXVK claim still requires removing those adaptations.
+3. **Connect the rendered workload to presentation.** The offscreen D3D11
+   pixel oracle and the native swapchain witnesses are separate results.
+   Combine them into acquire/draw/present/readback/teardown with the actual
+   DXVK libraries, then bounded relaunch and resource-accounting checks.
+   Broaden resources and shaders as the executable requires them. Neither
+   the old profile score nor a full core/CTS programme is this goal's gate.
 
 Independent host-only work on WSI, compiler, synchronization and resource
 contracts may run in parallel in separate branches/worktrees. Coordinate only
@@ -192,7 +170,7 @@ public query and native behavior agree.
 
 ## What remains in the old profile inventory
 
-The 27 current matrix blockers are useful leads, not the ordered execution
+The 21 current matrix blockers are useful leads, not the ordered execution
 queue. Besides the two T04 receipt-reconciliation rows, they comprise the
 Vulkan 1.1 aggregate draw-parameters query, two T08 subgroup features,
 the remaining T10–T13 sync/render/shader/descriptor/
@@ -202,9 +180,10 @@ row IDs and axis states are generated in
 `blocker` verdict into a claim that its implementation is absent. For example,
 the Vulkan 1.1 aggregate `shaderDrawParameters` field is blocked while the
 equivalent Vulkan 1.0 KHR route already works. Similarly, the T08 subgroup
-diagnostics demonstrate only bounded 32-bit and Int8 cases: public subgroup
-properties still report zero stages/operations, and neither feature bit is
-advertised. A future DXVK request for those capabilities needs the exact
+diagnostics demonstrate only bounded broadcast/arithmetic cases. The shipping
+profile now reports wave32 compute BASIC (Elect and subgroup barriers), not
+zero stages/operations. Neither extended-types nor dynamic-broadcast feature
+bit is advertised. A future DXVK request for those capabilities needs the exact
 requested type, operation, stage and reporting contract, not a speculative
 blanket bit flip.
 
