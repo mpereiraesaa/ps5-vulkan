@@ -39,14 +39,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateQueryPool(VkDevice d,
     case VK_QUERY_TYPE_PIPELINE_STATISTICS:
         /* pipelineStatisticsQuery is reported false. */
         return VK_ERROR_FEATURE_NOT_PRESENT;
+    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
+        /* transformFeedbackQueries (DXVK262-T14): only on a device that
+         * enabled transformFeedback. Each query holds two values. */
+        if (!(d->enabled_features_t09 & PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK))
+            return VK_ERROR_FEATURE_NOT_PRESENT;
+        break;
     default:
         return INVALID;
     }
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     size_t state_bytes = info->queryCount * sizeof(uint8_t);
     size_t value_offset = (sizeof(struct VkQueryPool_T) + state_bytes + 7u) & ~(size_t)7u;
+    const size_t values_per_query = ps5vk_query_values(info->queryType);
     size_t allocation_bytes = value_offset +
-        (size_t)info->queryCount * sizeof(uint64_t);
+        (size_t)info->queryCount * values_per_query * sizeof(uint64_t);
     VkQueryPool pool = ps5vk_object_alloc(
         d->custom_allocator ? &d->allocator : NULL, allocator,
         allocation_bytes,
@@ -60,7 +67,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateQueryPool(VkDevice d,
     pool->values = (uint64_t *)((uint8_t *)pool + value_offset);
     memset(pool->states, PS5VK_QUERY_UNINITIALIZED,
         info->queryCount * sizeof(pool->states[0]));
-    memset(pool->values, 0, (size_t)info->queryCount * sizeof(pool->values[0]));
+    memset(pool->values, 0, (size_t)info->queryCount * values_per_query *
+        sizeof(pool->values[0]));
     pool->next = d->query_pools;
     d->query_pools = pool;
     *out = pool;
@@ -145,9 +153,10 @@ VKAPI_ATTR void VKAPI_CALL vkResetQueryPool(VkDevice d, VkQueryPool pool,
         if (d) ++d->lifetime_errors;
         return;
     }
+    const size_t n = ps5vk_query_values(pool->query_type);
     memset(&pool->states[first], PS5VK_QUERY_UNAVAILABLE,
         count * sizeof(pool->states[0]));
-    memset(&pool->values[first], 0, count * sizeof(pool->values[0]));
+    memset(&pool->values[first * n], 0, count * n * sizeof(pool->values[0]));
 }
 
 VKAPI_ATTR void VKAPI_CALL vkResetQueryPoolEXT(VkDevice d, VkQueryPool pool,
@@ -169,8 +178,8 @@ static VkBool32 query_result_layout(const struct ps5vk_operation *op,
         VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT |
         VK_QUERY_RESULT_PARTIAL_BIT;
     size_t word = (op->query_flags & VK_QUERY_RESULT_64_BIT) ? 8u : 4u;
-    size_t record = word * ((op->query_flags &
-        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ? 2u : 1u);
+    size_t record = word * (ps5vk_query_values(op->query_pool->query_type) + ((op->query_flags &
+        VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ? 1u : 0u));
     /* A zero stride is useful for copying one result at a time to adjacent
      * offsets. The pinned CTS uses exactly that form; with one query the
      * stride is unused. Keep multi-query zero-stride copies fail-closed since
@@ -210,6 +219,11 @@ VkResult ps5vk_query_operation_validate(VkDevice d,
     if ((op->type != PS5VK_QUERY_BEGIN && op->type != PS5VK_QUERY_END) ||
         op->query_count != 1 || op->query_flags & ~VK_QUERY_CONTROL_PRECISE_BIT)
         return INVALID;
+    if (op->query_pool->query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+        return !op->query_flags && op->query_stream < PS5VK_XFB_ABI_STREAMS &&
+            (d->enabled_features_t09 & PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK) ?
+            VK_SUCCESS : INVALID;
+    if (op->query_stream) return INVALID;
     if ((op->query_flags & VK_QUERY_CONTROL_PRECISE_BIT) &&
         !(d->enabled_features & PS5VK_FEATURE_OCCLUSION_QUERY_PRECISE))
         return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -221,11 +235,12 @@ VkResult ps5vk_query_operation_execute(VkDevice d,
 {
     VkResult result = ps5vk_query_operation_validate(d, op);
     if (result != VK_SUCCESS) return result;
+    const size_t n = ps5vk_query_values(op->query_pool->query_type);
     if (op->type == PS5VK_QUERY_RESET) {
         memset(&op->query_pool->states[op->query_first], PS5VK_QUERY_UNAVAILABLE,
             op->query_count * sizeof(op->query_pool->states[0]));
-        memset(&op->query_pool->values[op->query_first], 0,
-            op->query_count * sizeof(op->query_pool->values[0]));
+        memset(&op->query_pool->values[op->query_first * n], 0,
+            op->query_count * n * sizeof(op->query_pool->values[0]));
         return VK_SUCCESS;
     }
     if (op->type != PS5VK_QUERY_COPY) return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -244,18 +259,34 @@ VkResult ps5vk_query_operation_execute(VkDevice d,
             PS5VK_QUERY_AVAILABLE;
         if (available || (op->query_flags & VK_QUERY_RESULT_PARTIAL_BIT)) {
             /* Zero is a valid intermediate value for an unavailable query. */
-            uint64_t value = available ?
-                op->query_pool->values[op->query_first + j] : 0;
-            if (word == 8u) memcpy(record, &value, sizeof(value));
-            else { uint32_t low = (uint32_t)value; memcpy(record, &low, sizeof(low)); }
+            for (size_t v = 0; v < n; ++v) {
+                uint64_t value = available ?
+                    op->query_pool->values[(op->query_first + j) * n + v] : 0;
+                if (word == 8u) memcpy(record + v * word, &value, sizeof(value));
+                else { uint32_t low = (uint32_t)value; memcpy(record + v * word, &low, sizeof(low)); }
+            }
         }
         if (op->query_flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {
             uint64_t value = available ? 1u : 0u;
-            if (word == 8u) memcpy(record + word, &value, sizeof(value));
-            else { uint32_t low = (uint32_t)value; memcpy(record + word, &low, sizeof(low)); }
+            if (word == 8u) memcpy(record + n * word, &value, sizeof(value));
+            else { uint32_t low = (uint32_t)value; memcpy(record + n * word, &low, sizeof(low)); }
         }
     }
     (void)record_bytes;
+    return VK_SUCCESS;
+}
+
+VkResult ps5vk_query_publish_xfb(VkDevice d, VkQueryPool pool, uint32_t query,
+    uint64_t written, uint64_t needed)
+{
+    if (!d || !pool || pool->device != d ||
+        pool->query_type != VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT ||
+        query >= pool->query_count || pool->states[query] == PS5VK_QUERY_UNINITIALIZED ||
+        written > needed)
+        return INVALID;
+    pool->values[2u * query] = written;
+    pool->values[2u * query + 1u] = needed;
+    pool->states[query] = PS5VK_QUERY_AVAILABLE;
     return VK_SUCCESS;
 }
 
@@ -317,6 +348,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginQuery(VkCommandBuffer command,
     VkQueryPool pool, uint32_t query, VkQueryControlFlags flags)
 {
     VkDevice d = command && command->pool ? command->pool->device : NULL;
+    /* The core command on a stream query pool is stream 0. */
+    if (pool && pool->query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
+        vkCmdBeginQueryIndexedEXT(command, pool, query, flags, 0);
+        return;
+    }
     if (!d || !pool || pool->device != d || pool->query_type != VK_QUERY_TYPE_OCCLUSION ||
         query >= pool->query_count || !command->render_pass ||
         command->active_occlusion_query_pool || (flags & ~VK_QUERY_CONTROL_PRECISE_BIT) ||
@@ -348,6 +384,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginQuery(VkCommandBuffer command,
 VKAPI_ATTR void VKAPI_CALL vkCmdEndQuery(VkCommandBuffer command,
     VkQueryPool pool, uint32_t query)
 {
+    if (pool && pool->query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
+        vkCmdEndQueryIndexedEXT(command, pool, query, 0);
+        return;
+    }
     if (!command || !command->active_occlusion_query_pool ||
         command->active_occlusion_query_pool != pool ||
         command->active_occlusion_query != query) {
@@ -415,8 +455,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetQueryPoolResults(VkDevice d,
         (count && !data))
         return d && d->lost ? VK_ERROR_DEVICE_LOST : INVALID;
     const size_t word = (flags & VK_QUERY_RESULT_64_BIT) ? 8u : 4u;
+    const size_t n = ps5vk_query_values(pool->query_type);
     const size_t record = word *
-        ((flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ? 2u : 1u);
+        (n + ((flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ? 1u : 0u));
     if ((count && data_size < record) ||
         (count > 1 && (!stride || stride < record || stride % word ||
             (count - 1u) > (SIZE_MAX - record) / (size_t)stride ||
@@ -452,15 +493,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetQueryPoolResults(VkDevice d,
         if (!available) all_available = VK_FALSE;
         if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT)) {
             /* Return a legal zero intermediate until the GPU publishes its
-             * completed sample count. */
-            uint64_t value = available ? pool->values[first + j] : 0;
-            if (word == 8u) memcpy(record_data, &value, sizeof(value));
-            else { uint32_t low = (uint32_t)value; memcpy(record_data, &low, sizeof(low)); }
+             * completed values. */
+            for (size_t v = 0; v < n; ++v) {
+                uint64_t value = available ? pool->values[(first + j) * n + v] : 0;
+                if (word == 8u) memcpy(record_data + v * word, &value, sizeof(value));
+                else { uint32_t low = (uint32_t)value; memcpy(record_data + v * word, &low, sizeof(low)); }
+            }
         }
         if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {
             uint64_t availability = available ? 1u : 0u;
-            if (word == 8u) memcpy(record_data + word, &availability, sizeof(availability));
-            else { uint32_t low = (uint32_t)availability; memcpy(record_data + word, &low, sizeof(low)); }
+            if (word == 8u) memcpy(record_data + n * word, &availability, sizeof(availability));
+            else { uint32_t low = (uint32_t)availability; memcpy(record_data + n * word, &low, sizeof(low)); }
         }
     }
     return all_available ? VK_SUCCESS : VK_NOT_READY;

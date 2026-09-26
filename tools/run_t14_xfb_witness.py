@@ -20,7 +20,8 @@ START = re.compile(r"T14_XFB_WITNESS_START feature=(\d+) streams_feature=(\d+) g
 CASE = re.compile(r"T14_XFB_WITNESS_CASE name=(\w+) points=(\d+) ok=(\d+) mismatches=(\d+) "
                   r"first_bad=(-?\d+) sentinel_bad=(\d+) before_bad=(\d+) counter0=(\d+) "
                   r"want0=(\d+) stream1_mismatches=(\d+) stream1_sentinel_bad=(\d+) "
-                  r"counter1=(\d+) want1=(\d+) w0=([0-9a-f,]+) digest=([0-9a-f]{8}) "
+                  r"counter1=(\d+) want1=(\d+) w0=([0-9a-f,]+) written=(\d+) needed=(\d+) "
+                  r"digest=([0-9a-f]{8}) "
                   r"fence=complete")
 RESULT = re.compile(r"T14_XFB_WITNESS_RESULT cases=(\d+) passed=(\d+) submissions=(\d+)")
 RETIRED = re.compile(r"T14_XFB_WITNESS_RETIRED resources=(\w+)")
@@ -29,7 +30,7 @@ RETIRED = re.compile(r"T14_XFB_WITNESS_RETIRED resources=(\w+)")
 EXPECTED = {
     "inactive": (3, 0, 0), "small": (3, 96, 0), "order": (6000, 192000, 0),
     "resume": (3, 224, 0), "overflow": (16, 320, 0), "streams": (4, 64, 64),
-    "instanced": (3, 192, 0), "drawauto": (3, 96, 0),
+    "instanced": (3, 192, 0), "drawauto": (3, 96, 0), "query": (16, 320, 0),
 }
 
 
@@ -52,19 +53,21 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
      queries, draw) = (int(v) for v in start[0])
     if (feature != 1 or streams_feature != 1 or geometry != 1 or streams != 4 or
             buffers != 4 or stride != 2048 or data != 512 or stream_data != 512 or
-            queries != 0 or draw != 1):
+            queries != 1 or draw != 1):
         raise ValueError("transform feedback reporting does not match the witness contract")
     if [case[0] for case in cases] != list(CASES):
         raise ValueError("cases missing, repeated or out of order")
     measured = {}
     for (name, points, ok, mismatches, first_bad, sentinel_bad, before_bad, counter0,
-         want0, s1_mismatches, s1_sentinel, counter1, want1, _w0, digest) in cases:
+         want0, s1_mismatches, s1_sentinel, counter1, want1, _w0, written, needed,
+         digest) in cases:
         want_points, want_counter0, want_counter1 = EXPECTED[name]
         passed = (int(ok) == 1 and int(points) == want_points and int(mismatches) == 0 and
                   int(first_bad) == -1 and int(sentinel_bad) == 0 and int(before_bad) == 0 and
                   int(counter0) == int(want0) == want_counter0 and
                   int(counter1) == int(want1) == want_counter1 and
-                  int(s1_mismatches) == 0 and int(s1_sentinel) == 0)
+                  int(s1_mismatches) == 0 and int(s1_sentinel) == 0 and
+                  (name != "query" or (int(written), int(needed)) == (10, 16)))
         measured[name] = {"passed": passed, "mismatches": int(mismatches),
                           "first_bad": int(first_bad), "sentinel_bad": int(sentinel_bad),
                           "counter0": int(counter0), "counter1": int(counter1),

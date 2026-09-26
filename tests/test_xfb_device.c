@@ -177,7 +177,7 @@ static void supported_device(void)
     assert(t.maxTransformFeedbackStreamDataSize == 512 &&
            t.maxTransformFeedbackBufferDataSize == 512 &&
            t.maxTransformFeedbackBufferDataStride == 2048);
-    assert(!t.transformFeedbackQueries && !t.transformFeedbackStreamsLinesTriangles &&
+    assert(t.transformFeedbackQueries && !t.transformFeedbackStreamsLinesTriangles &&
            !t.transformFeedbackRasterizationStreamSelect && t.transformFeedbackDraw);
     /* The Vulkan floors (maxTransformFeedbackBufferSize 2^27, data 512). */
     assert(t.maxTransformFeedbackBufferSize >= ((VkDeviceSize)1u << 27));
@@ -426,12 +426,78 @@ static void recording(void)
     vkCmdEndTransformFeedbackEXT(c, 0, 0, NULL, NULL); /* not active */
     assert(c->state == PS5VK_INVALID);
 
-    /* Stream queries and DrawIndirectByteCount are reported unsupported. */
-    struct VkQueryPool_T stream_pool = {.device = x.device,
-        .query_type = VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT, .query_count = 1};
+    /* Stream queries: two values per query, begun and ended inside one
+     * capture session, stream below four, no flags. */
+    VkQueryPoolCreateInfo qi = {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .queryType = VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT, .queryCount = 2};
+    VkQueryPool stream_pool;
+    assert(vkCreateQueryPool(x.device, &qi, NULL, &stream_pool) == VK_SUCCESS);
+    vkResetQueryPool(x.device, stream_pool, 0, 2); /* not enabled: ignored */
     c = record(&x);
-    vkCmdBeginQueryIndexedEXT(c, &stream_pool, 0, 0, 0);
+    leave(c);
+    vkCmdResetQueryPool(c, stream_pool, 0, 2);
+    c->render_pass = &x.pass;
+    vkCmdBindTransformFeedbackBuffersEXT(c, 0, 1, &x.capture, &zero, &size);
+    vkCmdBeginQueryIndexedEXT(c, stream_pool, 0, 0, 1); /* outside a session */
     assert(c->state == PS5VK_INVALID);
+    const struct { uint32_t query, index; VkQueryControlFlags flags; } bad_query[] = {
+        {0, 4, 0}, {0, 1, VK_QUERY_CONTROL_PRECISE_BIT}, {2, 0, 0}};
+    for (unsigned n = 0; n < sizeof(bad_query) / sizeof(bad_query[0]); ++n) {
+        c = record(&x);
+        leave(c);
+        vkCmdResetQueryPool(c, stream_pool, 0, 2);
+        c->render_pass = &x.pass;
+        vkCmdBindTransformFeedbackBuffersEXT(c, 0, 1, &x.capture, &zero, &size);
+        vkCmdBeginTransformFeedbackEXT(c, 0, 0, NULL, NULL);
+        vkCmdBeginQueryIndexedEXT(c, stream_pool, bad_query[n].query, bad_query[n].flags,
+                                  bad_query[n].index);
+        assert(c->state == PS5VK_INVALID);
+    }
+    c = record(&x);
+    leave(c);
+    vkCmdResetQueryPool(c, stream_pool, 0, 2);
+    c->render_pass = &x.pass;
+    vkCmdBindTransformFeedbackBuffersEXT(c, 0, 1, &x.capture, &zero, &size);
+    vkCmdBeginTransformFeedbackEXT(c, 0, 0, NULL, NULL);
+    vkCmdBeginQueryIndexedEXT(c, stream_pool, 1, 0, 2);
+    assert(c->state == PS5VK_RECORDING);
+    const struct ps5vk_operation *qb = &c->operations[c->operation_count - 1];
+    assert(qb->type == PS5VK_QUERY_BEGIN && qb->query_stream == 2 && qb->query_first == 1);
+    assert(ps5vk_query_operation_validate(x.device, qb) == VK_SUCCESS);
+    vkCmdEndQueryIndexedEXT(c, stream_pool, 1, 1); /* another stream */
+    assert(c->state == PS5VK_INVALID);
+    c = record(&x);
+    leave(c);
+    vkCmdResetQueryPool(c, stream_pool, 0, 2);
+    c->render_pass = &x.pass;
+    vkCmdBindTransformFeedbackBuffersEXT(c, 0, 1, &x.capture, &zero, &size);
+    vkCmdBeginTransformFeedbackEXT(c, 0, 0, NULL, NULL);
+    vkCmdBeginQuery(c, stream_pool, 0, 0); /* core command: stream 0 */
+    vkCmdEndTransformFeedbackEXT(c, 0, 0, NULL, NULL); /* query still active */
+    assert(c->state == PS5VK_INVALID);
+    c = record(&x);
+    leave(c);
+    vkCmdResetQueryPool(c, stream_pool, 0, 2);
+    c->render_pass = &x.pass;
+    vkCmdBindTransformFeedbackBuffersEXT(c, 0, 1, &x.capture, &zero, &size);
+    vkCmdBeginTransformFeedbackEXT(c, 0, 0, NULL, NULL);
+    vkCmdBeginQuery(c, stream_pool, 0, 0);
+    vkCmdEndQuery(c, stream_pool, 0);
+    vkCmdEndTransformFeedbackEXT(c, 0, 0, NULL, NULL);
+    assert(c->state == PS5VK_RECORDING);
+    /* Published results read back as (written, needed[, availability]). */
+    stream_pool->states[0] = PS5VK_QUERY_UNAVAILABLE;
+    assert(ps5vk_query_publish_xfb(x.device, stream_pool, 0, 10, 16) == VK_SUCCESS);
+    assert(ps5vk_query_publish_xfb(x.device, stream_pool, 0, 17, 16) != VK_SUCCESS);
+    uint64_t result[3] = {0};
+    assert(vkGetQueryPoolResults(x.device, stream_pool, 0, 1, sizeof(result), result,
+        sizeof(result), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) ==
+        VK_SUCCESS);
+    assert(result[0] == 10 && result[1] == 16 && result[2] == 1);
+    uint32_t small[2] = {0};
+    assert(vkGetQueryPoolResults(x.device, stream_pool, 0, 1, sizeof(small), small,
+        sizeof(small), 0) == VK_SUCCESS && small[0] == 10 && small[1] == 16);
+    vkDestroyQueryPool(x.device, stream_pool, NULL);
     struct VkQueryPool_T occlusion_pool = {.device = x.device,
         .query_type = VK_QUERY_TYPE_OCCLUSION, .query_count = 1};
     c = record(&x);

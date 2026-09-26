@@ -149,7 +149,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndTransformFeedbackEXT(VkCommandBuffer c,
     if (!c) return;
     struct ps5vk_xfb_operation record;
     memset(&record, 0, sizeof(record));
-    if (!transform_feedback_enabled(c) || !c->xfb_active ||
+    if (!transform_feedback_enabled(c) || !c->xfb_active || c->active_xfb_query_pool ||
         !counters(c, first, count, buffers, offsets, record.counters))
         { ps5vk_command_invalidate(c); return; }
     struct ps5vk_operation *op = ps5vk_command_reserve_operations(c,
@@ -161,24 +161,62 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndTransformFeedbackEXT(VkCommandBuffer c,
     c->xfb_active = VK_FALSE;
 }
 
+/* Stream queries. A query counts, for its stream, the primitives the capture
+ * wrote and the primitives it needed, from the capture session's own
+ * per-stream counters: it begins and ends inside one active capture session
+ * (the pinned DXVK begins them right after vkCmdBeginTransformFeedbackEXT and
+ * ends them right before vkCmdEndTransformFeedbackEXT), at most one at a
+ * time. Every other query type goes to the core commands at index 0. */
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginQueryIndexedEXT(VkCommandBuffer c, VkQueryPool pool,
     uint32_t query, VkQueryControlFlags flags, uint32_t index)
 {
     if (!c) return;
-    if (!transform_feedback_enabled(c) || !pool || index ||
-        pool->query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+    if (!transform_feedback_enabled(c) || !pool || pool->device != c->pool->device)
         { ps5vk_command_invalidate(c); return; }
-    vkCmdBeginQuery(c, pool, query, flags);
+    if (pool->query_type != VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
+        if (index) { ps5vk_command_invalidate(c); return; }
+        vkCmdBeginQuery(c, pool, query, flags);
+        return;
+    }
+    /* VUID-02339: index below maxTransformFeedbackStreams; no precise flag. */
+    if (index >= PS5VK_XFB_ABI_STREAMS || flags || query >= pool->query_count ||
+        !c->xfb_active || c->active_xfb_query_pool ||
+        !ps5vk_query_reset_before(c, c->operation_count, pool, query))
+        { ps5vk_command_invalidate(c); return; }
+    struct ps5vk_operation *op = ps5vk_command_reserve_operations(c,
+        PS5VK_QUERY_BEGIN, PS5VK_OPERATION_INSIDE_RENDER_PASS, 1);
+    if (!op) return;
+    op->query_pool = pool; op->query_first = query; op->query_count = 1;
+    op->query_stream = index;
+    op->render_pass = c->render_pass; op->framebuffer = c->framebuffer;
+    op->subpass = c->subpass;
+    c->active_xfb_query_pool = pool;
+    c->active_xfb_query = query;
+    c->active_xfb_query_stream = index;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdEndQueryIndexedEXT(VkCommandBuffer c, VkQueryPool pool,
     uint32_t query, uint32_t index)
 {
     if (!c) return;
-    if (!transform_feedback_enabled(c) || !pool || index ||
-        pool->query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+    if (!transform_feedback_enabled(c) || !pool)
         { ps5vk_command_invalidate(c); return; }
-    vkCmdEndQuery(c, pool, query);
+    if (pool->query_type != VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
+        if (index) { ps5vk_command_invalidate(c); return; }
+        vkCmdEndQuery(c, pool, query);
+        return;
+    }
+    if (!c->xfb_active || c->active_xfb_query_pool != pool ||
+        c->active_xfb_query != query || c->active_xfb_query_stream != index)
+        { ps5vk_command_invalidate(c); return; }
+    struct ps5vk_operation *op = ps5vk_command_reserve_operations(c,
+        PS5VK_QUERY_END, PS5VK_OPERATION_INSIDE_RENDER_PASS, 1);
+    if (!op) return;
+    op->query_pool = pool; op->query_first = query; op->query_count = 1;
+    op->query_stream = index;
+    op->render_pass = c->render_pass; op->framebuffer = c->framebuffer;
+    op->subpass = c->subpass;
+    c->active_xfb_query_pool = VK_NULL_HANDLE;
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectByteCountEXT(VkCommandBuffer c,

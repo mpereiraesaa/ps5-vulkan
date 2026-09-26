@@ -157,6 +157,8 @@ struct ps5vk_operation {
     /* PS5VK_DRAW_INDIRECT_BYTE_COUNT: the counterOffset the counter value is
      * reduced by before it is divided by the vertex stride. */
     uint32_t byte_count_offset;
+    /* VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT begin/end: the stream. */
+    uint32_t query_stream;
 };
 struct VkCommandBuffer_T {
     VkCommandPool pool;
@@ -256,6 +258,10 @@ struct VkCommandBuffer_T {
      * capture is active (between begin and end, inside one subpass). */
     struct ps5vk_xfb_range xfb_bindings[PS5VK_XFB_ABI_BUFFERS];
     VkBool32 xfb_active;
+    /* The active transform feedback stream query, which begins and ends
+     * inside the active capture session. */
+    VkQueryPool active_xfb_query_pool;
+    uint32_t active_xfb_query, active_xfb_query_stream;
     unsigned operation_count;
     struct ps5vk_operation operations[PS5VK_MAX_OPERATIONS];
 };

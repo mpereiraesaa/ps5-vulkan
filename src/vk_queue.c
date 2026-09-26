@@ -434,6 +434,8 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
     /* Transform feedback capture is active (DXVK262-T14): between a BEGIN and
      * an END of the same subpass, never across a subpass boundary. */
     int xfb_active = 0;
+    VkQueryPool xfb_query_pool = VK_NULL_HANDLE;
+    uint32_t xfb_query = 0;
     /* DRAW work seen since the pass began - what will execute, not how many
      * commands were written. A vkCmdExecuteCommands marker naming only empty
      * secondaries executes nothing, so counting markers here would accept the
@@ -567,9 +569,27 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
             if (!active || contents != VK_SUBPASS_CONTENTS_INLINE ||
                 op->render_pass != active || op->framebuffer != framebuffer ||
                 op->subpass != subpass || begin == xfb_active ||
+                (!begin && xfb_query_pool) ||
                 !ps5vk_xfb_operation_valid(d, op))
                 return 0;
             xfb_active = begin;
+            continue;
+        }
+        if ((op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) && op->query_pool &&
+            op->query_pool->query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
+            /* A stream query lives inside one capture session. */
+            const int begin = op->type == PS5VK_QUERY_BEGIN;
+            if (!active || contents != VK_SUBPASS_CONTENTS_INLINE ||
+                op->render_pass != active || op->framebuffer != framebuffer ||
+                op->subpass != subpass || !xfb_active ||
+                ps5vk_query_operation_validate(d, op) != VK_SUCCESS ||
+                (begin ? (xfb_query_pool ||
+                          !ps5vk_query_reset_before(c, j, op->query_pool, op->query_first)) :
+                         (xfb_query_pool != op->query_pool ||
+                          xfb_query != op->query_first)))
+                return 0;
+            xfb_query_pool = begin ? op->query_pool : VK_NULL_HANDLE;
+            xfb_query = op->query_first;
             continue;
         }
         if (op->type == PS5VK_QUERY_BEGIN || op->type == PS5VK_QUERY_END) {

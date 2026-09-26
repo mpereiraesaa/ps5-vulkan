@@ -25,12 +25,14 @@ def case_line(name, *, ok=1, mismatches=0, counter0=None):
             f" first_bad={-1 if not mismatches else 7} sentinel_bad=0 before_bad=0"
             f" counter0={counter0} want0={want0} stream1_mismatches=0"
             f" stream1_sentinel_bad=0 counter1={want1} want1={want1}"
-            f" w0=00000000,3f800000,00000000,40e00000 digest=1234abcd fence=complete")
+            f" w0=00000000,3f800000,00000000,40e00000"
+            f" written={10 if name == 'query' else 0} needed={16 if name == 'query' else 0}"
+            f" digest=1234abcd fence=complete")
 
 
 def log(*, streams=4, override=None, retired=True, failure=False):
     lines = [f"T14_XFB_WITNESS_START feature=1 streams_feature=1 geometry=1 streams={streams}"
-             " buffers=4 stride=2048 data=512 stream_data=512 queries=0 draw=1",
+             " buffers=4 stride=2048 data=512 stream_data=512 queries=1 draw=1",
              "T14_XFB_WITNESS_PIPELINES created=2"]
     passed = 0
     for name in CASES:

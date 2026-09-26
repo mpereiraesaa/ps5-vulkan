@@ -113,6 +113,8 @@ static void clear(VkCommandBuffer c)
     memset(&c->indices, 0, sizeof(c->indices));
     memset(c->xfb_bindings, 0, sizeof(c->xfb_bindings));
     c->xfb_active = VK_FALSE;
+    c->active_xfb_query_pool = VK_NULL_HANDLE;
+    c->active_xfb_query = c->active_xfb_query_stream = 0;
 }
 void ps5vk_command_invalidate(VkCommandBuffer c)
 {

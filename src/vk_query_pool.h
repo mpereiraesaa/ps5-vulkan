@@ -34,6 +34,14 @@ VkResult ps5vk_query_operation_execute(VkDevice device,
     const struct ps5vk_operation *operation);
 VkResult ps5vk_query_publish(VkDevice device, VkQueryPool pool,
     uint32_t query, uint64_t value);
+/* A transform feedback stream query's two results: primitives written and
+ * primitives needed. */
+VkResult ps5vk_query_publish_xfb(VkDevice device, VkQueryPool pool, uint32_t query,
+    uint64_t written, uint64_t needed);
+/* Result values per query: two for a transform feedback stream query
+ * (written, needed), one otherwise. */
+static inline size_t ps5vk_query_values(VkQueryType type)
+{ return type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT ? 2u : 1u; }
 VkBool32 ps5vk_query_reset_before(VkCommandBuffer command, uint32_t operation_index,
     VkQueryPool pool, uint32_t query);
 
