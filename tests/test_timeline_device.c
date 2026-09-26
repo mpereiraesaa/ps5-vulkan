@@ -143,10 +143,10 @@ static void supported_platform(void)
     /* The algorithm's bound: the full uint64_t range, above the profile's
      * 2^31-1 requirement and the upstream test's 2^32-1 floor. */
     assert(difference == UINT64_MAX && difference >= UINT64_C(2147483647));
-    /* The core API version is not raised to expose it. */
+    /* Extension negotiation preserves the declared device profile version. */
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(p, &properties);
-    assert(VK_API_VERSION_MINOR(properties.apiVersion) == 0);
+    assert(properties.apiVersion == PS5VK_DEVICE_API_VERSION);
 
     VkPhysicalDeviceTimelineSemaphoreFeatures f = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,

@@ -60,6 +60,8 @@ static VkPhysicalDevice physical(VkInstance *i)
     uint32_t count = 1;
     VkPhysicalDevice p = VK_NULL_HANDLE;
     assert(vkEnumeratePhysicalDevices(*i, &count, &p) == VK_SUCCESS && p);
+    /* Exercise legacy dependency rules after validating platform discovery. */
+    p->platform.properties.apiVersion = VK_API_VERSION_1_0;
     return p;
 }
 static uint32_t spec_version(const char *name)
