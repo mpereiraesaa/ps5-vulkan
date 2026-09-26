@@ -29,7 +29,7 @@ RETIRED = re.compile(r"T14_XFB_WITNESS_RETIRED resources=(\w+)")
 EXPECTED = {
     "inactive": (3, 0, 0), "small": (3, 96, 0), "order": (6000, 192000, 0),
     "resume": (3, 224, 0), "overflow": (16, 320, 0), "streams": (4, 64, 64),
-    "instanced": (3, 192, 0),
+    "instanced": (3, 192, 0), "drawauto": (3, 96, 0),
 }
 
 
@@ -52,7 +52,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
      queries, draw) = (int(v) for v in start[0])
     if (feature != 1 or streams_feature != 1 or geometry != 1 or streams != 4 or
             buffers != 4 or stride != 2048 or data != 512 or stream_data != 512 or
-            queries != 0 or draw != 0):
+            queries != 0 or draw != 1):
         raise ValueError("transform feedback reporting does not match the witness contract")
     if [case[0] for case in cases] != list(CASES):
         raise ValueError("cases missing, repeated or out of order")

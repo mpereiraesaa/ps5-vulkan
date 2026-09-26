@@ -1165,6 +1165,12 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     uint32_t subpass_index=0;
     int active_query_slot=-1;
     unsigned xfb_session=0,xfb_capture_draws=0;
+    /* Counters an END of this job writes. A byte-count draw is resolved on
+     * the CPU when the job is prepared, so it cannot read a counter this same
+     * job has yet to write; that shape is refused instead of drawing a stale
+     * count. */
+    struct { VkBuffer buffer; VkDeviceSize offset; } xfb_written[PS5VK_MAX_OPERATIONS*4];
+    unsigned xfb_written_count=0;
     for(unsigned i=0;i<body_count;++i) {
         const struct ps5vk_operation *recorded=body[i];
         if(recorded->type==PS5VK_TRANSFORM_FEEDBACK_BEGIN) {
@@ -1234,6 +1240,12 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                     {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=47;goto fail;}
                 cursor+=PS5VK_XFB_DMA_WORDS;++copies;
             }
+            for(unsigned b=0;b<4;++b)
+                if(recorded->xfb.counters[b].buffer &&
+                   xfb_written_count<sizeof(xfb_written)/sizeof(xfb_written[0])) {
+                    xfb_written[xfb_written_count].buffer=recorded->xfb.counters[b].buffer;
+                    xfb_written[xfb_written_count++].offset=recorded->xfb.counters[b].offset;
+                }
             ps5log_printf(PS5LOG_MARK,"PS5VK_XFB_END serial=%llu session=%u counters=%u",
                 (unsigned long long)j->serial,xfb_session,copies);
             xfb_session=0;
@@ -1414,6 +1426,11 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
         struct ps5vk_operation resolved;
         const struct ps5vk_operation *op=recorded;
         const int indirect=ps5vk_indirect_graphics_operation(recorded->type);
+        if(recorded->type==PS5VK_DRAW_INDIRECT_BYTE_COUNT)
+            for(unsigned w=0;w<xfb_written_count;++w)
+                if(xfb_written[w].buffer==recorded->indirect_buffer &&
+                   xfb_written[w].offset==recorded->indirect_offset)
+                    {rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=52;goto fail;}
         uint32_t command_count=1u;
         if(indirect) {
             command_count=recorded->indirect_count;

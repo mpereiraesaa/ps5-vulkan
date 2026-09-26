@@ -35,6 +35,7 @@ static VkResult prepare(VkDevice d, const struct ps5vk_submission *s, void **out
             case PS5VK_END_RENDER_PASS:
             case PS5VK_DRAW: case PS5VK_DRAW_INDEXED:
             case PS5VK_DRAW_INDIRECT: case PS5VK_DRAW_INDEXED_INDIRECT:
+            case PS5VK_DRAW_INDIRECT_BYTE_COUNT:
             case PS5VK_COPY_BUFFER_IMAGE: case PS5VK_COPY_IMAGE_BUFFER:
             case PS5VK_IMAGE_BARRIER:
             /* The depth clear is GPU work on a tiled attachment, so it routes

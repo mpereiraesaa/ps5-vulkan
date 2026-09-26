@@ -1,6 +1,7 @@
 #include "vk_command.h"
 #include "vk_query_pool.h"
 #include "vk_render_pass.h"
+#include "vk_indirect.h"
 #include <string.h>
 
 /* VK_EXT_transform_feedback recording commands (DXVK262-T14).
@@ -184,8 +185,29 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectByteCountEXT(VkCommandBuffer c,
     uint32_t instances, uint32_t first_instance, VkBuffer counter,
     VkDeviceSize counter_offset, uint32_t counter_bias, uint32_t stride)
 {
-    (void)instances; (void)first_instance; (void)counter; (void)counter_offset;
-    (void)counter_bias; (void)stride;
-    /* transformFeedbackDraw is reported false (VUID-02288). */
-    if (c) ps5vk_command_invalidate(c);
+    if (!c) return;
+    /* The draw is recorded like a one-command vkCmdDrawIndirect: a direct
+     * draw record whose vertex count the queue head resolves from the
+     * counter. VUID-02290..02293: indirect usage on the counter buffer, a
+     * dword-aligned counter offset inside it, and a stride in (0, 2048]. */
+    struct ps5vk_operation candidate;
+    memset(&candidate, 0, sizeof(candidate));
+    candidate.type = PS5VK_DRAW_INDIRECT_BYTE_COUNT;
+    candidate.indirect_buffer = counter;
+    candidate.indirect_offset = counter_offset;
+    candidate.indirect_count = 1u;
+    candidate.indirect_stride = stride;
+    candidate.byte_count_offset = counter_bias;
+    if (!transform_feedback_enabled(c) ||
+        ps5vk_indirect_validate(c->pool->device, &candidate) != VK_SUCCESS)
+        { ps5vk_command_invalidate(c); return; }
+    vkCmdDraw(c, 0, instances, 0, first_instance);
+    if (c->state != PS5VK_RECORDING) return;
+    struct ps5vk_operation *op = &c->operations[c->operation_count - 1];
+    op->type = PS5VK_DRAW_INDIRECT_BYTE_COUNT;
+    op->indirect_buffer = counter;
+    op->indirect_offset = counter_offset;
+    op->indirect_count = 1u;
+    op->indirect_stride = stride;
+    op->byte_count_offset = counter_bias;
 }

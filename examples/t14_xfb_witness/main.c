@@ -17,6 +17,8 @@
  *   overflow  a 320-byte binding, 16 points: exactly 10 records, counter 320
  *   streams   stream 0 into buffer 0 and stream 1 into buffer 1, 4 points
  *   instanced 3 points, 2 instances: 6 records, instance 0 then instance 1
+ *   drawauto  vkCmdDrawIndirectByteCountEXT with counter 128, counterOffset 32
+ *             and stride 32: 3 vertices drawn and captured, counter 96
  * Every submission waits on a 300 ms fence; no shader loops.
  */
 #define _DEFAULT_SOURCE 1
@@ -213,7 +215,10 @@ static int run_witness(void)
     PFN_vkCmdEndTransformFeedbackEXT end_xfb =
         (PFN_vkCmdEndTransformFeedbackEXT)vkGetDeviceProcAddr(device,
             "vkCmdEndTransformFeedbackEXT");
-    REQUIRE(bind_xfb && begin_xfb && end_xfb, "transform feedback entry points");
+    PFN_vkCmdDrawIndirectByteCountEXT draw_auto =
+        (PFN_vkCmdDrawIndirectByteCountEXT)vkGetDeviceProcAddr(device,
+            "vkCmdDrawIndirectByteCountEXT");
+    REQUIRE(bind_xfb && begin_xfb && end_xfb && draw_auto, "transform feedback entry points");
 
     VkAttachmentDescription attachment = {
         .format = VK_FORMAT_B8G8R8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -325,7 +330,8 @@ static int run_witness(void)
     TRY(make_buffer(device, CAPTURE_BYTES, capture_usage, &buffer0));
     TRY(make_buffer(device, CAPTURE_BYTES, capture_usage, &buffer1));
     TRY(make_buffer(device, COUNTER_BYTES,
-                    VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT, &counters));
+                    VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT |
+                    VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, &counters));
     VkCommandPoolCreateInfo pool_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = 0};
@@ -337,15 +343,17 @@ static int run_witness(void)
     VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     TRY(vkCreateFence(device, &fence_info, NULL, &fence));
 
-    enum { INACTIVE, SMALL, ORDER, RESUME, OVERFLOW, STREAMS, INSTANCED, CASES };
+    enum { INACTIVE, SMALL, ORDER, RESUME, OVERFLOW, STREAMS, INSTANCED, DRAWAUTO, CASES };
     static const char *const names[CASES] = {"inactive", "small", "order", "resume",
-                                             "overflow", "streams", "instanced"};
+                                             "overflow", "streams", "instanced", "drawauto"};
     for (unsigned c = 0; c < CASES; ++c) {
         /* Sentinel every capture word; counters start at 0 (64 for resume). */
         for (uint32_t w = 0; w < CAPTURE_BYTES / 4u; ++w)
             buffer0.words[w] = buffer1.words[w] = SENTINEL;
         memset(counters.words, 0, COUNTER_BYTES);
         counters.words[0] = c == RESUME ? 64u : 0u;
+        /* The byte count the drawauto case draws from: (128 - 32) / 32. */
+        counters.words[2] = c == DRAWAUTO ? 128u : 0u;
         TRY(publish(device, &buffer0));
         TRY(publish(device, &buffer1));
         TRY(publish(device, &counters));
@@ -373,8 +381,10 @@ static int run_witness(void)
             begin_xfb(command, 0, 4, counter_buffers, counter_offsets);
         }
         const uint32_t points = c == INACTIVE || c == SMALL || c == RESUME ||
-            c == INSTANCED ? 3u : c == ORDER ? ORDER_POINTS : c == OVERFLOW ? 16u : 4u;
-        vkCmdDraw(command, points, c == INSTANCED ? 2u : 1u, 0, 0);
+            c == INSTANCED || c == DRAWAUTO ? 3u : c == ORDER ? ORDER_POINTS :
+            c == OVERFLOW ? 16u : 4u;
+        if (c == DRAWAUTO) draw_auto(command, 1, 0, counters.buffer, 8, 32, 32);
+        else vkCmdDraw(command, points, c == INSTANCED ? 2u : 1u, 0, 0);
         if (c == RESUME) vkCmdDraw(command, 2, 1, 3, 0);
         if (c != INACTIVE) end_xfb(command, 0, 4, counter_buffers, counter_offsets);
         vkCmdEndRenderPass(command);
@@ -399,6 +409,7 @@ static int run_witness(void)
             want0 = ORDER_POINTS * 32u; break;
         case RESUME: t0 = score(buffer0.words, 64, 5, 0, 32, 0, 4096); want0 = 64 + 160; break;
         case OVERFLOW: t0 = score(buffer0.words, 0, 10, 0, 32, 0, 4096); want0 = 320; break;
+        case DRAWAUTO: t0 = score(buffer0.words, 0, 3, 0, 32, 0, 4096); want0 = 96; break;
         case INSTANCED:
             t0 = score_instances(buffer0.words, 0, 6, 0, 32, 0, 4096, 3); want0 = 192; break;
         default:

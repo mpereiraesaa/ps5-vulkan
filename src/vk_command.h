@@ -34,7 +34,11 @@ enum ps5vk_operation_type {
     /* VK_EXT_transform_feedback (DXVK262-T14): the draws recorded between the
      * two capture into the ranges the BEGIN operation snapshots. Both carry
      * the counter buffers the caller named (struct ps5vk_xfb_operation). */
-    PS5VK_TRANSFORM_FEEDBACK_BEGIN, PS5VK_TRANSFORM_FEEDBACK_END
+    PS5VK_TRANSFORM_FEEDBACK_BEGIN, PS5VK_TRANSFORM_FEEDBACK_END,
+    /* vkCmdDrawIndirectByteCountEXT: one direct draw whose vertex count is
+     * (counter - byte_count_offset) / indirect_stride, resolved at the queue
+     * head from the counter dword at indirect_buffer + indirect_offset. */
+    PS5VK_DRAW_INDIRECT_BYTE_COUNT
 };
 enum ps5vk_operation_scope {
     PS5VK_OPERATION_OUTSIDE_RENDER_PASS,
@@ -150,6 +154,9 @@ struct ps5vk_operation {
     VkAccessFlags src_access, dst_access;
     VkBufferMemoryBarrier buffer_barrier;
     struct ps5vk_xfb_operation xfb;
+    /* PS5VK_DRAW_INDIRECT_BYTE_COUNT: the counterOffset the counter value is
+     * reduced by before it is divided by the vertex stride. */
+    uint32_t byte_count_offset;
 };
 struct VkCommandBuffer_T {
     VkCommandPool pool;

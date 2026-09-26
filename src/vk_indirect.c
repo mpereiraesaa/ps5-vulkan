@@ -8,7 +8,10 @@ VkBool32 ps5vk_indirect_compute_operation(enum ps5vk_operation_type type)
 { return type == PS5VK_DISPATCH_INDIRECT; }
 
 VkBool32 ps5vk_indirect_graphics_operation(enum ps5vk_operation_type type)
-{ return type == PS5VK_DRAW_INDIRECT || type == PS5VK_DRAW_INDEXED_INDIRECT; }
+{
+    return type == PS5VK_DRAW_INDIRECT || type == PS5VK_DRAW_INDEXED_INDIRECT ||
+        type == PS5VK_DRAW_INDIRECT_BYTE_COUNT;
+}
 
 VkBool32 ps5vk_indirect_operation(enum ps5vk_operation_type type)
 { return ps5vk_indirect_compute_operation(type) || ps5vk_indirect_graphics_operation(type); }
@@ -18,6 +21,8 @@ size_t ps5vk_indirect_argument_size(enum ps5vk_operation_type type)
     if (type == PS5VK_DISPATCH_INDIRECT) return sizeof(VkDispatchIndirectCommand);
     if (type == PS5VK_DRAW_INDIRECT) return sizeof(VkDrawIndirectCommand);
     if (type == PS5VK_DRAW_INDEXED_INDIRECT) return sizeof(VkDrawIndexedIndirectCommand);
+    /* The transform feedback counter: one dword. */
+    if (type == PS5VK_DRAW_INDIRECT_BYTE_COUNT) return sizeof(uint32_t);
     return 0;
 }
 
@@ -67,6 +72,14 @@ VkResult ps5vk_indirect_validate(VkDevice d, const struct ps5vk_operation *op)
     VkDeviceSize length = 0;
     if (!ps5vk_indirect_argument_span(op->type, op->indirect_count,
                                       op->indirect_stride, &length)) return INVALID;
+    /* A byte-count draw is exactly one command with a vertex stride inside
+     * maxTransformFeedbackBufferDataStride (VUID-02289), on a device that
+     * enabled transformFeedback. */
+    if (op->type == PS5VK_DRAW_INDIRECT_BYTE_COUNT &&
+        (op->indirect_count != 1 || !op->indirect_stride ||
+         op->indirect_stride > PS5VK_XFB_BUFFER_DATA_STRIDE ||
+         !(d->enabled_features_t09 & PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK)))
+        return INVALID;
     if (ps5vk_indirect_graphics_operation(op->type)) {
         /* The physical limit bounds every command; the multiDrawIndirect
          * feature must additionally be ENABLED on this device before a second
@@ -123,6 +136,22 @@ VkResult ps5vk_indirect_resolve_command(VkDevice d, const struct ps5vk_operation
      * else is refused before it can reach the backend. */
     const VkBool32 first_instance_enabled =
         !!(d->enabled_features & PS5VK_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE);
+    if (recorded->type == PS5VK_DRAW_INDIRECT_BYTE_COUNT) {
+        /* vertexCount = (counter - counterOffset) / vertexStride; a counter
+         * at or below the offset draws nothing. The instances are the
+         * command's own parameters. */
+        uint32_t counter;
+        memcpy(&counter, address, sizeof(counter));
+        snapshot.type = PS5VK_DRAW;
+        snapshot.vertex_count = counter > recorded->byte_count_offset ?
+            (counter - recorded->byte_count_offset) / recorded->indirect_stride : 0u;
+        snapshot.first_vertex = 0;
+        snapshot.index_count = 0;
+        snapshot.first_index = 0;
+        snapshot.vertex_offset = 0;
+        *resolved = snapshot;
+        return VK_SUCCESS;
+    }
     if (recorded->type == PS5VK_DRAW_INDIRECT) {
         VkDrawIndirectCommand command;
         memcpy(&command, address, sizeof(command));

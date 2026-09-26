@@ -24,7 +24,8 @@ from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
 PROFILE = "t14-transform-feedback-public-sdk-witness"
 SWITCH = "PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC"
-CASES = ("inactive", "small", "order", "resume", "overflow", "streams", "instanced")
+CASES = ("inactive", "small", "order", "resume", "overflow", "streams", "instanced",
+         "drawauto")
 SHADERS = {
     "t14_xfb_vert_spirv": ("vert", "experiments/graphics/xfb_capture.vert"),
     "t14_xfb_frag_spirv": ("frag", "experiments/graphics/xfb_capture.frag"),
