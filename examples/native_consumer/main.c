@@ -3286,13 +3286,19 @@ int main(void)
         VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
         VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
         VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME,
+#ifdef CONSUMER_IMAGELESS_FRAMEBUFFER_WITNESS
+        /* The public Vulkan 1.0 route and its registry dependencies. */
+        VK_KHR_MAINTENANCE_2_EXTENSION_NAME,
+        VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+        VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME,
+#endif
     };
     VkDeviceCreateInfo dci = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &features2,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &qci,
-        .enabledExtensionCount = 4,
+        .enabledExtensionCount = sizeof(device_extensions) / sizeof(device_extensions[0]),
         .ppEnabledExtensionNames = device_extensions,
     };
     VkDevice device = VK_NULL_HANDLE;

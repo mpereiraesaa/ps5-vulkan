@@ -274,8 +274,7 @@ def main():
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")
         if shader_int16_diagnostic == "1":
             native_cflags.append("-DPS5VK_SHADER_INT16_DIAGNOSTIC=1")
-        for name in ("PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
-                     "PS5VK_MAINTENANCE4_DIAGNOSTIC",
+        for name in ("PS5VK_MAINTENANCE4_DIAGNOSTIC",
                      "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
                      "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
                      "PS5VK_DXVK_RENDER_DIAGNOSTIC",

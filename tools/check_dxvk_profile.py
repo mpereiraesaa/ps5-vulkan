@@ -97,13 +97,17 @@ EXTENSION_ROUTES = {
                    "convert onto the Vulkan 1.0 barrier and submit routes. Timestamp2 is "
                    "refused with every timestamp (timestampValidBits is zero)."),
     },
+    "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": {
+        "extension": "VK_KHR_imageless_framebuffer",
+        "field": "imagelessFramebuffer",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_framebuffer.c",
+                 "src/vk_command.c", "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed KHR feature query and opt-in with the maintenance2 and "
+                   "image_format_list dependencies; attachments bind at render-pass begin "
+                   "through VkRenderPassAttachmentBeginInfo."),
+    },
 }
 DIAGNOSTIC_IMPLEMENTATIONS = {
-    "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": (
-        ("src/vk_device.c", "PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER"),
-        ("src/vk_framebuffer.c", "VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT"),
-        ("src/vk_command.c", "VkRenderPassAttachmentBeginInfo"),
-    ),
     "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge": (
         ("src/vk_device.c", "PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE"),
         ("src/vk_sampler.c", "VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE"),
@@ -426,7 +430,6 @@ def implemented_device_extensions() -> set[str]:
     # its preprocessor boundary is malformed rather than counting its bits.
     for name in (
 
-        "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
         "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
 
         "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
@@ -518,6 +521,8 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST"},
         "VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_SYNCHRONIZATION2"},
+        "VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER"},
 
     }
     unmapped = sorted(tokens - gates.keys())

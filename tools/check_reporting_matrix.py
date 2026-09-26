@@ -366,6 +366,19 @@ ADVERTISED_FEATURES["shaderDemoteToHelperInvocation"] = {
     "profiles": ("graphics",),
     "cts": (),
 }
+ADVERTISED_FEATURES["imagelessFramebuffer"] = {
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;"),
+        ("src/vk_device.c", "VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME"),
+        ("src/vk_framebuffer.c", "VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT"),
+        ("src/vk_command.c", "VkRenderPassAttachmentBeginInfo"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR route with its maintenance2 and image_format_list "
+               "dependencies binds attachments at render-pass begin; the public-SDK clear "
+               "and draw witnesses passed with zero mismatches"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
 ADVERTISED_FEATURES["synchronization2"] = {
     "citations": (
         ("native/platform_ps5.c", "platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;"),
@@ -1363,7 +1376,8 @@ def main() -> int:
                      "vulkanMemoryModelDeviceScope", "bufferDeviceAddress",
                      "hostQueryReset", "timelineSemaphore",
                      "separateDepthStencilLayouts", "shaderDemoteToHelperInvocation",
-                     "shaderTerminateInvocation", "synchronization2", "transformFeedback", "geometryStreams"):
+                     "shaderTerminateInvocation", "synchronization2", "transformFeedback", "geometryStreams",
+                     "imagelessFramebuffer"):
 
             value = dump["extensionFeatures"][name]
             verdict, detail = evaluate_feature(name, value, profile)

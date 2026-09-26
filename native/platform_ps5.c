@@ -325,9 +325,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     /* Completed precise occlusion queries and host reset/reuse have a strict
      * SDK-linked native witness. Expose the Vulkan 1.0 EXT feature route. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_QUERY_RESET;
-#if defined(PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC) && PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC
+    /* imagelessFramebuffer through VK_KHR_imageless_framebuffer (with its
+     * maintenance2 and image_format_list dependencies): the SDK-linked clear
+     * and draw witnesses bound the attachments at render-pass begin with zero
+     * mismatches. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
-#endif
 #if defined(PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC) && PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC
     /* Measurement only: VK_KHR_descriptor_update_template, until the native
      * capability probe is re-measured with it enumerated. */

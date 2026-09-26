@@ -123,7 +123,6 @@ def main():
         raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
     t09_diagnostics = {}
     for name in (
-        "PS5VK_IMAGELESS_FRAMEBUFFER_DIAGNOSTIC",
         "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
     ):
         value = os.environ.get(name, "0")

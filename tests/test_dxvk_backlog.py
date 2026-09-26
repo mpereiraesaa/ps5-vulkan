@@ -43,10 +43,11 @@ class DxvkBacklogTests(unittest.TestCase):
         # T09 host reset, mirror clamp, timeline and separate depth/stencil
         # routes are public. Imageless has native evidence but remains blocked.
         # T11 demote and terminate are public through their EXT/KHR routes.
-        # sync2 (KHR route) and T14 VK_EXT_transform_feedback are public.
+        # sync2 and imageless (KHR routes) and T14 VK_EXT_transform_feedback
+        # are public.
         self.assertEqual(36, summary["implementation_ready"])
-        self.assertEqual(35, summary["profile_satisfied"])
-        self.assertEqual(26, summary["remaining_profile_blockers"])
+        self.assertEqual(36, summary["profile_satisfied"])
+        self.assertEqual(25, summary["remaining_profile_blockers"])
 
         self.assertEqual({
             "api-version": 1,
