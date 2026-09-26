@@ -265,12 +265,28 @@ static VkResult submit_wait(VkDevice device, VkQueue queue, VkFence fence,
 /* The compiler calls this weak hook, when an application defines it, at each
  * of its stages (diagnostic compiler builds only). */
 #include <signal.h>
+#include <pthread.h>
 void psbc_stage_hook(const char *label);
 static char last_stage[96];
 void psbc_stage_hook(const char *label)
 {
     strncpy(last_stage, label, sizeof(last_stage) - 1);
     ps5log_printf(PS5LOG_MARK, MARK "_PSBC stage=%s sp=%p", label, (void *)&label);
+}
+/* The compiler's instruction arena doubles 64 KiB .. 1 MiB and beyond. */
+static void small_heap_probe(const char *where)
+{
+    for (size_t bytes = (size_t)256u << 10; bytes <= ((size_t)16u << 20); bytes *= 2) {
+        void *p = malloc(bytes);
+        ps5log_printf(PS5LOG_MARK, MARK "_SMALL_HEAP where=%s bytes=%zu ptr=%p", where, bytes, p);
+        if (p) { memset(p, 0x5a, bytes); free(p); }
+    }
+}
+static void *small_heap_thread(void *unused)
+{
+    (void)unused;
+    small_heap_probe("thread");
+    return NULL;
 }
 /* A fault or abort inside the compiler is otherwise a silent exit. */
 static void fatal_signal(int sig, siginfo_t *info, void *context)
@@ -310,6 +326,15 @@ static int run_witness(void)
     failed = #call; goto cleanup; } } while (0)
     VkInstance instance = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
+    small_heap_probe("main");
+    {
+        pthread_t thread;
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setstacksize(&attr, (size_t)8u << 20);
+        if (!pthread_create(&thread, &attr, small_heap_thread, NULL)) pthread_join(thread, NULL);
+        pthread_attr_destroy(&attr);
+    }
     for (unsigned mib = 16; mib <= 1024; mib *= 2) {
         void *probe = malloc((size_t)mib << 20);
         ps5log_printf(PS5LOG_MARK, MARK "_HEAP mib=%u ok=%d", mib, probe != NULL);
