@@ -80,18 +80,17 @@ class Sync2WitnessContract(unittest.TestCase):
     def test_artifact_and_receipt_identity(self):
         log = fixture_log()
         with self.assertRaises(ValueError):
-            self.check(log, fixture_artifact(sdk_switches={}))
+            self.check(log, fixture_artifact(sdk_switches={"PS5VK_SYNC2": "1"}))
         receipt = fixture_receipt(log)
         receipt["sha256"] = "0" * 64
         with self.assertRaises(ValueError):
             verify(log, receipt, fixture_artifact())
 
-    def test_shipping_probe_keeps_the_switch_default_off(self):
-        platform = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertIn("#if defined(PS5VK_SYNCHRONIZATION2_DIAGNOSTIC) && "
-                      "PS5VK_SYNCHRONIZATION2_DIAGNOSTIC", platform)
-        self.assertIn('"PS5VK_SYNCHRONIZATION2_DIAGNOSTIC"',
-                      (ROOT / "tools/build_sdk.py").read_text())
+    def test_route_is_shipping(self):
+        sys.path.insert(0, str(ROOT / "tools"))
+        from check_dxvk_profile import implemented_device_extensions
+        self.assertIn("VK_KHR_synchronization2", implemented_device_extensions())
+        self.assertEqual(SDK_SWITCHES, {})
 
 
 if __name__ == "__main__":

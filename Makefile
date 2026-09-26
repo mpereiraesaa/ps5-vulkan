@@ -422,9 +422,6 @@ check:
 	./build/tests/test_dispatch_encode
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) tests/test_vk_memory.c -o build/tests/test_vk_memory
 	./build/tests/test_vk_memory
-	# The storage-texel measurement build: view creation for exactly its rows.
-	$(CC) -std=c11 -Wall -Wextra -Werror -DPS5VK_STORAGE_TEXEL_DIAGNOSTIC=1 $(VULKAN_CFLAGS) -Isrc $(VK_MEMORY_SOURCES) tests/test_vk_memory.c -o build/tests/test_vk_memory_storage_texel
-	./build/tests/test_vk_memory_storage_texel
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) tests/test_vk_device.c -o build/tests/test_vk_device
 	./build/tests/test_vk_device
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc $(VK_DEVICE_SOURCES) src/image_layout_state.c src/depth_layout.c native/image_ps5.c tests/test_wsi_buffer_present.c -o build/tests/test_wsi_buffer_present

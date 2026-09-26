@@ -69,6 +69,15 @@ EXTENSION_ROUTES = {
         "detail": ("Reviewed KHR feature query and opt-in; OpTerminateInvocation compiles "
                    "to a terminating program whose removed pixels write no depth or stencil."),
     },
+    "feature:VkPhysicalDeviceVulkan13Features:synchronization2": {
+        "extension": "VK_KHR_synchronization2",
+        "field": "synchronization2",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_sync2.c",
+                 "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed KHR feature query and opt-in; barrier2, event2 and submit2 "
+                   "convert onto the Vulkan 1.0 barrier and submit routes. Timestamp2 is "
+                   "refused with every timestamp (timestampValidBits is zero)."),
+    },
 }
 DIAGNOSTIC_IMPLEMENTATIONS = {
     "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": (
@@ -224,7 +233,9 @@ def extension_route_axes(row: dict, queries: dict, extensions: set[str],
         return None
     extension, field = route["extension"], route["field"]
     query = queries.get(extension)
-    if not isinstance(query, dict) or set(query) != {field}:
+    # One extension's feature structure may carry several fields.
+    if (not isinstance(query, dict) or field not in query or
+            not all(isinstance(value, bool) for value in query.values())):
         raise ValueError(f"{extension} public query route is absent")
     value = query[field]
     if not isinstance(value, bool):
@@ -398,7 +409,6 @@ def implemented_device_extensions() -> set[str]:
 
         "PS5VK_DXVK_RENDER_DIAGNOSTIC",
 
-        "PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC",
 
         "PS5VK_DXVK_ROUTES_DIAGNOSTIC",
 
@@ -406,7 +416,6 @@ def implemented_device_extensions() -> set[str]:
 
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 
-        "PS5VK_SYNCHRONIZATION2_DIAGNOSTIC",
         "PS5VK_HOST_COHERENT_DIAGNOSTIC",
 
     ):

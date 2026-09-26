@@ -595,6 +595,10 @@ static void lifecycle(void)
             VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT:0;
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER))
             buffer_bits|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
+        /* The witnessed storage-texel role, on exactly three rows. */
+        if(formats[n]==VK_FORMAT_R32_UINT || formats[n]==VK_FORMAT_R8G8B8A8_UNORM ||
+           formats[n]==VK_FORMAT_R32G32B32A32_SFLOAT)
+            buffer_bits|=VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT;
         VkFormatFeatureFlags optimal_bits=0;
         /* The published bits come from the witnessed column only. */
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_SAMPLED_IMAGE)) {
@@ -721,6 +725,8 @@ static void lifecycle(void)
         VkFormatFeatureFlags expected=VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
         if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER))
             expected|=VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
+        if(sampled && (sampled->witnessed & PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER))
+            expected|=VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT;
         assert(fp.bufferFeatures==expected);
         /* RGBA8 is also the one linear-tiling staging row; the other vertex
          * formats publish nothing there. */

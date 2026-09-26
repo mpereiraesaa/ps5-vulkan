@@ -27,6 +27,8 @@ EXTENSION_ROUTES = {
          (1, 3, 0)),
     "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation":
         ("VK_KHR_shader_terminate_invocation", "shaderTerminateInvocation", (1, 3, 0)),
+    "feature:VkPhysicalDeviceVulkan13Features:synchronization2":
+        ("VK_KHR_synchronization2", "synchronization2", (1, 3, 0)),
 }
 
 

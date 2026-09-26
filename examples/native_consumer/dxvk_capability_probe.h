@@ -294,6 +294,19 @@ static int run_dxvk262_capability_probe(void)
             "DXVK262_EXTENSION_ROUTE_QUERY route=VK_KHR_shader_terminate_invocation "
             "shaderTerminateInvocation=%u", terminate.shaderTerminateInvocation);
     }
+    if (properties.apiVersion < VK_API_VERSION_1_3 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+        VkPhysicalDeviceSynchronization2Features synchronization2 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &synchronization2};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features13.synchronization2 = synchronization2.synchronization2;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_EXTENSION_ROUTE_QUERY route=VK_KHR_synchronization2 "
+            "synchronization2=%u", synchronization2.synchronization2);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",

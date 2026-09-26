@@ -340,13 +340,12 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
         PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
 #endif
-#if defined(PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC) && PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC
-    /* Measurement only: VkFormatProperties3 and the RGBA8 UNORM <-> SRGB
-     * mutable views with VK_KHR_image_format_list, until the SDK-linked
-     * mutable-view witness passes on the console. */
+    /* VkFormatProperties3 (VK_KHR_format_feature_flags2) and the RGBA8
+     * UNORM <-> SRGB mutable views with VK_KHR_image_format_list: the
+     * SDK-linked mutable-view witness sampled the SRGB view of the UNORM
+     * image exactly as a native SRGB image. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2 |
         PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST;
-#endif
     /* Nearest/linear U, V and W SDK readback plus the compact original 3D
      * address-mode CTS leaf support the Vulkan 1.0 KHR extension route. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE;
@@ -379,12 +378,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
         PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1;
 #endif
-#if defined(PS5VK_SYNCHRONIZATION2_DIAGNOSTIC) && PS5VK_SYNCHRONIZATION2_DIAGNOSTIC
-    /* Private measurement build (DXVK262): enumerate VK_KHR_synchronization2
-     * so a witness can record through the converted barrier and submit
-     * route. The ordinary profile waits for that witness. */
+    /* VK_KHR_synchronization2: vkCmdPipelineBarrier2, vkQueueSubmit2 and
+     * the event commands convert onto the Vulkan 1.0 barrier and submit
+     * routes; the SDK-linked sync2 witness executed all three phases with
+     * zero mismatches. Timestamp2 stays refused with the other timestamps. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;
-#endif
 
 #endif
 #else
@@ -457,8 +455,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * (VK_KHR_get_memory_requirements2, VK_KHR_dedicated_allocation,
      * VK_KHR_bind_memory2), so the native DXVK payload can reach its first
      * draw before a witness promotes them. The render and format routes have
-     * their own switches (PS5VK_DXVK_RENDER_DIAGNOSTIC,
-     * PS5VK_DXVK_FORMAT_ROUTES_DIAGNOSTIC). */
+     * their own switch (PS5VK_DXVK_RENDER_DIAGNOSTIC); the format routes are
+     * shipping. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_GET_MEMORY_REQUIREMENTS2 |
         PS5VK_T09_FEATURE_DEDICATED_ALLOCATION | PS5VK_T09_FEATURE_BIND_MEMORY2;
 #endif

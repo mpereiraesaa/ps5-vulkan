@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build the bounded public-SDK VK_KHR_synchronization2 witness executable.
 
-The SDK is the default-off PS5VK_SYNCHRONIZATION2_DIAGNOSTIC build, which
-enumerates the extension; the witness negotiates it through the public API and
+The ordinary staged SDK enumerates the extension; the witness negotiates it
+through the public API and
 orders its compute work only with the synchronization2 commands. It reuses the
 timeline witness's plain Vulkan 1.0 compute shader."""
 
@@ -28,7 +28,7 @@ GATE_VALUE = 1002
 # phase 1 (three-buffer submit), phase 2 (gated submit), phase 3 (empty submit)
 PHASE_VALUES = (1001, 1 << 40, (1 << 40) + 1)
 SEEDS = (0x5C2D0001, 0x5C2D0002)
-SDK_SWITCHES = {"PS5VK_SYNCHRONIZATION2_DIAGNOSTIC": "1"}
+SDK_SWITCHES: dict = {}
 
 
 def main() -> None:

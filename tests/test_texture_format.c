@@ -511,7 +511,8 @@ int main(void)
          VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT));
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
-                               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+                               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT |
+                               VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT));
     /* The one linear-tiling role this profile publishes: the pinned upstream
      * draw module's host-readback staging image, which is this format, is 2D,
      * single-mip/layer/sample and carries a transfer destination alone. Every
@@ -570,7 +571,8 @@ int main(void)
     ps5vk_texture_format_properties(VK_FORMAT_R32_UINT, &properties);
     assert(properties.bufferFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT |
-                               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT));
+                               VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT |
+                               VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT));
     /* --- witnessed uniform texel buffer family ----------------------------
      * The four R8G8B8A8 rows carry the role in both masks after the two-run
      * RGBA8 texelFetch witness recorded in VALIDATION.md. The derivation
@@ -667,16 +669,17 @@ int main(void)
         if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)
             assert(ps5vk_texture_format_witnessed(all_formats[i],
                 PS5VK_FORMAT_CAP_STORAGE_IMAGE));
-        assert(!(properties.bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT));
-        /* The storage-texel role is implemented on exactly three rows and
-         * enabled on none outside the measurement build. */
+        /* The storage-texel role is implemented, witnessed and published on
+         * exactly three rows. */
         const VkBool32 storage_texel_row = all_formats[i] == VK_FORMAT_R32_UINT ||
             all_formats[i] == VK_FORMAT_R8G8B8A8_UNORM ||
             all_formats[i] == VK_FORMAT_R32G32B32A32_SFLOAT;
+        assert(!!(properties.bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT) ==
+               storage_texel_row);
         assert(!!(ps5vk_texture_format_capabilities(all_formats[i]) &
                   PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER) == storage_texel_row);
-        assert(!ps5vk_texture_format_witnessed(all_formats[i],
-            PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER));
+        assert(ps5vk_texture_format_witnessed(all_formats[i],
+            PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER) == storage_texel_row);
         if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT)
             assert(ps5vk_texture_format_witnessed(all_formats[i], PS5VK_FORMAT_CAP_BLIT_SRC));
         if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT)

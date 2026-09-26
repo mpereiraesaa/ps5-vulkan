@@ -95,24 +95,12 @@ class MutableViewWitness(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify(log, dict(receipt_for(log), sha256="0" * 64), fixture_artifact())
 
-    def test_switch_is_default_off_and_outside_the_shipping_probe(self):
-        guard = f"#if defined({SWITCH}) && {SWITCH}"
-        platform = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertEqual(platform.count(guard), 1)
-        block = platform[platform.index(guard):]
-        block = block[:block.index("#endif")]
-        self.assertIn("PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2", block)
-        self.assertIn("PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST", block)
-        outside = platform.replace(block, "")
-        self.assertNotIn("PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2", outside)
-        self.assertNotIn("PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST", outside)
-        self.assertIn(SWITCH, (ROOT / "tools/build_sdk.py").read_text())
-        self.assertIn(SWITCH, (ROOT / "tools/check_dxvk_profile.py").read_text())
-        self.assertNotIn(SWITCH, (ROOT / "src/vk_device.c").read_text())
+    def test_routes_are_shipping(self):
+        self.assertIsNone(SWITCH)
         from check_dxvk_profile import implemented_device_extensions
         shipping = implemented_device_extensions()
-        self.assertNotIn("VK_KHR_format_feature_flags2", shipping)
-        self.assertNotIn("VK_KHR_image_format_list", shipping)
+        self.assertIn("VK_KHR_format_feature_flags2", shipping)
+        self.assertIn("VK_KHR_image_format_list", shipping)
 
 
 if __name__ == "__main__":
