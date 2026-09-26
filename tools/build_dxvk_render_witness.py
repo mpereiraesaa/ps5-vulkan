@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Build the bounded public-SDK DXVK first-draw recording witness (DXVK262-T10).
 
-The SDK is staged with PS5VK_DXVK_RENDER_DIAGNOSTIC=1, the private measurement
-switch that reports the dynamic-rendering, extended-dynamic-state,
-copy_commands2 and maintenance1 routes before any shipping platform does."""
+Dynamic rendering, copy_commands2 and maintenance1 ship on the ordinary SDK.
+The witness also toggles cull mode and front face through
+VK_EXT_extended_dynamic_state, so the SDK is staged with
+PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC=1, the private measurement switch that
+reports that one route until dynamic topology and vertex stride land."""
 
 import hashlib
 import json
@@ -80,7 +82,7 @@ def main() -> None:
 
     # The measurement SDK: the routes under test are reported only with the
     # private switch, and the witness negotiates them through the public API.
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), PS5VK_DXVK_RENDER_DIAGNOSTIC="1")
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC="1")
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/dxvk_render_witness/main.c"
@@ -138,7 +140,7 @@ def main() -> None:
     artifact = {
         "profile": "dxvk-render-public-sdk-witness",
         "extent": 64, "format": "R8G8B8A8_UNORM",
-        "diagnostic_switch": "PS5VK_DXVK_RENDER_DIAGNOSTIC",
+        "diagnostic_switch": "PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC",
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),

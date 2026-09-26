@@ -2994,6 +2994,19 @@
         ],
         "note": "Public-SDK compute witness (eboot a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1) and vertex-input witness (eboot 78322cf1055ee67ca85513f52a3b2cba23c1a2beb6b4d788f20b2d732cf1d6d5) strictly verified on the ordinary SDK: null descriptors and a VK_NULL_HANDLE vertex buffer read zero."
       }
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260926T021545840Z_PPSA99994_ps5vk_0x6b2aea5c885d"
+        ],
+        "artifact_sha256": "134c43570a7a6a3884e99390e59756c480a082a1eef70475f2c3d904d1b9a8d9",
+        "refs": [
+          "VALIDATION.md#render-route-promotion-dynamic-rendering-copy2-maintenance1-2026-09-26"
+        ],
+        "note": "Public-SDK render witness strictly verified a vkCmdBeginRenderingKHR draw with a negative-height viewport, read back through vkCmdCopyImageToBuffer2KHR: zero full, sub-rectangle and sentinel mismatches, four visible markers."
+      }
     }
   }
 }

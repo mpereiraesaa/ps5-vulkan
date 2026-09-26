@@ -1533,8 +1533,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 (const VkPhysicalDeviceDynamicRenderingFeatures *)next;
             if (!valid_bool(features->dynamicRendering)) return INVALID;
             if (features->dynamicRendering) {
-                if (!dynamic_rendering_extension) return VK_ERROR_FEATURE_NOT_PRESENT;
-                dynamic_rendering = VK_TRUE;
+                /* A feature the device does not report is refused. The pinned
+                 * CTS multiview device copies the queried chain, so once the
+                 * feature is reported it arrives true without
+                 * VK_KHR_dynamic_rendering enabled; that request is accepted and
+                 * enables nothing, since the commands stay unreachable without
+                 * the extension. */
+                if (!dynamic_rendering_supported(p)) return VK_ERROR_FEATURE_NOT_PRESENT;
+                if (dynamic_rendering_extension) dynamic_rendering = VK_TRUE;
             }
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
