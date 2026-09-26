@@ -21,7 +21,7 @@ int main(void)
     struct ps5vk_graphics_key key={.vertex_binding_count=1,.vertex_attribute_count=2,
         .vertex_bindings=&binding,.vertex_attributes=attrs};
     struct ps5vk_operation op={.type=PS5VK_DRAW,.vertex_count=3,.instance_count=1,.first_vertex=2};
-    op.vertices[0]=(struct ps5vk_vertex_binding){buffer,24};
+    op.vertices[0]=(struct ps5vk_vertex_binding){.buffer=buffer,.offset=24};
     uint32_t words[4]={0};assert(ps5vk_vertex_fetch_descriptor(&d,&key,&op,words)==VK_SUCCESS);
     void *mapped;assert(vkMapMemory(&d,memory,0,VK_WHOLE_SIZE,0,&mapped)==VK_SUCCESS);
     uint64_t address=(uintptr_t)mapped+256+24;
@@ -86,8 +86,8 @@ int main(void)
     attrs[1]=(VkVertexInputAttributeDescription){1,15,VK_FORMAT_R32G32B32_SFLOAT,0};
     key.vertex_bindings=split;key.vertex_binding_count=2;
     op.type=PS5VK_DRAW;op.vertex_count=3;op.first_vertex=2;
-    op.vertices[3]=(struct ps5vk_vertex_binding){buffer,1};
-    op.vertices[15]=(struct ps5vk_vertex_binding){buffer,12};
+    op.vertices[3]=(struct ps5vk_vertex_binding){.buffer=buffer,.offset=1};
+    op.vertices[15]=(struct ps5vk_vertex_binding){.buffer=buffer,.offset=12};
     struct ps5vk_vertex_fetch_table table={0},snapshot;
     assert(ps5vk_vertex_fetch_spans(&d,&key,&op,&table)==VK_SUCCESS);
     assert(table.count==16 && table.bindings[3].stride==24 && table.bindings[15].stride==12);
@@ -128,7 +128,7 @@ int main(void)
     for(unsigned i=0;i<16;++i) {
         all_bindings[i]=(VkVertexInputBindingDescription){15-i,4,VK_VERTEX_INPUT_RATE_VERTEX};
         all_attrs[i]=(VkVertexInputAttributeDescription){i,i,VK_FORMAT_R32_SFLOAT,0};
-        op.vertices[i]=(struct ps5vk_vertex_binding){buffer,i};
+        op.vertices[i]=(struct ps5vk_vertex_binding){.buffer=buffer,.offset=i};
     }
     key.vertex_binding_count=key.vertex_attribute_count=16;
     key.vertex_bindings=all_bindings;key.vertex_attributes=all_attrs;op.vertex_count=3;
@@ -145,7 +145,7 @@ int main(void)
     binding=(VkVertexInputBindingDescription){0,24,VK_VERTEX_INPUT_RATE_VERTEX};
     attrs[0]=(VkVertexInputAttributeDescription){0,0,VK_FORMAT_R32G32B32_SFLOAT,0};
     op=(struct ps5vk_operation){.type=PS5VK_DRAW,.vertex_count=3,.instance_count=1};
-    op.vertices[0]=(struct ps5vk_vertex_binding){VK_NULL_HANDLE,0};
+    op.vertices[0]=(struct ps5vk_vertex_binding){.buffer=VK_NULL_HANDLE,.offset=0};
     assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,1,&table)==VK_ERROR_UNKNOWN);
     d.enabled_features_t09=PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
     assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,1,&table)==VK_SUCCESS &&
@@ -153,7 +153,7 @@ int main(void)
            table.bindings[0].attribute_extent==12 && table.bindings[0].stride==24);
     assert(ps5vk_vertex_fetch_compact(&table,1,&compact)==VK_SUCCESS && compact.count==1 &&
            !compact.bindings[0].address);
-    op.vertices[0]=(struct ps5vk_vertex_binding){buffer,24};op.first_vertex=7;
+    op.vertices[0]=(struct ps5vk_vertex_binding){.buffer=buffer,.offset=24};op.first_vertex=7;
     assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,1,&table)==VK_ERROR_UNKNOWN);
     d.enabled_features_t09|=PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2;
     assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,1,&table)==VK_SUCCESS &&

@@ -47,7 +47,10 @@ enum ps5vk_operation_scope {
 };
 enum { PS5VK_MAX_OPERATIONS = 64 };
 enum { PS5VK_MAX_VERTEX_BINDINGS = 16 };
-struct ps5vk_vertex_binding { VkBuffer buffer; VkDeviceSize offset; };
+/* stride/stride_valid: the stride vkCmdBindVertexBuffers2EXT named through
+ * pStrides, which a pipeline with a dynamic binding stride draws with.
+ * vkCmdBindVertexBuffers and a NULL pStrides leave it unset. */
+struct ps5vk_vertex_binding { VkBuffer buffer; VkDeviceSize offset; uint32_t stride; VkBool32 stride_valid; };
 struct ps5vk_index_binding { VkBuffer buffer; VkDeviceSize offset; VkIndexType type; };
 /* One transform feedback range: a capture buffer with its resolved byte size,
  * or a counter buffer (size 4). An unused slot has no buffer. */
@@ -241,6 +244,7 @@ struct VkCommandBuffer_T {
      * *_WITH_COUNT states needs both set and equal. */
     uint32_t eds_valid;
     uint32_t viewport_with_count, scissor_with_count;
+    VkPrimitiveTopology primitive_topology;
     VkCullModeFlags cull_mode;
     VkFrontFace front_face;
     VkBool32 depth_test_enable, depth_write_enable, depth_bounds_test_enable;

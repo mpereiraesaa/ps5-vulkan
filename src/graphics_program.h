@@ -120,13 +120,22 @@ struct ps5vk_graphics_library {
  * advertising geometryShader is expected to feed a geometry stage with, but a
  * topology this profile has not measured as a rasterized output on its own does
  * not become accepted just because it resolves: see
- * ps5vk_agc_primitive_needs_geometry below. Triangle fan, adjacency and every
- * other topology stay fail-closed at the resolver. */
+ * ps5vk_agc_primitive_needs_geometry below. Triangle fans resolve DI_PT_TRIFAN
+ * (5), which the pinned compiler also takes as its primitive option. The four
+ * adjacency topologies resolve DI_PT_*_ADJ (10..13), which the compiler also
+ * accepts: without a geometry stage the assembler skips the adjacent vertices,
+ * with one the stage receives them (4 or 6 per primitive). Every other
+ * topology stays fail-closed at the resolver. */
 #define PS5VK_AGC_PRIMITIVE_TYPE_POINT_LIST 1u
 #define PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST 2u
 #define PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP 3u
 #define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST 4u
+#define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_FAN 5u
 #define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP 6u
+#define PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST_ADJ 10u
+#define PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP_ADJ 11u
+#define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST_ADJ 12u
+#define PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP_ADJ 13u
 /* The patch-list draw's DI type: the pinned gfx103 register data names
  * DI_PT_PATCH 9 (src/amd/registers/gfx103.json). The tessellator, not the
  * assembler, generates the rasterized primitive - VGT_TF_PARAM carries that
@@ -148,6 +157,16 @@ static inline int ps5vk_agc_primitive_type(VkPrimitiveTopology topology,uint32_t
         *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST;return 0;
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
         *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_FAN;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST_ADJ;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP_ADJ;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST_ADJ;return 0;
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:
+        *out=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP_ADJ;return 0;
     case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
         *out=PS5VK_AGC_PRIMITIVE_TYPE_PATCH;return 0;
     default:
@@ -167,7 +186,9 @@ static inline int ps5vk_tess_patch_primitive_type(uint32_t *out)
 static inline int ps5vk_agc_primitive_needs_geometry(uint32_t primitive_type)
 {
     return primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST ||
-        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP;
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST_ADJ ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP_ADJ;
 }
 /* The primitive values the native create path will hand to the AGC linker. It is
  * the same set ps5vk_agc_primitive_type resolves, named separately because the
@@ -178,7 +199,10 @@ static inline int ps5vk_agc_primitive_linkable(uint32_t primitive_type)
         primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST ||
         primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP ||
         primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST ||
-        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP ||
+        primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_FAN ||
+        (primitive_type>=PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST_ADJ &&
+         primitive_type<=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP_ADJ);
 }
 VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *,
     const struct ps5vk_graphics_key *, const struct ps5vk_graphics_program **);

@@ -12,7 +12,7 @@ from run_dxvk_render_witness import (  # noqa: E402
     verify)
 
 ARTIFACT = dict(profile="dxvk-render-public-sdk-witness", extent=64, format="R8G8B8A8_UNORM",
-                diagnostic_switch="PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC", eboot_sha256="artifact-sha")
+                diagnostic_switch=None, eboot_sha256="artifact-sha")
 
 
 def fixture_log(*, features=(1, 1), mismatches=(0, 0, 0), visible=None, top=None,
@@ -86,7 +86,7 @@ class Verify(unittest.TestCase):
     def test_refuses_a_foreign_artifact_or_receipt(self):
         log = fixture_log()
         with self.assertRaises(ValueError):
-            verify(log, receipt(log), dict(ARTIFACT, diagnostic_switch=None))
+            verify(log, receipt(log), dict(ARTIFACT, diagnostic_switch="PS5VK_X"))
         with self.assertRaises(ValueError):
             verify(log, dict(receipt(log), bye=False), ARTIFACT)
 

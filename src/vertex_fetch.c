@@ -14,8 +14,12 @@ VkResult ps5vk_vertex_fetch_used_spans(VkDevice d,const struct ps5vk_graphics_ke
     for(uint32_t i=0;i<key->vertex_binding_count;++i) {
         const VkVertexInputBindingDescription *b=&key->vertex_bindings[i];
         if(b->binding>=PS5VK_MAX_VERTEX_BINDINGS || bindings[b->binding])return VK_ERROR_UNKNOWN;
-        if(b->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX || !b->stride ||
-           b->stride>0x3fff)return VK_ERROR_FEATURE_NOT_PRESENT;
+        /* Stride 0 is a pipeline with a dynamic binding stride: the draw
+         * recorded the one it binds with. */
+        const uint32_t stride=b->stride?b->stride:
+            (op->vertices[b->binding].stride_valid?op->vertices[b->binding].stride:0u);
+        if(b->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX || !stride ||
+           stride>0x3fff)return VK_ERROR_FEATURE_NOT_PRESENT;
         bindings[b->binding]=b;
     }
     for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
@@ -27,7 +31,8 @@ VkResult ps5vk_vertex_fetch_used_spans(VkDevice d,const struct ps5vk_graphics_ke
         for(uint32_t j=0;j<i;++j)if(key->vertex_attributes[j].location==a->location)return VK_ERROR_UNKNOWN;
         struct ps5vk_vertex_fetch *fetch=&result.bindings[a->binding];
         if(fetch->attribute_extent<a->offset+size)fetch->attribute_extent=a->offset+size;
-        fetch->stride=bindings[a->binding]->stride;
+        const VkVertexInputBindingDescription *b=bindings[a->binding];
+        fetch->stride=b->stride?b->stride:op->vertices[b->binding].stride;
         if(result.count<=a->binding)result.count=a->binding+1;
     }
     if(usage_mask>>PS5VK_MAX_VERTEX_BINDINGS)return VK_ERROR_UNKNOWN;

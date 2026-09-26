@@ -1908,6 +1908,58 @@ static void check_sparse_layout_static_use(void)
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
 
+/* VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE compiles the vertex program
+ * with stride 0 and lets the draw's descriptor carry the bound stride. That is
+ * sound only if the program does not depend on the stride for any stride
+ * Vulkan allows there, which is at least the attributes' extent
+ * (VUID-vkCmdBindVertexBuffers2-pStrides-03363). The compiler's only stride
+ * uses are the offset >= stride and record-straddling rewrites, which stride 0
+ * disables; so stride 0, the extent and a wider stride must give the same
+ * machine code. A stride below the extent, which the draw refuses, triggers
+ * the rewrite and must differ: the positive control that the comparison can
+ * see a stride dependence. */
+static void check_dynamic_stride_independence(void)
+{
+    struct ps5vk_set_signature sets[PS5VK_MAX_SETS]={0};
+    for(unsigned s=0;s<PS5VK_MAX_SETS;++s) {
+        sets[s].count=1;
+        sets[s].binding[0].count=1;sets[s].binding[0].first=0;
+        sets[s].binding[0].stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+        sets[s].type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        for(unsigned b=1;b<PS5VK_MAX_BINDINGS;++b)sets[s].binding[b].first=1;
+    }
+    VkVertexInputBindingDescription binding={.binding=0,.stride=0,
+        .inputRate=VK_VERTEX_INPUT_RATE_VERTEX};
+    VkVertexInputAttributeDescription attributes[2]={
+        {.location=0,.binding=0,.format=VK_FORMAT_R32G32B32_SFLOAT,.offset=0},
+        {.location=1,.binding=0,.format=VK_FORMAT_R32G32B32_SFLOAT,.offset=12}};
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/mipmap.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/texture.frag.spv"),
+        .descriptor_set_count=PS5VK_MAX_SETS,.descriptor_sets=sets,
+        .vertex_binding_count=1,.vertex_attribute_count=2,
+        .vertex_bindings=&binding,.vertex_attributes=attributes,
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,.color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    const uint32_t strides[4]={0,24,48,12};
+    const void *programs[4]={0};
+    for(unsigned n=0;n<4;++n) {
+        binding.stride=strides[n];
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&programs[n])==VK_SUCCESS && programs[n]);
+    }
+    const struct ps5vk_runtime_graphics_program *dynamic=programs[0];
+    assert(dynamic->vertex.machine_code_size);
+    for(unsigned n=1;n<4;++n) {
+        const struct ps5vk_runtime_graphics_program *p=programs[n];
+        const int same=p->vertex.machine_code_size==dynamic->vertex.machine_code_size &&
+            !memcmp(p->vertex.machine_code,dynamic->vertex.machine_code,
+                    dynamic->vertex.machine_code_size);
+        assert(same==(strides[n]>=24));
+    }
+    for(unsigned n=0;n<4;++n)ps5vk_runtime_graphics_free(NULL,programs[n]);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 /* The original sampled-cube-array shader requires SampledCubeArray. Both
  * that capability and ImageCubeArray are gated by the logical device feature. */
 static void check_cube_array_feature_mask(void)
@@ -2728,6 +2780,7 @@ int main(void)
     check_input_attachment_probe_pipelines();
     check_fragment_store_atomic_contract();
     check_sparse_layout_static_use();
+    check_dynamic_stride_independence();
     check_cube_array_feature_mask();
     check_view_index_builtin();
     check_clip_cull_distances();
@@ -3090,16 +3143,13 @@ int main(void)
      * accepted topology compiles; everything else stays fail-closed, before the
      * compiler is reached. */
     const VkPrimitiveTopology unsupported_topologies[]={
-        /* Lines still need geometry. The remaining families have no plain
-         * graphics resolver or hardware witness. Point-list rasterization is
-         * served by the ordinary pipeline. */
+        /* Lines, with or without adjacency, still need geometry. Point
+         * lists, fans and the triangle adjacency topologies are served by
+         * the ordinary pipeline. */
         VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
         VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
         VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
-        VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
-        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
+        VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY};
     /* PATCH_LIST resolves now (the tessellation draw's DI_PT_PATCH), but its
      * pipeline stands or falls on the tessellation contract, not on this
      * plain-pipeline resolver list. */
@@ -3126,8 +3176,25 @@ int main(void)
            ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_LINE_STRIP) &&
            ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST) &&
            ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP) &&
-           !ps5vk_agc_primitive_linkable(0u) && !ps5vk_agc_primitive_linkable(5u) &&
-           !ps5vk_agc_primitive_linkable(9u) && !ps5vk_agc_primitive_linkable(12u));
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_FAN) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST_ADJ) &&
+           ps5vk_agc_primitive_linkable(PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP_ADJ) &&
+           !ps5vk_agc_primitive_linkable(0u) && !ps5vk_agc_primitive_linkable(7u) &&
+           !ps5vk_agc_primitive_linkable(9u) && !ps5vk_agc_primitive_linkable(14u));
+    /* The fan and the triangle adjacency topologies compile a plain pair for
+     * their own DI type. */
+    const struct { VkPrimitiveTopology topology; uint32_t primitive; } plain[]={
+        {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_FAN},
+        {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST_ADJ},
+        {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP_ADJ}};
+    for(unsigned i=0;i<sizeof(plain)/sizeof(plain[0]);++i) {
+        key.topology=plain[i].topology;
+        assert(ps5vk_runtime_graphics_supported(&key) &&
+               ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+        assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==
+            plain[i].primitive);
+        ps5vk_runtime_graphics_free(NULL,out);out=NULL;
+    }
     key.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     assert(ps5vk_runtime_graphics_supported(&key) && ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
     assert(((const struct ps5vk_runtime_graphics_program *)out)->primitive_type==

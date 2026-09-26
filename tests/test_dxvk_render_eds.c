@@ -282,8 +282,18 @@ static void close_device(void)
  * empty vertex input, TRIANGLE_LIST, depthClampEnable = !depthClip = FALSE,
  * cullMode/frontFace left zero because they are dynamic, a zero viewport
  * state, a depth-stencil state with every test off, one blend attachment. */
+static VkResult make_pipeline_input(const VkDynamicState *states, uint32_t count,
+    uint32_t viewport_count, const VkPipelineVertexInputStateCreateInfo *input,
+    VkPrimitiveTopology topology, VkBool32 restart, VkPipeline *out);
 static VkResult make_pipeline(const VkDynamicState *states, uint32_t count,
     uint32_t viewport_count, VkPipeline *out)
+{
+    return make_pipeline_input(states, count, viewport_count, NULL,
+                               VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE, out);
+}
+static VkResult make_pipeline_input(const VkDynamicState *states, uint32_t count,
+    uint32_t viewport_count, const VkPipelineVertexInputStateCreateInfo *input,
+    VkPrimitiveTopology topology, VkBool32 restart, VkPipeline *out)
 {
     VkPipelineShaderStageCreateInfo stages[2] = {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -294,7 +304,7 @@ static VkResult make_pipeline(const VkDynamicState *states, uint32_t count,
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     VkPipelineInputAssemblyStateCreateInfo assembly = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        .topology = topology, .primitiveRestartEnable = restart};
     VkPipelineRasterizationStateCreateInfo raster = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = VK_CULL_MODE_BACK_BIT,
@@ -320,7 +330,7 @@ static VkResult make_pipeline(const VkDynamicState *states, uint32_t count,
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount = count, .pDynamicStates = states};
     VkGraphicsPipelineCreateInfo info = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .stageCount = 2, .pStages = stages, .pVertexInputState = &vertex,
+        .stageCount = 2, .pStages = stages, .pVertexInputState = input ? input : &vertex,
         .pInputAssemblyState = &assembly, .pViewportState = &viewports,
         .pRasterizationState = &raster, .pMultisampleState = &multisample,
         .pDepthStencilState = &depth, .pColorBlendState = &blend,
@@ -360,6 +370,160 @@ static const VkDynamicState dxvk_states[4] = {VK_DYNAMIC_STATE_VIEWPORT_WITH_COU
     VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT, VK_DYNAMIC_STATE_CULL_MODE_EXT,
     VK_DYNAMIC_STATE_FRONT_FACE_EXT};
 
+/* VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY: the pipeline is also built for the
+ * other topology of its class, and the draw records the build for the
+ * topology the buffer set. VERTEX_INPUT_BINDING_STRIDE: the pipeline keeps
+ * stride 0 and the draw takes the bound stride, bounded by the attributes. */
+static void dynamic_topology_and_stride(void)
+{
+    const VkViewport viewport = {0, 0, 64, 64, 0, 1};
+    const VkRect2D scissor = {{0, 0}, {64, 64}};
+    (void)viewport; (void)scissor;
+    const VkDynamicState topology_state[1] = {VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT};
+    VkPipeline list = VK_NULL_HANDLE;
+    assert(make_pipeline(topology_state, 1, 1, &list) == VK_SUCCESS && list);
+    assert(list->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
+           (list->dynamic_eds & PS5VK_EDS_PRIMITIVE_TOPOLOGY));
+    /* Every other member of the triangle class is built, owned by the list
+     * pipeline. */
+    const VkPrimitiveTopology members[4] = {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
+    VkPipeline built[4] = {0};
+    VkPipeline v = list->topology_variant;
+    for (unsigned n = 0; n < 4; ++n, v = v->topology_variant) {
+        assert(v && v->topology == members[n] && v->variant_parent == list);
+        built[n] = v;
+    }
+    assert(!v);
+    /* Primitive restart cannot act on a list, so a restart strip pipeline has
+     * no list builds and a list draw with it is refused. */
+    VkPipeline restart = VK_NULL_HANDLE;
+    assert(make_pipeline_input(topology_state, 1, 1, NULL, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+                               VK_TRUE, &restart) == VK_SUCCESS && restart);
+    for (VkPipeline r = restart->topology_variant; r; r = r->topology_variant)
+        assert(r->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN ||
+               r->topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY);
+
+    VkCommandBuffer t = begin();
+    begin_pass(t);
+    vkCmdBindPipeline(t, VK_PIPELINE_BIND_POINT_GRAPHICS, list);
+    vkCmdDraw(t, 3, 1, 0, 0);
+    assert(t->state == PS5VK_INVALID);  /* the topology was never set */
+    vkFreeCommandBuffers(device, pool, 1, &t);
+    t = begin();
+    begin_pass(t);
+    vkCmdBindPipeline(t, VK_PIPELINE_BIND_POINT_GRAPHICS, list);
+    vkCmdSetPrimitiveTopologyEXT(t, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    vkCmdDraw(t, 3, 1, 0, 0);
+    assert(t->state == PS5VK_RECORDING && last_draw(t)->pipeline == list);
+    for (unsigned n = 0; n < 4; ++n) {
+        vkCmdSetPrimitiveTopologyEXT(t, members[n]);
+        vkCmdDraw(t, 6, 1, 0, 0);
+        assert(t->state == PS5VK_RECORDING && last_draw(t)->pipeline == built[n]);
+    }
+    vkCmdEndRenderPass(t);
+    assert(vkEndCommandBuffer(t) == VK_SUCCESS);
+    vkFreeCommandBuffers(device, pool, 1, &t);
+    t = begin();
+    begin_pass(t);
+    vkCmdBindPipeline(t, VK_PIPELINE_BIND_POINT_GRAPHICS, list);
+    vkCmdSetPrimitiveTopologyEXT(t, VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
+    vkCmdDraw(t, 3, 1, 0, 0);
+    assert(t->state == PS5VK_INVALID);  /* another class */
+    vkFreeCommandBuffers(device, pool, 1, &t);
+    t = begin();
+    begin_pass(t);
+    vkCmdBindPipeline(t, VK_PIPELINE_BIND_POINT_GRAPHICS, restart);
+    vkCmdSetPrimitiveTopologyEXT(t, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    vkCmdDraw(t, 3, 1, 0, 0);
+    assert(t->state == PS5VK_INVALID);
+    vkFreeCommandBuffers(device, pool, 1, &t);
+    /* Destroying the pipeline destroys its variants; a variant handle is not
+     * the application's to destroy. */
+    const uint32_t objects = device->pipeline_objects;
+    vkDestroyPipeline(device, built[0], NULL);
+    assert(device->pipeline_objects == objects);
+    vkDestroyPipeline(device, list, NULL);
+    assert(device->pipeline_objects == objects - 5);
+    vkDestroyPipeline(device, restart, NULL);
+
+    /* Dynamic stride. */
+    const VkVertexInputBindingDescription binding = {0, 16, VK_VERTEX_INPUT_RATE_VERTEX};
+    const VkVertexInputAttributeDescription attribute = {0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0};
+    const VkPipelineVertexInputStateCreateInfo input = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = &binding,
+        .vertexAttributeDescriptionCount = 1, .pVertexAttributeDescriptions = &attribute};
+    const VkDynamicState stride_state[1] = {VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT};
+    VkPipeline strided = VK_NULL_HANDLE;
+    assert(make_pipeline_input(stride_state, 1, 1, &input, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                               VK_FALSE, &strided) == VK_SUCCESS && strided);
+    assert(strided->vertex_binding_count == 1 && strided->vertex_bindings[0].stride == 0);
+    /* The static stride is ignored when it is dynamic, even an invalid one. */
+    VkVertexInputBindingDescription ignored = binding;
+    ignored.stride = 0;
+    VkPipelineVertexInputStateCreateInfo ignored_input = input;
+    ignored_input.pVertexBindingDescriptions = &ignored;
+    VkPipeline ignored_pipeline = VK_NULL_HANDLE;
+    assert(make_pipeline_input(stride_state, 1, 1, &ignored_input,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE, &ignored_pipeline) == VK_SUCCESS);
+    vkDestroyPipeline(device, ignored_pipeline, NULL);
+    VkPipeline static_zero = VK_NULL_HANDLE;
+    assert(make_pipeline_input(NULL, 0, 1, &ignored_input, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                               VK_FALSE, &static_zero) != VK_SUCCESS && !static_zero);
+
+    VkBufferCreateInfo buffer_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = 256, .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
+    VkBuffer buffer = VK_NULL_HANDLE;
+    assert(vkCreateBuffer(device, &buffer_info, NULL, &buffer) == VK_SUCCESS);
+    VkMemoryRequirements requirements;
+    vkGetBufferMemoryRequirements(device, buffer, &requirements);
+    VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = requirements.size};
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    assert(vkAllocateMemory(device, &allocation, NULL, &memory) == VK_SUCCESS);
+    assert(vkBindBufferMemory(device, buffer, memory, 0) == VK_SUCCESS);
+    const VkDeviceSize offset = 0;
+    const VkDeviceSize strides[5] = {32, 16, 12, 0, 16384};
+    const int draws_ok[5] = {1, 1, 0, 0, -1};
+    for (unsigned n = 0; n < 5; ++n) {
+        VkCommandBuffer s = begin();
+        begin_pass(s);
+        vkCmdBindPipeline(s, VK_PIPELINE_BIND_POINT_GRAPHICS, strided);
+        vkCmdBindVertexBuffers2EXT(s, 0, 1, &buffer, &offset, NULL, &strides[n]);
+        if (draws_ok[n] < 0) {  /* above maxVertexInputBindingStride */
+            assert(s->state == PS5VK_INVALID);
+        } else {
+            assert(s->state == PS5VK_RECORDING && s->vertices[0].stride_valid &&
+                   s->vertices[0].stride == strides[n]);
+            /* The 1.0 bind keeps the dynamic stride. */
+            vkCmdBindVertexBuffers(s, 0, 1, &buffer, &offset);
+            assert(s->vertices[0].stride_valid && s->vertices[0].stride == strides[n]);
+            vkCmdDraw(s, 3, 1, 0, 0);
+            if (draws_ok[n]) {
+                assert(s->state == PS5VK_RECORDING &&
+                       last_draw(s)->vertices[0].stride == strides[n]);
+            } else {
+                /* Below the attribute extent (16), or zero. */
+                assert(s->state == PS5VK_INVALID);
+            }
+        }
+        vkFreeCommandBuffers(device, pool, 1, &s);
+    }
+    /* A dynamic-stride pipeline needs pStrides to have been named. */
+    VkCommandBuffer u = begin();
+    begin_pass(u);
+    vkCmdBindPipeline(u, VK_PIPELINE_BIND_POINT_GRAPHICS, strided);
+    vkCmdBindVertexBuffers(u, 0, 1, &buffer, &offset);
+    vkCmdDraw(u, 3, 1, 0, 0);
+    assert(u->state == PS5VK_INVALID);
+    vkFreeCommandBuffers(device, pool, 1, &u);
+    vkDestroyPipeline(device, strided, NULL);
+    vkDestroyBuffer(device, buffer, NULL);
+    vkFreeMemory(device, memory, NULL);
+}
+
 static void pipelines_and_recording(void)
 {
     VkPipeline dxvk = VK_NULL_HANDLE, stat = VK_NULL_HANDLE, bad = VK_NULL_HANDLE;
@@ -385,10 +549,7 @@ static void pipelines_and_recording(void)
     const VkDynamicState duplicate[2] = {VK_DYNAMIC_STATE_CULL_MODE_EXT,
         VK_DYNAMIC_STATE_CULL_MODE_EXT};
     assert(make_pipeline(duplicate, 2, 1, &bad) != VK_SUCCESS && !bad);
-    const VkDynamicState topology[1] = {VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT};
-    assert(make_pipeline(topology, 1, 1, &bad) == VK_ERROR_FEATURE_NOT_PRESENT && !bad);
-    const VkDynamicState stride[1] = {VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT};
-    assert(make_pipeline(stride, 1, 1, &bad) == VK_ERROR_FEATURE_NOT_PRESENT && !bad);
+    dynamic_topology_and_stride();
     /* The depth/stencil states are accepted (the draw resolves them). */
     const VkDynamicState depth_states[6] = {VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT,
         VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT, VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT,
@@ -526,8 +687,8 @@ static void pipelines_and_recording(void)
     assert(d->state == PS5VK_INVALID);
     vkFreeCommandBuffers(device, pool, 1, &d);
 
-    /* vkCmdBindVertexBuffers2EXT: sizes must fit, strides need a pipeline
-     * that declared them dynamic, which none can. */
+    /* vkCmdBindVertexBuffers2EXT: sizes must fit; strides are stored for a
+     * pipeline that declared them dynamic (dynamic_topology_and_stride). */
     VkBufferCreateInfo buffer_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = 256, .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
     VkBuffer buffer = VK_NULL_HANDLE;
@@ -553,7 +714,8 @@ static void pipelines_and_recording(void)
     vkFreeCommandBuffers(device, pool, 1, &b);
     b = begin();
     vkCmdBindVertexBuffers2EXT(b, 0, 1, &buffer, &offset, &fits, &stride_value);
-    assert(b->state == PS5VK_INVALID);
+    assert(b->state == PS5VK_RECORDING && b->vertices[0].stride_valid &&
+           b->vertices[0].stride == 16);
     vkFreeCommandBuffers(device, pool, 1, &b);
 
     /* Reset clears every extended dynamic state. */

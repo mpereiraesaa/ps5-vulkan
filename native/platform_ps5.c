@@ -375,12 +375,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_COPY_COMMANDS2 |
         PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE | PS5VK_T09_FEATURE_DYNAMIC_RENDERING |
         PS5VK_T09_FEATURE_MAINTENANCE1;
-#if defined(PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC) && PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC
-    /* Private measurement build only: VK_EXT_extended_dynamic_state. Dynamic
-     * primitive topology and vertex input binding stride are still refused, so
-     * the ordinary profile does not report it. */
+    /* VK_EXT_extended_dynamic_state, every state including dynamic primitive
+     * topology (a same-class build per pipeline) and dynamic vertex input
+     * binding stride (a stride-independent vertex program): the SDK-linked
+     * render and dynamic-state witnesses drew through them. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE;
-#endif
     /* DXVK262-T14 transform feedback on the graphics path. The public-SDK
      * capture witness verified, on the pinned compiler's ordered no-GDS
      * streamout: exact captured records in primitive order across many

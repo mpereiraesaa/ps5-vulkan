@@ -472,12 +472,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(VkDevice d, VkPipelineCa
 VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(VkDevice d, VkPipeline p, const VkAllocationCallbacks *a)
 {
     (void)a;
-    if (!d || !p || p->device != d) return;
-    if (p->pending) { ++d->lifetime_errors; return; }
+    if (!d || !p || p->device != d || p->variant_parent) return;
+    /* A dynamic-topology variant is owned by this pipeline: pending work on
+     * either keeps both alive, and destroying this one destroys both. */
+    for (VkPipeline v = p; v; v = v->topology_variant)
+        if (v->pending) { ++d->lifetime_errors; return; }
     if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_PIPELINE, p)) { ++d->lifetime_errors; return; }
     if (p->cache_entry) {
         ps5vk_cache_entry_release(d->pipeline_cache, p->cache_entry);
         p->cache_entry = NULL;
+    }
+    for (VkPipeline variant = p->topology_variant, next; variant; variant = next) {
+        next = variant->topology_variant;
+        VkAllocationCallbacks vsaved = variant->allocator; VkBool32 vcustom = variant->custom_allocator;
+        if (variant->graphics_state) variant->graphics_release(d, variant->graphics_state);
+        --d->pipeline_objects; ps5vk_object_free(variant, &vsaved, vcustom);
     }
     VkAllocationCallbacks saved = p->allocator; VkBool32 custom = p->custom_allocator;
     if (p->graphics && p->graphics_state) p->graphics_release(d, p->graphics_state);

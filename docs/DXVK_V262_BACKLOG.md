@@ -89,10 +89,10 @@ for an unmodified, truthful route:**
    public-SDK capture witness. A D3D11 stream-output shader with no pixel
    shader bound still needs a pipeline without a fragment stage, which the
    frontend refuses.
-3. **Measured routes still behind a default-off switch:** extended dynamic
-   state (dynamic topology and vertex stride are still refused) and
-   maintenance4, which cannot be exposed on a 1.0 device. Every other
-   measured route ships with a passing native witness: synchronization2,
+3. **Measured routes still behind a default-off switch:** maintenance4 only,
+   which cannot be exposed on a 1.0 device. Every other measured route ships
+   with a passing native witness: extended dynamic state (including dynamic
+   primitive topology and vertex input binding stride), synchronization2,
    format feature flags 2 and image format lists (RGBA8 UNORM/SRGB only),
    storage texel buffer views, imageless framebuffer, robustness2,
    descriptor update templates, memory requirements 2, dedicated allocation,

@@ -118,8 +118,9 @@ static int rasterization_pnext_supported(const void *pnext)
  * SCISSOR_WITH_COUNT (VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-04132,
  * -04133). This profile also requires the two *_WITH_COUNT states together:
  * the shape DXVK always declares, and the only one whose draw-time count
- * agreement it checks. The topology and binding-stride states stay refused
- * because the native program bakes both. */
+ * agreement it checks. The topology and binding-stride states are served as
+ * src/vk_pipeline.h describes (a same-class topology variant, and a vertex
+ * program compiled stride-independent). */
 static int dynamic_states(VkDevice d, const VkPipelineDynamicStateCreateInfo *info,
                           VkBool32 *viewport, VkBool32 *scissor, VkBool32 *depth_bias,
                           VkBool32 stencil[3], uint32_t *eds)
@@ -150,6 +151,9 @@ static int dynamic_states(VkDevice d, const VkPipelineDynamicStateCreateInfo *in
         case VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT: bit=PS5VK_EDS_DEPTH_BOUNDS_TEST_ENABLE; break;
         case VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT: bit=PS5VK_EDS_STENCIL_TEST_ENABLE; break;
         case VK_DYNAMIC_STATE_STENCIL_OP_EXT: bit=PS5VK_EDS_STENCIL_OP; break;
+        case VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT: bit=PS5VK_EDS_PRIMITIVE_TOPOLOGY; break;
+        case VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT:
+            bit=PS5VK_EDS_VERTEX_INPUT_BINDING_STRIDE; break;
         default: return 0;
         }
         if(flag) {
@@ -298,8 +302,70 @@ static VkResult rendering_pass(VkDevice d, const VkGraphicsPipelineCreateInfo *i
     out->pass.subpasses = &out->subpass;
     return VK_SUCCESS;
 }
+/* The other topologies of the same class (VK_EXT_extended_dynamic_state
+ * without dynamicPrimitiveTopologyUnrestricted), which a pipeline with a
+ * dynamic primitive topology is also built for: triangle list, strip, fan and
+ * the two triangle adjacency topologies; line list, strip and the two line
+ * adjacency topologies. Points and patches have no other member. */
+enum { TOPOLOGY_CLASS_MAX = 5 };
+static uint32_t same_class_topologies(VkPrimitiveTopology topology,
+                                      VkPrimitiveTopology other[TOPOLOGY_CLASS_MAX - 1])
+{
+    static const VkPrimitiveTopology triangles[5] = {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
+    static const VkPrimitiveTopology lines[4] = {VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+        VK_PRIMITIVE_TOPOLOGY_LINE_STRIP, VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+        VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY};
+    const VkPrimitiveTopology *members = NULL; uint32_t count = 0, out = 0;
+    for (uint32_t i = 0; i < 5; ++i) if (triangles[i] == topology) { members = triangles; count = 5; }
+    for (uint32_t i = 0; i < 4; ++i) if (lines[i] == topology) { members = lines; count = 4; }
+    for (uint32_t i = 0; i < count; ++i)
+        if (members[i] != topology) other[out++] = members[i];
+    return out;
+}
+
+static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
+                           const VkAllocationCallbacks *allocator, VkPipeline *out);
 static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                        const VkAllocationCallbacks *allocator, VkPipeline *out)
+{
+    VkResult rc=create_one(d,in,allocator,out);
+    if(rc!=VK_SUCCESS || !((*out)->dynamic_eds & PS5VK_EDS_PRIMITIVE_TOPOLOGY))return rc;
+    /* Built now, not at the first draw: the application may destroy its
+     * shader modules as soon as this call returns. At most four extra builds,
+     * chained through topology_variant. */
+    VkPrimitiveTopology others[TOPOLOGY_CLASS_MAX - 1];
+    const uint32_t count=same_class_topologies(in->pInputAssemblyState->topology,others);
+    VkPipeline last=*out;
+    for(uint32_t n=0;n<count;++n) {
+        VkPipelineInputAssemblyStateCreateInfo assembly=*in->pInputAssemblyState;
+        assembly.topology=others[n];
+        VkGraphicsPipelineCreateInfo sibling=*in;
+        sibling.pInputAssemblyState=&assembly;
+        VkPipeline variant=VK_NULL_HANDLE;
+        rc=create_one(d,&sibling,allocator,&variant);
+        if(rc==VK_SUCCESS) {
+            last->topology_variant=variant;
+            variant->variant_parent=*out;
+            last=variant;
+            continue;
+        }
+        /* A shape the profile refuses for that topology (primitive restart on
+         * a list or a fan) leaves it undrawable; running out of memory fails
+         * the whole pipeline. */
+        if(rc==VK_ERROR_OUT_OF_HOST_MEMORY || rc==VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+            vkDestroyPipeline(d,*out,allocator);
+            *out=VK_NULL_HANDLE;
+            return rc;
+        }
+    }
+    return VK_SUCCESS;
+}
+
+static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
+                           const VkAllocationCallbacks *allocator, VkPipeline *out)
 {
     if (in->sType != VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO || !in->layout ||
         in->layout->device != d || (in->renderPass && in->renderPass->device != d))
@@ -416,10 +482,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (v->vertexBindingDescriptionCount>16 || v->vertexAttributeDescriptionCount>32 ||
         (v->vertexBindingDescriptionCount && !v->pVertexBindingDescriptions) ||
         (v->vertexAttributeDescriptionCount && !v->pVertexAttributeDescriptions))return refuse(8);
+    /* A dynamic binding stride makes the static one ignored: the pipeline
+     * keeps stride 0 (compiled stride-independent) and the draw supplies it. */
+    const int dynamic_stride=(eds & PS5VK_EDS_VERTEX_INPUT_BINDING_STRIDE)!=0;
+    VkVertexInputBindingDescription vertex_bindings[16];
     for(uint32_t i=0;i<v->vertexBindingDescriptionCount;++i) {
         const VkVertexInputBindingDescription *binding=&v->pVertexBindingDescriptions[i];
         if(binding->binding>=16 || binding->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
-           !binding->stride || binding->stride>0x3fff)return refuse(9);
+           (!dynamic_stride && (!binding->stride || binding->stride>0x3fff)))return refuse(9);
+        vertex_bindings[i]=*binding;
+        if(dynamic_stride)vertex_bindings[i].stride=0;
         for(uint32_t j=0;j<i;++j)
             if(v->pVertexBindingDescriptions[j].binding==binding->binding)return VK_ERROR_UNKNOWN;
     }
@@ -457,13 +529,16 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return refuse(13);
     /* Primitive restart is input-assembly state: the front end compares each
      * index against a reset index and starts a new primitive where it matches,
-     * so it can only act on a strip. The profile accepts it for the two strips
-     * it carries and keeps refusing it everywhere else, where a restart index
+     * so it can only act on a strip or fan. The profile accepts it for the strips
+     * (with and without adjacency) and the fan and keeps refusing it everywhere else, where a restart index
      * could not do what the caller declared. The draw path programs the cut from
      * the pipeline's flag and the draw's index width. */
     if (ia->primitiveRestartEnable &&
         ia->topology != VK_PRIMITIVE_TOPOLOGY_LINE_STRIP &&
-        ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP)
+        ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP &&
+        ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN &&
+        ia->topology != VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY &&
+        ia->topology != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY)
         return refuse(14);
     /* The multisample state is judged against the subpass this pipeline draws
      * in: its colour attachment names the sample count the pipeline has to
@@ -609,7 +684,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         .min_sample_shading=m->sampleShadingEnable?m->minSampleShading:0.0f,
         .sample_mask=0u,
         .vertex_binding_count=v->vertexBindingDescriptionCount,.vertex_attribute_count=v->vertexAttributeDescriptionCount,
-        .vertex_bindings=v->pVertexBindingDescriptions,.vertex_attributes=v->pVertexAttributeDescriptions,
+        .vertex_bindings=v->vertexBindingDescriptionCount?vertex_bindings:NULL,.vertex_attributes=v->pVertexAttributeDescriptions,
         .descriptor_set_count=in->layout->set_count,.descriptor_sets=in->layout->sets,
         .push_constant_size=in->layout->push_constant_size};
     memcpy(key.push_constant_stages,in->layout->push_constant_stages,
@@ -755,6 +830,7 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         p->color_write_mask[attachment]=key.color_write_mask[attachment];
     }
     p->primitive_restart=ia->primitiveRestartEnable;
+    p->topology=ia->topology;
     p->xfb=capture;
     p->rasterizer_discard=r->rasterizerDiscardEnable?VK_TRUE:VK_FALSE;
     /* The pipeline carries one blend state per colour attachment it was

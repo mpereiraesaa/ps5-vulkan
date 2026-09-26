@@ -556,7 +556,7 @@ int ps5vk_runtime_graphics_supported(const struct ps5vk_graphics_key *key)
     for(uint32_t i=0;i<key->vertex_binding_count;++i) {
         const VkVertexInputBindingDescription *b=&key->vertex_bindings[i];
         if(b->binding>=16 || b->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
-           !b->stride || b->stride>0x3fff)return ps5vk_reject(key,9);
+           b->stride>0x3fff)return ps5vk_reject(key,9);
         for(uint32_t j=0;j<i;++j)if(key->vertex_bindings[j].binding==b->binding)return ps5vk_reject(key,10);
     }
     for(uint32_t i=0;i<key->vertex_attribute_count;++i) {
@@ -792,8 +792,12 @@ static int apply_parameters(PsbcCompileOptions *options,
             for(uint32_t j=0;j<key->vertex_binding_count;++j)
                 if(key->vertex_bindings[j].binding==source->binding)binding=&key->vertex_bindings[j];
             PsbcVertexFormat format=vertex_format(source->format);
+            /* Stride 0 is a dynamic binding stride (src/vk_pipeline.h): the
+             * PS5 compiler target accepts it and then applies no
+             * stride-dependent rewrite, so the program is stride-independent
+             * and the draw's vertex descriptor carries the bound stride. */
             if(!binding || !format || binding->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX ||
-               !binding->stride || binding->stride>0x3fff)
+               binding->stride>0x3fff)
                 return 0;
             options->vertex_attributes[options->vertex_attribute_count++]=(PsbcVertexAttribute){
                 .location=(uint8_t)source->location,.binding=(uint8_t)source->binding,

@@ -268,10 +268,11 @@ ARTIFACT = {"profile": build.PROFILE, "variant": "unmodified", "label": "UNMODIF
 class DiagnosticIntegrationRecipe(unittest.TestCase):
     def test_only_switches_the_sdk_build_knows_are_applied(self):
         present, absent = build.diagnostic_integration_switches(
-            'for name in ("PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC", "PS5VK_MAINTENANCE4_DIAGNOSTIC"):')
-        self.assertEqual(present, ["PS5VK_MAINTENANCE4_DIAGNOSTIC", "PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC"])
+            'for name in ("PS5VK_MAINTENANCE4_DIAGNOSTIC",):')
+        self.assertEqual(present, ["PS5VK_MAINTENANCE4_DIAGNOSTIC"])
         self.assertEqual(len(present) + len(absent), len(build.DXVK_DIAGNOSTIC_SWITCHES))
-        self.assertNotIn("PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC", absent)
+        present, absent = build.diagnostic_integration_switches("")
+        self.assertEqual(absent, ["PS5VK_MAINTENANCE4_DIAGNOSTIC"])
 
     def test_every_switch_is_a_default_off_diagnostic(self):
         for name in build.DXVK_DIAGNOSTIC_SWITCHES:

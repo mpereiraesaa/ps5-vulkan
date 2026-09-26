@@ -86,11 +86,16 @@ struct ps5vk_raster_state {
 };
 /* The VK_EXT_extended_dynamic_state states a pipeline may declare, as one
  * mask on the pipeline and one "set since reset" mask on the command buffer.
- * PRIMITIVE_TOPOLOGY and VERTEX_INPUT_BINDING_STRIDE have no bit: the topology
- * and the binding stride are compiled into the native program, so a pipeline
- * declaring either stays refused. DEPTH_BOUNDS_TEST_ENABLE is accepted because
- * this profile's only depth-bounds state is "disabled", which the draw
- * enforces. */
+ * DEPTH_BOUNDS_TEST_ENABLE is accepted because this profile's only
+ * depth-bounds state is "disabled", which the draw enforces.
+ * PRIMITIVE_TOPOLOGY: the native program is linked for one primitive type, so
+ * a pipeline declaring it also builds every other topology of its class this
+ * profile accepts (triangle list, strip and fan; line list and strip), and the
+ * draw selects the one the command buffer set. VERTEX_INPUT_BINDING_STRIDE: the vertex program is compiled with
+ * stride 0, which disables the compiler's only stride-dependent rewrites (the
+ * GFX6/7 offset >= stride and record-straddling splits), and the draw writes
+ * the bound stride into the vertex descriptor. The command buffer's bit for it
+ * is per binding (ps5vk_vertex_binding.stride_valid). */
 enum {
     PS5VK_EDS_VIEWPORT_WITH_COUNT = 1u << 0,
     PS5VK_EDS_SCISSOR_WITH_COUNT = 1u << 1,
@@ -102,6 +107,8 @@ enum {
     PS5VK_EDS_DEPTH_BOUNDS_TEST_ENABLE = 1u << 7,
     PS5VK_EDS_STENCIL_TEST_ENABLE = 1u << 8,
     PS5VK_EDS_STENCIL_OP = 1u << 9,
+    PS5VK_EDS_PRIMITIVE_TOPOLOGY = 1u << 10,
+    PS5VK_EDS_VERTEX_INPUT_BINDING_STRIDE = 1u << 11,
 };
 struct VkPipeline_T {
     VkDevice device;
@@ -170,6 +177,12 @@ struct VkPipeline_T {
      * end cuts a strip where an index matches the reset index. Accepted for the
      * strip topologies this profile carries and refused everywhere else. */
     VkBool32 primitive_restart;
+    /* The static input-assembly topology. With PS5VK_EDS_PRIMITIVE_TOPOLOGY,
+     * topology_variant chains the pipelines built for the other topologies of
+     * the same class (NULL at the end), all owned by this pipeline;
+     * variant_parent points back from each. */
+    VkPrimitiveTopology topology;
+    VkPipeline topology_variant, variant_parent;
     /* VK_EXT_transform_feedback (DXVK262-T14): what the geometry stage
      * captures (zero captures and no buffers when it captures nothing), and
      * rasterizer discard, which this profile admits only for a capture
