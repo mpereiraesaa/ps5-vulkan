@@ -5,6 +5,7 @@
 #include "texture_format.h"
 #include "texture_layout.h"
 #include "vk_image.h"
+#include <stdlib.h>
 #include <string.h>
 
 /* The compute UAV uses the same GFX10 T# fields as an ordinary 2D texture,
@@ -136,23 +137,27 @@ VkResult ps5vk_buffer_descriptor(VkDevice device, const VkDescriptorBufferInfo *
 
 VkResult ps5vk_descriptor_encode(VkDevice device,
     const struct ps5vk_compiled_program *program, uint32_t set_index, VkDescriptorSet set,
-    const VkDeviceSize dynamic_offsets[PS5VK_MAX_DESCRIPTORS],
+    const VkDeviceSize dynamic_offsets[PS5VK_MAX_DYNAMIC_DESCRIPTORS],
     uint32_t *table, size_t capacity_dwords)
 {
     if (!device || !program || !set || !set->pool || set->pool->device != device ||
         !table || program->gfx != 1013 || !program->descriptor_count ||
-        set_index >= PS5VK_MAX_SETS || program->descriptor_count > PS5VK_MAX_DESCRIPTORS)
+        set_index >= PS5VK_MAX_SETS || program->descriptor_count > PS5VK_MAX_DESCRIPTORS ||
+        !capacity_dwords || capacity_dwords > SIZE_MAX / sizeof(uint32_t))
         return VK_ERROR_UNKNOWN;
-    uint32_t scratch[128] = {0};
+    /* Encoded into a scratch copy so that a failure leaves the table as it
+     * was; the table's size follows the program's own records. */
+    uint32_t *scratch = calloc(capacity_dwords, sizeof(*scratch));
+    if (!scratch) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    VkResult failure = VK_ERROR_UNKNOWN;
     size_t extent = 0;
     for (uint32_t i = 0; i < program->descriptor_count; ++i) {
         const struct ps5vk_program_descriptor *p = &program->descriptors[i];
         if (p->set != set_index) continue;
         const uint32_t record_dwords = ps5vk_compute_record_dwords(p->type);
-        if (p->binding >= PS5VK_MAX_BINDINGS || !record_dwords ||
-            p->table_dword > 128u - record_dwords || p->table_dword % 4 ||
-            capacity_dwords < p->table_dword + record_dwords)
-            return VK_ERROR_UNKNOWN;
+        if (p->binding >= PS5VK_MAX_BINDINGS || !record_dwords || p->table_dword % 4 ||
+            capacity_dwords < record_dwords || p->table_dword > capacity_dwords - record_dwords)
+            goto fail;
         for (uint32_t j = 0; j < i; ++j)
             if (program->descriptors[j].set == set_index &&
                 ((program->descriptors[j].table_dword < p->table_dword + record_dwords &&
@@ -160,12 +165,12 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
                     ps5vk_compute_record_dwords(program->descriptors[j].type)) ||
                  (program->descriptors[j].binding == p->binding &&
                   program->descriptors[j].element == p->element)))
-                return VK_ERROR_UNKNOWN;
+                goto fail;
         const struct ps5vk_binding *binding = &set->signature.binding[p->binding];
         uint32_t index = binding->first + p->element;
         if (binding->count <= p->element || index >= PS5VK_MAX_DESCRIPTORS ||
             !set->defined[index] || set->signature.type[p->binding] != p->type)
-            return VK_ERROR_UNKNOWN;
+            goto fail;
         if (p->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
             const VkDescriptorImageInfo *info = &set->images[index];
             if (!info->imageView && !set->image_resources[index] &&
@@ -180,7 +185,7 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
                 set->image_resources[index] != info->imageView->image ||
                 storage_image_descriptor(device, info,
                     scratch + p->table_dword) != VK_SUCCESS)
-                return VK_ERROR_UNKNOWN;
+                goto fail;
             if (extent < p->table_dword + 8) extent = p->table_dword + 8;
             continue;
         }
@@ -198,14 +203,14 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
                         PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER :
                         PS5VK_FORMAT_CAP_UNIFORM_TEXEL_BUFFER,
                     scratch + p->table_dword) != VK_SUCCESS)
-                return VK_ERROR_UNKNOWN;
+                goto fail;
             if (extent < p->table_dword + 4) extent = p->table_dword + 4;
             continue;
         }
         if (p->type == VK_DESCRIPTOR_TYPE_SAMPLER) {
             /* A separate S#: the sampler's own four words, nothing else. */
             VkSampler sampler = set->images[index].sampler;
-            if (!sampler || sampler->device != device) return VK_ERROR_UNKNOWN;
+            if (!sampler || sampler->device != device) goto fail;
             memcpy(scratch + p->table_dword, sampler->words, sizeof(sampler->words));
             if (extent < p->table_dword + 4) extent = p->table_dword + 4;
             continue;
@@ -218,19 +223,27 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
                  info->imageLayout != VK_IMAGE_LAYOUT_GENERAL) ||
                 ps5vk_sampled_image_descriptor(device, info->imageView,
                     scratch + p->table_dword) != VK_SUCCESS)
-                return VK_ERROR_UNKNOWN;
+                goto fail;
             if (extent < p->table_dword + 8) extent = p->table_dword + 8;
             continue;
         }
         const VkDescriptorBufferInfo *info = &set->buffers[index];
-        VkDeviceSize dynamic = ps5vk_dynamic_descriptor_type(p->type) ?
-            dynamic_offsets[i] : 0;
+        VkDeviceSize dynamic = 0;
+        if (ps5vk_dynamic_descriptor_type(p->type)) {
+            const uint32_t slot = ps5vk_dynamic_slot(&set->signature, index);
+            if (!dynamic_offsets || slot >= PS5VK_MAX_DYNAMIC_DESCRIPTORS) goto fail;
+            dynamic = dynamic_offsets[slot];
+        }
         uint32_t *out = scratch + p->table_dword;
         VkResult result = ps5vk_buffer_descriptor(device, info, dynamic, out);
-        if (result != VK_SUCCESS) return result;
+        if (result != VK_SUCCESS) { failure = result; goto fail; }
         if (extent < p->table_dword + 4) extent = p->table_dword + 4;
     }
-    if(!extent)return VK_ERROR_UNKNOWN;
+    if(!extent)goto fail;
     memcpy(table, scratch, extent * sizeof(*table));
+    free(scratch);
     return VK_SUCCESS;
+fail:
+    free(scratch);
+    return failure;
 }

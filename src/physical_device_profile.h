@@ -58,6 +58,10 @@ static inline int ps5vk_profile_power_of_two(VkDeviceSize value)
  * GPU's and PSBC/ACO's business, so the least a conformant report may claim is
  * the floor itself. Anything this frontend genuinely restricts stays below the
  * floor and is recorded as a blocker in PHYSICAL_DEVICE_REPORTING.md instead. */
+/* Reported descriptor limits qualified before sets grew to
+ * PS5VK_MAX_DESCRIPTORS records; each stays within that capacity. */
+#define PS5VK_REPORTED_BUFFER_DESCRIPTORS 128u
+#define PS5VK_REPORTED_STAGE_RESOURCES 128u
 #define PS5VK_REQUIRED_SUBTEXEL_BITS 4u
 #define PS5VK_REQUIRED_MIPMAP_PRECISION_BITS 4u
 /* src/spirv_graphics_interface.c reflects at most LOCATIONS = 32 interface
@@ -185,10 +189,13 @@ static inline void ps5vk_physical_profile_init(
     limits->maxCullDistances = PS5VK_REQUIRED_CULL_DISTANCES;
     limits->maxCombinedClipAndCullDistances = PS5VK_REQUIRED_COMBINED_CLIP_CULL_DISTANCES;
     limits->maxBoundDescriptorSets = PS5VK_MAX_SETS;
-    limits->maxPerStageDescriptorStorageBuffers = PS5VK_MAX_DESCRIPTORS;
-    limits->maxDescriptorSetStorageBuffers = PS5VK_MAX_DESCRIPTORS;
-    limits->maxPerStageDescriptorUniformBuffers = PS5VK_MAX_DESCRIPTORS;
-    limits->maxDescriptorSetUniformBuffers = PS5VK_MAX_DESCRIPTORS;
+    /* The buffer and shared-resource limits stay at the capacity they were
+     * qualified at; a set now holds PS5VK_MAX_DESCRIPTORS records, and a
+     * larger report needs its own native evidence. */
+    limits->maxPerStageDescriptorStorageBuffers = PS5VK_REPORTED_BUFFER_DESCRIPTORS;
+    limits->maxDescriptorSetStorageBuffers = PS5VK_REPORTED_BUFFER_DESCRIPTORS;
+    limits->maxPerStageDescriptorUniformBuffers = PS5VK_REPORTED_BUFFER_DESCRIPTORS;
+    limits->maxDescriptorSetUniformBuffers = PS5VK_REPORTED_BUFFER_DESCRIPTORS;
     /* Dynamic UBO/SSBO descriptors share the same compiler table and exact
      * bind-time range validation as their static forms.  Report the Vulkan
      * 1.0 floors conservatively even though the table can hold more. */
@@ -197,7 +204,7 @@ static inline void ps5vk_physical_profile_init(
     /* Uniform texel buffers consume the sampled-image accounting class. */
     limits->maxPerStageDescriptorSampledImages = 1;
     limits->maxDescriptorSetSampledImages = 1;
-    limits->maxPerStageResources = PS5VK_MAX_DESCRIPTORS;
+    limits->maxPerStageResources = PS5VK_REPORTED_STAGE_RESOURCES;
     /* The public format table has typed UINT/SINT sampled-image execution.
      * Both profiles expose those query paths, conservatively at one sample. */
     limits->sampledImageIntegerSampleCounts = VK_SAMPLE_COUNT_1_BIT;
@@ -278,7 +285,7 @@ static inline int ps5vk_physical_profile_valid(
         !limits->maxSampleMaskWords ||
         limits->discreteQueuePriorities < PS5VK_REQUIRED_QUEUE_PRIORITIES ||
         limits->maxBoundDescriptorSets != PS5VK_MAX_SETS ||
-        limits->maxPerStageResources != PS5VK_MAX_DESCRIPTORS ||
+        limits->maxPerStageResources != PS5VK_REPORTED_STAGE_RESOURCES ||
         !limits->maxComputeSharedMemorySize ||
         !limits->maxComputeWorkGroupInvocations)
         return 0;

@@ -63,7 +63,8 @@ static void lifecycle(void)
     assert(vkAllocateDescriptorSets(&other, &ai, sets) != VK_SUCCESS && !sets[0] && !sets[1]);
     assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_SUCCESS);
     assert(p->used_sets == 2 && p->storage_used == 6);
-    for (unsigned j = 0; j < PS5VK_MAX_DESCRIPTORS; ++j) assert(!sets[0]->defined[j]);
+    assert(sets[0]->capacity == 3 && sets[1]->capacity == 3);
+    for (unsigned j = 0; j < sets[0]->capacity; ++j) assert(!sets[0]->defined[j]);
     VkDescriptorSet extra[2];
     assert(vkAllocateDescriptorSets(&d, &ai, extra) == VK_ERROR_OUT_OF_POOL_MEMORY);
     assert(!extra[0] && !extra[1] && p->used_sets == 2);
@@ -1044,6 +1045,103 @@ union dxvk_descriptor_info {
     VkDescriptorBufferInfo buffer;
     VkBufferView texelBuffer;
 };
+/* A set holds PS5VK_MAX_DESCRIPTORS (1024) descriptors across bindings up to
+ * PS5VK_MAX_BINDINGS - 1, stored in arrays sized from its layout. Writes,
+ * copies (including an overlapping copy inside one set) and templates cover
+ * the whole range without per-update stack arrays of that size. */
+static void set_capacity(void)
+{
+    struct VkDevice_T d={.memory={NULL,backing_alloc,backing_free,cache,cache},
+        .buffer_alignment=256,.uniform_buffer_alignment=256,.noncoherent_atom=64,.max_allocation=4096};
+    VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=1024,
+        .usage=VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT};
+    VkBuffer buffer;assert(vkCreateBuffer(&d,&bi,NULL,&buffer)==VK_SUCCESS);
+    VkMemoryAllocateInfo mi={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=1024};
+    VkDeviceMemory memory;assert(vkAllocateMemory(&d,&mi,NULL,&memory)==VK_SUCCESS);
+    assert(vkBindBufferMemory(&d,buffer,memory,0)==VK_SUCCESS);
+    VkBufferView views[4];
+    for(unsigned v=0;v<4;++v) {
+        VkBufferViewCreateInfo vi={.sType=VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,.buffer=buffer,
+            .format=VK_FORMAT_R32_UINT,.offset=256u*v,.range=256};
+        assert(vkCreateBufferView(&d,&vi,NULL,&views[v])==VK_SUCCESS);
+    }
+    VkDescriptorSetLayoutBinding bindings[]={
+        {0,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,PS5VK_MAX_DESCRIPTORS-24,VK_SHADER_STAGE_COMPUTE_BIT,NULL},
+        {PS5VK_MAX_BINDINGS-1,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,24,VK_SHADER_STAGE_COMPUTE_BIT,NULL}};
+    VkDescriptorSetLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount=2,.pBindings=bindings};VkDescriptorSetLayout layout,refused;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    assert(layout->signature.count==PS5VK_MAX_DESCRIPTORS &&
+           layout->signature.binding[PS5VK_MAX_BINDINGS-1].first==PS5VK_MAX_DESCRIPTORS-24);
+    bindings[1].descriptorCount=25;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&refused)==VK_ERROR_FEATURE_NOT_PRESENT);
+    bindings[1].descriptorCount=24;bindings[1].binding=PS5VK_MAX_BINDINGS;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&refused)==VK_ERROR_FEATURE_NOT_PRESENT);
+    VkDescriptorPoolSize size={VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,2*PS5VK_MAX_DESCRIPTORS};
+    VkDescriptorPoolCreateInfo pi={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets=2,.poolSizeCount=1,.pPoolSizes=&size};VkDescriptorPool pool;
+    assert(vkCreateDescriptorPool(&d,&pi,NULL,&pool)==VK_SUCCESS);
+    VkDescriptorSetLayout layouts[2]={layout,layout};
+    VkDescriptorSetAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool=pool,.descriptorSetCount=2,.pSetLayouts=layouts};VkDescriptorSet sets[2];
+    assert(vkAllocateDescriptorSets(&d,&ai,sets)==VK_SUCCESS);
+    assert(sets[0]->capacity==PS5VK_MAX_DESCRIPTORS && sets[1]->capacity==PS5VK_MAX_DESCRIPTORS);
+    /* One write of all 1024, rolling over from binding 0 into binding 63. */
+    static VkBufferView all[PS5VK_MAX_DESCRIPTORS];
+    for(unsigned i=0;i<PS5VK_MAX_DESCRIPTORS;++i)all[i]=views[i%4];
+    VkWriteDescriptorSet w={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=sets[0],
+        .dstBinding=0,.descriptorCount=PS5VK_MAX_DESCRIPTORS,
+        .descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,.pTexelBufferView=all};
+    vkUpdateDescriptorSets(&d,1,&w,0,NULL);
+    assert(!d.lifetime_errors);
+    for(unsigned i=0;i<PS5VK_MAX_DESCRIPTORS;++i)
+        assert(sets[0]->defined[i] && sets[0]->texel_views[i]==views[i%4]);
+    /* A copy of the whole set, then an overlapping copy inside set 1. */
+    VkCopyDescriptorSet c={.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET,.srcSet=sets[0],
+        .dstSet=sets[1],.descriptorCount=PS5VK_MAX_DESCRIPTORS};
+    vkUpdateDescriptorSets(&d,0,NULL,1,&c);
+    assert(!d.lifetime_errors && !memcmp(sets[0]->texel_views,sets[1]->texel_views,
+        PS5VK_MAX_DESCRIPTORS*sizeof(VkBufferView)));
+    c.srcSet=c.dstSet=sets[1];c.dstArrayElement=3;c.descriptorCount=PS5VK_MAX_DESCRIPTORS-3;
+    vkUpdateDescriptorSets(&d,0,NULL,1,&c);
+    assert(!d.lifetime_errors);
+    for(unsigned i=3;i<PS5VK_MAX_DESCRIPTORS;++i)assert(sets[1]->texel_views[i]==views[(i-3)%4]);
+    c.dstArrayElement=0;c.srcArrayElement=5;c.descriptorCount=PS5VK_MAX_DESCRIPTORS-5;
+    vkUpdateDescriptorSets(&d,0,NULL,1,&c);
+    for(unsigned i=0;i<PS5VK_MAX_DESCRIPTORS-5;++i)assert(sets[1]->texel_views[i]==views[(i+2)%4]);
+    /* A template entry longer than its internal chunk, rolling over too. */
+    VkDescriptorUpdateTemplateEntry entry={.dstBinding=0,.dstArrayElement=7,
+        .descriptorCount=PS5VK_MAX_DESCRIPTORS-7,.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+        .offset=0,.stride=sizeof(VkBufferView)};
+    VkDescriptorUpdateTemplateCreateInfo ti={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO,
+        .descriptorUpdateEntryCount=1,.pDescriptorUpdateEntries=&entry,
+        .templateType=VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET,.descriptorSetLayout=layout};
+    VkDescriptorUpdateTemplate t;assert(vkCreateDescriptorUpdateTemplateKHR(&d,&ti,NULL,&t)==VK_SUCCESS);
+    for(unsigned i=0;i<PS5VK_MAX_DESCRIPTORS;++i)all[i]=views[(i+1)%4];
+    vkUpdateDescriptorSetWithTemplateKHR(&d,sets[0],t,all);
+    assert(!d.lifetime_errors);
+    for(unsigned i=0;i<7;++i)assert(sets[0]->texel_views[i]==views[i%4]);
+    for(unsigned i=7;i<PS5VK_MAX_DESCRIPTORS;++i)assert(sets[0]->texel_views[i]==views[(i-7+1)%4]);
+    vkDestroyDescriptorUpdateTemplateKHR(&d,t,NULL);
+    vkDestroyDescriptorPool(&d,pool,NULL);vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    for(unsigned v=0;v<4;++v)vkDestroyBufferView(&d,views[v],NULL);
+    vkDestroyBuffer(&d,buffer,NULL);vkFreeMemory(&d,memory,NULL);
+    /* Dynamic buffers per set: the reported 8 uniform + 4 storage. */
+    d.uniform_buffer_alignment=256;
+    VkDescriptorSetLayoutBinding dynamic[]={
+        {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,8,VK_SHADER_STAGE_COMPUTE_BIT,NULL},
+        {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,4,VK_SHADER_STAGE_COMPUTE_BIT,NULL}};
+    li.pBindings=dynamic;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&layout)==VK_SUCCESS);
+    assert(ps5vk_dynamic_slot(&layout->signature,11)==11 &&
+           ps5vk_dynamic_slot(&layout->signature,12)==UINT32_MAX);
+    vkDestroyDescriptorSetLayout(&d,layout,NULL);
+    dynamic[0].descriptorCount=9;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&refused)==VK_ERROR_FEATURE_NOT_PRESENT);
+    dynamic[0].descriptorCount=8;dynamic[1].descriptorCount=5;
+    assert(vkCreateDescriptorSetLayout(&d,&li,NULL,&refused)==VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(!d.buffer_views && !d.buffers && !d.memories && !d.descriptor_objects);
+}
 static void update_templates(void)
 {
     struct counts counts = {0, -1};
@@ -1537,6 +1635,7 @@ static void inline_uniform_pipeline_layouts(void)
 
 int main(void)
 {
+    set_capacity();
     lifecycle(); rollback(); negative(); bda_cts_output_layout(); push_constant_layouts(); updates(); image_pool_types(); image_layout_visibility(); uniform_resources(); dynamic_buffer_resources(); input_attachments();
     separate_sampler_types();
     update_templates();

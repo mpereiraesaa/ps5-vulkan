@@ -284,8 +284,13 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
                 uint32_t *words=table+(tables.binding[s][b].byte_offset+
                     e*tables.binding[s][b].byte_stride)/4;
                 if(graphics_buffer_type(set->signature.type[b])) {
-                    VkDeviceSize dynamic=ps5vk_dynamic_descriptor_type(
-                        set->signature.type[b])?op->graphics_dynamic_offsets[s][index]:0;
+                    VkDeviceSize dynamic=0;
+                    if(ps5vk_dynamic_descriptor_type(set->signature.type[b])) {
+                        const uint32_t slot=ps5vk_dynamic_slot(&set->signature,index);
+                        if(slot>=PS5VK_MAX_DYNAMIC_DESCRIPTORS){ps5vk_native_release_draw(&result);
+                            ps5vk_draw_prepare_site=__LINE__;return VK_ERROR_UNKNOWN;}
+                        dynamic=op->dynamic_offsets[s][slot];
+                    }
                     rc=ps5vk_buffer_descriptor(d,&set->buffers[index],dynamic,words);
                 } else if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) {
                     /* Resource-only image data: the encoder writes the eight

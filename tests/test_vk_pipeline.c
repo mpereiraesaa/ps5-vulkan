@@ -50,6 +50,34 @@ static VkComputePipelineCreateInfo info(VkShaderModule m, VkPipelineLayout l)
         .layout = l, .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = m, .pName = "main"}};
 }
+/* A program whose descriptor sits past the historical 128-dword table: the
+ * last storage buffer of a 1024-descriptor set (1023 sampled images first). */
+static void full_set_table_offsets(void)
+{
+    static struct ps5vk_compiled_program p;
+    p = fixture(module_a, code_a);
+    p.descriptors[0] = (struct ps5vk_program_descriptor){0, 1, 0, (PS5VK_MAX_DESCRIPTORS - 1) * 8u,
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+    struct ps5vk_program_library lib = {&p, 1};
+    struct VkDevice_T d = {.compiler = {&lib, ps5vk_program_resolve}, .graphics_enabled = VK_TRUE};
+    VkDescriptorSetLayoutBinding bindings[2] = {
+        {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PS5VK_MAX_DESCRIPTORS - 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+    VkDescriptorSetLayoutCreateInfo si = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 2, .pBindings = bindings}; VkDescriptorSetLayout set;
+    assert(vkCreateDescriptorSetLayout(&d, &si, NULL, &set) == VK_SUCCESS);
+    VkPipelineLayoutCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1, .pSetLayouts = &set}; VkPipelineLayout pl;
+    assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_SUCCESS);
+    VkShaderModule m = shader(&d, module_a);
+    VkComputePipelineCreateInfo ci = info(m, pl);
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL, &pipeline) == VK_SUCCESS);
+    assert(pipeline->program.descriptors[0].table_dword == (PS5VK_MAX_DESCRIPTORS - 1) * 8u);
+    vkDestroyPipeline(&d, pipeline, NULL);
+    vkDestroyShaderModule(&d, m, NULL); vkDestroyPipelineLayout(&d, pl, NULL);
+    vkDestroyDescriptorSetLayout(&d, set, NULL);
+}
 static void lifecycle(void)
 {
     struct ps5vk_compiled_program programs[] = {fixture(module_a, code_a), fixture(module_b, code_b)};
@@ -490,6 +518,7 @@ static void unadvertised_int16_gate(void)
 }
 int main(void)
 {
+    full_set_table_offsets();
     lifecycle(); legacy_offline_abi(); dispatch_base_flag(); negative(); graphics_entries();
     t08_capability_gates(); uniform_block_layout_gate(); unadvertised_subgroup_gate();
     diagnostic_compute_basic_gate();

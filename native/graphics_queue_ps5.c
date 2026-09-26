@@ -353,7 +353,15 @@ static VkResult resolve_draw_emit(VkDevice d, struct graphics_job *j,
     synthetic_fb.samples[1] = VK_SAMPLE_COUNT_1_BIT;
     synthetic_fb.color_attachments[0] = 1u;
     struct VkDescriptorPool_T synthetic_pool = {.device = d};
-    struct VkDescriptorSet_T synthetic_set = {.pool = &synthetic_pool};
+    VkDescriptorBufferInfo synthetic_buffer = {0};
+    VkDescriptorImageInfo synthetic_image = {0};
+    VkBufferView synthetic_view = VK_NULL_HANDLE;
+    VkImage synthetic_resource = VK_NULL_HANDLE;
+    VkBool32 synthetic_defined = VK_FALSE;
+    struct VkDescriptorSet_T synthetic_set = {.pool = &synthetic_pool, .capacity = 1u,
+        .buffers = &synthetic_buffer, .images = &synthetic_image,
+        .texel_views = &synthetic_view, .image_resources = &synthetic_resource,
+        .defined = &synthetic_defined};
     synthetic_set.signature.count = 1u;
     synthetic_set.signature.binding[0] = (struct ps5vk_binding){.count = 1u, .first = 0u,
         .stages = VK_SHADER_STAGE_FRAGMENT_BIT};

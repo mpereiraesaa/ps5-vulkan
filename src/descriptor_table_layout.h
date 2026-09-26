@@ -25,6 +25,8 @@ struct ps5vk_descriptor_table_layout {
     uint32_t binding_count, descriptor_count;
 };
 
+/* The largest set table: every descriptor a 48-byte combined record. */
+enum { PS5VK_MAX_TABLE_DWORDS = PS5VK_MAX_DESCRIPTORS * 12 };
 static inline uint32_t ps5vk_descriptor_record_bytes(VkDescriptorType type)
 {
     switch (type) {

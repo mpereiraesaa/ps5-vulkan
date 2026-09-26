@@ -28,7 +28,9 @@ int main(void)
 {
     struct VkDevice_T device = {0};
     struct VkDescriptorPool_T pool = {.device = &device};
-    struct VkDescriptorSet_T set = {.pool = &pool};
+    struct VkDescriptorSet_T set={.pool = &pool};
+    static struct ps5vk_descriptor_storage set_storage;
+    memset(&set_storage,0,sizeof(set_storage));ps5vk_descriptor_set_use_storage(&set,&set_storage);
     set.signature.binding[0] = (struct ps5vk_binding){1, 0, VK_SHADER_STAGE_COMPUTE_BIT};
     set.signature.binding[1] = (struct ps5vk_binding){1, 1, VK_SHADER_STAGE_COMPUTE_BIT};
     set.signature.type[0]=set.signature.type[1]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -70,7 +72,11 @@ int main(void)
     assert(!memcmp(saved, table, sizeof(table)));
     struct VkBufferView_T view={.device=&device,.buffer=(VkBuffer)(uintptr_t)0x200004000,
         .format=VK_FORMAT_R32_UINT,.offset=64,.range=256};
-    struct VkDescriptorSet_T texel={.pool=&pool,.defined={VK_TRUE},.texel_views={&view}};
+    struct VkDescriptorSet_T texel={.pool=&pool};
+    static struct ps5vk_descriptor_storage texel_storage;
+    memset(&texel_storage,0,sizeof(texel_storage));ps5vk_descriptor_set_use_storage(&texel,&texel_storage);
+    texel.defined[0]=VK_TRUE;
+    texel.texel_views[0]=&view;
     texel.signature.binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
     texel.signature.type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
     struct ps5vk_compiled_program typed={.gfx=1013,.descriptor_count=1,
@@ -130,8 +136,12 @@ int main(void)
     struct VkImageView_T image_view={.device=&device,.image=&image,
         .format=VK_FORMAT_R32_UINT,.view_type=VK_IMAGE_VIEW_TYPE_2D,
         .range={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
-    struct VkDescriptorSet_T storage={.pool=&pool,
-        .defined={VK_TRUE,VK_TRUE},.image_resources={&image}};
+    struct VkDescriptorSet_T storage={.pool=&pool};
+    static struct ps5vk_descriptor_storage storage_storage;
+    memset(&storage_storage,0,sizeof(storage_storage));ps5vk_descriptor_set_use_storage(&storage,&storage_storage);
+    storage.defined[0]=VK_TRUE;
+    storage.defined[1]=VK_TRUE;
+    storage.image_resources[0]=&image;
     storage.signature.binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
     storage.signature.binding[1]=(struct ps5vk_binding){1,1,VK_SHADER_STAGE_COMPUTE_BIT};
     storage.signature.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -259,10 +269,19 @@ int main(void)
         0x33333333u,0x44444444u}};
     struct VkBufferView_T typed_view={.device=&device,.buffer=(VkBuffer)(uintptr_t)0x200004000,
         .format=VK_FORMAT_R32_UINT,.offset=64,.range=256};
-    struct VkDescriptorSet_T separate={.pool=&pool,
-        .defined={VK_TRUE,VK_TRUE,VK_TRUE,VK_TRUE},
-        .image_resources={VK_NULL_HANDLE,&sampled_image},
-        .texel_views={VK_NULL_HANDLE,VK_NULL_HANDLE,&typed_view,&typed_view}};
+    struct VkDescriptorSet_T separate={.pool=&pool};
+    static struct ps5vk_descriptor_storage separate_storage;
+    memset(&separate_storage,0,sizeof(separate_storage));ps5vk_descriptor_set_use_storage(&separate,&separate_storage);
+    separate.defined[0]=VK_TRUE;
+    separate.defined[1]=VK_TRUE;
+    separate.defined[2]=VK_TRUE;
+    separate.defined[3]=VK_TRUE;
+    separate.image_resources[0]=VK_NULL_HANDLE;
+    separate.image_resources[1]=&sampled_image;
+    separate.texel_views[0]=VK_NULL_HANDLE;
+    separate.texel_views[1]=VK_NULL_HANDLE;
+    separate.texel_views[2]=&typed_view;
+    separate.texel_views[3]=&typed_view;
     const VkDescriptorType separate_types[4]={VK_DESCRIPTOR_TYPE_SAMPLER,
         VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
         VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER};

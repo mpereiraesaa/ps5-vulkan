@@ -66,7 +66,7 @@ class CoreVersionContract(unittest.TestCase):
         message = str(raised.exception)
         self.assertIn("apiVersion 1.1 is not backed", message)
         self.assertIn("1.1 command vkGetDeviceQueue2 (device) does not resolve", message)
-        self.assertIn("1.1 limit:maxPerSetDescriptors: blocker", message)
+        self.assertIn("1.1 limit:maxPerSetDescriptors: in-progress", message)
         self.assertIn("1.1 limit:subgroupSupportedOperations: missing", message)
         self.assertNotIn("1.2 ", message)
 

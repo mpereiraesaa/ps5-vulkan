@@ -1,5 +1,6 @@
 #include "vk_queue.h"
 #include "ps5_platform.h"
+#include <string.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -72,7 +73,10 @@ int main(void)
     struct VkDevice_T device = {.memory = {.allocate = allocate, .release = release}};
     ps5vk_native_queue_configure(&device);
     struct VkDescriptorPool_T pool = {.device = &device};
-    struct VkDescriptorSet_T set = {.pool = &pool, .defined = {VK_TRUE}};
+    struct VkDescriptorSet_T set={.pool = &pool};
+    static struct ps5vk_descriptor_storage set_storage;
+    memset(&set_storage,0,sizeof(set_storage));ps5vk_descriptor_set_use_storage(&set,&set_storage);
+    set.defined[0]=VK_TRUE;
     set.signature.binding[0] = (struct ps5vk_binding){1, 0, VK_SHADER_STAGE_COMPUTE_BIT};
     set.signature.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     set.buffers[0] = (VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)0x100004000, 256, 4096};

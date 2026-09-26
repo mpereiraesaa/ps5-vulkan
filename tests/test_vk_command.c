@@ -268,8 +268,14 @@ static void multi_set_recording(void)
     assert(vkAllocateMemory(&d,&mi,NULL,&memory)==VK_SUCCESS);
     assert(vkBindBufferMemory(&d,uniform,memory,0)==VK_SUCCESS);
     struct VkDescriptorPool_T descriptor_pool={.device=&d};
-    struct VkDescriptorSet_T a={.pool=&descriptor_pool,.generation=3,.defined={VK_TRUE}};
-    struct VkDescriptorSet_T cset={.pool=&descriptor_pool,.generation=7,.defined={VK_TRUE}};
+    struct VkDescriptorSet_T a={.pool=&descriptor_pool,.generation=3};
+    static struct ps5vk_descriptor_storage a_storage;
+    memset(&a_storage,0,sizeof(a_storage));ps5vk_descriptor_set_use_storage(&a,&a_storage);
+    a.defined[0]=VK_TRUE;
+    struct VkDescriptorSet_T cset={.pool=&descriptor_pool,.generation=7};
+    static struct ps5vk_descriptor_storage cset_storage;
+    memset(&cset_storage,0,sizeof(cset_storage));ps5vk_descriptor_set_use_storage(&cset,&cset_storage);
+    cset.defined[0]=VK_TRUE;
     a.signature.binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_COMPUTE_BIT};
     cset.signature.binding[0]=a.signature.binding[0];
     a.signature.type[0]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -586,6 +592,8 @@ static void graphics_recording(void)
     assert(vkEndCommandBuffer(c) != VK_SUCCESS);
     struct VkDescriptorPool_T graphics_pool={.device=&d};
     struct VkDescriptorSet_T graphics_set={.pool=&graphics_pool,.generation=9};
+    static struct ps5vk_descriptor_storage graphics_set_storage;
+    memset(&graphics_set_storage,0,sizeof(graphics_set_storage));ps5vk_descriptor_set_use_storage(&graphics_set,&graphics_set_storage);
     graphics_set.signature.count=1;
     graphics_set.signature.binding[0]=(struct ps5vk_binding){1,0,VK_SHADER_STAGE_FRAGMENT_BIT};
     graphics_set.signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -597,6 +605,7 @@ static void graphics_recording(void)
     vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_GRAPHICS,&graphics_layout,0,1,&graphics_handle,0,NULL);
     assert(c->graphics_sets[0]==graphics_handle && !c->sets[0]);
     pipeline.set_count=1;pipeline.sets[0]=graphics_set.signature;
+    /* Copies of graphics_set: they share its descriptor storage. */
     struct VkDescriptorSet_T extra_sets[3];VkDescriptorSet extra_handles[3];
     pipeline.set_count=graphics_layout.set_count=4;
     for(unsigned s=1;s<4;++s) {
@@ -613,7 +622,7 @@ static void graphics_recording(void)
     vkCmdDraw(c, 3, 1, 2, 4);
     for(unsigned s=0;s<4;++s) {
         c->graphics_set_dynamic_offsets[s][0]=0;
-        assert(c->operations[1].graphics_dynamic_offsets[s][0]==256u*(s+1u));
+        assert(c->operations[1].dynamic_offsets[s][0]==256u*(s+1u));
     }
     assert(c->operations[1].sets[0]==graphics_handle && c->operations[1].generations[0]==9);
     for(unsigned s=1;s<4;++s)assert(c->operations[1].sets[s]==extra_handles[s-1] &&
@@ -923,8 +932,12 @@ static void dynamic_descriptor_recording(void)
 {
     struct VkDevice_T d={.buffer_alignment=256,.uniform_buffer_alignment=256};
     struct VkDescriptorPool_T descriptor_pool={.device=&d};
-    struct VkDescriptorSet_T set={.pool=&descriptor_pool,.generation=9,
-        .defined={VK_TRUE,VK_TRUE,VK_TRUE}};
+    struct VkDescriptorSet_T set={.pool=&descriptor_pool,.generation=9};
+    static struct ps5vk_descriptor_storage set_storage;
+    memset(&set_storage,0,sizeof(set_storage));ps5vk_descriptor_set_use_storage(&set,&set_storage);
+    set.defined[0]=VK_TRUE;
+    set.defined[1]=VK_TRUE;
+    set.defined[2]=VK_TRUE;
     set.signature.binding[1]=(struct ps5vk_binding){2,0,VK_SHADER_STAGE_COMPUTE_BIT};
     set.signature.binding[7]=(struct ps5vk_binding){1,2,VK_SHADER_STAGE_COMPUTE_BIT};
     set.signature.type[1]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -944,9 +957,12 @@ static void dynamic_descriptor_recording(void)
     vkCmdBindDescriptorSets(c,VK_PIPELINE_BIND_POINT_COMPUTE,&layout,0,1,&handle,3,offsets);
     vkCmdDispatch(c,1,1,1);
     assert(c->state==PS5VK_RECORDING && c->operation_count==1);
-    assert(c->operations[0].descriptor_dynamic_offsets[0]==768 &&
-        c->operations[0].descriptor_dynamic_offsets[1]==512 &&
-        c->operations[0].descriptor_dynamic_offsets[2]==256);
+    /* Compact per-set slots: binding 1's two elements, then binding 7. */
+    assert(c->operations[0].dynamic_offsets[0][0]==256 &&
+        c->operations[0].dynamic_offsets[0][1]==512 &&
+        c->operations[0].dynamic_offsets[0][2]==768);
+    assert(ps5vk_dynamic_slot(&set.signature,2)==2 && ps5vk_dynamic_slot(&set.signature,0)==0 &&
+        ps5vk_dynamic_slot(&set.signature,3)==UINT32_MAX);
     assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
         !c->set_dynamic_offsets[0][0] && !c->set_dynamic_offsets[0][2]);
     assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);

@@ -20,6 +20,7 @@ struct gate_fixture {
     struct VkImage_T attachment_image, other_image;
     struct VkDescriptorPool_T pool;
     struct VkDescriptorSet_T set;
+    struct ps5vk_descriptor_storage set_storage;
     struct ps5vk_binding binding;
     struct ps5vk_runtime_draw_abi abi;
     struct VkFramebuffer_T framebuffer;
@@ -57,6 +58,7 @@ static void fixture_init(struct gate_fixture *f)
     f->other_view.image = &f->other_image;
 
     f->pool.device = &f->device;
+    ps5vk_descriptor_set_use_storage(&f->set, &f->set_storage);
     f->set.pool = &f->pool;
     f->set.generation = 3;
     f->set.defined[GATE_ELEMENT] = VK_TRUE;
@@ -134,6 +136,7 @@ static void fixture_clone(struct gate_fixture *out, const struct gate_fixture *i
     out->other_view.device = &out->device;
     out->other_view.image = &out->other_image;
     out->pool.device = &out->device;
+    ps5vk_descriptor_set_use_storage(&out->set, &out->set_storage);
     out->set.pool = &out->pool;
     out->pass.device = &out->device;
     out->pass.attachments = out->attachments;
