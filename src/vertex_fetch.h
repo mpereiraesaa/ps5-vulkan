@@ -31,7 +31,9 @@ static inline VkResult ps5vk_vertex_fetch_compact(const struct ps5vk_vertex_fetc
     struct ps5vk_vertex_fetch_table result={0};
     for(uint32_t binding=0;binding<in->count;++binding) {
         if(!(usage_mask&(UINT32_C(1)<<binding)))continue;
-        /* Empty descriptors are only valid for an entirely empty draw. */
+        /* Empty descriptors are only valid for an entirely empty draw. A
+         * robustness2 null binding has an extent and a null address, and
+         * stays in the table as the all-zero SRD. */
         if(!in->bindings[binding].attribute_extent) {
             for(uint32_t i=0;i<in->count;++i)
                 if(in->bindings[i].address)return VK_ERROR_UNKNOWN;

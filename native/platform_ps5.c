@@ -335,13 +335,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * capability probe is re-measured with it enumerated. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE;
 #endif
-#if defined(PS5VK_ROBUSTNESS2_DIAGNOSTIC) && PS5VK_ROBUSTNESS2_DIAGNOSTIC
-    /* DXVK262-T13 measurement build only: VK_EXT_robustness2 with
-     * robustBufferAccess2 and nullDescriptor, so the public-SDK witness can
-     * negotiate both before the shipping profile reports them. */
+    /* VK_EXT_robustness2 with robustBufferAccess2 and nullDescriptor (never
+     * robustImageAccess2): the public-SDK compute and vertex-input witnesses
+     * read zero for out-of-range and null descriptors and vertex buffers. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
         PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
-#endif
     /* VkFormatProperties3 (VK_KHR_format_feature_flags2) and the RGBA8
      * UNORM <-> SRGB mutable views with VK_KHR_image_format_list: the
      * SDK-linked mutable-view witness sampled the SRGB view of the UNORM

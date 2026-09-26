@@ -6341,3 +6341,60 @@ verified strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 22 device
 extensions, 39/62 requested query values met, with the synchronization2,
 transform feedback and imageless framebuffer routes queried explicitly. The
 joined four-axis DXVK matrix has **37/62 ready and 25 blockers**.
+
+## Robustness2 promotion (2026-09-26)
+
+`PS5VK_ROBUSTNESS2_DIAGNOSTIC` is retired. The ordinary profile enumerates
+`VK_EXT_robustness2` with `robustBufferAccess2` and `nullDescriptor`
+(`robustImageAccess2` stays false), and the capability probe reads both
+features through an explicit `VK_EXT_robustness2` route query.
+
+The vertex-input path gained the two behaviours the extension requires. With
+`nullDescriptor` enabled, `vkCmdBindVertexBuffers` accepts `VK_NULL_HANDLE`
+(offset 0) and the draw binds an all-zero vertex descriptor, which reads zero.
+With `robustBufferAccess2` enabled, a non-indexed draw that runs past the end
+of a vertex buffer is no longer refused: the descriptor's record count bounds
+the fetch and the missing vertices read zero.
+
+A new public-SDK vertex-input witness (`examples/t13_vertex_robustness_witness`)
+draws three scissored columns into a 48x16 RGBA8 target: one from a null vertex
+binding, one with `firstVertex` 3 past a three-vertex buffer, and an in-bounds
+control whose colour comes from the vertex data. The readback runs in its own
+submission.
+
+- Measurement build: eboot SHA-256
+  `45c8b49cbc5ea216976aeff120f0e19433d212e609cbab6598d1160945d36dfc`, run
+  `20260926T014114236Z_PPSA99994_ps5vk_0x6948967a49d2`, log SHA-256
+  `ac6e018e5f7c16632eb4c5fe7c71fb2be63a8283fded0ed5353865ef73f947db`, strict.
+- Ordinary SDK: eboot SHA-256
+  `78322cf1055ee67ca85513f52a3b2cba23c1a2beb6b4d788f20b2d732cf1d6d5`, run
+  `20260926T024526733Z_PPSA99994_ps5vk_0x6cc98e68f652`, log SHA-256
+  `1f5ce5cbef3fa394ec7b0fb818d00e635deaa095e0e1eaaed6e3323c8774d28f`, strict:
+  the null and past-end columns read `00000000`, the control `4080bfff`, with
+  no mismatch inside any column.
+
+The compute witness (`examples/t13_robustness2_witness`: out-of-range storage
+and uniform reads, null descriptors) ran again on the ordinary SDK: eboot
+SHA-256 `a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1`, run
+`20260926T024516067Z_PPSA99994_ps5vk_0x6cc712bdfdd1`, log SHA-256
+`4566ba7a5e6f95130a2fa85baae9625e8668865680912ad2b42d8f16f3b1cb57`, strict.
+
+The frozen acceptance selection on this tree (eboot
+`279c89ba82a3948c77e4e392b8569093fa7279f150b332daa472a56b241a4bdc`, run
+`20260926T024537975Z_PPSA99994_upstream-cts_0x6ccc2c8a01b5`, log SHA-256
+`44164867a3ad8bf71fe1881506501899c178aec28b3f3e1ef87fa48670e536fb`) passed
+879/879. After rebasing onto the transform feedback promotion it passed again
+on the combined tree (eboot
+`45cd1dd5038215f68b47b94c933a77888ea82190837ebf6e0663a2ece57cd2c7`, run
+`20260926T025257217Z_PPSA99994_upstream-cts_0x6d3270d4ecd8`, log SHA-256
+`cd4673aec15e16d0e4106943adacf17418dad4f5a62a7938636cc4944809c433`).
+
+**Public-ABI capability probe.** On the pre-rebase tree: eboot SHA-256
+`86adde7931b05233d94359dfc90b55be23eb6740a67fdeb443bb05af308a2018`, run
+`20260926T024509592Z_PPSA99994_ps5vk_0x6cc590c2fd6b`, 21 device extensions,
+38/62. On the combined tree: eboot SHA-256
+`35dda92c4b3b455e41a4a35d5214272e941abe6dc4a0180c87e08599566a9e3f`, run
+`20260926T025244554Z_PPSA99994_ps5vk_0x6d2f7e091699`, log SHA-256
+`430896e8ecd132bd7c2dcfa162ff1d015b5891924103042fd6a911a52966f29d`: API 1.0.0, 22 device extensions, 41/62. The DXVK matrix has **39/62
+ready and 23 blockers** (the robustness2 extension row and both feature rows
+on top of transform feedback).

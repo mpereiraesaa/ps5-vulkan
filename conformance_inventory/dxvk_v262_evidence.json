@@ -2952,6 +2952,48 @@
         ],
         "note": "Public-SDK transform feedback witness (tools/run_t14_xfb_witness.py) strictly verified 9/9 cases on the shipping SDK (and on the measurement build, eboot 05ad8022331520e1d9d87cc7a9f1c09e2ec0651d06fe09be8734259aac8e35d2): exact records in primitive order for 6000 points, counter resume across two draws, overflow ending at the last whole primitive, streams 0 and 1 into buffers 0 and 1, instanced capture, a capture pipeline with capture inactive, DrawIndirectByteCount and a stream query (written 10, needed 16)."
       }
+    },
+    "extension:VK_EXT_robustness2": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260926T024516067Z_PPSA99994_ps5vk_0x6cc712bdfdd1",
+          "20260926T024526733Z_PPSA99994_ps5vk_0x6cc98e68f652"
+        ],
+        "artifact_sha256": "a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1",
+        "refs": [
+          "VALIDATION.md#robustness2-promotion-2026-09-26"
+        ],
+        "note": "Public-SDK compute witness (eboot a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1) and vertex-input witness (eboot 78322cf1055ee67ca85513f52a3b2cba23c1a2beb6b4d788f20b2d732cf1d6d5) strictly verified on the ordinary SDK: the extension negotiates robustBufferAccess2 and nullDescriptor through the public API."
+      }
+    },
+    "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260926T024516067Z_PPSA99994_ps5vk_0x6cc712bdfdd1",
+          "20260926T024526733Z_PPSA99994_ps5vk_0x6cc98e68f652"
+        ],
+        "artifact_sha256": "a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1",
+        "refs": [
+          "VALIDATION.md#robustness2-promotion-2026-09-26"
+        ],
+        "note": "Public-SDK compute witness (eboot a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1) and vertex-input witness (eboot 78322cf1055ee67ca85513f52a3b2cba23c1a2beb6b4d788f20b2d732cf1d6d5) strictly verified on the ordinary SDK: out-of-range storage and uniform reads return zero, and a non-indexed draw past a vertex buffer reads zero."
+      }
+    },
+    "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260926T024516067Z_PPSA99994_ps5vk_0x6cc712bdfdd1",
+          "20260926T024526733Z_PPSA99994_ps5vk_0x6cc98e68f652"
+        ],
+        "artifact_sha256": "a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1",
+        "refs": [
+          "VALIDATION.md#robustness2-promotion-2026-09-26"
+        ],
+        "note": "Public-SDK compute witness (eboot a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1) and vertex-input witness (eboot 78322cf1055ee67ca85513f52a3b2cba23c1a2beb6b4d788f20b2d732cf1d6d5) strictly verified on the ordinary SDK: null descriptors and a VK_NULL_HANDLE vertex buffer read zero."
+      }
     }
   }
 }
