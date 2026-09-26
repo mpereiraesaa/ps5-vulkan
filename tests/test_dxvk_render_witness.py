@@ -12,7 +12,7 @@ from run_dxvk_render_witness import (  # noqa: E402
     verify)
 
 ARTIFACT = dict(profile="dxvk-render-public-sdk-witness", extent=64, format="R8G8B8A8_UNORM",
-                diagnostic_switch="PS5VK_DXVK_RENDER_DIAGNOSTIC", eboot_sha256="artifact-sha")
+                diagnostic_switch="PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC", eboot_sha256="artifact-sha")
 
 
 def fixture_log(*, features=(1, 1), mismatches=(0, 0, 0), visible=None, top=None,

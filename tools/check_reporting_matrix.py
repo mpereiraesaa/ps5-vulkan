@@ -379,6 +379,42 @@ ADVERTISED_FEATURES["imagelessFramebuffer"] = {
     "profiles": ("graphics",),
     "cts": (),
 }
+ADVERTISED_FEATURES["robustBufferAccess2"] = {
+    "citations": (
+        ("native/platform_ps5.c", "platform->supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |"),
+        ("src/vk_device.c", "VK_EXT_ROBUSTNESS_2_EXTENSION_NAME"),
+        ("src/vertex_fetch.c", "PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2"),
+    ),
+    "detail": ("the VK_EXT_robustness2 route bounds buffer descriptors by their exact "
+               "range and vertex fetches by the vertex descriptor record count; the "
+               "public-SDK compute and vertex-input witnesses read zero out of range"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
+ADVERTISED_FEATURES["nullDescriptor"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_T09_FEATURE_NULL_DESCRIPTOR;"),
+        ("src/vk_device.c", "VK_EXT_ROBUSTNESS_2_EXTENSION_NAME"),
+        ("src/vertex_fetch.c", "PS5VK_T09_FEATURE_NULL_DESCRIPTOR"),
+    ),
+    "detail": ("the VK_EXT_robustness2 route turns VK_NULL_HANDLE descriptors and vertex "
+               "buffers into all-zero records; the public-SDK compute and vertex-input "
+               "witnesses read zero through them"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
+ADVERTISED_FEATURES["dynamicRendering"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_T09_FEATURE_DYNAMIC_RENDERING |"),
+        ("src/vk_device.c", "VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME"),
+        ("src/vk_dynamic_rendering.c", "vkCmdBeginRenderingKHR"),
+    ),
+    "detail": ("the Vulkan 1.0 KHR route with its depth_stencil_resolve dependency records "
+               "vkCmdBeginRenderingKHR onto the render-pass path; the public-SDK render "
+               "witness drew, copied back and compared through it"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
 ADVERTISED_FEATURES["synchronization2"] = {
     "citations": (
         ("native/platform_ps5.c", "platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;"),
@@ -1377,7 +1413,9 @@ def main() -> int:
                      "hostQueryReset", "timelineSemaphore",
                      "separateDepthStencilLayouts", "shaderDemoteToHelperInvocation",
                      "shaderTerminateInvocation", "synchronization2", "transformFeedback", "geometryStreams",
-                     "imagelessFramebuffer"):
+                     "imagelessFramebuffer",
+                     "robustBufferAccess2", "nullDescriptor",
+                     "dynamicRendering"):
 
             value = dump["extensionFeatures"][name]
             verdict, detail = evaluate_feature(name, value, profile)

@@ -1110,6 +1110,10 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(VkCommandBuffer c,uint32_t fir
        count>PS5VK_MAX_VERTEX_BINDINGS-first || (count && (!buffers || !offsets))) {invalid(c);return;}
     for(uint32_t i=0;i<count;++i) {
         void *address;VkDeviceSize bytes;
+        /* robustness2 nullDescriptor: VK_NULL_HANDLE with a zero offset
+         * (VUID-vkCmdBindVertexBuffers-pBuffers-04001/-04002). */
+        if(!buffers[i] && !offsets[i] &&
+           (c->pool->device->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR))continue;
         if(!ps5vk_buffer_usage(c->pool->device,buffers[i],VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) ||
            ps5vk_buffer_span(c->pool->device,buffers[i],offsets[i],VK_WHOLE_SIZE,&address,&bytes)!=VK_SUCCESS)
             {invalid(c);return;}
@@ -1930,6 +1934,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(VkCommandBuffer c, uint32_
     for (uint32_t i = 0; i < count && sizes; ++i) {
         void *address; VkDeviceSize bytes;
         if (sizes[i] == VK_WHOLE_SIZE) continue;
+        /* A null binding's size is ignored (nullDescriptor). */
+        if (!buffers[i] && (c->pool->device->enabled_features_t09 &
+                            PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) continue;
         if (!buffers[i] || ps5vk_buffer_span(c->pool->device, buffers[i], offsets[i],
                 VK_WHOLE_SIZE, &address, &bytes) != VK_SUCCESS || sizes[i] > bytes) {
             invalid(c); return;

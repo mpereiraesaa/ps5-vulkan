@@ -1,50 +1,30 @@
 #!/usr/bin/env python3
-"""Build the bounded public-SDK DXVK first-draw recording witness (DXVK262-T10).
+"""Build the bounded public-SDK witness for DXVK's memory-requirement, dedicated
+allocation, bind2 and descriptor-update-template routes.
 
-Dynamic rendering, copy_commands2 and maintenance1 ship on the ordinary SDK.
-The witness also toggles cull mode and front face through
-VK_EXT_extended_dynamic_state, so the SDK is staged with
-PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC=1, the private measurement switch that
-reports that one route until dynamic topology and vertex stride land."""
+The four extensions ship on the ordinary SDK, so ROUTE_SWITCHES is empty and
+the witness is their native regression check."""
 
 import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
-import struct
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_sdk import get_ps5_toolchain  # noqa: E402
+from build_t09_timeline_witness import checked_spirv, run  # noqa: E402
 from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
-
-def run(*command: str, env: dict | None = None) -> None:
-    subprocess.run(command, cwd=ROOT, env=env, check=True)
-
-
-def checked_spirv(payload: bytes) -> None:
-    """A plain Vulkan-1.0 SPIR-V module with the Shader capability only."""
-    if len(payload) % 4:
-        raise ValueError("SPIR-V length is not word aligned")
-    words = struct.unpack(f"<{len(payload) // 4}I", payload)
-    if len(words) < 7 or words[:2] != (0x07230203, 0x00010000):
-        raise ValueError("witness requires SPIR-V 1.0")
-    capabilities = set()
-    index = 5
-    while index < len(words):
-        size, opcode = words[index] >> 16, words[index] & 0xffff
-        if not size or index + size > len(words):
-            raise ValueError("malformed SPIR-V instruction stream")
-        if opcode == 17 and size == 2:  # OpCapability
-            capabilities.add(words[index + 1])
-        index += size
-    if capabilities != {1}:
-        raise ValueError("witness shaders use the Shader capability only")
+PROFILE = "dxvk-routes-public-sdk-witness"
+VALUES = 64
+TARGETS = 3
+SEEDS = (0x40A70001, 0x40A70002, 0x40A70003)
+ROUTE_SWITCHES: dict[str, str] = {}
 
 
 def main() -> None:
@@ -58,42 +38,32 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    build = ROOT / "build/dxvk-render-witness"
-    dist = ROOT / "dist-dxvk-render-witness/PPSA99994"
+    build = ROOT / "build/dxvk-routes-witness"
+    dist = build / "dist/PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
 
-    shaders = {
-        "dxvk_render_witness_vert_spirv": ROOT / "experiments/graphics/dxvk_render_witness.vert",
-        "dxvk_render_witness_frag_spirv": ROOT / "experiments/graphics/dxvk_render_witness.frag",
-    }
-    arrays = []
-    shader_hashes = {}
-    for name, shader_source in shaders.items():
-        target = build / f"{name}.spv"
-        run(glslang, "-V", "--target-env", "vulkan1.0", str(shader_source),
-            "-o", str(target))
-        payload = target.read_bytes()
-        checked_spirv(payload)
-        arrays.append(emit_array(name, payload))
-        shader_hashes[name] = hashlib.sha256(payload).hexdigest()
-    (build / "dxvk_render_witness_shaders.h").write_text(
-        "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
+    shader_source = ROOT / "experiments/compute/t09_timeline_write.comp"
+    shader_file = build / "timeline_write.spv"
+    run(glslang, "-V", "--target-env", "vulkan1.0", str(shader_source),
+        "-o", str(shader_file))
+    shader = shader_file.read_bytes()
+    checked_spirv(shader)
+    (build / "t09_timeline_shader.h").write_text(
+        "#include <stdint.h>\n" + emit_array("t09_timeline_spirv", shader),
+        encoding="utf-8")
 
-    # The measurement SDK: the routes under test are reported only with the
-    # private switch, and the witness negotiates them through the public API.
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC="1")
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **ROUTE_SWITCHES)
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
-    source = ROOT / "examples/dxvk_render_witness/main.c"
+    source = ROOT / "examples/dxvk_routes_witness/main.c"
     obj = build / "main.o"
     dep = build / "main.d"
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
-        "-I" + str(logger),
-        "-c", str(source), "-o", str(obj), env=sdk_env)
+        "-I" + str(logger), "-c", str(source), "-o", str(obj), env=sdk_env)
     dependencies = dep.read_text()
     if str(ROOT / "src/") in dependencies or str(ROOT / "native/") in dependencies:
         raise RuntimeError("witness includes a private runtime header")
@@ -129,20 +99,19 @@ def main() -> None:
 
     param = json.loads((lab / "projects/ps5-agc-gears/sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
-                 contentId="UP9000-PPSA99994_00-PS5VKDR000000001")
+                 contentId="UP9000-PPSA99994_00-PS5VKRT000000001")
     param["localizedParameters"]["en-US"]["titleName"] = (
-        "PS5 Vulkan DXVK Render Witness")
+        "PS5 Vulkan DXVK Routes Witness")
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": "dxvk-render-public-sdk-witness",
-        "extent": 64, "format": "R8G8B8A8_UNORM",
-        "diagnostic_switch": "PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC",
+        "profile": PROFILE, "values": VALUES, "targets": TARGETS, "seeds": list(SEEDS),
+        "sdk_switches": dict(ROUTE_SWITCHES),
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
-        "shader_sha256": shader_hashes,
+        "shader_sha256": hashlib.sha256(shader).hexdigest(),
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
     }
     artifact_path = dist.parent / "artifact.json"

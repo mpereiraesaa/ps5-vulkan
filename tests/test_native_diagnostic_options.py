@@ -336,17 +336,9 @@ class NativeDiagnosticOptions(unittest.TestCase):
                        "PS5VK_MULTIVIEW_DIAGNOSTIC": "2"},
                       "must be 0 or 1")
 
-    def test_t09_diagnostics_are_bounded_and_graphics_only(self):
-        from tools.build_upstream_cts import tessellation_build_profile
-
-        for name in ("PS5VK_ROBUSTNESS2_DIAGNOSTIC",):
-            with self.subTest(name=name):
-                self.rejected({name: "1"}, "requires the graphics profile API")
-                self.rejected({"PS5VK_GRAPHICS_API": "unused", name: "2"},
-                              "must be 0 or 1")
-                profile = tessellation_build_profile({name: "1"})
-                self.assertTrue(profile["experimental"])
-                self.assertEqual(profile["switches"][name], "1")
+    def test_t09_routes_are_shipping_without_switches(self):
+        # Every T09 measurement switch was retired at its promotion
+        # (tests/test_retired_diagnostic_switches.py).
         for path in ("native/platform_ps5.c", "tools/build_native.py",
                      "tools/build_sdk.py", "tools/build_upstream_cts.py",
                      "tools/verify_sampler_mirror.py"):

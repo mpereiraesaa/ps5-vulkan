@@ -161,6 +161,18 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
             PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
     /* Mirroring native/platform_ps5.c: synchronization2 and the format routes
      * (VkFormatProperties3, image format list) on the graphics submit path. */
+    /* Mirroring native/platform_ps5.c: VK_EXT_robustness2 (buffer access and
+     * null descriptors) on the graphics submit path. */
+    if (graphics_submit)
+        platform->supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
+            PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    /* Mirroring native/platform_ps5.c: the DXVK first-draw recording routes
+     * (dynamic rendering with depth/stencil resolve, copy commands 2,
+     * maintenance1) on the graphics submit path. */
+    if (graphics_submit)
+        platform->supported_features_t09 |= PS5VK_T09_FEATURE_COPY_COMMANDS2 |
+            PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE | PS5VK_T09_FEATURE_DYNAMIC_RENDERING |
+            PS5VK_T09_FEATURE_MAINTENANCE1;
     if (graphics_submit)
         platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2 |
             PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2 | PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST |
@@ -635,6 +647,10 @@ int main(int argc, char **argv)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};
     VkPhysicalDeviceImagelessFramebufferFeatures imageless = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES};
+    VkPhysicalDeviceRobustness2FeaturesEXT robustness2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT};
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES};
 
     VkPhysicalDeviceMultiviewProperties multiview_properties = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES};
@@ -664,6 +680,8 @@ int main(int argc, char **argv)
     terminate.pNext = &synchronization2;
     synchronization2.pNext = &transform_feedback;
     transform_feedback.pNext = &imageless;
+    imageless.pNext = &robustness2;
+    robustness2.pNext = &dynamic_rendering;
     multiview_properties.pNext = &timeline_properties;
 
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -724,14 +742,21 @@ int main(int argc, char **argv)
                     "    \"VK_EXT_transform_feedback\": "
                     "{\"transformFeedback\": %s, \"geometryStreams\": %s},\n"
                     "    \"VK_KHR_imageless_framebuffer\": "
-                    "{\"imagelessFramebuffer\": %s}\n"
+                    "{\"imagelessFramebuffer\": %s},\n"
+                    "    \"VK_EXT_robustness2\": "
+                    "{\"robustBufferAccess2\": %s, \"nullDescriptor\": %s},\n"
+                    "    \"VK_KHR_dynamic_rendering\": "
+                    "{\"dynamicRendering\": %s}\n"
                     "  },\n",
         demote.shaderDemoteToHelperInvocation ? "true" : "false",
         terminate.shaderTerminateInvocation ? "true" : "false",
         synchronization2.synchronization2 ? "true" : "false",
         transform_feedback.transformFeedback ? "true" : "false",
         transform_feedback.geometryStreams ? "true" : "false",
-        imageless.imagelessFramebuffer ? "true" : "false");
+        imageless.imagelessFramebuffer ? "true" : "false",
+        robustness2.robustBufferAccess2 ? "true" : "false",
+        robustness2.nullDescriptor ? "true" : "false",
+        dynamic_rendering.dynamicRendering ? "true" : "false");
 
     fprintf(stdout, "  \"extensionCount\": %u,\n", extensions);
     fputs("  \"extensions\": [", stdout);
@@ -761,7 +786,10 @@ int main(int argc, char **argv)
                     "    \"synchronization2\": %s,\n"
                     "    \"transformFeedback\": %s,\n"
                     "    \"geometryStreams\": %s,\n"
-                    "    \"imagelessFramebuffer\": %s\n"
+                    "    \"imagelessFramebuffer\": %s,\n"
+                    "    \"robustBufferAccess2\": %s,\n"
+                    "    \"nullDescriptor\": %s,\n"
+                    "    \"dynamicRendering\": %s\n"
 
                     "  },\n",
         storage8.storageBuffer8BitAccess ? "true" : "false",
@@ -786,7 +814,10 @@ int main(int argc, char **argv)
         synchronization2.synchronization2 ? "true" : "false",
         transform_feedback.transformFeedback ? "true" : "false",
         transform_feedback.geometryStreams ? "true" : "false",
-        imageless.imagelessFramebuffer ? "true" : "false");
+        imageless.imagelessFramebuffer ? "true" : "false",
+        robustness2.robustBufferAccess2 ? "true" : "false",
+        robustness2.nullDescriptor ? "true" : "false",
+        dynamic_rendering.dynamicRendering ? "true" : "false");
 
     free(extension_names);
     free(extension_properties);

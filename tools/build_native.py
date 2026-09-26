@@ -121,14 +121,6 @@ def main():
     sample_rate_diagnostic = os.environ.get("PS5VK_SAMPLE_RATE_DIAGNOSTIC", "0")
     if sample_rate_diagnostic not in ("0", "1") or (sample_rate_diagnostic == "1" and not graphics_api):
         raise SystemExit("PS5VK_SAMPLE_RATE_DIAGNOSTIC requires the graphics profile API and must be 0 or 1")
-    t09_diagnostics = {}
-    for name in (
-        "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
-    ):
-        value = os.environ.get(name, "0")
-        if value not in ("0", "1") or (value == "1" and not graphics_api):
-            raise SystemExit(f"{name} requires the graphics profile API and must be 0 or 1")
-        t09_diagnostics[name] = value
     sampler_mirror_case = os.environ.get("PS5VK_SAMPLER_MIRROR_CASE", "-1")
     if sampler_mirror_case not in ("-1", *(str(n) for n in range(8, 26))):
         raise SystemExit("PS5VK_SAMPLER_MIRROR_CASE must be -1 or 8..25")
@@ -527,7 +519,6 @@ def main():
             common += ["-DPS5VK_LAYER_PROBE=" + layer_probe]
             common += ["-DPS5VK_MULTIVIEW_DIAGNOSTIC=" + multiview_diagnostic]
             common += ["-DPS5VK_SAMPLE_RATE_DIAGNOSTIC=" + sample_rate_diagnostic]
-            common += [f"-D{name}={value}" for name, value in t09_diagnostics.items()]
             common += ["-DPS5VK_SAMPLER_MIRROR_CASE=" + sampler_mirror_case]
             common += ["-DPS5VK_MULTIVIEW_VIEW_PROBE=" + multiview_view_probe]
             common += ["-DPS5VK_MULTIVIEW_INSTANCE_PROBE=" + multiview_instance_probe]
@@ -946,9 +937,6 @@ def main():
                 "foundation": pin, "files": {}}
     if sampler_mirror_case != "-1":
         manifest["sampler_mirror_case"] = int(sampler_mirror_case)
-    if any(value == "1" for value in t09_diagnostics.values()):
-        manifest["t09_diagnostics"] = {name: value == "1"
-                                       for name, value in t09_diagnostics.items()}
     if use_runtime_sdk:
         manifest["sdk_archive_sha256"] = {
             name: hashlib.sha256((ROOT / "dist-sdk/lib" / name).read_bytes()).hexdigest()

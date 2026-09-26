@@ -336,6 +336,29 @@ static int run_dxvk262_capability_probe(void)
             "DXVK262_EXTENSION_ROUTE_QUERY route=VK_KHR_imageless_framebuffer "
             "imagelessFramebuffer=%u", imageless.imagelessFramebuffer);
     }
+    if (extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_EXT_ROBUSTNESS_2_EXTENSION_NAME)) {
+        /* No core equivalent: the rows read the structure itself, so the
+         * route line repeats the values the requirement rows report. */
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_EXTENSION_ROUTE_QUERY route=VK_EXT_robustness2 "
+            "robustBufferAccess2=%u nullDescriptor=%u",
+            robustness2.robustBufferAccess2, robustness2.nullDescriptor);
+    }
+    if (properties.apiVersion < VK_API_VERSION_1_3 && extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
+        VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &dynamic_rendering};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        features13.dynamicRendering = dynamic_rendering.dynamicRendering;
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_EXTENSION_ROUTE_QUERY route=VK_KHR_dynamic_rendering "
+            "dynamicRendering=%u", dynamic_rendering.dynamicRendering);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",

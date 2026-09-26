@@ -12,11 +12,11 @@ DXVK execution.
 
 ## Verified baseline on `main` (2026-09-25)
 
-After the synchronization2, T14 transform feedback and imageless framebuffer
-promotions, `tools/check_dxvk_profile.py --check` reports **37/62 ready, 25
-blockers**. This is an implementation-evidence score, not a DXVK runtime
-result. `tools/check_dxvk_backlog.py --check` reports 36 implementation-ready
-original blockers and 36 profile-satisfied ones (the 62-row score also
+After the synchronization2, T14 transform feedback, imageless framebuffer,
+robustness2 and dynamic rendering promotions, `tools/check_dxvk_profile.py
+--check` reports **41/62 ready, 21 blockers**. This is an implementation-evidence
+score, not a DXVK runtime result. `tools/check_dxvk_backlog.py --check` reports
+40 implementation-ready original blockers and 40 profile-satisfied ones (the 62-row score also
 includes the initially satisfied `robustBufferAccess`). The public device
 still reports Vulkan **1.0.0**. The matrix counts geometry and tessellation as
 blockers because their completed T04 native receipts have not been admitted
@@ -89,16 +89,16 @@ for an unmodified, truthful route:**
    public-SDK capture witness. A D3D11 stream-output shader with no pixel
    shader bound still needs a pipeline without a fragment stage, which the
    frontend refuses.
-3. **Promotion of the measured routes now behind default-off switches:**
-   synchronization2, dynamic rendering and depth/stencil resolve, extended
-   dynamic state (dynamic topology and vertex stride are still refused),
-   maintenance1, copy commands 2, format feature flags 2 and image format
-   lists (RGBA8 UNORM/SRGB only), robustness2, descriptor update templates,
-   memory requirements 2, dedicated allocation, bind memory 2, storage texel
-   buffer views, and a host-coherent memory type. Each has a passing
-   native witness except where the witness is weaker than the claim: the
-   host-coherent control did not observe stale data without cache
-   maintenance, and maintenance4 cannot be exposed on a 1.0 device.
+3. **Measured routes still behind a default-off switch:** extended dynamic
+   state (dynamic topology and vertex stride are still refused) and
+   maintenance4, which cannot be exposed on a 1.0 device. Every other
+   measured route ships with a passing native witness: synchronization2,
+   format feature flags 2 and image format lists (RGBA8 UNORM/SRGB only),
+   storage texel buffer views, imageless framebuffer, robustness2,
+   descriptor update templates, memory requirements 2, dedicated allocation,
+   bind memory 2, dynamic rendering with depth/stencil resolve, maintenance1,
+   copy commands 2 and the host-coherent memory type (whose control did not
+   observe stale data without cache maintenance, see VALIDATION.md).
 4. **Core-named commands and the Vulkan 1.1/1.2/1.3 query structures.**
    DXVK uses only core names and the aggregate structures; the diagnostic
    payload translates them onto the extension routes. The driver-side

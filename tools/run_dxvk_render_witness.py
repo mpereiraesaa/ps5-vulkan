@@ -86,7 +86,7 @@ def expected_digest() -> str:
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     if (artifact.get("profile") != PROFILE or artifact.get("extent") != EXTENT or
             artifact.get("format") != "R8G8B8A8_UNORM" or
-            artifact.get("diagnostic_switch") != "PS5VK_DXVK_RENDER_DIAGNOSTIC"):
+            artifact.get("diagnostic_switch") != "PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC"):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or

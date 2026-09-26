@@ -37,6 +37,12 @@ EXTENSION_ROUTES = {
         ("VK_EXT_transform_feedback", "geometryStreams", None),
     "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer":
         ("VK_KHR_imageless_framebuffer", "imagelessFramebuffer", (1, 2, 0)),
+    "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2":
+        ("VK_EXT_robustness2", "robustBufferAccess2", None),
+    "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor":
+        ("VK_EXT_robustness2", "nullDescriptor", None),
+    "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering":
+        ("VK_KHR_dynamic_rendering", "dynamicRendering", (1, 3, 0)),
 }
 
 

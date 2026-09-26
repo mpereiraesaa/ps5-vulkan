@@ -6341,3 +6341,215 @@ verified strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 22 device
 extensions, 39/62 requested query values met, with the synchronization2,
 transform feedback and imageless framebuffer routes queried explicitly. The
 joined four-axis DXVK matrix has **37/62 ready and 25 blockers**.
+
+## Robustness2 promotion (2026-09-26)
+
+`PS5VK_ROBUSTNESS2_DIAGNOSTIC` is retired. The ordinary profile enumerates
+`VK_EXT_robustness2` with `robustBufferAccess2` and `nullDescriptor`
+(`robustImageAccess2` stays false), and the capability probe reads both
+features through an explicit `VK_EXT_robustness2` route query.
+
+The vertex-input path gained the two behaviours the extension requires. With
+`nullDescriptor` enabled, `vkCmdBindVertexBuffers` accepts `VK_NULL_HANDLE`
+(offset 0) and the draw binds an all-zero vertex descriptor, which reads zero.
+With `robustBufferAccess2` enabled, a non-indexed draw that runs past the end
+of a vertex buffer is no longer refused: the descriptor's record count bounds
+the fetch and the missing vertices read zero.
+
+A new public-SDK vertex-input witness (`examples/t13_vertex_robustness_witness`)
+draws three scissored columns into a 48x16 RGBA8 target: one from a null vertex
+binding, one with `firstVertex` 3 past a three-vertex buffer, and an in-bounds
+control whose colour comes from the vertex data. The readback runs in its own
+submission.
+
+- Measurement build: eboot SHA-256
+  `45c8b49cbc5ea216976aeff120f0e19433d212e609cbab6598d1160945d36dfc`, run
+  `20260926T014114236Z_PPSA99994_ps5vk_0x6948967a49d2`, log SHA-256
+  `ac6e018e5f7c16632eb4c5fe7c71fb2be63a8283fded0ed5353865ef73f947db`, strict.
+- Ordinary SDK: eboot SHA-256
+  `78322cf1055ee67ca85513f52a3b2cba23c1a2beb6b4d788f20b2d732cf1d6d5`, run
+  `20260926T024526733Z_PPSA99994_ps5vk_0x6cc98e68f652`, log SHA-256
+  `1f5ce5cbef3fa394ec7b0fb818d00e635deaa095e0e1eaaed6e3323c8774d28f`, strict:
+  the null and past-end columns read `00000000`, the control `4080bfff`, with
+  no mismatch inside any column.
+
+The compute witness (`examples/t13_robustness2_witness`: out-of-range storage
+and uniform reads, null descriptors) ran again on the ordinary SDK: eboot
+SHA-256 `a3574f338a4bc993712f54e67d6ed79a3f33d702b223f21d37b9a91e1c6e56c1`, run
+`20260926T024516067Z_PPSA99994_ps5vk_0x6cc712bdfdd1`, log SHA-256
+`4566ba7a5e6f95130a2fa85baae9625e8668865680912ad2b42d8f16f3b1cb57`, strict.
+
+The frozen acceptance selection on this tree (eboot
+`279c89ba82a3948c77e4e392b8569093fa7279f150b332daa472a56b241a4bdc`, run
+`20260926T024537975Z_PPSA99994_upstream-cts_0x6ccc2c8a01b5`, log SHA-256
+`44164867a3ad8bf71fe1881506501899c178aec28b3f3e1ef87fa48670e536fb`) passed
+879/879. After rebasing onto the transform feedback promotion it passed again
+on the combined tree (eboot
+`45cd1dd5038215f68b47b94c933a77888ea82190837ebf6e0663a2ece57cd2c7`, run
+`20260926T025257217Z_PPSA99994_upstream-cts_0x6d3270d4ecd8`, log SHA-256
+`cd4673aec15e16d0e4106943adacf17418dad4f5a62a7938636cc4944809c433`).
+
+**Public-ABI capability probe.** On the pre-rebase tree: eboot SHA-256
+`86adde7931b05233d94359dfc90b55be23eb6740a67fdeb443bb05af308a2018`, run
+`20260926T024509592Z_PPSA99994_ps5vk_0x6cc590c2fd6b`, 21 device extensions,
+38/62. On the combined tree: eboot SHA-256
+`35dda92c4b3b455e41a4a35d5214272e941abe6dc4a0180c87e08599566a9e3f`, run
+`20260926T025244554Z_PPSA99994_ps5vk_0x6d2f7e091699`, log SHA-256
+`430896e8ecd132bd7c2dcfa162ff1d015b5891924103042fd6a911a52966f29d`: API 1.0.0, 22 device extensions, 41/62. The DXVK matrix has **39/62
+ready and 23 blockers** (the robustness2 extension row and both feature rows
+on top of transform feedback).
+
+## Memory-requirement, binding and descriptor-template route promotion (2026-09-26)
+
+`PS5VK_DXVK_ROUTES_DIAGNOSTIC` and `PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC`
+are retired. The ordinary profile enumerates `VK_KHR_get_memory_requirements2`,
+`VK_KHR_dedicated_allocation`, `VK_KHR_bind_memory2` and
+`VK_KHR_descriptor_update_template`. None of them is a DXVK 2.6.2 requirement
+row, so the matrix count is unchanged; DXVK calls all four right after device
+creation.
+
+A bounded public-SDK witness (`examples/dxvk_routes_witness`) drives the four
+routes together: the `*2` requirement queries for a buffer and an image must
+agree exactly with the Vulkan 1.0 queries and report neither a dedicated
+preference nor a requirement; a dedicated buffer and a dedicated image are
+allocated and bound through `vkBindBufferMemory2KHR`/`vkBindImageMemory2KHR`;
+two buffers are bound into one allocation in a single `vkBindBufferMemory2KHR`
+call, the second at a non-zero offset; the descriptor sets are written only
+through `vkUpdateDescriptorSetWithTemplateKHR`; three compute dispatches write
+seeded values into the three targets, each completion bounded by a 300 ms
+fence, and every word and its guard words are compared on the host.
+
+- Measurement build (switches on): eboot SHA-256
+  `6688f6e3734f0e06d78c08f1d37f925685664fdde0efec9c06fc1390a875eea9`, run
+  `20260926T014107501Z_PPSA99994_ps5vk_0x6947050d8575`, log SHA-256
+  `d9f5111591a39a818889dc63ec7bac2828f730044c2c76aa4debebbce555352b`, strict.
+- Ordinary SDK (switches retired): eboot SHA-256
+  `d524cd00a99ffb4502dba022a943a8069585edc732c29cbbe352d0cb2d01a76e`, run
+  `20260926T015628596Z_PPSA99994_ps5vk_0x6a1d7a0105cc`, log SHA-256
+  `9ca88253962e1e1dbd56ec761c5a747f6ff0cf0a60d262b890d5429cbaa73caa`, strict:
+  shared bind offset 768, zero data and guard mismatches in all five
+  dispatch/target results, resources retired cleanly.
+
+The frozen acceptance selection on this tree (eboot
+`cec77a0c8bb9b8b6ad851dd87f60615f98c96ebf64a06ceb2a72508a7bdd2968`, run
+`20260926T015640551Z_PPSA99994_upstream-cts_0x6a2042999648`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`f3036d5be089bf10aa0ad9b130c8b56e154a6e680c3e27152de48f39390dad95`, run
+`20260926T015621519Z_PPSA99994_ps5vk_0x6a1bd43a33d7`, log SHA-256
+`780569182278a664dffb21711a01ac39100933bb6e27d5e73169c73c6917a843`: API 1.0.0,
+24 device extensions, 35/62. The DXVK matrix is unchanged at **33/62 ready and
+29 blockers**.
+
+## Render route promotion: dynamic rendering, copy2, maintenance1 (2026-09-26)
+
+`PS5VK_DXVK_RENDER_DIAGNOSTIC` is retired. The ordinary profile enumerates
+`VK_KHR_dynamic_rendering` with its `VK_KHR_depth_stencil_resolve` dependency,
+`VK_KHR_copy_commands2` and `VK_KHR_maintenance1`, and reports
+`dynamicRendering` through an explicit `VK_KHR_dynamic_rendering` route query.
+`VK_EXT_extended_dynamic_state` does not ship: dynamic primitive topology and
+vertex input binding stride are still refused, so it moved onto its own
+measurement switch, `PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC`.
+
+The pinned CTS multiview device copies the queried feature chain, so once
+`dynamicRendering` is reported it arrives true with only `VK_KHR_multiview`
+enabled. The first acceptance run of this tree refused that device
+(48 multiview query leaves, `VK_ERROR_FEATURE_NOT_PRESENT`, eboot
+`f9fc0285492d90031e9984435573bb02daafde52cd14c60056c8e2155a97350b`, run
+`20260926T021558452Z_PPSA99994_upstream-cts_0x6b2dda13d14e`). A reported
+`dynamicRendering` without the extension is now accepted and enables nothing,
+because the commands stay unreachable without it; an unreported one is still
+refused. `tests/test_dxvk_dynamic_rendering.c` reproduces the CTS shape.
+
+The public-SDK render witness (the ordinary routes plus the extended dynamic
+state switch, which it uses to toggle cull mode and front face) draws with
+`vkCmdBeginRenderingKHR`, a negative-height viewport, and reads the target back
+with `vkCmdCopyImageToBuffer2KHR`: eboot SHA-256
+`134c43570a7a6a3884e99390e59756c480a082a1eef70475f2c3d904d1b9a8d9`, run
+`20260926T021545840Z_PPSA99994_ps5vk_0x6b2aea5c885d`, log SHA-256
+`df5e46667313dd007425bcc9a04353ce5ed39ff2320b655248a502ec7004f78c`, strict:
+zero full, sub-rectangle and sentinel mismatches, four visible markers,
+digest `2da9cdc5`.
+
+The frozen acceptance selection on the fixed tree (eboot
+`34c3c6ae32d73e8986d569ebd73bb95ae9f014a325ac9d95d023bb676389b4b3`, run
+`20260926T022757688Z_PPSA99994_upstream-cts_0x6bd54f5f311a`, log SHA-256 `3ca3741d1de0debc701d8713eafef6e9c7db2c47cff46336c6e04cd836bbb22c`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`a295d0eb7b7e39c79f557865adb0bcda2bbae8ca14587a1962e013f58c467607`, run
+`20260926T021539591Z_PPSA99994_ps5vk_0x6b2975cfcf67`, log SHA-256
+`b455edbd68f6d58a0e18796fa45ffddd837b7d2ba7a149bc8c995e5c917990d2`: API 1.0.0,
+24 device extensions, 36/62. The probe and the render witness predate the
+`vkCreateDevice` fix above, which only admits a reported feature without its
+extension; neither the reporting they measured nor the extension-enabled route
+the witness drove changes. The DXVK matrix has **34/62 ready and 28
+blockers**.
+
+## Driver-maintained HOST_COHERENT memory type promotion (2026-09-26)
+
+`PS5VK_HOST_COHERENT_DIAGNOSTIC` is retired. The PS5 profile now reports a
+second memory type: type 0 is unchanged and first, and type 1 is the same
+direct memory with `HOST_COHERENT` added. The driver keeps that type coherent
+by construction: before a submission launches it writes back every mapped
+coherent range from the CPU caches, and after it observes the completion it
+invalidates them, so no stale CPU line survives either boundary.
+
+The public-SDK witness (`examples/coherent_memory_witness`) selects the type
+the way DXVK does (the first `HOST_VISIBLE|HOST_COHERENT` type) and never
+flushes or invalidates it. On the ordinary SDK: eboot SHA-256
+`084ec469ae64d56fd992f86e1981edbedbfabe5c875f2bc112ed5425e5e2491f`, run
+`20260926T015723365Z_PPSA99994_ps5vk_0x6a2a3a916559`, log SHA-256
+`184231a2987ccf8652146e3b3d4d4d3cc0a461a96aabe6abb5731b272b11882c`, strict:
+host-to-GPU (C1), GPU-to-host (C2) and a mixed host/GPU round trip (C3) each
+had zero mismatches and zero stale words over 4096 words.
+
+The witness is weaker than the claim in one respect, recorded here. Its
+negative control repeats the traffic on the non-coherent type 0 without any
+flush or invalidate, and it did not observe staleness either
+(`verdict=no-stale-observed`, zero unmaintained mismatches). The underlying
+`0x0c` direct-memory mapping may itself be coherent for these access patterns,
+so the driver's writeback and invalidation may be redundant on this hardware.
+They are still correct, and they are what makes the reported property hold
+independently of that mapping. The positive cases C1-C3 prove the observable
+contract.
+
+The frozen acceptance selection on this tree, with the second memory type
+reported (eboot
+`f6e3f85fafcbc7e7b226c869f13ff80cce9fae18395cacd6f376b262491ab3f8`, run
+`20260926T015735877Z_PPSA99994_upstream-cts_0x6a2d245b4043`, log SHA-256
+`7c38bf186ffcf86ad7f83839c204ddd1bb86c47aeab27663e5f1420c208435da`), passed
+879/879. The leaves earlier kept as diagnostics because they need a
+`HOST_COHERENT` type (for example the `host-coherent-memory-gap` Amber leaf and
+`uniform_8_to_8.stress_test`) are not re-measured here; the dated sections
+above describe the profile before this change. The capability probe is not
+re-measured either: the change adds no device extension and no DXVK
+requirement row.
+
+## Combined evidence for the robustness2, routes, render and coherent promotions (2026-09-26)
+
+The four promotions above (robustness2; memory requirements 2, dedicated
+allocation, bind memory 2 and descriptor update templates; dynamic rendering,
+copy commands 2 and maintenance1; the host-coherent memory type) landed as one
+stack on top of the imageless framebuffer promotion. Each family's own witness
+and probe runs are recorded in its section; the counts quoted there describe
+the tree each was first measured on. One capability probe and one acceptance
+run measured the whole stack.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`ac46bfca58296f3d3876a7fc376f9d3f968d901a525141addf1ace6a7b06bdfd`, run
+`20260926T031405453Z_PPSA99994_ps5vk_0x6e59b86caee4`, log SHA-256
+`ae0152c4d8f082d5e8d961ab6c405b6e50afdbd408373b18394dc1d1c83644fe`: API 1.0.0,
+31 device extensions, 43/62, with the synchronization2, transform feedback,
+imageless framebuffer, robustness2 and dynamic rendering routes queried
+explicitly.
+
+The frozen acceptance selection on the same tree, with the second
+(host-coherent) memory type reported (eboot
+`10a1859338b791e9f2e220095e3e78c14cd1657845c3acd7c3c39e3527f61daf`, run
+`20260926T031417276Z_PPSA99994_upstream-cts_0x6e5c79244671`, log SHA-256
+`0aeda568b439f700e2079b58b138e62b2ef02b4d0fdaef57c5e5aeb818b106d6`), passed
+879/879.
+
+The DXVK matrix has **41/62 ready and 21 blockers**;
+`tools/check_dxvk_backlog.py --check` reports 40 implementation-ready original
+blockers and 40 profile-satisfied ones.

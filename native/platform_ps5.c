@@ -330,18 +330,14 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * and draw witnesses bound the attachments at render-pass begin with zero
      * mismatches. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
-#if defined(PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC) && PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC
-    /* Measurement only: VK_KHR_descriptor_update_template, until the native
-     * capability probe is re-measured with it enumerated. */
+    /* VK_KHR_descriptor_update_template: the public-SDK routes witness writes
+     * its descriptor sets only through templates. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE;
-#endif
-#if defined(PS5VK_ROBUSTNESS2_DIAGNOSTIC) && PS5VK_ROBUSTNESS2_DIAGNOSTIC
-    /* DXVK262-T13 measurement build only: VK_EXT_robustness2 with
-     * robustBufferAccess2 and nullDescriptor, so the public-SDK witness can
-     * negotiate both before the shipping profile reports them. */
+    /* VK_EXT_robustness2 with robustBufferAccess2 and nullDescriptor (never
+     * robustImageAccess2): the public-SDK compute and vertex-input witnesses
+     * read zero for out-of-range and null descriptors and vertex buffers. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2 |
         PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
-#endif
     /* VkFormatProperties3 (VK_KHR_format_feature_flags2) and the RGBA8
      * UNORM <-> SRGB mutable views with VK_KHR_image_format_list: the
      * SDK-linked mutable-view witness sampled the SRGB view of the UNORM
@@ -372,13 +368,18 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features_t09 |=
         PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION |
         PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
-#if defined(PS5VK_DXVK_RENDER_DIAGNOSTIC) && PS5VK_DXVK_RENDER_DIAGNOSTIC
-    /* Private measurement build (DXVK262-T10): report the DXVK first-draw
-     * recording routes so the witness negotiates them through the public API
-     * before any shipping platform advertises them. */
-    platform->supported_features_t09 |= PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE |
-        PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
-        PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1;
+    /* DXVK's first-draw recording routes (DXVK262-T10): dynamic rendering
+     * with its depth/stencil resolve dependency, copy commands 2 and
+     * maintenance1 (negative viewport height); the SDK-linked render witness
+     * rendered, copied back and compared through all of them. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_COPY_COMMANDS2 |
+        PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE | PS5VK_T09_FEATURE_DYNAMIC_RENDERING |
+        PS5VK_T09_FEATURE_MAINTENANCE1;
+#if defined(PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC) && PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC
+    /* Private measurement build only: VK_EXT_extended_dynamic_state. Dynamic
+     * primitive topology and vertex input binding stride are still refused, so
+     * the ordinary profile does not report it. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE;
 #endif
     /* DXVK262-T14 transform feedback on the graphics path. The public-SDK
      * capture witness verified, on the pinned compiler's ordered no-GDS
@@ -459,28 +460,21 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
     ps5vk_native_tess_profile(platform);
-#if defined(PS5VK_DXVK_ROUTES_DIAGNOSTIC) && PS5VK_DXVK_ROUTES_DIAGNOSTIC
-    /* Private measurement build only (DXVK262): report the memory-requirement
-     * and binding routes DXVK calls right after device creation
-     * (VK_KHR_get_memory_requirements2, VK_KHR_dedicated_allocation,
-     * VK_KHR_bind_memory2), so the native DXVK payload can reach its first
-     * draw before a witness promotes them. The render and format routes have
-     * their own switch (PS5VK_DXVK_RENDER_DIAGNOSTIC); the format routes are
-     * shipping. */
+    /* The memory-requirement and binding routes DXVK calls right after device
+     * creation (VK_KHR_get_memory_requirements2, VK_KHR_dedicated_allocation,
+     * VK_KHR_bind_memory2), witnessed by the public-SDK routes witness. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_GET_MEMORY_REQUIREMENTS2 |
         PS5VK_T09_FEATURE_DEDICATED_ALLOCATION | PS5VK_T09_FEATURE_BIND_MEMORY2;
-#endif
 #if defined(PS5VK_MAINTENANCE4_DIAGNOSTIC) && PS5VK_MAINTENANCE4_DIAGNOSTIC
     /* DIAGNOSTIC DXVK measurement only, never shipping: VK_KHR_maintenance4
      * requires a Vulkan 1.1 device, which this profile does not report. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
     platform->maintenance4_diagnostic_on_vulkan_1_0 = VK_TRUE;
 #endif
-#if defined(PS5VK_HOST_COHERENT_DIAGNOSTIC) && PS5VK_HOST_COHERENT_DIAGNOSTIC
-    /* Witness-only: the driver-maintained HOST_COHERENT type is not part of
-     * the ordinary profile until its native witness passes. */
+    /* The driver-maintained HOST_COHERENT type: coherence is kept by CPU
+     * writeback before each launch and invalidation after each observed
+     * completion (src/vk_queue.c), witnessed natively. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_COHERENT_MEMORY;
     ps5vk_profile_add_coherent_type(&platform->memory_properties);
-#endif
     return VK_SUCCESS;
 }

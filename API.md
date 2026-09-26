@@ -61,6 +61,13 @@ measurements do not claim that DXVK can create a device or run yet; see
   malformed booleans, and rejects every unreported core feature. Other
   graphics feature bits are listed individually below; this is not a claim
   that only one Vulkan 1.0 feature is available.
+- `VK_EXT_robustness2` is reported with `robustBufferAccess2` and
+  `nullDescriptor` (never `robustImageAccess2`; robust storage and uniform
+  alignment 4). Buffer descriptors are bounded by their exact range, a
+  `VK_NULL_HANDLE` descriptor or vertex buffer becomes an all-zero record that
+  reads zero, and with `robustBufferAccess2` a non-indexed draw may run past a
+  vertex buffer: the vertex descriptor's record count bounds the fetch and the
+  missing vertices read zero.
 - Storage and uniform buffer descriptors carry their actual byte extent and
   use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
   the bound buffer span. This is the implementation basis for the feature, not
@@ -789,10 +796,11 @@ Firmware 12.02 is owner reported, not independently measured. This witness
 does not establish a full DXVK device bootstrap or frame-rendering run.
 
 `VK_KHR_get_memory_requirements2`, `VK_KHR_dedicated_allocation` (which
-requires the former) and `VK_KHR_bind_memory2` are implemented as Vulkan 1.0
-extension routes but are not reported by either platform yet. When a platform
-reports them, `vkCreateDevice` accepts them with their dependencies and the
-five `*2KHR` commands become visible; the core-1.1 names stay absent. The
+requires the former) and `VK_KHR_bind_memory2` are Vulkan 1.0 extension routes
+reported by the PS5 platform, together with `VK_KHR_descriptor_update_template`;
+a public-SDK witness exercises all four on hardware. `vkCreateDevice` accepts
+them with their dependencies and the five `*2KHR` commands become visible; the
+core-1.1 names stay absent. The
 queries return exactly the Vulkan 1.0 requirements, and
 `VkMemoryDedicatedRequirements` reports neither a preference nor a requirement.
 `VkMemoryDedicatedAllocateInfo` must name one live, unbound resource and its

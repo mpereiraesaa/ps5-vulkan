@@ -373,7 +373,7 @@ class DxvkProbeTests(unittest.TestCase):
             self.assertEqual((extension, field),
                              (matrix.EXTENSION_ROUTES[identifier]["extension"],
                               matrix.EXTENSION_ROUTES[identifier]["field"]))
-            with self.subTest(route=extension):
+            with self.subTest(route=extension, field=field):
                 fixture = ProbeFixture()
                 self.addCleanup(fixture.tmp.cleanup)
                 records = list(fixture.records)

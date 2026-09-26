@@ -1,4 +1,4 @@
-"""Contracts for the diagnostic HOST_COHERENT memory witness verifier."""
+"""Contracts for the HOST_COHERENT memory witness verifier."""
 
 import hashlib
 import sys
@@ -72,13 +72,14 @@ class CoherentWitnessVerifier(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify(log, bad, ARTIFACT)
         with self.assertRaises(ValueError):
-            verify(log, receipt(log), dict(ARTIFACT, sdk_switches={}))
+            verify(log, receipt(log), dict(ARTIFACT, sdk_switches={"PS5VK_X": "1"}))
 
-    def test_switch_is_default_off_and_witness_only(self):
+    def test_coherent_type_ships_on_the_ordinary_profile(self):
         platform = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertIn("#if defined(PS5VK_HOST_COHERENT_DIAGNOSTIC) && "
-                      "PS5VK_HOST_COHERENT_DIAGNOSTIC", platform)
-        self.assertNotIn("PS5VK_HOST_COHERENT_DIAGNOSTIC", (ROOT / "src/vk_device.c").read_text())
+        self.assertIn("platform->supported_features_t09 |= PS5VK_T09_FEATURE_HOST_COHERENT_MEMORY;\n"
+                      "    ps5vk_profile_add_coherent_type(&platform->memory_properties);\n"
+                      "    return VK_SUCCESS;", platform)
+        self.assertEqual({}, SWITCHES)
         source = (ROOT / "examples/coherent_memory_witness/main.c").read_text()
         # The coherent cases never use the explicit cache commands on the
         # coherent region; only the non-coherent control does.
