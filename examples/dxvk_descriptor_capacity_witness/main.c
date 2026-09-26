@@ -267,7 +267,7 @@ static VkResult submit_wait(VkDevice device, VkQueue queue, VkFence fence,
 void psbc_stage_hook(const char *label);
 void psbc_stage_hook(const char *label)
 {
-    ps5log_printf(PS5LOG_MARK, MARK "_PSBC stage=%s", label);
+    ps5log_printf(PS5LOG_MARK, MARK "_PSBC stage=%s sp=%p", label, (void *)&label);
 }
 /* Heap headroom, then compute pipelines over sets of 128..1023 sampled
  * images (plus the output buffer), each compiled on its own, no dispatch.
