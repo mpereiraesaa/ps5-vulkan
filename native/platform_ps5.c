@@ -330,11 +330,9 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * and draw witnesses bound the attachments at render-pass begin with zero
      * mismatches. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_IMAGELESS_FRAMEBUFFER;
-#if defined(PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC) && PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC
-    /* Measurement only: VK_KHR_descriptor_update_template, until the native
-     * capability probe is re-measured with it enumerated. */
+    /* VK_KHR_descriptor_update_template: the public-SDK routes witness writes
+     * its descriptor sets only through templates. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE;
-#endif
     /* VK_EXT_robustness2 with robustBufferAccess2 and nullDescriptor (never
      * robustImageAccess2): the public-SDK compute and vertex-input witnesses
      * read zero for out-of-range and null descriptors and vertex buffers. */
@@ -457,17 +455,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
         graphics_objects, graphics_submit, platform->supported_features);
     ps5vk_native_tess_profile(platform);
-#if defined(PS5VK_DXVK_ROUTES_DIAGNOSTIC) && PS5VK_DXVK_ROUTES_DIAGNOSTIC
-    /* Private measurement build only (DXVK262): report the memory-requirement
-     * and binding routes DXVK calls right after device creation
-     * (VK_KHR_get_memory_requirements2, VK_KHR_dedicated_allocation,
-     * VK_KHR_bind_memory2), so the native DXVK payload can reach its first
-     * draw before a witness promotes them. The render and format routes have
-     * their own switch (PS5VK_DXVK_RENDER_DIAGNOSTIC); the format routes are
-     * shipping. */
+    /* The memory-requirement and binding routes DXVK calls right after device
+     * creation (VK_KHR_get_memory_requirements2, VK_KHR_dedicated_allocation,
+     * VK_KHR_bind_memory2), witnessed by the public-SDK routes witness. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_GET_MEMORY_REQUIREMENTS2 |
         PS5VK_T09_FEATURE_DEDICATED_ALLOCATION | PS5VK_T09_FEATURE_BIND_MEMORY2;
-#endif
 #if defined(PS5VK_MAINTENANCE4_DIAGNOSTIC) && PS5VK_MAINTENANCE4_DIAGNOSTIC
     /* DIAGNOSTIC DXVK measurement only, never shipping: VK_KHR_maintenance4
      * requires a Vulkan 1.1 device, which this profile does not report. */
