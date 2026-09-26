@@ -448,12 +448,8 @@ def implemented_device_extensions() -> set[str]:
     for name in (
 
 
-        "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
-
         "PS5VK_DXVK_RENDER_DIAGNOSTIC",
 
-
-        "PS5VK_DXVK_ROUTES_DIAGNOSTIC",
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
 

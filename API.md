@@ -796,10 +796,11 @@ Firmware 12.02 is owner reported, not independently measured. This witness
 does not establish a full DXVK device bootstrap or frame-rendering run.
 
 `VK_KHR_get_memory_requirements2`, `VK_KHR_dedicated_allocation` (which
-requires the former) and `VK_KHR_bind_memory2` are implemented as Vulkan 1.0
-extension routes but are not reported by either platform yet. When a platform
-reports them, `vkCreateDevice` accepts them with their dependencies and the
-five `*2KHR` commands become visible; the core-1.1 names stay absent. The
+requires the former) and `VK_KHR_bind_memory2` are Vulkan 1.0 extension routes
+reported by the PS5 platform, together with `VK_KHR_descriptor_update_template`;
+a public-SDK witness exercises all four on hardware. `vkCreateDevice` accepts
+them with their dependencies and the five `*2KHR` commands become visible; the
+core-1.1 names stay absent. The
 queries return exactly the Vulkan 1.0 requirements, and
 `VkMemoryDedicatedRequirements` reports neither a preference nor a requirement.
 `VkMemoryDedicatedAllocateInfo` must name one live, unbound resource and its

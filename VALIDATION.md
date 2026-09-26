@@ -6398,3 +6398,45 @@ on the combined tree (eboot
 `430896e8ecd132bd7c2dcfa162ff1d015b5891924103042fd6a911a52966f29d`: API 1.0.0, 22 device extensions, 41/62. The DXVK matrix has **39/62
 ready and 23 blockers** (the robustness2 extension row and both feature rows
 on top of transform feedback).
+
+## Memory-requirement, binding and descriptor-template route promotion (2026-09-26)
+
+`PS5VK_DXVK_ROUTES_DIAGNOSTIC` and `PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC`
+are retired. The ordinary profile enumerates `VK_KHR_get_memory_requirements2`,
+`VK_KHR_dedicated_allocation`, `VK_KHR_bind_memory2` and
+`VK_KHR_descriptor_update_template`. None of them is a DXVK 2.6.2 requirement
+row, so the matrix count is unchanged; DXVK calls all four right after device
+creation.
+
+A bounded public-SDK witness (`examples/dxvk_routes_witness`) drives the four
+routes together: the `*2` requirement queries for a buffer and an image must
+agree exactly with the Vulkan 1.0 queries and report neither a dedicated
+preference nor a requirement; a dedicated buffer and a dedicated image are
+allocated and bound through `vkBindBufferMemory2KHR`/`vkBindImageMemory2KHR`;
+two buffers are bound into one allocation in a single `vkBindBufferMemory2KHR`
+call, the second at a non-zero offset; the descriptor sets are written only
+through `vkUpdateDescriptorSetWithTemplateKHR`; three compute dispatches write
+seeded values into the three targets, each completion bounded by a 300 ms
+fence, and every word and its guard words are compared on the host.
+
+- Measurement build (switches on): eboot SHA-256
+  `6688f6e3734f0e06d78c08f1d37f925685664fdde0efec9c06fc1390a875eea9`, run
+  `20260926T014107501Z_PPSA99994_ps5vk_0x6947050d8575`, log SHA-256
+  `d9f5111591a39a818889dc63ec7bac2828f730044c2c76aa4debebbce555352b`, strict.
+- Ordinary SDK (switches retired): eboot SHA-256
+  `d524cd00a99ffb4502dba022a943a8069585edc732c29cbbe352d0cb2d01a76e`, run
+  `20260926T015628596Z_PPSA99994_ps5vk_0x6a1d7a0105cc`, log SHA-256
+  `9ca88253962e1e1dbd56ec761c5a747f6ff0cf0a60d262b890d5429cbaa73caa`, strict:
+  shared bind offset 768, zero data and guard mismatches in all five
+  dispatch/target results, resources retired cleanly.
+
+The frozen acceptance selection on this tree (eboot
+`cec77a0c8bb9b8b6ad851dd87f60615f98c96ebf64a06ceb2a72508a7bdd2968`, run
+`20260926T015640551Z_PPSA99994_upstream-cts_0x6a2042999648`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`f3036d5be089bf10aa0ad9b130c8b56e154a6e680c3e27152de48f39390dad95`, run
+`20260926T015621519Z_PPSA99994_ps5vk_0x6a1bd43a33d7`, log SHA-256
+`780569182278a664dffb21711a01ac39100933bb6e27d5e73169c73c6917a843`: API 1.0.0,
+24 device extensions, 35/62. The DXVK matrix is unchanged at **33/62 ready and
+29 blockers**.

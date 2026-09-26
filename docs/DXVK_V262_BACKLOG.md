@@ -93,9 +93,9 @@ for an unmodified, truthful route:**
    synchronization2, dynamic rendering and depth/stencil resolve, extended
    dynamic state (dynamic topology and vertex stride are still refused),
    maintenance1, copy commands 2, format feature flags 2 and image format
-   lists (RGBA8 UNORM/SRGB only), descriptor update templates,
-   memory requirements 2, dedicated allocation, bind memory 2, storage texel
-   buffer views, and a host-coherent memory type. Each has a passing
+   lists (RGBA8 UNORM/SRGB only), storage texel buffer views, and a
+   host-coherent memory type. (Descriptor update templates, memory
+   requirements 2, dedicated allocation and bind memory 2 now ship.) Each has a passing
    native witness except where the witness is weaker than the claim: the
    host-coherent control did not observe stale data without cache
    maintenance, and maintenance4 cannot be exposed on a 1.0 device.
