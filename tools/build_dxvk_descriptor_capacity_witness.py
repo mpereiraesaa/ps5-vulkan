@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from build_sdk import get_ps5_toolchain  # noqa: E402
 from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
+from cts_heap_parameters import use_application_heap  # noqa: E402
 
 IMAGES = 1024
 SIDE = 32
@@ -185,6 +186,10 @@ def main() -> None:
         "--stub", str(staged / "lib/libSceAgc.so"),
         "--stub", str(staged / "lib/libSceAgcDriver.so"),
         "--companion-sdk", "0x08050001", "--file-name", "eboot.elf")
+    # Application heap mode, as the DXVK payload uses: the foundation's
+    # internal-memory libc heap (about 13 MiB) cannot hold a 1024-descriptor
+    # compile.
+    eboot_elf.write_bytes(use_application_heap(eboot_elf.read_bytes()))
     run(str(builder), "self", "--sign", "--in", str(eboot_elf), "--out",
         str(eboot), "--magic", "0x1D3D154F")
 

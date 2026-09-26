@@ -266,9 +266,11 @@ static VkResult submit_wait(VkDevice device, VkQueue queue, VkFence fence,
  * of its stages (diagnostic compiler builds only). */
 #include <signal.h>
 #include <pthread.h>
-void psbc_stage_hook(const char *label);
+/* opengnm-psbc's stage reporting (libpsbc.a, linked into every payload). */
+typedef void (*PsbcStageHook)(const char *label);
+void psbc_set_stage_hook(PsbcStageHook hook);
 static char last_stage[96];
-void psbc_stage_hook(const char *label)
+static void psbc_stage_hook(const char *label)
 {
     strncpy(last_stage, label, sizeof(last_stage) - 1);
     ps5log_printf(PS5LOG_MARK, MARK "_PSBC stage=%s sp=%p", label, (void *)&label);
@@ -354,6 +356,7 @@ static int run_witness(void)
         .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info};
     TRY(vkCreateDevice(physical, &device_info, NULL, &device));
     install_signal_handlers();
+    psbc_set_stage_hook(psbc_stage_hook);
     ps5log_printf(PS5LOG_MARK, MARK "_START sizes=128,256,512,768,1023");
 
     for (unsigned n = 0; n < 5; ++n) {
