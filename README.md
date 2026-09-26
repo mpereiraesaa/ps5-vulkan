@@ -11,6 +11,9 @@ complete Vulkan core version.
 - Native graphics and compute submission, GPU-backed buffers and images,
   command buffers, fences, binary semaphores, and two-buffer 1080p VideoOut
   presentation with clean Close Game/relaunch.
+- A 1.25 GiB graphics heap with a 1 GiB single-buffer allocation limit,
+  layout-sized descriptor sets up to 1024 records, and a driver-maintained
+  host-coherent buffer memory type. Other per-resource limits remain bounded.
 - Runtime SPIR-V compute and vertex/fragment compilation through pinned
   PSBC/ACO, with bounded in-memory shader and pipeline caches. Compute has up
   to four descriptor sets, storage/uniform buffers, uniform texel buffers,
@@ -19,7 +22,8 @@ complete Vulkan core version.
 - Indexed and indirect draws, typed vertex formats, depth testing, face
   culling, multiview, geometry and tessellation stages, and clip/cull distance
   export. The graphics backend also serves bounded non-solid fill, depth
-  clamp/bias and multiple viewports.
+  clamp/bias and multiple viewports, dynamic topology/vertex stride, and
+  geometry-stage transform feedback with counters and stream queries.
 - One or two BGRA8/RGBA8 colour attachments, independent and dual-source
   blending, fragment storage writes/atomics, and 2x/4x colour multisampling
   with per-sample shading, input-attachment reads and resolve.
@@ -33,11 +37,15 @@ complete Vulkan core version.
   standard-UBO-layout and buffer-device-address behavior through explicit KHR
   extension routes. The public API and native evidence are narrower than the
   corresponding complete core-version contracts.
+- Synchronization2, dynamic rendering with depth/stencil resolve, imageless
+  framebuffers, descriptor update templates, bounded robustness2 and compute
+  subgroup BASIC (wave32). These ship through the routes detailed in the API
+  reference; extended subgroup operations/types are not advertised.
 
 These capabilities were validated through public-SDK consumers, structured
 `ps5log/1` telemetry and deterministic GPU readback; visual output alone is
-not the oracle. The T07 resource/query expansion and the T09 timeline,
-render pass 2 and D32S8 stencil/depth leaves are merged, and the ordinary
+not the oracle. The resource/query, timeline, render pass 2 and D32S8
+stencil/depth paths are merged, and the ordinary
 upstream selection passed 879/879 cases on hardware. See [API.md](API.md) for
 the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
 [BUILDING.md](BUILDING.md) to build the SDK.
@@ -50,14 +58,17 @@ VkFormatProperties3 and the image format list. A native
 surface/swapchain adapter has completed acquire, graphics submit and
 presentation on PS5.
 
-Our pinned DXVK 2.6.2 D3D11/DXGI now renders on PS5 in a labelled
+Our pinned DXVK 2.6.2 D3D11/DXGI rendered on PS5 in a labelled
 **diagnostic** configuration: `D3D11CreateDevice` at feature level 11_0 and its
 immediate context, a render target, shaders, a clear, a draw, a staging copy
 and `Map`, with every one of 4096 pixels matching the oracle, then a clean
-shutdown and relaunch. That configuration turns on default-off driver
-measurement switches, patches DXVK in two places (its Vulkan 1.3 adapter
-filter and the transform-feedback terms of its feature-level check) and adds a
-payload translation layer. It is **not** an unmodified DXVK run: an unmodified
+shutdown and relaunch. That dated configuration enabled driver
+measurement switches, patched DXVK in two places (its Vulkan 1.3 adapter
+filter and the transform-feedback terms of its feature-level check) and added a
+payload translation layer. The measured driver routes have since shipped
+except maintenance4; the combined DXVK workload still needs remeasurement
+with the remaining adaptations recorded explicitly. It is **not** an
+unmodified DXVK run: an unmodified
 build still stops at DXVK's adapter filter because the device reports Vulkan
 1.0. See [VALIDATION.md](VALIDATION.md#dxvk-262-d3d11-diagnostic-render-on-ps5-2026-09-25)
 for the receipts and [docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md) for
