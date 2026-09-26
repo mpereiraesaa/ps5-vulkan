@@ -6484,3 +6484,43 @@ The frozen acceptance selection on the fixed tree (eboot
 extension; neither the reporting they measured nor the extension-enabled route
 the witness drove changes. The DXVK matrix has **34/62 ready and 28
 blockers**.
+
+## Driver-maintained HOST_COHERENT memory type promotion (2026-09-26)
+
+`PS5VK_HOST_COHERENT_DIAGNOSTIC` is retired. The PS5 profile now reports a
+second memory type: type 0 is unchanged and first, and type 1 is the same
+direct memory with `HOST_COHERENT` added. The driver keeps that type coherent
+by construction: before a submission launches it writes back every mapped
+coherent range from the CPU caches, and after it observes the completion it
+invalidates them, so no stale CPU line survives either boundary.
+
+The public-SDK witness (`examples/coherent_memory_witness`) selects the type
+the way DXVK does (the first `HOST_VISIBLE|HOST_COHERENT` type) and never
+flushes or invalidates it. On the ordinary SDK: eboot SHA-256
+`084ec469ae64d56fd992f86e1981edbedbfabe5c875f2bc112ed5425e5e2491f`, run
+`20260926T015723365Z_PPSA99994_ps5vk_0x6a2a3a916559`, log SHA-256
+`184231a2987ccf8652146e3b3d4d4d3cc0a461a96aabe6abb5731b272b11882c`, strict:
+host-to-GPU (C1), GPU-to-host (C2) and a mixed host/GPU round trip (C3) each
+had zero mismatches and zero stale words over 4096 words.
+
+The witness is weaker than the claim in one respect, recorded here. Its
+negative control repeats the traffic on the non-coherent type 0 without any
+flush or invalidate, and it did not observe staleness either
+(`verdict=no-stale-observed`, zero unmaintained mismatches). The underlying
+`0x0c` direct-memory mapping may itself be coherent for these access patterns,
+so the driver's writeback and invalidation may be redundant on this hardware.
+They are still correct, and they are what makes the reported property hold
+independently of that mapping. The positive cases C1-C3 prove the observable
+contract.
+
+The frozen acceptance selection on this tree, with the second memory type
+reported (eboot
+`f6e3f85fafcbc7e7b226c869f13ff80cce9fae18395cacd6f376b262491ab3f8`, run
+`20260926T015735877Z_PPSA99994_upstream-cts_0x6a2d245b4043`, log SHA-256
+`7c38bf186ffcf86ad7f83839c204ddd1bb86c47aeab27663e5f1420c208435da`), passed
+879/879. The leaves earlier kept as diagnostics because they need a
+`HOST_COHERENT` type (for example the `host-coherent-memory-gap` Amber leaf and
+`uniform_8_to_8.stress_test`) are not re-measured here; the dated sections
+above describe the profile before this change. The capability probe is not
+re-measured either: the change adds no device extension and no DXVK
+requirement row.

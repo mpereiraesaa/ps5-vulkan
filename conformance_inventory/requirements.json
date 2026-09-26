@@ -4482,7 +4482,7 @@
       "owner": "implementation",
       "provenance": "manual-review",
       "manual_review": true,
-      "review_notes": "The profile truthfully reports HOST_VISIBLE without HOST_COHERENT. Host range validation and cache callbacks are source-tested; four original non-coherent mapping cases and a public host-compute-host consumer pass twice on hardware. The evidence covers the bounded mapped ranges and 64-byte atom contract, not every mapping size or coherent-memory behavior. Coherency modelling is also central to the ParaLLEl-RDP consumer overlay.",
+      "review_notes": "Memory type 0 is HOST_VISIBLE without HOST_COHERENT; a second, driver-maintained HOST_COHERENT type (2026-09-26) keeps coherence by CPU writeback before each launch and invalidation after each observed completion. Host range validation and cache callbacks are source-tested; four original non-coherent mapping cases and a public host-compute-host consumer pass twice on hardware. The evidence covers the bounded mapped ranges and 64-byte atom contract, not every mapping size or coherent-memory behavior. Coherency modelling is also central to the ParaLLEl-RDP consumer overlay.",
       "classification_basis": "core-cumulative-required",
       "consumer_demand": [
         "parallel-rdp"

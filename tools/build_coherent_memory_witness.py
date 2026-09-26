@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build the bounded public-SDK HOST_COHERENT memory witness executable.
 
-The SDK is staged with PS5VK_HOST_COHERENT_DIAGNOSTIC=1, the default-off
-switch that appends the driver-maintained HOST_COHERENT memory type. The
-ordinary profile does not report that type until this witness passes."""
+The SDK is the ordinary shipping profile, which reports the driver-maintained
+HOST_COHERENT memory type; the witness is its native regression check."""
 
 import hashlib
 import json
@@ -22,7 +21,7 @@ from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
 PROFILE = "host-coherent-memory-diagnostic-witness"
 WORDS = 4096
-SWITCHES = {"PS5VK_HOST_COHERENT_DIAGNOSTIC": "1"}
+SWITCHES: dict[str, str] = {}
 
 
 def run(*command: str, env: dict | None = None) -> None:

@@ -89,17 +89,16 @@ for an unmodified, truthful route:**
    public-SDK capture witness. A D3D11 stream-output shader with no pixel
    shader bound still needs a pipeline without a fragment stage, which the
    frontend refuses.
-3. **Promotion of the measured routes now behind default-off switches:**
-   synchronization2, extended dynamic state (dynamic topology and vertex
-   stride are still refused), format feature flags 2 and image format
-   lists (RGBA8 UNORM/SRGB only), storage texel buffer views, and a
-   host-coherent memory type. (Descriptor update templates, memory
-   requirements 2, dedicated allocation and bind memory 2 now ship.) Each has a passing
-   native witness except where the witness is weaker than the claim: the
-   host-coherent control did not observe stale data without cache
-   maintenance, and maintenance4 cannot be exposed on a 1.0 device.
-   (Dynamic rendering with depth/stencil resolve, maintenance1 and copy
-   commands 2 now ship.)
+3. **Measured routes still behind a default-off switch:** extended dynamic
+   state (dynamic topology and vertex stride are still refused) and
+   maintenance4, which cannot be exposed on a 1.0 device. Every other
+   measured route ships with a passing native witness: synchronization2,
+   format feature flags 2 and image format lists (RGBA8 UNORM/SRGB only),
+   storage texel buffer views, imageless framebuffer, robustness2,
+   descriptor update templates, memory requirements 2, dedicated allocation,
+   bind memory 2, dynamic rendering with depth/stencil resolve, maintenance1,
+   copy commands 2 and the host-coherent memory type (whose control did not
+   observe stale data without cache maintenance, see VALIDATION.md).
 4. **Core-named commands and the Vulkan 1.1/1.2/1.3 query structures.**
    DXVK uses only core names and the aggregate structures; the diagnostic
    payload translates them onto the extension routes. The driver-side
