@@ -384,10 +384,9 @@ struct ps5vk_platform {
 };
 VkResult ps5vk_platform_query(struct ps5vk_platform *platform);
 
-/* Vulkan 1.1 instance: any requested apiVersion is accepted, and the only
- * instance-level additions (vkEnumerateInstanceVersion and the core
- * vkEnumeratePhysicalDeviceGroups) are implemented. It does not raise the
- * physical device, which still reports Vulkan 1.0. */
+/* Experimental instance API ceiling. Physical-device reporting is selected
+ * separately by PS5VK_DEVICE_API_VERSION; feature/property queries and
+ * implemented command routes determine the bounded consumer contract. */
 #define PS5VK_INSTANCE_API_VERSION VK_API_VERSION_1_3
 struct VkPhysicalDevice_T {
     VkInstance instance;
