@@ -120,6 +120,8 @@ VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *library,
             p->sample_shading_enable != key->sample_shading_enable ||
             p->min_sample_shading != key->min_sample_shading ||
             p->sample_mask != key->sample_mask ||
+            p->transform_feedback_buffers != key->transform_feedback_buffers ||
+            p->rasterizer_discard != key->rasterizer_discard ||
             p->color_attachment_count != key->color_attachment_count ||
             !equal_color_state(p, key) ||
             p->push_constant_size!=key->push_constant_size ||

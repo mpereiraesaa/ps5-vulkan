@@ -332,10 +332,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateBuffer(VkDevice d, const VkBufferCreateIn
     /* Usage is permission, not a capability claim. STORAGE_TEXEL_BUFFER is
      * admitted because D3D11 UAV buffers carry it next to STORAGE_BUFFER
      * (their raw/structured access); a storage-texel VIEW still needs a format
-     * with the witnessed storage-texel role, and none has one. Transform
-     * feedback usage stays refused until that feature exists. */
+     * with the witnessed storage-texel role, and none has one. The two
+     * transform feedback usages exist only on a device that enabled
+     * VK_EXT_transform_feedback (DXVK's allocator probes both there). */
+    const VkBufferUsageFlags transform_feedback_usage =
+        d->transform_feedback_extension_enabled ?
+        (VkBufferUsageFlags)(VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT |
+                             VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT) : 0u;
     if (info->pNext || info->flags || info->sharingMode != VK_SHARING_MODE_EXCLUSIVE ||
-        !info->usage || (info->usage & ~(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+        !info->usage || (info->usage & ~transform_feedback_usage &
+        ~(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
         VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |

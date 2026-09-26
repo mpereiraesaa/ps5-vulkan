@@ -363,24 +363,35 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (tcs && !(d->enabled_features & PS5VK_FEATURE_TESSELLATION_SHADER))
         return refuse(7);
 #endif
-    /* Transform feedback (VK_EXT_transform_feedback) is not negotiated on this
-     * device, so no stage may declare the Xfb execution mode. Such a module
-     * would otherwise be compiled and only refused later, by the native header
-     * builder, when it sees streamout metadata; this site names the reason
-     * before any compiler or backend work. A malformed capture interface is
-     * refused here as well. */
+    /* Transform feedback (VK_EXT_transform_feedback, DXVK262-T14). Without the
+     * transformFeedback feature no stage may declare Xfb (site 19); a module
+     * whose capture interface is malformed or outside the reported properties
+     * is refused at the same site. With it, capture is admitted only on the
+     * geometry stage (site 20): the compiler's PS5 capture path is the merged
+     * vertex+geometry program's no-GDS streamout, and the pinned DXVK always
+     * captures there (its vertex-stage stream output becomes a pass-through
+     * geometry shader). The geometry stage is then the last pre-rasterization
+     * stage, as Vulkan requires. */
+    struct ps5vk_xfb_interface capture;
+    memset(&capture,0,sizeof(capture));
     {
-        static const struct ps5vk_xfb_limits no_capture;
+        const VkBool32 xfb_enabled=
+            (d->enabled_features_t09 & PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK)!=0;
+        struct ps5vk_xfb_limits limits;
+        ps5vk_xfb_device_limits(xfb_enabled,d->geometry_streams_enabled,&limits);
         const VkPipelineShaderStageCreateInfo *const stages[]={vs,tcs,tes,gs,fs};
         for (unsigned i=0; i<sizeof(stages)/sizeof(stages[0]); ++i) {
             const VkPipelineShaderStageCreateInfo *s=stages[i];
             uint32_t id;
             struct ps5vk_xfb_interface xfb;
             if (!s) continue;
-            if (!ps5vk_shader_entry(s->module, s->stage, s->pName, &id) ||
-                ps5vk_xfb_reflect(s->module->words, s->module->word_count, id,
-                                  &no_capture, &xfb) != PS5VK_XFB_NONE)
-                return refuse(19);
+            if (!ps5vk_shader_entry(s->module, s->stage, s->pName, &id)) return refuse(19);
+            const int reflected=ps5vk_xfb_reflect(s->module->words, s->module->word_count,
+                                                  id, &limits, &xfb);
+            if (reflected==PS5VK_XFB_NONE) continue;
+            if (!xfb_enabled || reflected!=PS5VK_XFB_CAPTURES) return refuse(19);
+            if (s!=gs) return refuse(20);
+            capture=xfb;
         }
     }
     const VkPipelineVertexInputStateCreateInfo *v=in->pVertexInputState;
@@ -470,7 +481,11 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          * topologies it can act on, and refused there for every other
          * topology, so it is not part of this blanket refusal. */
         ia->pNext || ia->flags ||
-        !rasterization_pnext_supported(r->pNext) || r->flags || r->rasterizerDiscardEnable ||
+        !rasterization_pnext_supported(r->pNext) || r->flags ||
+        /* Rasterizer discard is admitted only for a pipeline that captures:
+         * the pinned DXVK sets it for stream output with no rasterized
+         * stream, and nothing else in this profile draws without raster. */
+        (r->rasterizerDiscardEnable && !capture.buffers_mask) ||
         /* depthClampEnable needs depthClamp ENABLED on this logical device;
          * the state itself executes (native PA_CL_CLIP_CNTL ZCLIP_*_DISABLE
          * with the viewport depth range as the clamp interval). */
@@ -579,6 +594,8 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             (struct ps5vk_graphics_module_key){0},
         .patch_control_points=tcs?in->pTessellationState->patchControlPoints:0,
         .feature_mask=d->enabled_features,
+        .transform_feedback_buffers=capture.buffers_mask,
+        .rasterizer_discard=r->rasterizerDiscardEnable?VK_TRUE:VK_FALSE,
         .topology=ia->topology,
         .samples=m->rasterizationSamples,
         /* Sample shading is carried exactly as the accepted state reads it:
@@ -738,6 +755,8 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         p->color_write_mask[attachment]=key.color_write_mask[attachment];
     }
     p->primitive_restart=ia->primitiveRestartEnable;
+    p->xfb=capture;
+    p->rasterizer_discard=r->rasterizerDiscardEnable?VK_TRUE:VK_FALSE;
     /* The pipeline carries one blend state per colour attachment it was
      * created for; with none (the depth-only shape) the array keeps the zeroed
      * value the object allocation gave it. */

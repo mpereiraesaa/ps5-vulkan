@@ -115,6 +115,7 @@ def main():
             (ROOT / "src/vk_indirect.c", []),
             (ROOT / "src/vk_fence.c", []),
             (ROOT / "src/vk_query_pool.c", []),
+            (ROOT / "src/vk_xfb_commands.c", []),
             (ROOT / "src/vk_sync.c", []),
             (ROOT / "src/vk_buffer_transfer.c", []),
             (ROOT / "src/vk_image_transfer.c", []),
@@ -393,7 +394,7 @@ def main():
     host_sources = [
         "src/vk_alloc.c", "src/vk_memory.c", "src/vk_descriptor.c",
         "src/vk_pipeline.c", "src/spirv_ubo_layout.c", "src/compilation_cache.c", "src/vk_pipeline_cache.c", "src/vk_command.c", "src/vk_indirect.c",
-        "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c", "src/vk_sync2.c",
+        "src/vk_fence.c", "src/vk_query_pool.c", "src/vk_xfb_commands.c", "src/vk_sync.c", "src/vk_buffer_transfer.c", "src/vk_image_transfer.c", "src/vk_queue.c", "src/vk_queue_router.c", "src/vk_sync2.c",
         # The linear staging readback copy reads the tiled colour surface
         # through the shared 64KB_R_X offset contract.
         # through the shared 64KB_R_X offset contract, and a depth readback

@@ -4,6 +4,7 @@
 #include "wsi_present_backend.h"
 #include "texture_format.h"
 #include "vk_core_version.h"
+#include "vk_transform_feedback.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -578,6 +579,12 @@ static VkBool32 separate_depth_stencil_supported(VkPhysicalDevice p)
  * VK_KHR_get_physical_device_properties2 or Vulkan 1.1; this profile's device
  * is 1.0, so vkCreateDevice requires the instance extension. The extension is
  * reported once the platform carries either of its implemented features. */
+/* VK_EXT_transform_feedback (DXVK262-T14): one platform bit decides the
+ * extension, both features and every property. */
+static VkBool32 transform_feedback_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK) != 0;
+}
 static VkBool32 robustness2_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 &
@@ -700,6 +707,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES) {
             ((VkPhysicalDeviceDynamicRenderingFeatures *)next)->dynamicRendering =
                 dynamic_rendering_supported(p);
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT) {
+            /* DXVK262-T14: both members follow the one platform bit. */
+            VkPhysicalDeviceTransformFeedbackFeaturesEXT *features =
+                (VkPhysicalDeviceTransformFeedbackFeaturesEXT *)next;
+            features->transformFeedback = transform_feedback_supported(p);
+            features->geometryStreams = transform_feedback_supported(p);
         } else {
             /* Core Vulkan 1.1-1.3 aggregates: answered only on a device that
              * reports their version (src/vk_core_version.c). */
@@ -788,6 +802,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
             properties->supportedStencilResolveModes = modes;
             properties->independentResolveNone = VK_FALSE;
             properties->independentResolve = VK_FALSE;
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT) {
+            ps5vk_xfb_device_properties(transform_feedback_supported(p),
+                (VkPhysicalDeviceTransformFeedbackPropertiesEXT *)next);
         } else {
             (void)ps5vk_core_version_properties(p, next);
         }
@@ -950,7 +968,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Thirty-two conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Thirty-three conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
@@ -958,10 +976,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
      * dedicated_allocation, bind_memory2, maintenance4, descriptor update
      * template, robustness2, extended dynamic state, maintenance1,
      * copy_commands2, depth/stencil resolve, dynamic rendering, format feature
-     * flags 2, image format list, synchronization2). Keep headroom so a new
-     * entry cannot overflow the array before this bound is revisited; each push
+     * flags 2, image format list, synchronization2, transform feedback). Keep
+     * headroom so a new entry cannot overflow the array before this bound is revisited; each push
      * site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 32, DEVICE_EXTENSION_SLOTS = 36 };
+    enum { DEVICE_EXTENSION_PUSHES = 33, DEVICE_EXTENSION_SLOTS = 36 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -1122,6 +1140,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
             VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
             VK_KHR_SYNCHRONIZATION_2_SPEC_VERSION};
     }
+    if (transform_feedback_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME, VK_EXT_TRANSFORM_FEEDBACK_SPEC_VERSION};
+    }
     return enumerate_extensions(properties, total, count, out);
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
@@ -1171,6 +1193,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 depth_stencil_resolve_extension = VK_FALSE, dynamic_rendering_extension = VK_FALSE;
     VkBool32 format_feature_flags2_extension = VK_FALSE, image_format_list_extension = VK_FALSE;
     VkBool32 synchronization2_extension = VK_FALSE;
+    VkBool32 transform_feedback_extension = VK_FALSE;
 
     for (uint32_t n = 0; n < info->enabledExtensionCount; ++n) {
         const char *name = info->ppEnabledExtensionNames[n];
@@ -1242,6 +1265,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &image_format_list_extension;
         else if (!strcmp(name, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME))
             seen = &synchronization2_extension;
+        else if (!strcmp(name, VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME))
+            seen = &transform_feedback_extension;
 
         else {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1258,6 +1283,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     if (swapchain_extension && !swapchain_supported(p))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    /* The pinned registry makes VK_EXT_transform_feedback depend on
+     * VK_KHR_get_physical_device_properties2 or Vulkan 1.1: the instance must
+     * be able to query the feature and property structures. */
+    if (transform_feedback_extension &&
+        (!transform_feedback_supported(p) ||
+         (!p->instance->features2_extension_enabled &&
+          p->instance->api_version < VK_API_VERSION_1_1)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     if (multiview_extension &&
@@ -1388,6 +1421,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_extended_dynamic_state = VK_FALSE, extended_dynamic_state = VK_FALSE;
     VkBool32 saw_synchronization2 = VK_FALSE;
     uint32_t core_version_structs = 0;
+    VkBool32 saw_transform_feedback = VK_FALSE, geometry_streams = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO) {
@@ -1690,6 +1724,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 if (!synchronization2_extension) return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;
             }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT) {
+            if (saw_transform_feedback) return INVALID;
+            saw_transform_feedback = VK_TRUE;
+            const VkPhysicalDeviceTransformFeedbackFeaturesEXT *features =
+                (const VkPhysicalDeviceTransformFeedbackFeaturesEXT *)next;
+            if (!valid_bool(features->transformFeedback) ||
+                !valid_bool(features->geometryStreams)) return INVALID;
+            if ((features->transformFeedback || features->geometryStreams) &&
+                (!transform_feedback_extension || !transform_feedback_supported(p)))
+                return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (features->transformFeedback)
+                enabled_features_t09 |= PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK;
+            geometry_streams = features->geometryStreams;
         } else {
             /* Vulkan1{1,2,3}Features, only above the effective version. */
             VkResult core = ps5vk_core_version_enable(p, next, &core_version_structs,
@@ -1745,6 +1793,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->synchronization2_extension_enabled = synchronization2_extension;
     d->create_renderpass2_extension_enabled = create_renderpass2_extension;
     d->swapchain_extension_enabled = swapchain_extension;
+    d->transform_feedback_extension_enabled = transform_feedback_extension;
+    d->geometry_streams_enabled = geometry_streams;
     d->memory_requirements2_extension_enabled = memory_requirements2_extension;
     d->dedicated_allocation_extension_enabled = dedicated_allocation_extension;
     d->bind_memory2_extension_enabled = bind_memory2_extension;

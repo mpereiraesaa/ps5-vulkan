@@ -78,6 +78,11 @@ struct ps5vk_graphics_key {
     const struct ps5vk_set_signature *descriptor_sets;
     uint32_t push_constant_size;
     VkShaderStageFlags push_constant_stages[PS5VK_MAX_PUSH_CONSTANT_DWORDS];
+    /* VK_EXT_transform_feedback (DXVK262-T14): the XfbBuffer indices the
+     * geometry stage writes (zero: no capture), and rasterizer discard. Both
+     * change the compiled pre-raster program and its draw state. */
+    uint32_t transform_feedback_buffers;
+    VkBool32 rasterizer_discard;
 };
 /* True when the pipeline carries a geometry stage. */
 static inline int ps5vk_graphics_has_geometry(const struct ps5vk_graphics_key *key)
