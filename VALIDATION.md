@@ -6575,7 +6575,19 @@ distinct one-texel images and reads them through constant indices:
 
 The witness now also reads a compute set of `UNIFORM_TEXEL_BUFFER[1023]` plus
 the output buffer (1023 `R32_UINT` views over one buffer), the other member of
-the sampled-image accounting class. On this evidence the graphics profile
+the sampled-image accounting class. The payloads below were built from this
+change combined with the pinned compiler update, with every diagnostic switch
+off:
+
+| Payload | Eboot SHA-256 | Run | Result |
+|---|---|---|---|
+| capacity witness with the texel pass | `a916407697953b160bdca0d1e20350e68943bc48deb2136971a1cc3b00a2e1d2` | `20260926T022320430Z_PPSA99994_ps5vk_0x6b94c1989266` | strict pass (sampled images, texel buffers, fragment set) |
+| dynamic-offset witness | `ede9e604f8a3c97f8fa65a23e9fa52730c63aa2aed2642ecea9bb63b52ea7dd9` | `20260926T022328018Z_PPSA99994_ps5vk_0x6b9685d87ab5` | strict pass |
+| DXVK capability probe | `c0c4cb0796d408cdb77c270837e34f7cf83bc08fc4d7c7fffaa75f064c8e9764` | `20260926T022336442Z_PPSA99994_ps5vk_0x6b987c0f2190` | `tools/verify_dxvk_probe.py` strict: API 1.0.0, 17 device extensions, 34/62 requested values met; source log SHA-256 `065c2076dbea14bed1d5cd466166ece2e655df2a78bbc6ad0577e1e7117670c1` |
+| public consumer resource ABI | `78a27440964e875e3150fd1c0632d2d38268995a270aa96c0aba96e2a6754e40` | `20260926T022342642Z_PPSA99994_ps5vk_0x6b99ed9aa59c` | strict pass, report hash `7f34799b` |
+| canonical acceptance | `d83f7f91c7b7da2c4b89ae2bfb6ab85a2051e61c59c4e22acfeb9dcea805763d` | `20260926T022355269Z_PPSA99994_upstream-cts_0x6b9cde32da43` | 879/879 |
+
+On this evidence the graphics profile
 reports `maxPerStageDescriptorSampledImages`, `maxDescriptorSetSampledImages`
 and `maxPerStageResources` as 1024, and the Vulkan 1.1 `maxPerSetDescriptors`
 contract row is satisfied. Samplers, storage and uniform buffers, and dynamic
