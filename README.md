@@ -1,90 +1,79 @@
-# ps5-vulkan
+<p align="center">
+  <img src="assets/branding/header.svg" alt="ps5-vulkan — Graphics and compute for the PlayStation 5 GPU" width="100%">
+</p>
 
-An experimental, hardware-accelerated Vulkan-style graphics and compute API for
-native PlayStation 5 homebrew on the console's `gfx1013` GPU. It is built and
-tested on an owned PS5; the public device currently reports Vulkan 1.0. The
-project documents supported operations individually rather than claiming a
-complete Vulkan core version.
+<p align="center">
+  <a href="https://github.com/mpereiraesaa/ps5-vulkan/actions/workflows/host-contracts.yml"><img src="https://github.com/mpereiraesaa/ps5-vulkan/actions/workflows/host-contracts.yml/badge.svg?branch=main" alt="Host and compiler checks"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-8875ff" alt="License: GPL-3.0-or-later"></a>
+  <a href="API.md"><img src="https://img.shields.io/badge/status-experimental-f25569" alt="Experimental"></a>
+  <a href="https://github.com/mpereiraesaa/ps5-vulkan/stargazers"><img src="https://img.shields.io/github/stars/mpereiraesaa/ps5-vulkan?style=flat" alt="GitHub stars"></a>
+  <a href="https://github.com/mpereiraesaa/ps5-vulkan/pulls"><img src="https://img.shields.io/github/issues-pr/mpereiraesaa/ps5-vulkan?color=8875ff" alt="Open pull requests"></a>
+  <a href="https://github.com/mpereiraesaa/ps5-vulkan/issues"><img src="https://img.shields.io/github/issues/mpereiraesaa/ps5-vulkan?color=f25569" alt="Open issues"></a>
+</p>
 
-## Working capabilities
+<p align="center">
+  <a href="BUILDING.md">Build the SDK</a> ·
+  <a href="API.md">Supported API</a> ·
+  <a href="VALIDATION.md">Hardware validation</a> ·
+  <a href="https://github.com/mpereiraesaa/ps5-vulkan/issues">Report an issue</a>
+</p>
 
-- Native graphics and compute submission, GPU-backed buffers and images,
-  command buffers, fences, binary semaphores, and two-buffer 1080p VideoOut
-  presentation with clean Close Game/relaunch.
-- A 1.25 GiB graphics heap with a 1 GiB single-buffer allocation limit,
-  layout-sized descriptor sets up to 1024 records, and a driver-maintained
-  host-coherent buffer memory type. Other per-resource limits remain bounded.
-- Runtime SPIR-V compute and vertex/fragment compilation through pinned
-  PSBC/ACO, with bounded in-memory shader and pipeline caches. Compute has up
-  to four descriptor sets, storage/uniform buffers, uniform texel buffers,
-  push constants, specialization constants, and extension-negotiated 8/16-bit
-  storage-buffer access.
-- Indexed and indirect draws, typed vertex formats, depth testing, face
-  culling, multiview, geometry and tessellation stages, and clip/cull distance
-  export. The graphics backend also serves bounded non-solid fill, depth
-  clamp/bias and multiple viewports, dynamic topology/vertex stride, and
-  geometry-stage transform feedback with counters and stream queries.
-- One or two BGRA8/RGBA8 colour attachments, independent and dual-source
-  blending, fragment storage writes/atomics, and 2x/4x colour multisampling
-  with per-sample shading, input-attachment reads and resolve.
-- Sampled 1D, 2D, array, cube, cube-array and 3D images, including bounded BC
-  compressed formats, mip uploads, depth sampling and extended image gather.
-  The format ledger records 61 sampled texture formats: 40 filterable rows and
+An experimental, hardware-accelerated Vulkan-style graphics and compute API
+for native PlayStation 5 homebrew, targeting the console's **gfx1013 GPU**.
+It provides a static SDK, runtime SPIR-V compilation and native 1080p
+presentation. The public device reports **Vulkan 1.0**, with selected newer
+features exposed through explicit extension routes—not a complete core-version
+or Vulkan conformance claim.
+
+## What works
+
+- **Graphics:** indexed and indirect draws, multiview, geometry and tessellation,
+  clip/cull distances, depth testing, multiple viewports, dynamic topology and
+  vertex stride, plus geometry-stage transform feedback and stream queries.
+- **Pixels and textures:** independent and dual-source blending, fragment
+  storage writes/atomics, 2x/4x colour multisampling with per-sample shading and
+  resolve, cube arrays, bounded BC textures, depth sampling and extended gather.
+  The ledger records 61 sampled texture formats: 40 filterable rows and
   20 integer rows restricted to nearest filtering.
-  Selected image copy, blit, clear and readback paths have exact GPU oracles;
-  unsupported resource shapes remain fail-closed.
-- Occlusion queries, including precise counts, and selected Vulkan memory-model,
-  standard-UBO-layout and buffer-device-address behavior through explicit KHR
-  extension routes. The public API and native evidence are narrower than the
-  corresponding complete core-version contracts.
-- Synchronization2, dynamic rendering with depth/stencil resolve, imageless
-  framebuffers, descriptor update templates, bounded robustness2 and compute
-  subgroup BASIC (wave32). These ship through the routes detailed in the API
-  reference; extended subgroup operations/types are not advertised.
+- **Compute and shaders:** runtime SPIR-V compilation through pinned PSBC/ACO,
+  shader/pipeline caches, up to four compute descriptor sets, push and
+  specialization constants, 8/16-bit storage access and wave32 compute BASIC.
+- **Memory and resources:** a 1.25 GiB graphics heap, a 1 GiB single-buffer
+  allocation limit, layout-sized sets of up to 1024 descriptors, and a
+  driver-maintained host-coherent buffer memory type. Other resource limits
+  remain narrower.
+- **Execution:** synchronization2, timeline semaphores, dynamic rendering with
+  depth/stencil resolve, imageless framebuffers, descriptor update templates,
+  bounded robustness2, and precise occlusion queries.
+- **Presentation:** native surface/swapchain acquisition and two-buffer 1080p
+  VideoOut presentation, with measured Close Game and relaunch behavior.
 
-These capabilities were validated through public-SDK consumers, structured
-`ps5log/1` telemetry and deterministic GPU readback; visual output alone is
-not the oracle. The resource/query, timeline, render pass 2 and D32S8
-stencil/depth paths are merged, and the ordinary
-upstream selection passed 879/879 cases on hardware. See [API.md](API.md) for
-the bounded contract, [VALIDATION.md](VALIDATION.md) for exact evidence and
-[BUILDING.md](BUILDING.md) to build the SDK.
+Supported formats, stages and resource shapes are deliberately bounded.
+See [API.md](API.md) for the exact contracts and [VALIDATION.md](VALIDATION.md)
+for artifact-identified native witnesses and deterministic GPU readback.
+Host CI alone does not establish hardware correctness.
 
-## In progress
+## Current runtime milestone
 
-The Vulkan 1.0 profile exposes selected newer features through their EXT/KHR
-routes, including shader demote and terminate invocation, synchronization2,
-VkFormatProperties3 and the image format list. A native
-surface/swapchain adapter has completed acquire, graphics submit and
-presentation on PS5.
+Pinned DXVK 2.6.2 D3D11/DXGI has rendered an offscreen workload on PS5 in a
+labelled **diagnostic configuration**: feature-level 11_0 device creation,
+shaders, draw, staging copy and readback, with all 4096 pixels matching the
+oracle and clean shutdown/relaunch.
 
-Our pinned DXVK 2.6.2 D3D11/DXGI rendered on PS5 in a labelled
-**diagnostic** configuration: `D3D11CreateDevice` at feature level 11_0 and its
-immediate context, a render target, shaders, a clear, a draw, a staging copy
-and `Map`, with every one of 4096 pixels matching the oracle, then a clean
-shutdown and relaunch. That dated configuration enabled driver
-measurement switches, patched DXVK in two places (its Vulkan 1.3 adapter
-filter and the transform-feedback terms of its feature-level check) and added a
-payload translation layer. The measured driver routes have since shipped
-except maintenance4; the combined DXVK workload still needs remeasurement
-with the remaining adaptations recorded explicitly. It is **not** an
-unmodified DXVK run: an unmodified
-build still stops at DXVK's adapter filter because the device reports Vulkan
-1.0. See [VALIDATION.md](VALIDATION.md#dxvk-262-d3d11-diagnostic-render-on-ps5-2026-09-25)
-for the receipts and [docs/DXVK_V262_BACKLOG.md](docs/DXVK_V262_BACKLOG.md) for
-the contracts a truthful route still needs.
+That measured configuration used consumer patches and core-name/query
+translation. Its driver routes have since shipped except maintenance4;
+the combined workload needs a fresh measurement with the remaining adaptations
+recorded. **Unmodified DXVK still stops at the Vulkan 1.0 device filter.**
+The offscreen result is not a presented DXVK frame or general game compatibility.
 
-The historical DXVK requirement matrix remains available for auditing with
-`make check-dxvk-ledger`; its counts are not a build or promotion gate.
-Development uses targeted host checks and artifact-identified native witnesses.
-There is no Vulkan loader/ICD, and format, shader, queue and resource coverage
-remains bounded. Focused upstream CTS results are available for debugging in
-[UPSTREAM_CTS.md](UPSTREAM_CTS.md), but no full CTS or Vulkan conformance claim
-is made.
+Read the [native result](VALIDATION.md#dxvk-262-d3d11-diagnostic-render-on-ps5-2026-09-25)
+and [runtime backlog](docs/DXVK_V262_BACKLOG.md) for the remaining work.
+There is no Vulkan loader/ICD. Focused [CTS results](UPSTREAM_CTS.md) are
+diagnostic evidence, not a full conformance claim or a blanket delivery gate.
 
-## Development
+## Build and develop
 
-Host validation requires Python 3, Make, a C11 compiler and Git:
+Host checks require Python 3, Make, a C11 compiler and Git:
 
 ```sh
 make vulkan-headers
@@ -93,17 +82,16 @@ make check
 make check-sanitize
 ```
 
-Native compilation also requires the PS5 payload SDK and the companion
-`ps5-agc-gears` support library; see [BUILDING.md](BUILDING.md).
+Native builds also need the PS5 payload SDK and the companion graphics support
+library. Follow [BUILDING.md](BUILDING.md) for dependencies and SDK staging.
+Development uses targeted host checks and artifact-identified native witnesses;
+the historical requirement matrix is available through `make check-dxvk-ledger`,
+not used as a build or promotion gate.
 
 ## License
 
-`ps5-vulkan` is free software licensed under the GNU General Public License,
-version 3 or (at your option) any later version (`GPL-3.0-or-later`). See
-[LICENSE](LICENSE) for the complete terms and [LICENSING.md](LICENSING.md) for
-copyright, contribution, dependency and source-provenance details.
-
-The staged SDK contains a static `libps5vk.a`. Distributing an application that
-links this library creates a combined GPL work and requires providing its
-corresponding source under GPL-compatible terms. Console system modules and
-their link-time import facades are not distributed as part of this repository.
+**GPL-3.0-or-later.** See [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md)
+for terms, contribution guidance and third-party provenance. Applications
+distributed with the static `libps5vk.a` must provide the corresponding source
+under GPL-compatible terms. Console system modules and their import facades
+are not distributed here.

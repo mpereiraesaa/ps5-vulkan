@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+  <title id="title">ps5-vulkan</title>
+  <desc id="desc">An original geometric V inside a GPU-inspired frame. Graphics and compute for PlayStation 5 homebrew.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#101827"/>
+      <stop offset="1" stop-color="#1d2340"/>
+    </linearGradient>
+    <linearGradient id="accent">
+      <stop stop-color="#fa6375"/>
+      <stop offset="0.52" stop-color="#bb72e9"/>
+      <stop offset="1" stop-color="#777aff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" rx="20" fill="url(#background)"/>
+  <g fill="none" stroke="#313953" stroke-width="1.5" opacity="0.65">
+    <path d="M934 0 1107 300M1009 0 1182 300M1084 0 1200 201M859 0 1032 300"/>
+    <path d="M906 80h294M952 160h248M998 240h202"/>
+  </g>
+  <g transform="translate(76 58)">
+    <rect x="16" y="16" width="160" height="160" rx="32" fill="#151d30" stroke="#657293" stroke-width="2"/>
+    <g stroke="#657293" stroke-width="4" stroke-linecap="round">
+      <path d="M55 4v12M96 4v12M137 4v12M55 176v12M96 176v12M137 176v12M4 55h12M4 96h12M4 137h12M176 55h12M176 96h12M176 137h12"/>
+    </g>
+    <path d="M42 48h36l37 64-19 34z" fill="#b6a7ff"/>
+    <path d="M114 48h36L96 146l-18-32z" fill="#fa6375"/>
+    <path d="m96 146 19-34 18 32-37 21z" fill="#8c79f1"/>
+  </g>
+  <g font-family="DejaVu Sans, Arial, sans-serif">
+    <text x="311" y="79" fill="#aeb9d1" font-size="13" font-weight="600" letter-spacing="3">NATIVE · OPEN SOURCE · HOMEBREW</text>
+    <text x="305" y="170" fill="#f5f7ff" font-size="79" font-weight="700" letter-spacing="-4">ps5<tspan fill="#fa6375">-vulkan</tspan></text>
+    <text x="310" y="214" fill="#b9c4db" font-size="22">Graphics &amp; compute for the PlayStation 5 GPU</text>
+  </g>
+  <rect x="76" y="268" width="1048" height="4" rx="2" fill="url(#accent)"/>
+</svg>
