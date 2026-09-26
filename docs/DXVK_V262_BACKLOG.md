@@ -12,11 +12,11 @@ DXVK execution.
 
 ## Verified baseline on `main` (2026-09-25)
 
-After the synchronization2, T14 transform feedback and imageless framebuffer
-promotions, `tools/check_dxvk_profile.py --check` reports **37/62 ready, 25
-blockers**. This is an implementation-evidence score, not a DXVK runtime
-result. `tools/check_dxvk_backlog.py --check` reports 36 implementation-ready
-original blockers and 36 profile-satisfied ones (the 62-row score also
+After the synchronization2, T14 transform feedback, imageless framebuffer and
+robustness2 promotions, `tools/check_dxvk_profile.py --check` reports **40/62
+ready, 22 blockers**. This is an implementation-evidence score, not a DXVK
+runtime result. `tools/check_dxvk_backlog.py --check` reports 39
+implementation-ready original blockers and 39 profile-satisfied ones (the 62-row score also
 includes the initially satisfied `robustBufferAccess`). The public device
 still reports Vulkan **1.0.0**. The matrix counts geometry and tessellation as
 blockers because their completed T04 native receipts have not been admitted
@@ -93,7 +93,7 @@ for an unmodified, truthful route:**
    synchronization2, dynamic rendering and depth/stencil resolve, extended
    dynamic state (dynamic topology and vertex stride are still refused),
    maintenance1, copy commands 2, format feature flags 2 and image format
-   lists (RGBA8 UNORM/SRGB only), robustness2, descriptor update templates,
+   lists (RGBA8 UNORM/SRGB only), descriptor update templates,
    memory requirements 2, dedicated allocation, bind memory 2, storage texel
    buffer views, and a host-coherent memory type. Each has a passing
    native witness except where the witness is weaker than the claim: the

@@ -106,6 +106,23 @@ EXTENSION_ROUTES = {
                    "image_format_list dependencies; attachments bind at render-pass begin "
                    "through VkRenderPassAttachmentBeginInfo."),
     },
+    "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2": {
+        "extension": "VK_EXT_robustness2",
+        "field": "robustBufferAccess2",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vertex_fetch.c",
+                 "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed EXT feature query and opt-in; the compiler bounds buffer descriptors by "
+                   "their exact range, and non-indexed draws past a vertex buffer read zero "
+                   "through the vertex descriptor record count."),
+    },
+    "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor": {
+        "extension": "VK_EXT_robustness2",
+        "field": "nullDescriptor",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_descriptor.c",
+                 "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed EXT feature query and opt-in; VK_NULL_HANDLE descriptors and vertex "
+                   "buffers become all-zero records that read zero."),
+    },
 }
 DIAGNOSTIC_IMPLEMENTATIONS = {
     "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge": (
@@ -430,7 +447,6 @@ def implemented_device_extensions() -> set[str]:
     # its preprocessor boundary is malformed rather than counting its bits.
     for name in (
 
-        "PS5VK_ROBUSTNESS2_DIAGNOSTIC",
 
         "PS5VK_DESCRIPTOR_UPDATE_TEMPLATE_DIAGNOSTIC",
 

@@ -44,6 +44,12 @@ VkResult ps5vk_vertex_fetch_used_spans(VkDevice d,const struct ps5vk_graphics_ke
         }
         if(!fetch->attribute_extent)continue;
         const struct ps5vk_vertex_binding *bound=&op->vertices[i];
+        /* robustness2 nullDescriptor: a VK_NULL_HANDLE binding keeps a null
+         * address, which becomes the all-zero SRD. NUM_RECORDS zero puts
+         * every fetch out of range, so each attribute reads zero. */
+        if(!bound->buffer && (d->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) {
+            fetch->address=NULL;fetch->bytes=0;continue;
+        }
         if(!ps5vk_buffer_usage(d,bound->buffer,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT))return VK_ERROR_UNKNOWN;
         void *address;VkDeviceSize bytes;
         VkResult rc=ps5vk_buffer_span(d,bound->buffer,bound->offset,VK_WHOLE_SIZE,&address,&bytes);
@@ -55,7 +61,12 @@ VkResult ps5vk_vertex_fetch_used_spans(VkDevice d,const struct ps5vk_graphics_ke
         /* Indexed contents remain GPU inputs, not CPU-expanded geometry. Their
          * values plus signed baseVertex must satisfy Vulkan valid usage; the SRD
          * still bounds the actual vertex buffer. No robust-access feature claim. */
-        if(op->type==PS5VK_DRAW && (uint64_t)op->first_vertex+op->vertex_count>records)return VK_ERROR_UNKNOWN;
+        /* robustBufferAccess2 makes an out-of-range vertex read defined: the
+         * SRD's record count bounds the fetch and the rest read zero. Without
+         * it, a non-indexed draw past the buffer is still refused. */
+        if(op->type==PS5VK_DRAW && (uint64_t)op->first_vertex+op->vertex_count>records &&
+           !(d->enabled_features_t09 & PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2))
+            return VK_ERROR_UNKNOWN;
         fetch->address=address;fetch->bytes=bytes;
     }
     *out=result;return VK_SUCCESS;

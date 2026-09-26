@@ -149,7 +149,7 @@ class LogContract(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify(log, receipt, fixture_artifact())
         artifact = fixture_artifact()
-        artifact["sdk_switches"] = {}
+        artifact["sdk_switches"] = {"PS5VK_X": "1"}
         with self.assertRaises(ValueError):
             verify(log, fixture_receipt(log), artifact)
 

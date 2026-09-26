@@ -61,6 +61,13 @@ measurements do not claim that DXVK can create a device or run yet; see
   malformed booleans, and rejects every unreported core feature. Other
   graphics feature bits are listed individually below; this is not a claim
   that only one Vulkan 1.0 feature is available.
+- `VK_EXT_robustness2` is reported with `robustBufferAccess2` and
+  `nullDescriptor` (never `robustImageAccess2`; robust storage and uniform
+  alignment 4). Buffer descriptors are bounded by their exact range, a
+  `VK_NULL_HANDLE` descriptor or vertex buffer becomes an all-zero record that
+  reads zero, and with `robustBufferAccess2` a non-indexed draw may run past a
+  vertex buffer: the vertex descriptor's record count bounds the fetch and the
+  missing vertices read zero.
 - Storage and uniform buffer descriptors carry their actual byte extent and
   use GFX1013 raw out-of-bounds selection. Vertex descriptors are bounded by
   the bound buffer span. This is the implementation basis for the feature, not

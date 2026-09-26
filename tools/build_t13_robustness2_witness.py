@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the bounded public-SDK VK_EXT_robustness2 witness executable.
 
-The SDK is built with the default-off PS5VK_ROBUSTNESS2_DIAGNOSTIC switch so
-the witness can negotiate robustBufferAccess2 and nullDescriptor through the
-public API before any shipping platform reports them (DXVK262-T13)."""
+The ordinary SDK reports VK_EXT_robustness2; the witness negotiates
+robustBufferAccess2 and nullDescriptor through the public API and is the
+route's native regression check (DXVK262-T13)."""
 
 import hashlib
 import json
@@ -21,7 +21,7 @@ from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
 PROFILE = "t13-robustness2-public-sdk-witness"
-SDK_SWITCHES = {"PS5VK_ROBUSTNESS2_DIAGNOSTIC": "1"}
+SDK_SWITCHES: dict[str, str] = {}
 STORAGE_RANGE = 38
 UNIFORM_RANGE = 40
 # Shader (1) everywhere; SampledBuffer (46) for the uniform texel buffer;

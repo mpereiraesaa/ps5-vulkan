@@ -983,6 +983,16 @@ static void vertex_binding_lifetime(void)
     offset=256;vkCmdBindVertexBuffers(c,0,1,&b,&offset);assert(c->state==PS5VK_INVALID);
     assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
     offset=0;vkCmdBindVertexBuffers(c,16,1,&b,&offset);assert(c->state==PS5VK_INVALID);
+    /* A null binding needs robustness2 nullDescriptor and a zero offset. */
+    VkBuffer null_buffer=VK_NULL_HANDLE;
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    offset=0;vkCmdBindVertexBuffers(c,0,1,&null_buffer,&offset);assert(c->state==PS5VK_INVALID);
+    d.enabled_features_t09=PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdBindVertexBuffers(c,0,1,&null_buffer,&offset);
+    assert(c->state==PS5VK_RECORDING && !c->vertices[0].buffer && !c->vertices[0].offset);
+    offset=4;vkCmdBindVertexBuffers(c,0,1,&null_buffer,&offset);assert(c->state==PS5VK_INVALID);
+    d.enabled_features_t09=0;
     vkDestroyCommandPool(&d,p,NULL);vkDestroyBuffer(&d,b,NULL);vkFreeMemory(&d,m,NULL);
 }
 static void index_binding_lifetime(void)

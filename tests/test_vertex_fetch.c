@@ -135,5 +135,30 @@ int main(void)
     assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,0xffff,&table)==VK_SUCCESS);
     assert(ps5vk_vertex_fetch_compact(&table,0xffff,&compact)==VK_SUCCESS && compact.count==16);
     for(unsigned i=0;i<16;++i)assert(compact.bindings[i].address==(unsigned char *)mapped+256+i);
+
+    /* robustness2. Without the features a null binding and a non-indexed
+     * draw past the buffer are refused; with nullDescriptor the null binding
+     * keeps its extent and a null address (the all-zero SRD), and with
+     * robustBufferAccess2 the SRD's record count bounds the draw instead. */
+    key.vertex_binding_count=key.vertex_attribute_count=1;
+    key.vertex_bindings=&binding;key.vertex_attributes=attrs;
+    binding=(VkVertexInputBindingDescription){0,24,VK_VERTEX_INPUT_RATE_VERTEX};
+    attrs[0]=(VkVertexInputAttributeDescription){0,0,VK_FORMAT_R32G32B32_SFLOAT,0};
+    op=(struct ps5vk_operation){.type=PS5VK_DRAW,.vertex_count=3,.instance_count=1};
+    op.vertices[0]=(struct ps5vk_vertex_binding){VK_NULL_HANDLE,0};
+    assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,1,&table)==VK_ERROR_UNKNOWN);
+    d.enabled_features_t09=PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,1,&table)==VK_SUCCESS &&
+           !table.bindings[0].address && !table.bindings[0].bytes &&
+           table.bindings[0].attribute_extent==12 && table.bindings[0].stride==24);
+    assert(ps5vk_vertex_fetch_compact(&table,1,&compact)==VK_SUCCESS && compact.count==1 &&
+           !compact.bindings[0].address);
+    op.vertices[0]=(struct ps5vk_vertex_binding){buffer,24};op.first_vertex=7;
+    assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,1,&table)==VK_ERROR_UNKNOWN);
+    d.enabled_features_t09|=PS5VK_T09_FEATURE_ROBUST_BUFFER_ACCESS2;
+    assert(ps5vk_vertex_fetch_used_spans(&d,&key,&op,1,&table)==VK_SUCCESS &&
+           table.bindings[0].address==(unsigned char *)mapped+256+24 &&
+           table.bindings[0].bytes==216);
+    d.enabled_features_t09=0;
     vkUnmapMemory(&d,memory);vkDestroyBuffer(&d,buffer,NULL);vkFreeMemory(&d,memory,NULL);
 }
