@@ -320,6 +320,7 @@ class DxvkMatrixTests(unittest.TestCase):
 
         self.assertEqual(
             [
+                         "extension:VK_EXT_transform_feedback",
                          "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
                          "feature:VkPhysicalDeviceFeatures:depthClamp",
                          "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
@@ -338,6 +339,8 @@ class DxvkMatrixTests(unittest.TestCase):
                          "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
                          "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
                          "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+                         "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
+                         "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
                          "feature:VkPhysicalDeviceVulkan11Features:multiview",
                          "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
 
