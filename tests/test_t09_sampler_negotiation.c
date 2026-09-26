@@ -63,8 +63,7 @@ int main(void)
     assert(physical_count==1 && p);
     VkPhysicalDeviceProperties properties={0};
     vkGetPhysicalDeviceProperties(p,&properties);
-    assert(VK_VERSION_MAJOR(properties.apiVersion)==1 &&
-           VK_VERSION_MINOR(properties.apiVersion)==0);
+    assert(properties.apiVersion == PS5VK_DEVICE_API_VERSION);
 
     float priority=1.0f;
     VkDeviceQueueCreateInfo queue={.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
