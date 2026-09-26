@@ -47,7 +47,7 @@ inspect-graphics-compiler: build/libpsbc.host.a
 	$(GLSLANG) -V experiments/graphics/runtime_shared_sets.frag -o build/runtime-graphics/shared_sets.frag.spv
 	$(GLSLANG) -V -DVERTEX_SAMPLERS_ONLY=1 experiments/graphics/runtime_shared_sets.frag -o build/runtime-graphics/vertex_sets.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_mipmap.vert -o build/runtime-graphics/mipmap.vert.spv
-	$(CC) -std=c11 -Wall -Wextra -Werror -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tools/inspect_graphics_compiler.c src/ps5_compiler_shims.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/runtime-graphics/inspect
+	$(CC) -std=c11 -Wall -Wextra -Werror -Ithird_party/vulkan-headers/include -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tools/inspect_graphics_compiler.c src/ps5_compiler_shims.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/runtime-graphics/inspect
 	./build/runtime-graphics/inspect build/runtime-graphics/triangle.vert.spv build/runtime-graphics/triangle.frag.spv
 VULKAN_CFLAGS ?= -Ithird_party/vulkan-headers/include
 VK_MEMORY_SOURCES = src/vk_alloc.c src/vk_memory.c src/texture_format.c
@@ -547,6 +547,7 @@ test-tessellation-compiler: build/libpsbc.host.a graphics-stage-shaders
 .PHONY: test-runtime-graphics-compiler
 test-runtime-graphics-compiler: inspect-graphics-compiler graphics-stage-shaders
 	mkdir -p build/tests
+	$(PYTHON) tools/build_dxvk_descriptor_capacity_witness.py --shaders-only build/test-shaders/descriptor-capacity
 	$(PYTHON) tools/build_resolve_shaders.py --out build/resolve/resolve_spirv.h \
 		--compiler $(GLSLANG)
 	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -Ibuild/resolve -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c native/runtime_graphics_compiler.c native/runtime_graphics_cache.c native/resolve_program.c src/color_attachment_contract.c src/spirv_graphics_interface.c src/vertex_format_probe.c src/texture_format.c src/compilation_cache.c src/ps5_compiler_shims.c tests/test_runtime_graphics_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_graphics_compiler
@@ -562,7 +563,7 @@ test-runtime-graphics-native:
 	./build/tests/test_runtime_graphics_native
 test-runtime-header:
 	mkdir -p build/tests
-	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tests/test_runtime_shader.c -o build/tests/test_runtime_shader
+	$(CC) -std=c11 -Wall -Wextra -Werror $(RUNTIME_HEADER_SANITIZERS) $(VULKAN_CFLAGS) -Isrc -Inative -I$(LAB_SIBLINGS)/ps5-agc-gears/src -I$(LAB_SIBLINGS)/ps5-agc-gears/include -Ithird_party/psbc-reference native/runtime_shader.c tests/test_runtime_shader.c -o build/tests/test_runtime_shader
 	./build/tests/test_runtime_shader
 test-compiler: build/libpsbc.host.a test-shaders
 	$(MAKE) test-runtime-header
@@ -573,6 +574,7 @@ test-compiler: build/libpsbc.host.a test-shaders
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cts_ssbo_local_barrier.comp -o build/test-shaders/cts_ssbo_local_barrier.spv
 	$(GLSLANG) -V --target-env vulkan1.2 -S comp experiments/compute/t08_subgroup_int8_iadd_runtime.comp -o build/test-shaders/t08_subgroup_int8_iadd_runtime.spv
 	$(GLSLANG) -V --target-env vulkan1.2 -S comp experiments/compute/t08_subgroup_iadd_runtime.comp -o build/test-shaders/t08_subgroup_iadd_runtime.spv
+	$(PYTHON) tools/build_dxvk_descriptor_capacity_witness.py --shaders-only build/test-shaders/descriptor-capacity
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_compiler.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_compiler
 	./build/tests/test_runtime_compiler
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_pipeline_cache.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_pipeline_cache

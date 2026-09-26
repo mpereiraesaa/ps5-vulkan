@@ -48,6 +48,36 @@ int main(void)
     REJECT(start_instance_user_data_dword,1);
     REJECT(draw_id_user_data_dword,1);
 #undef REJECT
+    /* One set holds maxPerSetDescriptors (1024) records at any stride, up to
+     * the widest (combined, 48-byte) table; one more record, or a table that
+     * ends past it, is refused. */
+    {
+        PsbcShaderMetadata saved=*m;
+        m->descriptor_binding_count=1;
+        m->descriptor_set0_valid=m->descriptor_set_valid[0]=true;
+        m->descriptor_set0_user_data_dword=m->descriptor_set_user_data_dword[0]=1;
+        m->descriptor_bindings[0]=(PsbcDescriptorBinding){.set=0,.binding=0,
+            .type=PSBC_DESCRIPTOR_SAMPLED_IMAGE,.array_size=1024,.offset=0,.stride=32};
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        m->descriptor_bindings[0].array_size=1025;
+        assert(ps5vk_runtime_shader_build(&arena,&c));
+        m->descriptor_bindings[0]=(PsbcDescriptorBinding){.set=0,.binding=0,
+            .type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER,.array_size=1024,.offset=0,.stride=48};
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        m->descriptor_bindings[0].offset=16;
+        assert(ps5vk_runtime_shader_build(&arena,&c));
+        m->descriptor_binding_count=2;
+        m->descriptor_bindings[0]=(PsbcDescriptorBinding){.set=0,.binding=0,
+            .type=PSBC_DESCRIPTOR_UNIFORM_BUFFER,.array_size=512,.offset=0,.stride=16};
+        m->descriptor_bindings[1]=(PsbcDescriptorBinding){.set=0,.binding=1,
+            .type=PSBC_DESCRIPTOR_SAMPLED_IMAGE,.array_size=512,.offset=8192,.stride=32};
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        m->descriptor_bindings[1].array_size=513;
+        assert(ps5vk_runtime_shader_build(&arena,&c));
+        *m=saved;
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        before=arena;
+    }
     /* The hardware scales the per-vertex offsets it hands a merged geometry half
      * by VGT_ESGS_RING_ITEMSIZE, and next-gen geometry keeps that register at one
      * so those offsets stay ITEM INDICES: upstream never writes it on the NGG

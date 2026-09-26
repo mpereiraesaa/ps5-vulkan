@@ -440,6 +440,8 @@ struct compute_compile_call {
 static void compute_compile_call(void *opaque)
 {
     struct compute_compile_call *c = opaque;
+    COMPUTE_MARK("PS5VK_COMPUTE_COMPILE phase=thread sp=%p stack_bytes=%zu",
+                 (void *)&c, (size_t)PS5VK_COMPILE_STACK_BYTES);
     c->result = runtime_compile_compute_features(c->spirv, c->spirv_words, c->entry_name,
         c->layout, c->specialization, c->feature_mask, c->out_program, c->out_code);
 }
