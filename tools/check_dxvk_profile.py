@@ -457,7 +457,6 @@ def implemented_device_extensions() -> set[str]:
     for name in (
 
 
-        "PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC",
 
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",

@@ -139,9 +139,16 @@ measurements do not claim that DXVK can create a device or run yet; see
   [TESSELLATION_STATUS.md](TESSELLATION_STATUS.md). Do not infer arbitrary
   shader-stage combinations from these witnesses.
 - Indexed and non-indexed triangle draws, with separately measured non-solid
-  fill, depth clamp/bias and viewport selection. Some additional topologies
-  and vertex-input modes remain fail-closed; see their individual contracts
-  and [VALIDATION.md](VALIDATION.md).
+  fill, depth clamp/bias and viewport selection. Triangle lists, strips and
+  fans and the two triangle adjacency topologies draw with or without a
+  geometry stage; point lists draw directly; line topologies (with or without
+  adjacency) still require a geometry stage. Primitive restart is accepted on
+  strips (with or without adjacency) and fans. `VK_EXT_extended_dynamic_state`
+  is reported with every state: a pipeline with a dynamic primitive topology is
+  also built for each other topology of its class, and a dynamic vertex input
+  binding stride is taken from `vkCmdBindVertexBuffers2EXT` and must cover the
+  attributes. Other vertex-input modes remain fail-closed; see their individual
+  contracts and [VALIDATION.md](VALIDATION.md).
 - Up to 16 vertex bindings numbered 0–15, per-vertex input, with up to 32 attribute
   locations. Supported attributes are `R8` and `R8G8` UNORM/SNORM/UINT/SINT;
   `R8G8B8A8` UNORM/SNORM/UINT/SINT; packed `A8B8G8R8`

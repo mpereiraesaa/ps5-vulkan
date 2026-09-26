@@ -6593,3 +6593,59 @@ and `maxPerStageResources` as 1024, and the Vulkan 1.1 `maxPerSetDescriptors`
 contract row is satisfied. Samplers, storage and uniform buffers, and dynamic
 buffers keep their earlier qualified values; storage images and input
 attachments stay blocked.
+
+## Extended dynamic state promotion, with fans and adjacency (2026-09-26)
+
+`PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC` is retired and
+`VK_EXT_extended_dynamic_state` ships with every state, including the two it
+was held back for:
+
+- **Dynamic vertex input binding stride.** The vertex program is compiled with
+  stride 0, which disables the compiler's only stride-dependent rewrites, and
+  the draw writes the stride named through `vkCmdBindVertexBuffers2EXT` into the
+  vertex descriptor; the draw refuses a stride below the attributes' extent. A
+  host contract (`tests/test_runtime_graphics_compiler.c`) shows that stride 0,
+  the extent and a wider stride compile to identical machine code, while a
+  stride below the extent does not (the control that the comparison can see a
+  stride dependence).
+- **Dynamic primitive topology.** Without `dynamicPrimitiveTopologyUnrestricted`
+  the topology may change within its class, so a pipeline declaring it is also
+  built, at creation, for every other member the profile draws (at most four
+  extra builds, owned and destroyed with it), and the draw records the build for
+  the topology the command buffer set.
+
+Triangle fans (DI type 5) and the four adjacency topologies (DI types 10-13)
+were refused even as static state; they now resolve statically and
+dynamically. Triangle adjacency draws without a geometry stage (the assembler
+skips the adjacent vertices) and feeds a `triangles_adjacency` geometry stage
+six vertices. Line topologies, with or without adjacency, still require a
+geometry stage, as plain lines already did. Primitive restart is admitted on
+fans and adjacency strips as well as strips.
+
+The public-SDK dynamic-state witness (`examples/dxvk_eds_witness`) draws eight
+16x16 columns through two pipelines with dynamic topology and stride over a
+buffer whose unused bytes are 0xAB: list, strip, list at stride 24, strip at
+stride 32, fan, list and strip adjacency without a geometry stage (adjacent
+vertices far away and black), and list adjacency into a geometry stage that
+takes the colour from adjacency vertex 1. Eboot SHA-256
+`70bc2948771c87ea02a8466f5769d43f8c80a3d2efe8ebc3bdccef5997de6ba9`, run
+`20260926T062738292Z_PPSA99994_ps5vk_0x78e9823f81be`, log SHA-256
+`91ca4f9463795560c1276905266f8744bab4265c35e5709563245d032a67396b`, strict:
+every column exactly its own colour. The render witness, now on the ordinary
+SDK (eboot `ddc1d7c7b67f07b80539f405571f30b8ceaffe096ebb5b516f92a379638bc759`,
+run `20260926T062747871Z_PPSA99994_ps5vk_0x78ebbd1c8a4e`, log SHA-256
+`b24c768ed45514acfd7cb263c8fa33f3e9a5a3c8330dd07c9b2c8e8795979fa6`), stayed
+strict with digest `2da9cdc5`.
+
+The frozen acceptance selection on this tree (eboot
+`19ea2e6048829d3cb45a7252741ab5550d9026913479bb119c2943811f0470e4`, run
+`20260926T062809795Z_PPSA99994_upstream-cts_0x78f0d777b0be`, log SHA-256
+`8f088699d2899e81002af8b559e5a02cc0f5d3285d76da42a44e0167f3452964`) passed
+879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025`, run
+`20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054`, log SHA-256
+`83557ae2d7a2c3dafd1edd851ea785321e810820bc83cbc667a5e1d3808a7ea6`: API 1.0.0,
+32 device extensions, 43/62. `VK_EXT_extended_dynamic_state` is not a DXVK
+requirement row, so the matrix stays at **41/62 ready and 21 blockers**.

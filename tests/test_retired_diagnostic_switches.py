@@ -21,6 +21,7 @@ RETIRED = tuple("PS5VK_" + name + "_DIAGNOSTIC" for name in (
     "DXVK_ROUTES",
     "DESCRIPTOR_UPDATE_TEMPLATE",
     "DXVK_RENDER",
+    "EXTENDED_DYNAMIC_STATE",
     "HOST_COHERENT",
 ))
 

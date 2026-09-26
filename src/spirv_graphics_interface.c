@@ -171,8 +171,8 @@ static int declared_distance_array(const struct id_info *ids,unsigned bound,
  * which is what binds the shader's declaration to the pipeline's topology. */
 /* The EXECUTION MODE a geometry stage must declare for each topology this
  * profile feeds one from: points for a point list, lines for either line
- * topology, triangles for a triangle list or strip. Adjacency topologies report
- * zero here and stay refused, exactly like the vertex-count helper below. */
+ * topology, triangles for a triangle list, strip or fan, and the adjacency
+ * modes (4 and 6 vertices) for the adjacency topologies. */
 static unsigned ps5vk_topology_input_mode(VkPrimitiveTopology topology)
 {
     switch(topology) {
@@ -182,6 +182,10 @@ static unsigned ps5vk_topology_input_mode(VkPrimitiveTopology topology)
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:return MODE_TRIANGLES;
+    case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+    case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:return MODE_INPUT_LINES_ADJACENCY;
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:return MODE_INPUT_TRIANGLES_ADJACENCY;
     default:return 0u;
     }
 }
@@ -195,6 +199,10 @@ static unsigned ps5vk_topology_input_vertices(VkPrimitiveTopology topology)
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
     case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:return 3u;
+    case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+    case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:return 4u;
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:return 6u;
     default:return 0u;
     }
 }

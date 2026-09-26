@@ -16,6 +16,7 @@
 #include "vk_image_transfer.h"
 #include "vk_sync.h"
 #include "color_barrier.h"
+#include "graphics_formats.h"
 #include <float.h>
 #include <string.h>
 
@@ -240,7 +241,10 @@ static int references(VkCommandBuffer c, VkObjectType type, const void *object)
             if ((type == VK_OBJECT_TYPE_IMAGE_VIEW && (const void *)view == object) ||
                 (type == VK_OBJECT_TYPE_IMAGE && (const void *)view->image == object)) return 1;
         }
-        if (type == VK_OBJECT_TYPE_PIPELINE && (const void *)c->operations[j].pipeline == object) return 1;
+        /* A draw recorded through a dynamic-topology variant uses its parent. */
+        if (type == VK_OBJECT_TYPE_PIPELINE && c->operations[j].pipeline &&
+            ((const void *)c->operations[j].pipeline == object ||
+             (const void *)c->operations[j].pipeline->variant_parent == object)) return 1;
         for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set)
             if (set_uses(c->operations[j].sets[set], type, object)) return 1;
     }
@@ -1117,7 +1121,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(VkCommandBuffer c,uint32_t fir
            ps5vk_buffer_span(c->pool->device,buffers[i],offsets[i],VK_WHOLE_SIZE,&address,&bytes)!=VK_SUCCESS)
             {invalid(c);return;}
     }
-    for(uint32_t i=0;i<count;++i)c->vertices[first+i]=(struct ps5vk_vertex_binding){buffers[i],offsets[i]};
+    /* The buffer and offset only: a dynamic stride named by
+     * vkCmdBindVertexBuffers2EXT stays in effect. */
+    for(uint32_t i=0;i<count;++i) {
+        c->vertices[first+i].buffer=buffers[i];
+        c->vertices[first+i].offset=offsets[i];
+    }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer(VkCommandBuffer c,VkBuffer buffer,
     VkDeviceSize offset,VkIndexType type)
@@ -1176,6 +1185,26 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
      * dynamic must have been set, and the snapshot carries the resolved value
      * so the native encoder never reads a pipeline value the draw overrode. */
     if(!ps5vk_command_resolve_extended_dynamic_state(c,p,&raster)) {invalid(c);return;}
+    /* A dynamic topology draws with the pipeline built for it. */
+    VkPipeline drawn=p;
+    if(p->dynamic_eds & PS5VK_EDS_PRIMITIVE_TOPOLOGY) {
+        while(drawn && drawn->topology!=c->primitive_topology)drawn=drawn->topology_variant;
+        if(!drawn) {invalid(c);return;}
+    }
+    /* A dynamic binding stride must have been named for every binding the
+     * pipeline's attributes read, bounded below by their extent
+     * (VUID-vkCmdBindVertexBuffers2-pStrides-03363). A zero stride, which
+     * Vulkan permits there, is refused as it is for a static stride. */
+    if(p->dynamic_eds & PS5VK_EDS_VERTEX_INPUT_BINDING_STRIDE) {
+        for(uint32_t a=0;a<p->vertex_attribute_count;++a) {
+            const VkVertexInputAttributeDescription *attribute=&p->vertex_attributes[a];
+            const struct ps5vk_vertex_binding *bound=&c->vertices[attribute->binding];
+            const uint64_t extent=(uint64_t)attribute->offset+
+                ps5vk_vertex_format_size(attribute->format);
+            if(!bound->stride_valid || !bound->stride || bound->stride<extent)
+                {invalid(c);return;}
+        }
+    }
     /* The stencil masks and reference the pipeline declared dynamic come
      * from the command buffer, and each one must have been set for both
      * faces: the test reads the front and the back state. A pipeline with the
@@ -1237,7 +1266,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDraw(VkCommandBuffer c, uint32_t vertices, uint3
     struct ps5vk_operation *op=ps5vk_command_reserve_operations(c,PS5VK_DRAW,
         PS5VK_OPERATION_INSIDE_RENDER_PASS,1);
     if(!op)return;
-    op->pipeline=p;op->render_pass=pass;op->framebuffer=c->framebuffer;
+    op->pipeline=drawn;op->render_pass=pass;op->framebuffer=c->framebuffer;
     op->subpass=c->subpass;
     op->viewport_count=viewport_count;
     memcpy(op->viewports,viewport,viewport_count*sizeof(*viewport));
@@ -1866,14 +1895,15 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFaceEXT(VkCommandBuffer c, VkFrontFace f
     }
     c->front_face = face; c->eds_valid |= PS5VK_EDS_FRONT_FACE;
 }
-/* Only the fixed-function topology state is dynamic here, and the native
- * program bakes it, so no pipeline can declare it: the value is validated and
- * retained, exactly like any other state no bound pipeline reads. */
+/* The draw selects the pipeline built for this topology (the static one or
+ * its same-class variant); a topology the pipeline has no build for is
+ * refused there. */
 VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopologyEXT(VkCommandBuffer c,
     VkPrimitiveTopology topology)
 {
     if (!eds_recording(c)) return;
-    if ((uint32_t)topology > (uint32_t)VK_PRIMITIVE_TOPOLOGY_PATCH_LIST) invalid(c);
+    if ((uint32_t)topology > (uint32_t)VK_PRIMITIVE_TOPOLOGY_PATCH_LIST) { invalid(c); return; }
+    c->primitive_topology = topology; c->eds_valid |= PS5VK_EDS_PRIMITIVE_TOPOLOGY;
 }
 /* The *_WITH_COUNT setters replace the count and the first `count` elements;
  * the count is bounded by the array and, without multiViewport enabled, is
@@ -1911,16 +1941,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCountEXT(VkCommandBuffer c, uint32
  * the buffer (VUID-vkCmdBindVertexBuffers2-pSizes-03358) and is otherwise not
  * carried, because the native fetch already bounds reads by the buffer, which
  * robustBufferAccess permits (an out-of-range read may return any value inside
- * the buffer's bound memory). pStrides needs a pipeline that declared
- * VERTEX_INPUT_BINDING_STRIDE dynamic (VUID-vkCmdBindVertexBuffers2-pStrides-
- * 03362 at draw time), and no pipeline here can, so a non-NULL pStrides is
- * refused where it is recorded rather than at a later draw. */
+ * the buffer's bound memory). pStrides sets the dynamic binding strides a
+ * pipeline that declared VERTEX_INPUT_BINDING_STRIDE draws with; each is
+ * bounded by maxVertexInputBindingStride here
+ * (VUID-vkCmdBindVertexBuffers2-pStrides-03362) and checked against the
+ * pipeline's attributes at the draw. */
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(VkCommandBuffer c, uint32_t first,
     uint32_t count, const VkBuffer *buffers, const VkDeviceSize *offsets,
     const VkDeviceSize *sizes, const VkDeviceSize *strides)
 {
     if (!eds_recording(c)) return;
-    if (strides || first >= PS5VK_MAX_VERTEX_BINDINGS ||
+    if (first >= PS5VK_MAX_VERTEX_BINDINGS ||
         count > PS5VK_MAX_VERTEX_BINDINGS - first || (count && (!buffers || !offsets))) {
         invalid(c); return;
     }
@@ -1935,7 +1966,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(VkCommandBuffer c, uint32_
             invalid(c); return;
         }
     }
+    for (uint32_t i = 0; i < count && strides; ++i)
+        if (strides[i] > PS5VK_MAX_VERTEX_STRIDE) { invalid(c); return; }
     vkCmdBindVertexBuffers(c, first, count, buffers, offsets);
+    if (c->state != PS5VK_RECORDING || !strides) return;
+    for (uint32_t i = 0; i < count; ++i) {
+        c->vertices[first + i].stride = (uint32_t)strides[i];
+        c->vertices[first + i].stride_valid = VK_TRUE;
+    }
 }
 VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnableEXT(VkCommandBuffer c, VkBool32 enable)
 {
@@ -1999,7 +2037,9 @@ static int ps5vk_command_resolve_extended_dynamic_state(VkCommandBuffer c, VkPip
     struct ps5vk_raster_state *raster)
 {
     const uint32_t eds = p->dynamic_eds;
-    const uint32_t per_draw = eds & ~(PS5VK_EDS_VIEWPORT_WITH_COUNT | PS5VK_EDS_SCISSOR_WITH_COUNT);
+    /* The counts are checked by the draw, and the binding strides per binding. */
+    const uint32_t per_draw = eds & ~(PS5VK_EDS_VIEWPORT_WITH_COUNT | PS5VK_EDS_SCISSOR_WITH_COUNT |
+                                      PS5VK_EDS_VERTEX_INPUT_BINDING_STRIDE);
     if ((c->eds_valid & per_draw) != per_draw) return 0;
     raster->fixed_function_resolved = VK_TRUE;
     raster->cull_mode = (eds & PS5VK_EDS_CULL_MODE) ? c->cull_mode : p->cull_mode;

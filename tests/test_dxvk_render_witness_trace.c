@@ -41,8 +41,7 @@ static VkResult open_backend(void *ctx, struct ps5vk_memory_backend *backend)
 static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend; }
 VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
-    /* The witness build's platform bits (shipping routes plus the
-     * PS5VK_EXTENDED_DYNAMIC_STATE_DIAGNOSTIC measurement route). */
+    /* The witness build's platform bits (the shipping routes). */
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
         .max_allocation = 1u << 22, .queue_flags = VK_QUEUE_COMPUTE_BIT,
         .supported_features = PS5VK_FEATURE_MULTIVIEW,

@@ -595,10 +595,25 @@ int main(void)
         expected_primitive=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP;
         assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS && topo->graphics);
         vkDestroyPipeline(&d,topo,NULL);
+        /* The fan and the triangle adjacency topologies resolve their DI
+         * types; without a geometry stage the assembler skips the adjacent
+         * vertices. */
+        const struct { VkPrimitiveTopology topology; uint32_t primitive; } served[]={
+            {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_FAN},
+            {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+             PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_LIST_ADJ},
+            {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
+             PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP_ADJ}};
+        for(unsigned i=0;i<sizeof(served)/sizeof(served[0]);++i) {
+            ia.topology=served[i].topology;expected_primitive=served[i].primitive;
+            assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&topo)==VK_SUCCESS && topo->graphics);
+            vkDestroyPipeline(&d,topo,NULL);
+        }
+        /* Lines, with or without adjacency, still need a geometry stage. */
         const VkPrimitiveTopology unsupported_topologies[]={
             VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY};
+            VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+            VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY};
         unsigned before_created=created;
         for(unsigned i=0;i<sizeof(unsupported_topologies)/sizeof(unsupported_topologies[0]);++i) {
             ia.topology=unsupported_topologies[i];
