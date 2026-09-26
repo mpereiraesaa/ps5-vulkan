@@ -6157,6 +6157,59 @@ artifact profile by design; the captured log is verified with
 `tools/verify_dxvk_probe.py <run> --manifest <artifact.json> --artifact
 <eboot.bin> --matrix-snapshot <build-time matrix>`.
 
+## T14 transform feedback promotion (2026-09-26)
+
+**Route.** `VK_EXT_transform_feedback` with `transformFeedback` and
+`geometryStreams`; properties: 4 streams, 4 buffers, 512-byte stream and
+buffer data, 2048-byte stride, 2^31-byte buffer ranges, stream queries and
+`vkCmdDrawIndirectByteCountEXT` served, line/triangle multi-stream output and
+rasterization-stream selection not claimed. Capture runs in the geometry
+stage (the shape DXVK emits for every stream-output shader) through the
+pinned compiler's no-GDS streamout (`ps5_global_streamout`, opengnm-psbc PR
+30): each workgroup reserves its range with global atomics on the begin's
+control block, in primitive order through a ticket keyed on its first
+primitive id, and returns the part it did not write. Each begin/end session
+loads its counters by CP DMA and stores them back after the capture drains.
+Rasterizer discard is `DX_RASTERIZATION_KILL`.
+
+**Measurement that moved the design.** The first capture witness passed 4/6:
+6000 points came back out of order (5872 records misplaced, counter exact),
+proving that unordered global reservation is not enough, and an overflowing
+binding left a 512-byte counter for 320 written bytes. Keying the order on the
+hardware ordered id did not hold either: it does not restart per draw on this
+GPU (session tickets 55→106 across submissions, fallback taken). The
+primitive-id ticket fixed both.
+
+**Capture witness** (`tools/build_t14_xfb_witness.py`,
+`tools/run_t14_xfb_witness.py`): nine cases, one bounded submission each —
+a capture pipeline with capture inactive; 3 points; 6000 points with a
+record-order check; counter preloaded to 64 with two draws; a 320-byte
+binding overflowing with 16 points; stream 0 into buffer 0 and stream 1 into
+buffer 1; 3 points x 2 instances; DrawIndirectByteCount (counter 128, offset
+32, stride 32); a stream query around the overflow (written 10, needed 16).
+Every record, sentinel and counter is checked.
+
+* Measurement build: eboot SHA-256
+  `05ad8022331520e1d9d87cc7a9f1c09e2ec0651d06fe09be8734259aac8e35d2`, run
+  `20260926T004624010Z_PPSA99994_ps5vk_0x664a88782421`, strict 9/9; every
+  capture session reported no unordered workgroup.
+* Shipping SDK: eboot SHA-256
+  `915f8f20e0bcf53b1697d4df9a012de9cb656d0c3202039a86e2554a68e5dcc0`, run
+  `20260926T010723192Z_PPSA99994_ps5vk_0x676fb45dc43b`, strict 9/9.
+
+The frozen acceptance selection on the same tree (eboot SHA-256
+`32e9676393f4d850ee49f1f3572a1f9887dfa140c595178ae1b09cd148f3cfcb`, run
+`20260926T010737807Z_PPSA99994_upstream-cts_0x67731b8711d3`) passed 879/879.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`176bd90da56d74e71c07f971e872a81ac0b353035c5ef4ae0c6447d9b5ec8811`, run
+`20260926T010716926Z_PPSA99994_ps5vk_0x676e3ee8ce7a`, log SHA-256
+`c1fa6916a86fdd0f952bdb860ea13ea9aab625b7d2c3d158d866eddeea70c92a`, verified
+strictly by `tools/verify_dxvk_probe.py`: API 1.0.0, 18 device extensions,
+37/62 requested query values met, the transform feedback route queried
+explicitly. The joined four-axis DXVK matrix has **35/62 ready and 27
+blockers**. The measurement switch is retired and a test forbids its return.
+
 ## DXVK 2.6.2 D3D11 diagnostic render on PS5 (2026-09-25)
 
 **Scope.** The pinned DXVK `9d6f54a1ade20d1d27dd421024717a636f3d8c68`

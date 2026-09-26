@@ -2220,6 +2220,32 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
+      "detail": "the Vulkan 1.0 EXT query and opt-in route; geometry-stage capture in primitive order with counter resume and overflow, DrawIndirectByteCount and stream queries, measured by the public-SDK capture witness",
+      "feature": "transformFeedback",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the Vulkan 1.0 EXT query and opt-in route; streams 0 and 1 captured into buffers 0 and 1 by the public-SDK capture witness",
+      "feature": "geometryStreams",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
       "detail": "alphaToOneEnable is rejected (src/vk_graphics_pipeline.c)",
       "feature": "alphaToOne",
       "kind": "feature",
@@ -3470,6 +3496,32 @@
       },
       "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "synchronization2",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "transformFeedback",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "geometryStreams",
       "kind": "extension-feature",
       "profile": "compute",
       "reported": false,
@@ -27687,6 +27739,10 @@
         "VK_EXT_shader_demote_to_helper_invocation": {
           "shaderDemoteToHelperInvocation": false
         },
+        "VK_EXT_transform_feedback": {
+          "geometryStreams": false,
+          "transformFeedback": false
+        },
         "VK_KHR_shader_terminate_invocation": {
           "shaderTerminateInvocation": false
         },
@@ -27750,11 +27806,16 @@
         "VK_KHR_shader_terminate_invocation",
         "VK_KHR_format_feature_flags2",
         "VK_KHR_image_format_list",
-        "VK_KHR_synchronization2"
+        "VK_KHR_synchronization2",
+        "VK_EXT_transform_feedback"
       ],
       "extension_route_queries": {
         "VK_EXT_shader_demote_to_helper_invocation": {
           "shaderDemoteToHelperInvocation": true
+        },
+        "VK_EXT_transform_feedback": {
+          "geometryStreams": true,
+          "transformFeedback": true
         },
         "VK_KHR_shader_terminate_invocation": {
           "shaderTerminateInvocation": true
@@ -28173,7 +28234,7 @@
   ],
   "summary": {
     "features": {
-      "satisfied": 130
+      "satisfied": 134
     },
     "format_query_consistency": {
       "satisfied": 60

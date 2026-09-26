@@ -7,12 +7,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from build_t14_xfb_witness import CASES, PROFILE, SWITCH, checked_spirv  # noqa: E402
+from build_t14_xfb_witness import CASES, PROFILE, RETIRED_SWITCH, checked_spirv  # noqa: E402
 from run_t14_xfb_witness import EXPECTED, verify  # noqa: E402
 
 
 def artifact(**changes):
-    value = {"profile": PROFILE, "diagnostic_switch": SWITCH, "cases": list(CASES),
+    value = {"profile": PROFILE, "diagnostic_switch": None, "cases": list(CASES),
              "eboot_sha256": "0" * 64}
     value.update(changes)
     return value
@@ -76,11 +76,15 @@ class TransformFeedbackWitness(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify(payload, receipt(payload), artifact(diagnostic_switch="PS5VK_OTHER"))
 
-    def test_switch_is_default_off_and_wired(self):
+    def test_promoted_bit_and_retired_switch(self):
+        """The shipping platform reports the route; the measurement switch that
+        exposed it for the witness must not come back anywhere."""
         platform = (ROOT / "native/platform_ps5.c").read_text()
-        self.assertIn(f"#if defined({SWITCH}) && {SWITCH}", platform)
-        self.assertIn(f'"{SWITCH}"', (ROOT / "tools/build_sdk.py").read_text())
-        self.assertIn(f'"{SWITCH}"', (ROOT / "tools/check_dxvk_profile.py").read_text())
+        self.assertIn("platform->supported_features_t09 |= PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK;",
+                      platform)
+        for path in ("native/platform_ps5.c", "tools/build_sdk.py", "tools/check_dxvk_profile.py",
+                     "tools/build_native.py", "Makefile"):
+            self.assertNotIn(RETIRED_SWITCH, (ROOT / path).read_text(), path)
 
     def test_spirv_capability_screen(self):
         header = (0x07230203).to_bytes(4, "little") + (0x00010000).to_bytes(4, "little")

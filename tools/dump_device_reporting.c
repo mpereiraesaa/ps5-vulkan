@@ -164,6 +164,10 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     if (graphics_submit)
         platform->supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2 |
             PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2 | PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST;
+    /* DXVK262-T14, mirroring native/platform_ps5.c: transform feedback on the
+     * graphics submit path. */
+    if (graphics_submit)
+        platform->supported_features_t09 |= PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK;
 
     platform->max_allocation = ps5vk_device_profile_max_allocation(graphics_objects);
     ps5vk_device_profile_init(&platform->properties, &platform->memory_properties,
@@ -622,6 +626,8 @@ int main(int argc, char **argv)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES};
     VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures demote = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES};
+    VkPhysicalDeviceTransformFeedbackFeaturesEXT transform_feedback = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT};
     VkPhysicalDeviceShaderTerminateInvocationFeatures terminate = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES};
     VkPhysicalDeviceSynchronization2Features synchronization2 = {
@@ -653,6 +659,7 @@ int main(int argc, char **argv)
     separate_layouts.pNext = &demote;
     demote.pNext = &terminate;
     terminate.pNext = &synchronization2;
+    synchronization2.pNext = &transform_feedback;
     multiview_properties.pNext = &timeline_properties;
 
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -709,11 +716,15 @@ int main(int argc, char **argv)
                     "    \"VK_KHR_shader_terminate_invocation\": "
                     "{\"shaderTerminateInvocation\": %s},\n"
                     "    \"VK_KHR_synchronization2\": "
-                    "{\"synchronization2\": %s}\n"
+                    "{\"synchronization2\": %s},\n"
+                    "    \"VK_EXT_transform_feedback\": "
+                    "{\"transformFeedback\": %s, \"geometryStreams\": %s}\n"
                     "  },\n",
         demote.shaderDemoteToHelperInvocation ? "true" : "false",
         terminate.shaderTerminateInvocation ? "true" : "false",
-        synchronization2.synchronization2 ? "true" : "false");
+        synchronization2.synchronization2 ? "true" : "false",
+        transform_feedback.transformFeedback ? "true" : "false",
+        transform_feedback.geometryStreams ? "true" : "false");
 
     fprintf(stdout, "  \"extensionCount\": %u,\n", extensions);
     fputs("  \"extensions\": [", stdout);
@@ -740,7 +751,9 @@ int main(int argc, char **argv)
                     "    \"separateDepthStencilLayouts\": %s,\n"
                     "    \"shaderDemoteToHelperInvocation\": %s,\n"
                     "    \"shaderTerminateInvocation\": %s,\n"
-                    "    \"synchronization2\": %s\n"
+                    "    \"synchronization2\": %s,\n"
+                    "    \"transformFeedback\": %s,\n"
+                    "    \"geometryStreams\": %s\n"
 
                     "  },\n",
         storage8.storageBuffer8BitAccess ? "true" : "false",
@@ -762,7 +775,9 @@ int main(int argc, char **argv)
         separate_layouts.separateDepthStencilLayouts ? "true" : "false",
         demote.shaderDemoteToHelperInvocation ? "true" : "false",
         terminate.shaderTerminateInvocation ? "true" : "false",
-        synchronization2.synchronization2 ? "true" : "false");
+        synchronization2.synchronization2 ? "true" : "false",
+        transform_feedback.transformFeedback ? "true" : "false",
+        transform_feedback.geometryStreams ? "true" : "false");
 
     free(extension_names);
     free(extension_properties);

@@ -2,10 +2,9 @@
 """Build the bounded public-SDK transform feedback witness executable
 (DXVK262-T14).
 
-The SDK is built with the default-off PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC
-switch, which makes the platform report VK_EXT_transform_feedback so the
-witness can negotiate it through the public API. The switch is a measurement
-build, never the shipping profile."""
+The witness links the ordinary shipping SDK, which reports
+VK_EXT_transform_feedback; the measurement switch that exposed it before the
+promotion is retired (RETIRED_SWITCH, which a test forbids)."""
 
 import hashlib
 import json
@@ -23,7 +22,7 @@ from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
 PROFILE = "t14-transform-feedback-public-sdk-witness"
-SWITCH = "PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC"
+RETIRED_SWITCH = "PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC"
 CASES = ("inactive", "small", "order", "resume", "overflow", "streams", "instanced",
          "drawauto", "query")
 SHADERS = {
@@ -89,7 +88,7 @@ def main() -> None:
     (build / "t14_xfb_shaders.h").write_text(
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
 
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **{SWITCH: "1"})
+    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t14_xfb_witness/main.c"
@@ -146,7 +145,7 @@ def main() -> None:
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": PROFILE, "diagnostic_switch": SWITCH, "cases": list(CASES),
+        "profile": PROFILE, "diagnostic_switch": None, "cases": list(CASES),
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),

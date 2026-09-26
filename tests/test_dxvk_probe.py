@@ -386,12 +386,15 @@ class DxvkProbeTests(unittest.TestCase):
                 fixture.write(records)
                 with self.assertRaisesRegex(ValueError, f"explicit {extension} query route"):
                     fixture.validate()
-                route = f"DXVK262_EXTENSION_ROUTE_QUERY route={extension} {field}=1"
+                siblings = sorted(probe.route_fields(extension) - {field})
+                route = (f"DXVK262_EXTENSION_ROUTE_QUERY route={extension} {field}=1" +
+                         "".join(f" {name}=0" for name in siblings))
                 records.insert(1, route)
                 fixture.write(records)
                 result = fixture.validate()
                 self.assertEqual(2, result["satisfied"])
-                self.assertIn({"route": extension, field: "1"}, result["query_routes"])
+                self.assertIn({"route": extension, field: "1",
+                               **{name: "0" for name in siblings}}, result["query_routes"])
                 for bad in (route.replace(f"{field}=1", f"{field}=0"),
                             route + " extra=1"):
                     records[1] = bad

@@ -378,6 +378,29 @@ ADVERTISED_FEATURES["synchronization2"] = {
     "profiles": ("graphics",),
     "cts": (),
 }
+ADVERTISED_FEATURES["transformFeedback"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK;"),
+        ("src/vk_device.c", "VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME"),
+        ("native/runtime_graphics_compiler.c",
+         "options.ps5_global_streamout=key->transform_feedback_buffers!=0;"),
+    ),
+    "detail": ("the Vulkan 1.0 EXT query and opt-in route; geometry-stage capture in "
+               "primitive order with counter resume and overflow, DrawIndirectByteCount "
+               "and stream queries, measured by the public-SDK capture witness"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
+ADVERTISED_FEATURES["geometryStreams"] = {
+    "citations": (
+        ("native/platform_ps5.c", "PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK;"),
+        ("src/vk_device.c", "features->geometryStreams = transform_feedback_supported(p);"),
+    ),
+    "detail": ("the Vulkan 1.0 EXT query and opt-in route; streams 0 and 1 captured into "
+               "buffers 0 and 1 by the public-SDK capture witness"),
+    "profiles": ("graphics",),
+    "cts": (),
+}
 ADVERTISED_FEATURES["shaderTerminateInvocation"] = {
     "citations": (
         ("native/platform_ps5.c", "PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;"),
@@ -1340,7 +1363,7 @@ def main() -> int:
                      "vulkanMemoryModelDeviceScope", "bufferDeviceAddress",
                      "hostQueryReset", "timelineSemaphore",
                      "separateDepthStencilLayouts", "shaderDemoteToHelperInvocation",
-                     "shaderTerminateInvocation", "synchronization2"):
+                     "shaderTerminateInvocation", "synchronization2", "transformFeedback", "geometryStreams"):
 
             value = dump["extensionFeatures"][name]
             verdict, detail = evaluate_feature(name, value, profile)

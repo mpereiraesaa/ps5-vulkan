@@ -4,6 +4,7 @@
   "capability_probe": {
     "artifact_sha256": "ebcf7eb50f99aa206596c9d072108c051e2961f6a4e0fe34e85040914454a5df",
     "satisfied_ids": [
+      "extension:VK_EXT_transform_feedback",
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
       "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
@@ -24,6 +25,8 @@
       "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
       "feature:VkPhysicalDeviceFeatures:tessellationShader",
       "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+      "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
+      "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
       "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
       "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
@@ -2790,6 +2793,48 @@
           "VALIDATION.md#diagnostic-route-promotion-sync2-formats-storage-texel-2026-09-26"
         ],
         "note": "Public-SDK sync2 witness strictly verified three compute phases (three-buffer submit2, gated submit2 with barrier2/event2 ordering, empty submit2) with zero mismatches."
+      }
+    },
+    "extension:VK_EXT_transform_feedback": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260926T010723192Z_PPSA99994_ps5vk_0x676fb45dc43b",
+          "20260926T004624010Z_PPSA99994_ps5vk_0x664a88782421"
+        ],
+        "artifact_sha256": "915f8f20e0bcf53b1697d4df9a012de9cb656d0c3202039a86e2554a68e5dcc0",
+        "refs": [
+          "VALIDATION.md#t14-transform-feedback-promotion-2026-09-26"
+        ],
+        "note": "Public-SDK transform feedback witness (tools/run_t14_xfb_witness.py) strictly verified 9/9 cases on the shipping SDK (and on the measurement build, eboot 05ad8022331520e1d9d87cc7a9f1c09e2ec0651d06fe09be8734259aac8e35d2): exact records in primitive order for 6000 points, counter resume across two draws, overflow ending at the last whole primitive, streams 0 and 1 into buffers 0 and 1, instanced capture, a capture pipeline with capture inactive, DrawIndirectByteCount and a stream query (written 10, needed 16)."
+      }
+    },
+    "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260926T010723192Z_PPSA99994_ps5vk_0x676fb45dc43b",
+          "20260926T004624010Z_PPSA99994_ps5vk_0x664a88782421"
+        ],
+        "artifact_sha256": "915f8f20e0bcf53b1697d4df9a012de9cb656d0c3202039a86e2554a68e5dcc0",
+        "refs": [
+          "VALIDATION.md#t14-transform-feedback-promotion-2026-09-26"
+        ],
+        "note": "Public-SDK transform feedback witness (tools/run_t14_xfb_witness.py) strictly verified 9/9 cases on the shipping SDK (and on the measurement build, eboot 05ad8022331520e1d9d87cc7a9f1c09e2ec0651d06fe09be8734259aac8e35d2): exact records in primitive order for 6000 points, counter resume across two draws, overflow ending at the last whole primitive, streams 0 and 1 into buffers 0 and 1, instanced capture, a capture pipeline with capture inactive, DrawIndirectByteCount and a stream query (written 10, needed 16)."
+      }
+    },
+    "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams": {
+      "native": {
+        "state": "native-evidence",
+        "run_ids": [
+          "20260926T010723192Z_PPSA99994_ps5vk_0x676fb45dc43b",
+          "20260926T004624010Z_PPSA99994_ps5vk_0x664a88782421"
+        ],
+        "artifact_sha256": "915f8f20e0bcf53b1697d4df9a012de9cb656d0c3202039a86e2554a68e5dcc0",
+        "refs": [
+          "VALIDATION.md#t14-transform-feedback-promotion-2026-09-26"
+        ],
+        "note": "Public-SDK transform feedback witness (tools/run_t14_xfb_witness.py) strictly verified 9/9 cases on the shipping SDK (and on the measurement build, eboot 05ad8022331520e1d9d87cc7a9f1c09e2ec0651d06fe09be8734259aac8e35d2): exact records in primitive order for 6000 points, counter resume across two draws, overflow ending at the last whole primitive, streams 0 and 1 into buffers 0 and 1, instanced capture, a capture pipeline with capture inactive, DrawIndirectByteCount and a stream query (written 10, needed 16)."
       }
     }
   }

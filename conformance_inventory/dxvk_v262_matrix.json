@@ -4,6 +4,7 @@
     "device_extensions": [
       "VK_EXT_host_query_reset",
       "VK_EXT_shader_demote_to_helper_invocation",
+      "VK_EXT_transform_feedback",
       "VK_KHR_16bit_storage",
       "VK_KHR_8bit_storage",
       "VK_KHR_buffer_device_address",
@@ -87,6 +88,7 @@
       ],
       "satisfied": 35,
       "satisfied_ids": [
+        "extension:VK_EXT_transform_feedback",
         "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
         "feature:VkPhysicalDeviceFeatures:depthClamp",
         "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
@@ -107,6 +109,8 @@
         "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
         "feature:VkPhysicalDeviceFeatures:tessellationShader",
         "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+        "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
+        "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
         "feature:VkPhysicalDeviceVulkan11Features:multiview",
         "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
         "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
@@ -245,8 +249,8 @@
     {
       "api": {
         "expected": 1,
-        "observed": 0,
-        "state": "blocker"
+        "observed": 1,
+        "state": "satisfied"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -267,7 +271,7 @@
         "refs": [
           "src/vk_device.c"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "extension",
       "name": "VK_EXT_transform_feedback",
@@ -275,14 +279,14 @@
         "artifact_sha256": "ebcf7eb50f99aa206596c9d072108c051e2961f6a4e0fe34e85040914454a5df",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t14-transform-feedback-promotion-2026-09-26"
         ],
         "run_ids": [
           "20260925T232646238Z_PPSA99994_ps5vk_0x61f222c41344"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
@@ -2144,10 +2148,11 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
+        "detail": "VK_EXT_transform_feedback feature query on Vulkan 1.0.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied",
+        "via": "VK_EXT_transform_feedback"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -2165,9 +2170,14 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Reviewed EXT feature query and opt-in; streams 1-3 capture into their own buffers and a non-zero stream needs the enabled feature.",
+        "refs": [
+          "native/platform_ps5.c",
+          "src/vk_device.c",
+          "src/vk_transform_feedback.c",
+          "conformance_inventory/reporting_matrix.json"
+        ],
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "geometryStreams",
@@ -2175,21 +2185,22 @@
         "artifact_sha256": "ebcf7eb50f99aa206596c9d072108c051e2961f6a4e0fe34e85040914454a5df",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t14-transform-feedback-promotion-2026-09-26"
         ],
         "run_ids": [
           "20260925T232646238Z_PPSA99994_ps5vk_0x61f222c41344"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
+        "detail": "VK_EXT_transform_feedback feature query on Vulkan 1.0.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied",
+        "via": "VK_EXT_transform_feedback"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -2207,9 +2218,15 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Reviewed EXT feature query and opt-in; geometry-stage capture compiles to the ordered no-GDS streamout and each begin/end session loads and stores its counters, with DrawIndirectByteCount and stream queries.",
+        "refs": [
+          "native/platform_ps5.c",
+          "src/vk_device.c",
+          "src/vk_xfb_commands.c",
+          "native/graphics_queue_ps5.c",
+          "conformance_inventory/reporting_matrix.json"
+        ],
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "transformFeedback",
@@ -2217,14 +2234,14 @@
         "artifact_sha256": "ebcf7eb50f99aa206596c9d072108c051e2961f6a4e0fe34e85040914454a5df",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#t14-transform-feedback-promotion-2026-09-26"
         ],
         "run_ids": [
           "20260925T232646238Z_PPSA99994_ps5vk_0x61f222c41344"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {

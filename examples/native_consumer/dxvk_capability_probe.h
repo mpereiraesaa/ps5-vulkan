@@ -307,6 +307,22 @@ static int run_dxvk262_capability_probe(void)
             "DXVK262_EXTENSION_ROUTE_QUERY route=VK_KHR_synchronization2 "
             "synchronization2=%u", synchronization2.synchronization2);
     }
+    /* VK_EXT_transform_feedback's own feature structure (never core): both
+     * members on one route line, queried only when the extension is
+     * enumerated. The requirement rows read the same structure below. */
+    if (extension_result == VK_SUCCESS &&
+        dxvk262_extension_version(extensions, extension_count,
+            VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
+        VkPhysicalDeviceTransformFeedbackFeaturesEXT routed = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT};
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &routed};
+        vkGetPhysicalDeviceFeatures2KHR(physical, &query);
+        ps5log_printf(PS5LOG_MARK,
+            "DXVK262_EXTENSION_ROUTE_QUERY route=VK_EXT_transform_feedback "
+            "transformFeedback=%u geometryStreams=%u",
+            routed.transformFeedback, routed.geometryStreams);
+    }
 
     ps5log_printf(PS5LOG_MARK,
         "DXVK262_PROBE_BEGIN schema=1 profile=%s target_api=%s device_api=%u.%u.%u",

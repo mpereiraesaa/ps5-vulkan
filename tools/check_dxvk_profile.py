@@ -52,6 +52,25 @@ SEPARATE_DEPTH_STENCIL_ID = "feature:VkPhysicalDeviceVulkan12Features:separateDe
 # is one entry here, one in tools/verify_dxvk_probe.py and one query in the
 # probe and the dump.
 EXTENSION_ROUTES = {
+    # DXVK262-T14: both members of the extension's own feature structure. The
+    # capture witness is their execution evidence (dxvk_v262_evidence.json).
+    "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback": {
+        "extension": "VK_EXT_transform_feedback",
+        "field": "transformFeedback",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_xfb_commands.c",
+                 "native/graphics_queue_ps5.c", "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed EXT feature query and opt-in; geometry-stage capture compiles "
+                   "to the ordered no-GDS streamout and each begin/end session loads and "
+                   "stores its counters, with DrawIndirectByteCount and stream queries."),
+    },
+    "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams": {
+        "extension": "VK_EXT_transform_feedback",
+        "field": "geometryStreams",
+        "refs": ["native/platform_ps5.c", "src/vk_device.c", "src/vk_transform_feedback.c",
+                 "conformance_inventory/reporting_matrix.json"],
+        "detail": ("Reviewed EXT feature query and opt-in; streams 1-3 capture into their "
+                   "own buffers and a non-zero stream needs the enabled feature."),
+    },
     "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation": {
         "extension": "VK_EXT_shader_demote_to_helper_invocation",
         "field": "shaderDemoteToHelperInvocation",
@@ -233,8 +252,11 @@ def extension_route_axes(row: dict, queries: dict, extensions: set[str],
         return None
     extension, field = route["extension"], route["field"]
     query = queries.get(extension)
-    # One extension's feature structure may carry several fields.
-    if (not isinstance(query, dict) or field not in query or
+    # One extension's feature structure may carry several routed fields: the
+    # query must hold exactly those fields, each a boolean.
+    fields = {entry["field"] for entry in EXTENSION_ROUTES.values()
+              if entry["extension"] == extension}
+    if (not isinstance(query, dict) or set(query) != fields or
             not all(isinstance(value, bool) for value in query.values())):
         raise ValueError(f"{extension} public query route is absent")
     value = query[field]
@@ -247,7 +269,9 @@ def extension_route_axes(row: dict, queries: dict, extensions: set[str],
     return ({"state": "satisfied" if value and enumerated else "blocker",
              "observed": value and enumerated, "expected": row["expected"],
              "via": extension if enumerated else None,
-             "detail": (f"{extension} feature query on Vulkan 1.0; the "
+             "detail": (f"{extension} feature query on Vulkan 1.0." if
+                        row["container"].endswith("EXT") or row["container"].endswith("KHR")
+                        else f"{extension} feature query on Vulkan 1.0; the "
                         f"{row['container']} aggregate is unadvertised.")},
             {"state": "implemented" if implemented else "missing",
              "refs": route["refs"], "detail": route["detail"]})
@@ -413,8 +437,6 @@ def implemented_device_extensions() -> set[str]:
         "PS5VK_DXVK_ROUTES_DIAGNOSTIC",
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
-
-        "PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC",
 
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 

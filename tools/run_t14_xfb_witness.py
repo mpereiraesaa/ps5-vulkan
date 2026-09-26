@@ -11,7 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from build_t14_xfb_witness import CASES, PROFILE, SWITCH  # noqa: E402
+from build_t14_xfb_witness import CASES, PROFILE  # noqa: E402
 from run_consumer import close_and_confirm, control, running, wait_for_log  # noqa: E402
 
 START = re.compile(r"T14_XFB_WITNESS_START feature=(\d+) streams_feature=(\d+) geometry=(\d+) "
@@ -35,7 +35,7 @@ EXPECTED = {
 
 
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
-    if (artifact.get("profile") != PROFILE or artifact.get("diagnostic_switch") != SWITCH or
+    if (artifact.get("profile") != PROFILE or artifact.get("diagnostic_switch") is not None or
             artifact.get("cases") != list(CASES)):
         raise ValueError("unexpected transform feedback witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or

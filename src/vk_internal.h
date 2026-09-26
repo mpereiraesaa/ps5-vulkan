@@ -257,9 +257,9 @@ enum ps5vk_t09_feature_bits {
     PS5VK_T09_FEATURE_HOST_COHERENT_MEMORY = 1u << 26,
     /* VK_EXT_transform_feedback (DXVK262-T14): transformFeedback and
      * geometryStreams, captured by the geometry stage through the compiler's
-     * no-GDS global streamout. One bit: the platform sets it only once the
-     * native capture witness (stream order, resume, overflow and stream 1)
-     * holds on this build. */
+     * no-GDS global streamout. One bit; the shipping platform sets it on the
+     * public-SDK capture witness's evidence (stream order, resume, overflow,
+     * streams, instancing, DrawIndirectByteCount and stream queries). */
     PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK = 1u << 25,
 };
 

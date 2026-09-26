@@ -334,8 +334,10 @@ A row is satisfied when the API, implementation and native axes are positive
 and no applicable CTS leaf was observed failing. CTS is regression evidence: a
 missing or unrun leaf does not block, an observed failure does. Unknown or
 absent API, implementation or native evidence is a blocker. The checked matrix
-records **33/62 satisfied and 29 blockers**. `synchronization2` is satisfied
-through `VK_KHR_synchronization2`. T11 contributes
+records **@S@/62 satisfied and @B@ blockers**. `synchronization2` is satisfied
+through `VK_KHR_synchronization2`. T14 contributes
+`VK_EXT_transform_feedback` with `transformFeedback` and `geometryStreams`
+through the EXT route, on the public-SDK capture witness. T11 contributes
 `shaderDemoteToHelperInvocation` and `shaderTerminateInvocation` through the
 EXT/KHR routes. T09 contributes five satisfied
 requirements: `hostQueryReset` through EXT, and `samplerMirrorClampToEdge`,
