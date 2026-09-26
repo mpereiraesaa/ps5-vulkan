@@ -45,7 +45,12 @@ DEPS = [
         # the queue zeroes per draw) and returns each workgroup's unwritten
         # reservation, so the transform feedback counter ends at the last
         # whole primitive (DXVK262-T14).
-        "pin": "eaf6f9d75bf343441dd1994ee81b00d194af100b",
+        # PR 31 bounds ACO's instruction arena at 256 KiB blocks and checks
+        # every block allocation: the console libc refused the 1 MiB block a
+        # 768-descriptor compute program needed, and isel wrote through NULL.
+        # PR 32 replaces its weak stage-hook symbol with psbc_set_stage_hook,
+        # so payloads that never set a hook link unchanged.
+        "pin": "4fe7264a0cab9feb531a156e8a810b3e39cfe42c",
     },
     {
         "name": "opengnm",
