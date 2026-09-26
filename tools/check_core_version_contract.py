@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Vulkan 1.1-1.3 device contract and the reported-apiVersion promotion gate.
+"""Vulkan 1.1-1.3 inventory audit and experimental profile consistency check.
+
+Default mode audits the complete recorded core contract. Ordinary builds use
+--experimental-profile: validate source/registry consistency while keeping
+full-core gaps as an explicit separate audit, not a consumer-delivery gate.
+Neither mode replaces runtime tests or native consumer evidence.
 
 conformance_inventory/core_version_contract.json holds, per core version:
 
@@ -172,7 +177,8 @@ def unmet(contract, target, surface):
 
 
 def check(root=ROOT, assume=None, contract=None, profile_source=None,
-          internal_source=None, dispatch_source=None, registry=True):
+          internal_source=None, dispatch_source=None, registry=True,
+          experimental=False):
     contract = contract or json.loads((root / "conformance_inventory/core_version_contract.json").read_text())
     check_shape(contract)
     if registry:
@@ -199,6 +205,16 @@ def check(root=ROOT, assume=None, contract=None, profile_source=None,
     gaps = unmet(contract, target, surface)
     if instance < target:
         gaps.insert(0, f"PS5VK_INSTANCE_API_VERSION 1.{instance[1]} is lower than the device version")
+    # Experimental consumer negotiation is not a claim that the complete core
+    # inventory is satisfied. Preserve the strict audit and its evidence rows;
+    # implementation/consumer tests validate the experimental execution path.
+    if experimental:
+        require(instance >= target,
+                f"PS5VK_INSTANCE_API_VERSION 1.{instance[1]} is lower than the device version")
+        require(assume is None, "experimental profile cannot assume a different version")
+        require(reported in ((1, 0), (1, 1), (1, 2), (1, 3)),
+                "unsupported experimental API version")
+        return reported
     if gaps:
         fail(f"device apiVersion 1.{target[1]} is not backed by the core contract "
              f"({len(gaps)} unmet):\n  " + "\n  ".join(gaps))
@@ -232,16 +248,22 @@ def main():
     parser.add_argument("--check", action="store_true", help="validate the reported version (default)")
     parser.add_argument("--assume-version", help="evaluate the gate for 1.N without editing sources")
     parser.add_argument("--derive", action="store_true", help="rewrite the registry-derived parts")
+    parser.add_argument("--experimental-profile", action="store_true",
+                        help="validate profile/registry consistency, not full core coverage")
     args = parser.parse_args()
     if args.derive:
         derive()
     try:
-        reported = check(assume=args.assume_version)
+        reported = check(assume=args.assume_version, experimental=args.experimental_profile)
     except AssertionError as error:
         print(error, file=sys.stderr)
         return 1
     shown = args.assume_version or f"1.{reported[1]}"
-    print(f"Core version contract: device apiVersion {shown} is backed")
+    if args.experimental_profile:
+        print(f"Experimental device apiVersion {shown}: profile consistency checked; "
+              "full core coverage and conformance NOT certified")
+    else:
+        print(f"Core version contract: device apiVersion {shown} is backed")
     return 0
 
 

@@ -36,6 +36,22 @@ class CoreVersionContract(unittest.TestCase):
     def test_shipping_tree_reports_the_backed_version(self):
         self.assertEqual((1, 0), checker.check(ROOT))
 
+    def test_experimental_profile_does_not_claim_full_core_coverage(self):
+        profile = self.raised(self.profile, 3)
+        internal = self.internal.replace("VK_API_VERSION_1_1", "VK_API_VERSION_1_3")
+        self.assertEqual((1, 3), checker.check(ROOT, profile_source=profile,
+                         internal_source=internal, experimental=True))
+        with self.assertRaisesRegex(AssertionError, "not backed"):
+            checker.check(ROOT, profile_source=profile, internal_source=internal)
+
+    def test_experimental_profile_still_checks_instance_and_evidence_integrity(self):
+        with self.assertRaisesRegex(AssertionError, "lower than"):
+            checker.check(ROOT, profile_source=self.raised(self.profile, 3), experimental=True)
+        contract = copy.deepcopy(self.contract)
+        contract["versions"]["1.1"]["requirements"][0]["status"] = "invented"
+        with self.assertRaisesRegex(AssertionError, "bad status"):
+            checker.check(ROOT, contract=contract, experimental=True)
+
     def test_registry_surface_is_exact(self):
         commands = {version: {level: len(names) for level, names in data["commands"].items()}
                     for version, data in self.contract["versions"].items()}
