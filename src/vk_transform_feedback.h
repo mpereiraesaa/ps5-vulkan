@@ -54,10 +54,10 @@ enum {
  * data sizes follow the compiler's upstream (RADV) envelope: 512 bytes of
  * captured data per stream and buffer, and a 2048-byte stride, which is also
  * D3D11_SO_BUFFER_MAX_STRIDE_IN_BYTES. A buffer range is bounded by the 32-bit
- * byte offsets the capture program keeps. Every optional behaviour stays
- * false until it has its own measurement: queries, DrawIndirectByteCount,
- * line/triangle output on several streams, and rasterizing a stream other
- * than zero. Without the bit everything is zero. */
+ * byte offsets the capture program keeps. DrawIndirectByteCount is served;
+ * every other optional behaviour stays false until it has its own
+ * measurement: queries, line/triangle output on several streams, and
+ * rasterizing a stream other than zero. Without the bit everything is zero. */
 enum { PS5VK_XFB_STREAM_DATA_SIZE = 512, PS5VK_XFB_BUFFER_DATA_SIZE = 512,
        PS5VK_XFB_BUFFER_DATA_STRIDE = 2048 };
 #define PS5VK_XFB_MAX_BUFFER_SIZE ((VkDeviceSize)1u << 31)
@@ -73,7 +73,9 @@ static inline void ps5vk_xfb_device_properties(int supported,
     out->transformFeedbackQueries = VK_FALSE;
     out->transformFeedbackStreamsLinesTriangles = VK_FALSE;
     out->transformFeedbackRasterizationStreamSelect = VK_FALSE;
-    out->transformFeedbackDraw = VK_FALSE;
+    /* DrawIndirectByteCount resolves the counter at the queue head, exactly
+     * as vkCmdDrawIndirect resolves its arguments. */
+    out->transformFeedbackDraw = supported ? VK_TRUE : VK_FALSE;
 }
 /* The reflection limits a logical device imposes: the reported properties,
  * and a stream other than zero only when geometryStreams was enabled. */

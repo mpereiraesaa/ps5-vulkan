@@ -8,6 +8,7 @@
 #include "vk_command.h"
 #include "vk_query_pool.h"
 #include "vk_render_pass.h"
+#include "vk_indirect.h"
 #include "physical_device_profile.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -177,7 +178,7 @@ static void supported_device(void)
            t.maxTransformFeedbackBufferDataSize == 512 &&
            t.maxTransformFeedbackBufferDataStride == 2048);
     assert(!t.transformFeedbackQueries && !t.transformFeedbackStreamsLinesTriangles &&
-           !t.transformFeedbackRasterizationStreamSelect && !t.transformFeedbackDraw);
+           !t.transformFeedbackRasterizationStreamSelect && t.transformFeedbackDraw);
     /* The Vulkan floors (maxTransformFeedbackBufferSize 2^27, data 512). */
     assert(t.maxTransformFeedbackBufferSize >= ((VkDeviceSize)1u << 27));
 
@@ -243,7 +244,8 @@ static void fixture_open(struct fixture *x, int feature)
     d->graphics_enabled = VK_TRUE;
     assert(make_buffer(d, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT, 1024,
                        &x->capture) == VK_SUCCESS);
-    assert(make_buffer(d, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT, 64,
+    assert(make_buffer(d, VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT |
+                          VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, 64,
                        &x->counter) == VK_SUCCESS);
     assert(make_buffer(d, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 64, &x->plain) == VK_SUCCESS);
     VkMemoryAllocateInfo mi = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -435,9 +437,45 @@ static void recording(void)
     c = record(&x);
     vkCmdEndQueryIndexedEXT(c, &occlusion_pool, 0, 1);
     assert(c->state == PS5VK_INVALID);
-    c = record(&x);
-    vkCmdDrawIndirectByteCountEXT(c, 1, 0, x.counter, 0, 0, 16);
-    assert(c->state == PS5VK_INVALID);
+    /* DrawIndirectByteCount records one draw resolved at the queue head:
+     * vertexCount = (counter - counterOffset) / vertexStride. */
+    struct ps5vk_operation auto_record = {.type = PS5VK_DRAW_INDIRECT_BYTE_COUNT,
+        .indirect_buffer = x.counter, .indirect_offset = 8, .indirect_count = 1,
+        .indirect_stride = 32, .byte_count_offset = 32, .instance_count = 2,
+        .first_instance = 1};
+    const struct ps5vk_operation *auto_draw = &auto_record;
+    assert(ps5vk_indirect_graphics_operation(auto_draw->type) &&
+           ps5vk_indirect_argument_size(auto_draw->type) == 4);
+    void *mapped = NULL;
+    assert(vkMapMemory(x.device, x.memory, 2048, 64, 0, &mapped) == VK_SUCCESS);
+    const uint32_t counter_words[4] = {0, 0, 128, 0};
+    memcpy(mapped, counter_words, sizeof(counter_words));
+    struct ps5vk_operation resolved;
+    assert(ps5vk_indirect_resolve(x.device, auto_draw, &resolved) == VK_SUCCESS);
+    assert(resolved.type == PS5VK_DRAW && resolved.vertex_count == 3 &&
+           !resolved.first_vertex && resolved.instance_count == 2 &&
+           resolved.first_instance == 1);
+    /* A counter at or below the offset draws nothing; a partial vertex is
+     * dropped. */
+    ((uint32_t *)mapped)[2] = 16;
+    assert(ps5vk_indirect_resolve(x.device, auto_draw, &resolved) == VK_SUCCESS &&
+           resolved.vertex_count == 0);
+    ((uint32_t *)mapped)[2] = 32 + 95;
+    assert(ps5vk_indirect_resolve(x.device, auto_draw, &resolved) == VK_SUCCESS &&
+           resolved.vertex_count == 2);
+    vkUnmapMemory(x.device, x.memory);
+    /* Stride 0 or past 2048, a misaligned counter, a counter past the end and
+     * a buffer without indirect usage are refused. */
+    const struct { VkBuffer buffer; VkDeviceSize offset; uint32_t stride; } bad_auto[] = {
+        {x.counter, 0, 0}, {x.counter, 0, 2052}, {x.counter, 2, 16}, {x.counter, 64, 16},
+        {x.capture, 0, 16},
+    };
+    for (unsigned n = 0; n < sizeof(bad_auto) / sizeof(bad_auto[0]); ++n) {
+        c = record(&x);
+        vkCmdDrawIndirectByteCountEXT(c, 1, 0, bad_auto[n].buffer, bad_auto[n].offset, 0,
+                                      bad_auto[n].stride);
+        assert(c->state == PS5VK_INVALID);
+    }
 
     /* Barrier scopes: the capture stage and its accesses order work on a
      * device with the feature; an access must name a stage that performs it. */
