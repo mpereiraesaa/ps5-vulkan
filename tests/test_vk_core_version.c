@@ -70,6 +70,7 @@ static void dormant_on_vulkan_1_0(void)
     VkInstance i;
     VkPhysicalDevice p = physical(&i, VK_API_VERSION_1_3);
     assert(p->platform.properties.apiVersion == PS5VK_DEVICE_API_VERSION);
+    p->platform.properties.apiVersion = VK_API_VERSION_1_0;
     assert(ps5vk_effective_api_version(p) == VK_API_VERSION_1_0);
 
     VkPhysicalDeviceVulkan12Features v12 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
@@ -198,11 +199,108 @@ static void effective_version_is_the_lower(void)
     vkDestroyInstance(i, NULL);
 }
 
+static void instance_versions(void)
+{
+    const uint32_t versions[] = {0, VK_API_VERSION_1_0, VK_API_VERSION_1_1,
+        VK_API_VERSION_1_2, VK_API_VERSION_1_3, VK_API_VERSION_1_4};
+    for (size_t n = 0; n < sizeof(versions) / sizeof(versions[0]); ++n) {
+        VkInstance i;
+        (void)physical(&i, versions[n]);
+        const uint32_t requested = versions[n] ? versions[n] : VK_API_VERSION_1_0;
+        assert(i->api_version == (requested < PS5VK_INSTANCE_API_VERSION ?
+                                 requested : PS5VK_INSTANCE_API_VERSION));
+        vkDestroyInstance(i, NULL);
+    }
+}
+
+static void graphics_core13_negotiation(void)
+{
+    VkInstance i;
+    VkPhysicalDevice p = physical(&i, VK_API_VERSION_1_3);
+    i->api_version = VK_API_VERSION_1_3;
+    raised(i, p, VK_API_VERSION_1_3);
+    p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2 |
+        PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_CREATE_RENDERPASS2 |
+        PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE | PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE |
+        PS5VK_T09_FEATURE_MAINTENANCE2;
+    p->platform.supported_features |= PS5VK_FEATURE_MULTIVIEW;
+    VkPhysicalDeviceDynamicRenderingFeatures rendering = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES};
+    VkPhysicalDeviceSynchronization2Features sync = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES, .pNext = &rendering};
+    VkPhysicalDeviceVulkan13Features v13 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, .pNext = &sync};
+    VkPhysicalDeviceFeatures2 f = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &v13};
+    vkGetPhysicalDeviceFeatures2(p, &f);
+    assert(v13.synchronization2 && v13.synchronization2 == sync.synchronization2);
+    assert(v13.dynamicRendering && v13.dynamicRendering == rendering.dynamicRendering);
+    assert(!v13.maintenance4 && !v13.privateData && !v13.robustImageAccess);
+    v13.pNext = NULL;
+    /* ABI tail padding is not a requested feature and may contain any bytes. */
+    const size_t last = offsetof(VkPhysicalDeviceVulkan13Features, maintenance4) + sizeof(VkBool32);
+    memset((unsigned char *)&v13 + last, 0xa5, sizeof(v13) - last);
+    VkDevice d = VK_NULL_HANDLE;
+    assert(create(p, &v13, &d) == VK_SUCCESS);
+    assert(d->enabled_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2);
+    assert(d->enabled_features_t09 & PS5VK_T09_FEATURE_DYNAMIC_RENDERING);
+    assert(d->dynamic_rendering_enabled && d->dynamic_rendering_extension_enabled);
+    assert(d->synchronization2_extension_enabled && d->extended_dynamic_state_enabled);
+    const char *core[] = {"vkCmdBeginRendering", "vkCmdEndRendering", "vkQueueSubmit2",
+        "vkCmdPipelineBarrier2", "vkCmdCopyBuffer2", "vkCmdSetCullMode"};
+    const char *ext[] = {"vkCmdBeginRenderingKHR", "vkCmdEndRenderingKHR", "vkQueueSubmit2KHR",
+        "vkCmdPipelineBarrier2KHR", "vkCmdCopyBuffer2KHR", "vkCmdSetCullModeEXT"};
+    for (size_t n = 0; n < sizeof(core) / sizeof(core[0]); ++n) {
+        assert(vkGetDeviceProcAddr(d, core[n]));
+        assert(vkGetDeviceProcAddr(d, core[n]) == vkGetDeviceProcAddr(d, ext[n]));
+    }
+    vkDestroyDevice(d, NULL);
+    d = VK_NULL_HANDLE;
+    v13.synchronization2 = v13.dynamicRendering = VK_FALSE;
+    assert(create(p, &v13, &d) == VK_SUCCESS);
+    assert(!d->dynamic_rendering_enabled);
+    assert(!(d->enabled_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2));
+    vkDestroyDevice(d, NULL);
+    d = VK_NULL_HANDLE;
+    /* Individual promoted structs remain usable without extension names. */
+    sync.pNext = &rendering;
+    assert(create(p, &sync, &d) == VK_SUCCESS);
+    assert(d->dynamic_rendering_enabled &&
+           (d->enabled_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2));
+    vkDestroyDevice(d, NULL);
+    d = VK_NULL_HANDLE;
+    /* An extension may satisfy its dependency through the core version. */
+    i->features2_extension_enabled = VK_FALSE;
+    const char *extension = VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
+    const float priority = 1.0f;
+    VkDeviceQueueCreateInfo queue = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueCount = 1, .pQueuePriorities = &priority};
+    VkDeviceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue,
+        .enabledExtensionCount = 1, .ppEnabledExtensionNames = &extension};
+    assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+    assert(d->dynamic_rendering_enabled);
+    vkDestroyDevice(d, NULL);
+    d = VK_NULL_HANDLE;
+    /* Aggregate/constituent overlap is invalid in either order, even false. */
+    sync.synchronization2 = VK_FALSE; sync.pNext = NULL; v13.pNext = &sync;
+    assert(create(p, &v13, &d) == VK_ERROR_UNKNOWN && !d);
+    v13.pNext = NULL; sync.pNext = &v13;
+    assert(create(p, &sync, &d) == VK_ERROR_UNKNOWN && !d);
+    v13.dynamicRendering = VK_TRUE;
+    p->platform.supported_features_t09 &= ~PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE;
+    assert(create(p, &v13, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    v13.dynamicRendering = VK_FALSE; v13.synchronization2 = 2;
+    assert(create(p, &v13, &d) == VK_ERROR_UNKNOWN && !d);
+    vkDestroyInstance(i, NULL);
+}
+
 int main(void)
 {
     dormant_on_vulkan_1_0();
     projections_when_reported();
     effective_version_is_the_lower();
+    instance_versions();
+    graphics_core13_negotiation();
     puts("vk core version: dormant on 1.0, projections and core names on raised versions");
     return 0;
 }

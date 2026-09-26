@@ -190,8 +190,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(const VkInstanceCreateInfo *info
          * Instance-level behaviour follows the lower of the request and the
          * instance version. */
         if (VK_API_VERSION_VARIANT(a->apiVersion)) return VK_ERROR_INCOMPATIBLE_DRIVER;
-        if (a->apiVersion >= PS5VK_INSTANCE_API_VERSION)
-            api_version = PS5VK_INSTANCE_API_VERSION;
+        if (a->apiVersion >= VK_API_VERSION_1_0) {
+            const uint32_t requested = VK_MAKE_API_VERSION(0,
+                VK_API_VERSION_MAJOR(a->apiVersion), VK_API_VERSION_MINOR(a->apiVersion), 0);
+            api_version = requested < PS5VK_INSTANCE_API_VERSION ?
+                requested : PS5VK_INSTANCE_API_VERSION;
+        }
     }
     VkAllocationCallbacks saved = {0}; VkBool32 custom = VK_FALSE;
     VkInstance i = ps5vk_object_alloc(NULL, allocator, sizeof(*i),
@@ -1292,12 +1296,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         if (*seen) return INVALID;
         *seen = VK_TRUE;
     }
+    const uint32_t core_version = ps5vk_effective_api_version(p);
+    const VkBool32 features2_available = p->instance->features2_extension_enabled ||
+        p->instance->api_version >= VK_API_VERSION_1_1;
     if ((extension8 && !(p->platform.supported_features & PS5VK_FEATURE_STORAGE_BUFFER_8BIT)) ||
         (extension16 && !(p->platform.supported_features & PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) ||
         (draw_parameters &&
          !(p->platform.supported_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS)) ||
         ((extension8 || extension16) &&
-         (!storage_class || !p->instance->features2_extension_enabled)))
+         ((!storage_class && core_version < VK_API_VERSION_1_1) || !features2_available)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     if (swapchain_extension && !swapchain_supported(p))
@@ -1313,13 +1320,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
 
     if (multiview_extension &&
         (!(p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     /* On Vulkan 1.0 the KHR route depends on the instance's Features2
      * extension; an internal platform bit alone is not an enabled API route. */
     if (memory_model_extension &&
         (!(p->platform.supported_features & PS5VK_FEATURE_VULKAN_MEMORY_MODEL) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (group_extension &&
         (!(p->platform.supported_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS) ||
@@ -1327,16 +1334,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (buffer_address_extension &&
         (!(p->platform.supported_features & PS5VK_FEATURE_BUFFER_DEVICE_ADDRESS) ||
-         !p->instance->features2_extension_enabled || !group_extension))
+         !features2_available || (!group_extension && core_version < VK_API_VERSION_1_1)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (uniform_buffer_standard_layout_extension &&
         (!(p->platform.supported_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     if (host_query_reset_extension &&
         (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_HOST_QUERY_RESET) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (sampler_mirror_clamp_extension &&
         !(p->platform.supported_features_t09 &
@@ -1348,7 +1355,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
      * 1.0, so only the instance extension satisfies it. */
     if (timeline_extension &&
         (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_TIMELINE_SEMAPHORE) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     /* Every enabled extension's registry dependencies must be enabled too
@@ -1359,27 +1366,29 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (create_renderpass2_extension &&
-        (!create_renderpass2_supported(p) || !multiview_extension || !maintenance2_extension))
+        (!create_renderpass2_supported(p) ||
+         ((!multiview_extension || !maintenance2_extension) && core_version < VK_API_VERSION_1_1)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (separate_depth_stencil_extension &&
-        (!separate_depth_stencil_supported(p) || !p->instance->features2_extension_enabled ||
-         !create_renderpass2_extension))
+        (!separate_depth_stencil_supported(p) || !features2_available ||
+         (!create_renderpass2_extension && core_version < VK_API_VERSION_1_2)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     /* Both pixel-removal extensions depend, in the pinned registry, on
      * VK_KHR_get_physical_device_properties2 or Vulkan 1.1. */
     if (demote_extension &&
         (!(p->platform.supported_features_t09 &
            PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (terminate_extension &&
         (!(p->platform.supported_features_t09 &
            PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if ((memory_requirements2_extension && !memory_requirements2_supported(p)) ||
         (dedicated_allocation_extension &&
-         (!dedicated_allocation_supported(p) || !memory_requirements2_extension)) ||
+         (!dedicated_allocation_supported(p) ||
+          (!memory_requirements2_extension && core_version < VK_API_VERSION_1_1))) ||
         (bind_memory2_extension && !bind_memory2_supported(p)) ||
         (maintenance4_extension && !maintenance4_supported(p)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1387,26 +1396,28 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
      * VK_KHR_get_physical_device_properties2 or Vulkan 1.1. */
     if (synchronization2_extension &&
         (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     if (robustness2_extension &&
-        (!robustness2_supported(p) || !p->instance->features2_extension_enabled))
+        (!robustness2_supported(p) || !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (extended_dynamic_state_extension &&
-        (!extended_dynamic_state_supported(p) || !p->instance->features2_extension_enabled))
+        (!extended_dynamic_state_supported(p) || !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (maintenance1_extension && !maintenance1_supported(p))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (copy_commands2_extension &&
-        (!copy_commands2_supported(p) || !p->instance->features2_extension_enabled))
+        (!copy_commands2_supported(p) || !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (depth_stencil_resolve_extension &&
-        (!depth_stencil_resolve_supported(p) || !create_renderpass2_extension))
+        (!depth_stencil_resolve_supported(p) ||
+         (!create_renderpass2_extension && core_version < VK_API_VERSION_1_2)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (dynamic_rendering_extension &&
-        (!dynamic_rendering_supported(p) || !depth_stencil_resolve_extension ||
-         !p->instance->features2_extension_enabled))
+        (!dynamic_rendering_supported(p) ||
+         (!depth_stencil_resolve_extension && core_version < VK_API_VERSION_1_2) ||
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     /* VK_KHR_format_feature_flags2 depends on
      * VK_KHR_get_physical_device_properties2 or Vulkan 1.1; this device is
@@ -1414,14 +1425,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
      * has no registry dependency. */
     if (format_feature_flags2_extension &&
         (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_FORMAT_FEATURE_FLAGS2) ||
-         !p->instance->features2_extension_enabled))
+         !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (image_format_list_extension &&
         !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_IMAGE_FORMAT_LIST))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (imageless_framebuffer_extension &&
-        (!imageless_framebuffer_supported(p) || !p->instance->features2_extension_enabled ||
-         !maintenance2_extension || !image_format_list_extension))
+        (!imageless_framebuffer_supported(p) || !features2_available ||
+         (!maintenance2_extension && core_version < VK_API_VERSION_1_1) ||
+         (!image_format_list_extension && core_version < VK_API_VERSION_1_2)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
 
     uint32_t enabled_features = 0;
@@ -1443,6 +1455,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_extended_dynamic_state = VK_FALSE, extended_dynamic_state = VK_FALSE;
     VkBool32 saw_synchronization2 = VK_FALSE;
     uint32_t core_version_structs = 0;
+    VkResult chain_result = ps5vk_core_version_validate_chain(info->pNext);
+    if (chain_result != VK_SUCCESS) return chain_result;
     VkBool32 saw_transform_feedback = VK_FALSE, geometry_streams = VK_FALSE;
     for (const VkBaseInStructure *next = (const VkBaseInStructure *)info->pNext;
          next; next = next->pNext) {
@@ -1540,7 +1554,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                  * enables nothing, since the commands stay unreachable without
                  * the extension. */
                 if (!dynamic_rendering_supported(p)) return VK_ERROR_FEATURE_NOT_PRESENT;
-                if (dynamic_rendering_extension) dynamic_rendering = VK_TRUE;
+                if (dynamic_rendering_extension || core_version >= VK_API_VERSION_1_3)
+                    dynamic_rendering = VK_TRUE;
             }
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
@@ -1747,7 +1762,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 (const VkPhysicalDeviceSynchronization2Features *)next;
             if (!valid_bool(features->synchronization2)) return INVALID;
             if (features->synchronization2) {
-                if (!synchronization2_extension) return VK_ERROR_FEATURE_NOT_PRESENT;
+                if ((!synchronization2_extension && core_version < VK_API_VERSION_1_3) ||
+                    !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_SYNCHRONIZATION2))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_SYNCHRONIZATION2;
             }
         } else if (next->sType ==
