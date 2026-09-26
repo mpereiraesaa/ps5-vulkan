@@ -104,8 +104,8 @@
     "64-bit float scalar and vec2/3/4": ["shaderFloat64"]
   },
   "current": {
-    "api": "1.0",
-    "subgroup_properties": "no supported stages or operations",
+    "api": "1.3",
+    "subgroup_properties": "wave32 compute stage, BASIC operations only",
     "shaderSubgroupExtendedTypes": false,
     "subgroupBroadcastDynamicId": false,
     "cts": "no accepted original subgroup leaves",
