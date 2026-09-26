@@ -334,46 +334,26 @@ A row is satisfied when the API, implementation and native axes are positive
 and no applicable CTS leaf was observed failing. CTS is regression evidence: a
 missing or unrun leaf does not block, an observed failure does. Unknown or
 absent API, implementation or native evidence is a blocker. The checked matrix
-records **41/62 satisfied and 21 blockers**. `synchronization2`,
-`imagelessFramebuffer` and `dynamicRendering` are satisfied through
-`VK_KHR_synchronization2`, `VK_KHR_imageless_framebuffer` and
-`VK_KHR_dynamic_rendering`. T14 contributes
-`VK_EXT_transform_feedback` with `transformFeedback` and `geometryStreams`
-through the EXT route, on the public-SDK capture witness, and
-`VK_EXT_robustness2` with `robustBufferAccess2` and `nullDescriptor` is
-public. T11 contributes
-`shaderDemoteToHelperInvocation` and `shaderTerminateInvocation` through the
-EXT/KHR routes. T09 contributes five satisfied
-requirements: `hostQueryReset` through EXT, and `samplerMirrorClampToEdge`,
-`timelineSemaphore`, `maxTimelineSemaphoreValueDifference` and
-`separateDepthStencilLayouts` through KHR routes on Vulkan 1.0. The other
-satisfied rows include T07's four resource and query requirements, T08's four
-KHR requirements, and the earlier graphics and draw capabilities. The exact
-per-row evidence is in `dxvk_v262_matrix.json`.
+records **45/62 satisfied and 17 blockers**. The API axis is the current
+native capability probe's observation, which must equal the public host query
+of the same row (`core_version_queries` and the route queries in
+`reporting_matrix.json`); a probe that disagrees, or one older than an
+archived probe, fails the check. The current probe observed device API 1.3.0,
+33 device extensions and 46/62 requested values; the Vulkan 1.0 probes are
+kept under `historical_capability_probes`.
 
-The T09 `hostQueryReset` row is public through `VK_EXT_host_query_reset` with
-an ordinary SDK probe and shipping native reset/reuse witness. The
-`imagelessFramebuffer` row is public through `VK_KHR_imageless_framebuffer` with
-its maintenance2 and image_format_list dependencies and a public-route witness.
-`samplerMirrorClampToEdge` has eight passing U/V and six passing W diagnostic
-draw witnesses, two passing shipping draws, and one compact 3D W CTS PASS.
-Its public KHR extension was also observed by the ordinary SDK probe. The two
-larger 3D filtering CTS leaves remain `Fail` at image upload before sampling;
-those verdicts do not measure W sampling.
-The timeline and separate depth/stencil rows have public SDK witnesses, and
-their 50 focused original CTS leaves are now in the frozen 879-case selection. A probe of the combined build (synchronization2, transform feedback and imageless framebuffer) observed 39/62
-requested query values; query success alone does not establish GPU execution.
-
-T04's implementation and focused native validation are
-complete and merged (PR #158), but its `geometryShader` and
-`tessellationShader` rows remain blocked **in this matrix** until the existing
-native receipts are admitted and the 99 passing tessellation leaves are added
-to the frozen acceptance selection. Do not interpret those two evidence-ledger
-blockers as unimplemented stages. The exact current count is in
-`dxvk_v262_matrix.json`; its checked generator, not this prose, is authoritative.
-Multiview values use the explicitly recorded equivalent KHR route; aggregate
-query structures and the API 1.3 floor remain unadvertised. This is not a
-DXVK compatibility or Vulkan conformance statement.
+Of the 46 rows the query meets, 45 are ready. `maintenance4` is not: compound
+`LocalSizeId` specialization expressions and wider producer output vectors
+are still refused, and no witness executes its creation-description
+memory-requirement queries directly. The T04 `geometryShader` and
+`tessellationShader` rows now carry their admitted native receipts, and
+`maxBufferSize` carries the 1 GiB buffer witness. The 16 query blockers are
+`apiVersion` (1.3.0 reported, 1.3.204 required including the patch level;
+DXVK's own 1.3.0 filter passes), `shaderSubgroupExtendedTypes`,
+`subgroupBroadcastDynamicId`, seven Vulkan 1.3 features and six inline uniform
+block limits. The exact per-row evidence is in `dxvk_v262_matrix.json`; its
+checked generator, not this prose, is authoritative. This is not a DXVK
+compatibility or Vulkan conformance statement.
 
 ## Running the tools
 

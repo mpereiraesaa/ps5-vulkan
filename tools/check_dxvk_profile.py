@@ -141,6 +141,74 @@ DIAGNOSTIC_IMPLEMENTATIONS = {
 }
 
 
+# Promoted core rows with no single-extension adapter: the reviewed source
+# sites that implement the reported value. Every token must still be present,
+# and the public query must report the value, before the row is implemented.
+# `gaps` names required semantics the driver does not implement yet; a row with
+# a gap stays missing however its query reads.
+CORE_IMPLEMENTATIONS = {
+    "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
+        "citations": (
+            ("native/platform_ps5.c", "PS5VK_FEATURE_SHADER_DRAW_PARAMETERS"),
+            ("src/vk_device.c", "VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME"),
+            ("src/vk_core_version.c", "V11(shaderDrawParameters"),
+            ("src/spirv_graphics_interface.c", "BUILTIN_DRAW_INDEX=4426"),
+            ("src/ps5vk_compiler.c", "PS5VK_FEATURE_SHADER_DRAW_PARAMETERS"),
+        ),
+        "detail": ("Reviewed KHR and Vulkan 1.1 aggregate query and opt-in; BaseVertex, "
+                   "BaseInstance and DrawIndex come from the draw's user SGPRs on the "
+                   "direct, indexed and indirect routes."),
+        "gaps": (),
+    },
+    "property:VkPhysicalDeviceVulkan13Properties:maxBufferSize": {
+        "citations": (
+            ("src/vk_device.c", "->maxBufferSize ="),
+            ("src/vk_core_version.c", "out->maxBufferSize = e.maintenance4.maxBufferSize"),
+            ("src/device_profile_report.h", "ps5vk_device_profile_max_allocation"),
+        ),
+        "detail": ("maxBufferSize is the graphics profile's 2^30 single-allocation budget, "
+                   "aligned to the storage offset alignment; vkCreateBuffer, "
+                   "vkAllocateMemory and vkBindBufferMemory accept a buffer of that size."),
+        "gaps": (),
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:maintenance4": {
+        "citations": (
+            ("native/platform_ps5.c", "PS5VK_T09_FEATURE_MAINTENANCE4"),
+            ("src/vk_memory.c", "vkGetDeviceBufferMemoryRequirementsKHR"),
+            ("src/vk_pipeline.c", "LocalSizeId (OpExecutionModeId 331, mode 38)"),
+        ),
+        "detail": ("Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; "
+                   "creation-description memory requirements, maxBufferSize and "
+                   "LocalSizeId with constant or direct specialization-constant operands."),
+        "gaps": (
+            "LocalSizeId operands that are compound OpSpecConstantOp expressions are "
+            "refused (src/vk_pipeline.c local_size)",
+            "a producer output vector wider than the consumer's input is refused by the "
+            "graphics interface policy",
+        ),
+    },
+}
+
+
+def core_implementation(identifier: str, api: dict) -> dict | None:
+    entry = CORE_IMPLEMENTATIONS.get(identifier)
+    if entry is None:
+        return None
+    missing = [f"{path}:{token}" for path, token in entry["citations"]
+               if not (ROOT / path).is_file() or token not in (ROOT / path).read_text()]
+    refs = sorted({path for path, _ in entry["citations"]})
+    if missing:
+        detail = "Missing reviewed implementation: " + ", ".join(missing)
+    elif entry["gaps"]:
+        detail = entry["detail"] + " Not implemented yet: " + "; ".join(entry["gaps"]) + "."
+    elif api["state"] != "satisfied":
+        detail = "The public query does not report the required value."
+    else:
+        detail = entry["detail"]
+    ok = not missing and not entry["gaps"] and api["state"] == "satisfied"
+    return {"state": "implemented" if ok else "missing", "refs": refs, "detail": detail}
+
+
 def diagnostic_implementation(identifier: str) -> dict | None:
     citations = DIAGNOSTIC_IMPLEMENTATIONS.get(identifier)
     if citations is None:
@@ -676,13 +744,77 @@ def row_ready(row: dict) -> bool:
             row["native"]["state"] == "native-evidence")
 
 
+def wire_expected(row: dict) -> int:
+    """The profile value on the probe's integer wire (tools/verify_dxvk_probe.py)."""
+    value = row["expected"]
+    if row["kind"] == "api-version":
+        major, minor, patch = version_tuple(value)
+        return (major << 22) | (minor << 12) | patch
+    return int(value)
+
+
+def public_observation(row: dict, graphics: dict, feature_reports: dict[str, dict],
+                       extensions: set[str]) -> tuple[int, str]:
+    """The value the public host reporting dump answers for one profile row,
+    as an integer, and the query that answered it."""
+    kind, name, container = row["kind"], row["name"], row["container"]
+    if kind == "api-version":
+        return int(graphics["apiVersion"]), "VkPhysicalDeviceProperties.apiVersion"
+    if kind == "extension":
+        return int(name in extensions), "vkEnumerateDeviceExtensionProperties"
+    if container == "VkPhysicalDeviceFeatures":
+        report = feature_reports.get(name)
+        if report is None:
+            raise ValueError(f"public reporting has no value for {row['id']}")
+        return int(report.get("reported") is True), container
+    core = graphics.get("core_version_queries", {}).get(container)
+    if isinstance(core, dict) and name in core:
+        value = core[name]
+        if isinstance(value, bool) or (isinstance(value, int) and value >= 0):
+            return int(value), container
+        raise ValueError(f"invalid public core query value for {row['id']}")
+    route = EXTENSION_ROUTES.get(row["id"])
+    if route is not None:
+        value = graphics.get("extension_route_queries", {}).get(
+            route["extension"], {}).get(route["field"])
+        if isinstance(value, bool):
+            return int(value and route["extension"] in extensions), route["extension"]
+    raise ValueError(f"public reporting has no value for {row['id']}")
+
+
+def api_axis(row: dict, observed: int, public: int, query: str) -> dict:
+    """API observation: the native probe's value, which must equal the public
+    host query. Only the observation is judged here; implementation review and
+    native execution evidence are separate axes."""
+    if observed != public:
+        raise ValueError("DXVK native capability probe no longer matches public "
+                         f"reporting for {row['id']}: probe {observed}, public {public}")
+    expected = wire_expected(row)
+    satisfied = observed >= expected
+    axis = {"state": "satisfied" if satisfied else "blocker",
+            "observed": observed, "expected": row["expected"], "via": query}
+    if row["kind"] == "api-version":
+        reported = ".".join(map(str, decode_vk_version(observed)))
+        axis["observed"] = reported
+        axis["detail"] = (
+            f"The device reports {reported}; the pinned profile requires "
+            f"{row['expected']}, a comparison that includes the header patch level. "
+            "DXVK 2.6.2's own device filter requires Vulkan 1.3.0 and passes. "
+            "Reporting a patch level would assert conformance to that Vulkan header "
+            "revision; that is an owner decision, not a ledger reconciliation.")
+    elif row["kind"] == "feature":
+        axis["observed"] = bool(observed)
+    return axis
+
+
 def implementation_for(row: dict, feature_reports: dict[str, dict],
-                       extensions: set[str], current_api: tuple[int, int, int]) -> dict:
+                       extensions: set[str], api: dict) -> dict:
     kind = row["kind"]
     if kind == "api-version":
-        ok = current_api >= version_tuple(row["expected"])
-        return {"state": "implemented" if ok else "missing",
-                "refs": ["src/physical_device_profile.h", "src/vk_device.c"]}
+        return {"state": "missing",
+                "refs": ["src/physical_device_profile.h", "src/vk_device.c"],
+                "detail": (f"PS5VK_DEVICE_API_VERSION reports {api['observed']} without a "
+                           f"patch level; the profile's {row['expected']} is not reported.")}
     if kind == "extension":
         ok = row["name"] in extensions
         return {"state": "implemented" if ok else "missing",
@@ -694,28 +826,52 @@ def implementation_for(row: dict, feature_reports: dict[str, dict],
         return {"state": "implemented" if ok else "missing",
                 "refs": ["conformance_inventory/reporting_matrix.json"],
                 "detail": report.get("detail") if report else "feature is absent from the public reporting matrix"}
+    core = core_implementation(row["id"], api)
+    if core is not None:
+        return core
     return {"state": "missing", "refs": [],
-            "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised."}
+            "detail": (f"The public query reports {api['observed']}; no reviewed "
+                       "implementation of this requirement exists.")}
 
 
-def api_for(row: dict, feature_reports: dict[str, dict], extensions: set[str],
-            current_api: tuple[int, int, int]) -> dict:
-    kind = row["kind"]
-    if kind == "api-version":
-        expected = version_tuple(row["expected"])
-        return {"state": "satisfied" if current_api >= expected else "blocker",
-                "observed": ".".join(map(str, current_api)), "expected": row["expected"]}
-    if kind == "extension":
-        observed = 1 if row["name"] in extensions else 0
-        return {"state": "satisfied" if observed >= row["expected"] else "blocker",
-                "observed": observed, "expected": row["expected"]}
-    if kind == "feature" and row["container"] == "VkPhysicalDeviceFeatures":
-        report = feature_reports.get(row["name"])
-        observed = bool(report and report.get("reported") is True)
-        return {"state": "satisfied" if observed == row["expected"] else "blocker",
-                "observed": observed, "expected": row["expected"]}
-    return {"state": "blocker", "observed": None, "expected": row["expected"],
-            "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure."}
+def validate_probe(probe: dict, profile_rows: list[dict],
+                   historical: list[dict]) -> set[str]:
+    """The current capability probe: one strict run whose recorded observations
+    cover every profile row, and which is newer than every archived probe."""
+    ids = [row["id"] for row in profile_rows]
+    runs = probe.get("runs", [])
+    observed = probe.get("observed")
+    satisfied = set(probe.get("satisfied_ids", []))
+    if (probe.get("requirements") != len(ids) or
+            not re.fullmatch(r"\d+\.\d+\.\d+", str(probe.get("device_api", ""))) or
+            probe.get("transport") != "ps5log/1" or
+            probe.get("verifier") != "tools/verify_dxvk_probe.py" or
+            len(runs) < 1 or
+            not re.fullmatch(r"[0-9a-f]{64}", probe.get("artifact_sha256", "")) or
+            any(not run.get("id") or
+                not re.fullmatch(r"[0-9a-f]{64}", run.get("log_sha256", ""))
+                for run in runs) or
+            not isinstance(observed, dict) or set(observed) != set(ids) or
+            any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+                for value in observed.values())):
+        raise ValueError("invalid DXVK native capability-probe evidence")
+    derived = {row["id"] for row in profile_rows
+               if observed[row["id"]] >= wire_expected(row)}
+    if (satisfied != derived or probe.get("satisfied") != len(derived) or
+            probe.get("blockers") != len(ids) - len(derived)):
+        raise ValueError("DXVK native capability probe satisfied set drift")
+    if observed["api-version:apiVersion"] != (
+            lambda v: (v[0] << 22) | (v[1] << 12) | v[2])(version_tuple(probe["device_api"])):
+        raise ValueError("DXVK native capability probe apiVersion drift")
+    current = {run["id"] for run in runs}
+    newest = max(run["id"] for run in runs)
+    for old in historical:
+        old_runs = {run.get("id") for run in old.get("runs", [])}
+        if (old_runs & current or old.get("artifact_sha256") == probe["artifact_sha256"] or
+                any(run_id and run_id >= newest for run_id in old_runs)):
+            raise ValueError("the current DXVK capability probe is not newer than an "
+                             "archived probe; archive stale probes, never relabel them")
+    return satisfied
 
 
 def generate() -> dict:
@@ -733,21 +889,11 @@ def generate() -> dict:
     probe = evidence.get("capability_probe")
     probe_satisfied: set[str] = set()
     if probe:
-        probe_satisfied = set(probe.get("satisfied_ids", []))
-        runs = probe.get("runs", [])
-        if (probe.get("requirements") != len(profile_ids) or
-                probe.get("device_api") != "1.0.0" or
-                probe.get("transport") != "ps5log/1" or
-                probe.get("verifier") != "tools/verify_dxvk_probe.py" or
-                len(runs) < 1 or
-                not re.fullmatch(r"[0-9a-f]{64}", probe.get("artifact_sha256", "")) or
-                any(not run.get("id") or
-                    not re.fullmatch(r"[0-9a-f]{64}", run.get("log_sha256", ""))
-                    for run in runs) or
-                not probe_satisfied.issubset(profile_ids)):
-            raise ValueError("invalid DXVK native capability-probe evidence")
+        probe_satisfied = validate_probe(probe, profile["requirements"],
+                                         evidence.get("historical_capability_probes", []))
 
-    current_api = decode_vk_version(reporting["profiles"]["graphics"]["apiVersion"])
+    graphics = reporting["profiles"]["graphics"]
+    current_api = decode_vk_version(graphics["apiVersion"])
     extensions = implemented_device_extensions()
     if probe and (probe["device_api"] != ".".join(map(str, current_api)) or
                   probe.get("device_extensions") != len(extensions)):
@@ -769,53 +915,61 @@ def generate() -> dict:
             related = extension_index.get(requirement["name"], [])
         else:
             related = []
-        api = api_for(requirement, feature_reports, extensions, current_api)
-        implementation = implementation_for(
-            requirement, feature_reports, extensions, current_api)
+        public, query = public_observation(requirement, graphics, feature_reports, extensions)
+        observed = probe["observed"][identifier] if probe else public
+        api = api_axis(requirement, observed, public, query)
+        implementation = implementation_for(requirement, feature_reports, extensions, api)
+        # The single-extension adapters validate their public query routes and
+        # review the implementation; the API observation above stays the one
+        # judged value, so an adapter can never replace it.
+        adapter_api = None
         multiview = multiview_axes(requirement,
             reporting["profiles"]["graphics"].get("multiview_query", {}), extensions)
         if multiview is not None:
-            api, implementation = multiview
+            adapter_api, implementation = multiview
         standard_ubo = standard_ubo_axes(requirement,
             reporting["profiles"]["graphics"].get("standard_ubo_query", {}),
             extensions, feature_reports)
         if standard_ubo is not None:
-            api, implementation = standard_ubo
+            adapter_api, implementation = standard_ubo
         memory_model = memory_model_axes(requirement,
             reporting["profiles"]["graphics"].get("memory_model_query", {}),
             extensions, feature_reports)
         if memory_model is not None:
-            api, implementation = memory_model
+            adapter_api, implementation = memory_model
         buffer_address = buffer_address_axes(requirement,
             reporting["profiles"]["graphics"].get("buffer_device_address_query", {}),
             extensions, feature_reports)
         if buffer_address is not None:
-            api, implementation = buffer_address
+            adapter_api, implementation = buffer_address
 
         host_query_reset = host_query_reset_axes(requirement,
             reporting["profiles"]["graphics"].get("host_query_reset_query", {}),
             extensions, feature_reports)
         if host_query_reset is not None:
-            api, implementation = host_query_reset
+            adapter_api, implementation = host_query_reset
         sampler_mirror_clamp = sampler_mirror_clamp_axes(requirement, extensions)
         if sampler_mirror_clamp is not None:
-            api, implementation = sampler_mirror_clamp
+            adapter_api, implementation = sampler_mirror_clamp
 
         timeline = timeline_axes(requirement,
             reporting["profiles"]["graphics"].get("timeline_semaphore_query", {}),
             extensions, feature_reports)
         if timeline is not None:
-            api, implementation = timeline
+            adapter_api, implementation = timeline
         separate = separate_depth_stencil_axes(requirement,
             reporting["profiles"]["graphics"].get("separate_depth_stencil_layouts_query", {}),
             extensions, feature_reports)
         if separate is not None:
-            api, implementation = separate
+            adapter_api, implementation = separate
         routed = extension_route_axes(requirement,
             reporting["profiles"]["graphics"].get("extension_route_queries", {}),
             extensions, feature_reports)
         if routed is not None:
-            api, implementation = routed
+            adapter_api, implementation = routed
+
+        if adapter_api is not None and adapter_api["state"] != api["state"]:
+            raise ValueError(f"public route query disagrees with the observation for {identifier}")
 
         diagnostic = diagnostic_implementation(identifier)
         if diagnostic is not None and sampler_mirror_clamp is None:

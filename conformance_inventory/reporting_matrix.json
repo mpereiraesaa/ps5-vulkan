@@ -27827,6 +27827,55 @@
         "bufferDeviceAddressMultiDevice": false,
         "route": "VK_KHR_buffer_device_address"
       },
+      "core_version_queries": {
+        "VkPhysicalDeviceVulkan11Features": {
+          "multiview": false,
+          "shaderDrawParameters": false
+        },
+        "VkPhysicalDeviceVulkan11Properties": {
+          "maxMultiviewInstanceIndex": 0,
+          "maxMultiviewViewCount": 0
+        },
+        "VkPhysicalDeviceVulkan12Features": {
+          "bufferDeviceAddress": true,
+          "hostQueryReset": false,
+          "imagelessFramebuffer": false,
+          "samplerMirrorClampToEdge": false,
+          "separateDepthStencilLayouts": false,
+          "shaderSubgroupExtendedTypes": false,
+          "subgroupBroadcastDynamicId": false,
+          "timelineSemaphore": true,
+          "uniformBufferStandardLayout": true,
+          "vulkanMemoryModel": true,
+          "vulkanMemoryModelDeviceScope": true
+        },
+        "VkPhysicalDeviceVulkan12Properties": {
+          "maxTimelineSemaphoreValueDifference": 18446744073709551615
+        },
+        "VkPhysicalDeviceVulkan13Features": {
+          "computeFullSubgroups": false,
+          "dynamicRendering": false,
+          "inlineUniformBlock": false,
+          "maintenance4": true,
+          "pipelineCreationCacheControl": false,
+          "robustImageAccess": false,
+          "shaderDemoteToHelperInvocation": false,
+          "shaderIntegerDotProduct": false,
+          "shaderTerminateInvocation": false,
+          "shaderZeroInitializeWorkgroupMemory": false,
+          "subgroupSizeControl": false,
+          "synchronization2": false
+        },
+        "VkPhysicalDeviceVulkan13Properties": {
+          "maxBufferSize": 67108864,
+          "maxDescriptorSetInlineUniformBlocks": 0,
+          "maxDescriptorSetUpdateAfterBindInlineUniformBlocks": 0,
+          "maxInlineUniformBlockSize": 0,
+          "maxInlineUniformTotalSize": 0,
+          "maxPerStageDescriptorInlineUniformBlocks": 0,
+          "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks": 0
+        }
+      },
       "deviceID": 0,
       "deviceName": "ps5vk gfx1013 experimental compute profile",
       "device_extensions": [
@@ -27837,7 +27886,8 @@
         "VK_KHR_device_group",
         "VK_KHR_buffer_device_address",
         "VK_KHR_uniform_buffer_standard_layout",
-        "VK_KHR_timeline_semaphore"
+        "VK_KHR_timeline_semaphore",
+        "VK_KHR_maintenance4"
       ],
       "extension_route_queries": {
         "VK_EXT_robustness2": {
@@ -27902,9 +27952,59 @@
         "bufferDeviceAddressMultiDevice": false,
         "route": "VK_KHR_buffer_device_address"
       },
+      "core_version_queries": {
+        "VkPhysicalDeviceVulkan11Features": {
+          "multiview": true,
+          "shaderDrawParameters": true
+        },
+        "VkPhysicalDeviceVulkan11Properties": {
+          "maxMultiviewInstanceIndex": 134217727,
+          "maxMultiviewViewCount": 6
+        },
+        "VkPhysicalDeviceVulkan12Features": {
+          "bufferDeviceAddress": true,
+          "hostQueryReset": true,
+          "imagelessFramebuffer": true,
+          "samplerMirrorClampToEdge": true,
+          "separateDepthStencilLayouts": true,
+          "shaderSubgroupExtendedTypes": false,
+          "subgroupBroadcastDynamicId": false,
+          "timelineSemaphore": true,
+          "uniformBufferStandardLayout": true,
+          "vulkanMemoryModel": true,
+          "vulkanMemoryModelDeviceScope": true
+        },
+        "VkPhysicalDeviceVulkan12Properties": {
+          "maxTimelineSemaphoreValueDifference": 18446744073709551615
+        },
+        "VkPhysicalDeviceVulkan13Features": {
+          "computeFullSubgroups": false,
+          "dynamicRendering": true,
+          "inlineUniformBlock": false,
+          "maintenance4": true,
+          "pipelineCreationCacheControl": false,
+          "robustImageAccess": false,
+          "shaderDemoteToHelperInvocation": true,
+          "shaderIntegerDotProduct": false,
+          "shaderTerminateInvocation": true,
+          "shaderZeroInitializeWorkgroupMemory": false,
+          "subgroupSizeControl": false,
+          "synchronization2": true
+        },
+        "VkPhysicalDeviceVulkan13Properties": {
+          "maxBufferSize": 1073741824,
+          "maxDescriptorSetInlineUniformBlocks": 0,
+          "maxDescriptorSetUpdateAfterBindInlineUniformBlocks": 0,
+          "maxInlineUniformBlockSize": 0,
+          "maxInlineUniformTotalSize": 0,
+          "maxPerStageDescriptorInlineUniformBlocks": 0,
+          "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks": 0
+        }
+      },
       "deviceID": 0,
       "deviceName": "ps5vk gfx1013 experimental graphics profile",
       "device_extensions": [
+        "VK_KHR_shader_draw_parameters",
         "VK_KHR_multiview",
         "VK_KHR_vulkan_memory_model",
         "VK_KHR_device_group",
@@ -27918,6 +28018,7 @@
         "VK_KHR_separate_depth_stencil_layouts",
         "VK_EXT_shader_demote_to_helper_invocation",
         "VK_KHR_shader_terminate_invocation",
+        "VK_KHR_maintenance4",
         "VK_EXT_robustness2",
         "VK_KHR_maintenance1",
         "VK_KHR_copy_commands2",

@@ -22,18 +22,19 @@ belongs to the [artifact-bound native receipt](../VALIDATION.md#experimental-vul
 not to an assumption based on the version label. This does not claim universal
 game support, a presented DXVK frame, or Vulkan conformance.
 
-## Historical ledger baseline before the Vulkan 1.3 integration
+## Profile ledger on the Vulkan 1.3 probe
 
-After the synchronization2, T14 transform feedback, imageless framebuffer,
-robustness2 and dynamic rendering promotions, `tools/check_dxvk_profile.py
---check` reports **41/62 ready, 21 blockers**. This is an implementation-evidence
-score, not a DXVK runtime result. `tools/check_dxvk_backlog.py --check` reports
-40 implementation-ready original blockers and 40 profile-satisfied ones (the 62-row score also
-includes the initially satisfied `robustBufferAccess`). That snapshot reported
-Vulkan **1.0.0**. The matrix counts geometry and tessellation as
-blockers because their completed T04 native receipts have not been admitted
-to that ledger; this does **not** mean their rendering implementation is
-unfinished. Do not infer a missing DXVK dependency solely from those two rows.
+`tools/check_dxvk_profile.py --check` reports **45/62 ready, 17 blockers**.
+This is an implementation-evidence score, not a DXVK runtime result. Its API
+axis is the current native probe (device API 1.3.0, 33 device extensions,
+46/62 values met), cross-checked row by row against the public host query.
+Before the Vulkan 1.3 integration the ledger read 41/62 on a Vulkan 1.0
+probe; that probe is archived, not relabelled. Geometry, tessellation,
+draw parameters and `maxBufferSize` now carry admitted native receipts.
+`maintenance4` is queried true but stays blocked on its two refused shapes
+(below) and on a direct witness of its memory-requirement queries.
+`apiVersion` stays blocked: the pinned profile requires 1.3.204 including the
+patch level; the device reports 1.3.0, which DXVK's own device filter accepts.
 
 The shipping public routes already include the T01–T07 work: draw parameters;
 multiview; indirect/indexed draws; geometry,
@@ -178,16 +179,12 @@ public query and native behavior agree.
 
 ## What remains in the old profile inventory
 
-The 21 blockers in the earlier matrix snapshot are useful leads, not the ordered execution
-queue. Besides the two T04 receipt-reconciliation rows, they comprise the
-then-unadvertised Vulkan 1.1 aggregate draw-parameters query, two T08 subgroup features,
-the remaining T10–T13 sync/render/shader/descriptor/
-robustness families and the API-version row. The exact
+The 17 current blockers are useful leads, not the ordered execution queue.
+They are the API-version row, `maintenance4`, two T08 subgroup features and
+the remaining Vulkan 1.3 feature and inline-uniform-block families. The exact
 row IDs and axis states are generated in
-`conformance_inventory/dxvk_v262_matrix.json`; do not copy a row's old
-`blocker` verdict into a claim that its implementation is absent. For example,
-the Vulkan 1.1 aggregate `shaderDrawParameters` field now has its direct core
-route, so an old blocker row cannot describe current query behavior. The T08 subgroup
+`conformance_inventory/dxvk_v262_matrix.json`; do not copy a row's
+`blocker` verdict into a claim that its implementation is absent. The T08 subgroup
 diagnostics demonstrate only bounded broadcast/arithmetic cases. The shipping
 profile now reports wave32 compute BASIC (Elect and subgroup barriers), not
 zero stages/operations. Neither extended-types nor dynamic-broadcast feature

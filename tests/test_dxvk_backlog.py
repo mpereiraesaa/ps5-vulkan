@@ -46,9 +46,11 @@ class DxvkBacklogTests(unittest.TestCase):
         # sync2, imageless and dynamic rendering (KHR routes), T14
         # VK_EXT_transform_feedback and VK_EXT_robustness2 (extension,
         # robustBufferAccess2, nullDescriptor) are public.
-        self.assertEqual(40, summary["implementation_ready"])
-        self.assertEqual(40, summary["profile_satisfied"])
-        self.assertEqual(21, summary["remaining_profile_blockers"])
+        # On the Vulkan 1.3 probe, draw parameters, geometry, tessellation and
+        # maxBufferSize carry admitted native receipts (2026-09-26).
+        self.assertEqual(44, summary["implementation_ready"])
+        self.assertEqual(44, summary["profile_satisfied"])
+        self.assertEqual(17, summary["remaining_profile_blockers"])
 
         self.assertEqual({
             "api-version": 1,
@@ -79,9 +81,12 @@ class DxvkBacklogTests(unittest.TestCase):
     def test_implementation_readiness_is_distinct_from_profile_satisfaction(self):
         baseline = backlog.validate(self.document, self.matrix)
         promoted = copy.deepcopy(self.matrix)
-        identifier = self.document["tranches"][0]["requirements"][0]
-        row = next(item for item in promoted["requirements"]
-                   if item["id"] == identifier)
+        # The first backlog requirement that is not implementation-ready yet.
+        rows = {item["id"]: item for item in promoted["requirements"]}
+        identifier = next(name for tranche in self.document["tranches"]
+                          for name in tranche["requirements"]
+                          if rows[name]["implementation"]["state"] != "implemented")
+        row = rows[identifier]
         row["implementation"]["state"] = "implemented"
         row["cts"]["state"] = "cts-pass"
         row["native"]["state"] = "native-evidence"

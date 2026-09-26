@@ -17,10 +17,10 @@ default-profile execution pass strict identity and clean closure. The default
 Compute-only and offline graphics profiles do not gain the feature. Historical
 experimental receipts below must not be relabelled as default-profile runs.
 
-The separate DXVK profile matrix still has an evidence-accounting gap:
-these 99 passing leaves have not been added to its frozen acceptance selection.
-That gap does not undo T04's merged implementation or native result, but it
-must be closed before the matrix may count `tessellationShader` as satisfied.
+The DXVK profile matrix admits this default-profile run as the
+`tessellationShader` native execution evidence. The 99 passing leaves are
+still outside the frozen CTS selection, so its CTS axis records no evidence;
+under the current policy an unrun or unselected leaf does not block a row.
 
 A standalone consumer of staged public SDK headers also verifies that the
 default build reports tessellationShader and the eight intended limits
