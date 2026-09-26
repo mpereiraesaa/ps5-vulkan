@@ -464,12 +464,9 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * VK_KHR_bind_memory2), witnessed by the public-SDK routes witness. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_GET_MEMORY_REQUIREMENTS2 |
         PS5VK_T09_FEATURE_DEDICATED_ALLOCATION | PS5VK_T09_FEATURE_BIND_MEMORY2;
-#if defined(PS5VK_MAINTENANCE4_DIAGNOSTIC) && PS5VK_MAINTENANCE4_DIAGNOSTIC
-    /* DIAGNOSTIC DXVK measurement only, never shipping: VK_KHR_maintenance4
-     * requires a Vulkan 1.1 device, which this profile does not report. */
+    /* Creation-description memory requirements and LocalSizeId are available
+     * through the experimental core profile as well as the extension route. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
-    platform->maintenance4_diagnostic_on_vulkan_1_0 = VK_TRUE;
-#endif
     /* The driver-maintained HOST_COHERENT type: coherence is kept by CPU
      * writeback before each launch and invalidation after each observed
      * completion (src/vk_queue.c), witnessed natively. */

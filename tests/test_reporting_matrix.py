@@ -47,7 +47,7 @@ class TestReportingMatrix(unittest.TestCase):
         extension = "VK_KHR_sampler_mirror_clamp_to_edge"
         graphics = data["profiles"]["graphics"]
         compute = data["profiles"]["compute"]
-        self.assertEqual(4194304, graphics["apiVersion"])
+        self.assertEqual(4206592, graphics["apiVersion"])  # experimental1.3.0
         self.assertIn(extension, graphics["device_extensions"])
         self.assertNotIn(extension, compute["device_extensions"])
 
@@ -60,7 +60,7 @@ class TestReportingMatrix(unittest.TestCase):
                                   "vulkanMemoryModel": True,
                                   "vulkanMemoryModelDeviceScope": True},
                                  reported["memory_model_query"])
-                self.assertEqual(4194304, reported["apiVersion"])
+                self.assertEqual(4206592, reported["apiVersion"])  # experimental1.3.0
                 row = next(row for row in data["features"] if
                            row["profile"] == profile and
                            row["feature"] == "vulkanMemoryModelDeviceScope")
