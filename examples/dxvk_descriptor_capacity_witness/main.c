@@ -264,10 +264,34 @@ static VkResult submit_wait(VkDevice device, VkQueue queue, VkFence fence,
 #include <stdlib.h>
 /* The compiler calls this weak hook, when an application defines it, at each
  * of its stages (diagnostic compiler builds only). */
+#include <signal.h>
 void psbc_stage_hook(const char *label);
+static char last_stage[96];
 void psbc_stage_hook(const char *label)
 {
+    strncpy(last_stage, label, sizeof(last_stage) - 1);
     ps5log_printf(PS5LOG_MARK, MARK "_PSBC stage=%s sp=%p", label, (void *)&label);
+}
+/* A fault or abort inside the compiler is otherwise a silent exit. */
+static void fatal_signal(int sig, siginfo_t *info, void *context)
+{
+    (void)context;
+    ps5log_printf(PS5LOG_ERR, MARK "_SIGNAL sig=%d code=%d addr=%p last_stage=%s", sig,
+                  info ? info->si_code : -1, info ? info->si_addr : NULL, last_stage);
+    ps5log_close("descriptor-witness-signal");
+    _exit(3);
+}
+static void install_signal_handlers(void)
+{
+    static const int signals[] = {SIGSEGV, SIGBUS, SIGABRT, SIGILL, SIGFPE, SIGTRAP};
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    action.sa_sigaction = fatal_signal;
+    action.sa_flags = SA_SIGINFO;
+    sigemptyset(&action.sa_mask);
+    for (unsigned i = 0; i < sizeof(signals) / sizeof(signals[0]); ++i)
+        ps5log_printf(PS5LOG_MARK, MARK "_HANDLER sig=%d rc=%d", signals[i],
+                      sigaction(signals[i], &action, NULL));
 }
 /* Heap headroom, then compute pipelines over sets of 128..1023 sampled
  * images (plus the output buffer), each compiled on its own, no dispatch.
@@ -304,6 +328,7 @@ static int run_witness(void)
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info};
     TRY(vkCreateDevice(physical, &device_info, NULL, &device));
+    install_signal_handlers();
     ps5log_printf(PS5LOG_MARK, MARK "_START sizes=128,256,512,768,1023");
 
     for (unsigned n = 0; n < 5; ++n) {
