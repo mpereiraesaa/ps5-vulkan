@@ -40,7 +40,12 @@ DEPS = [
         # PR 29 lowers compute LocalInvocationIndex and NumSubgroups from the
         # local invocation IDs: TG_SIZE, which ACO read them from, is not
         # populated by the PS5 compute dispatch.
-        "pin": "d153f7bdedf9ee76a5f08079e23a8ce6a04c9b73",
+        # PR 30 reserves the no-GDS geometry streamout ranges in primitive
+        # order (a ticket keyed on each workgroup's first primitive id, which
+        # the queue zeroes per draw) and returns each workgroup's unwritten
+        # reservation, so the transform feedback counter ends at the last
+        # whole primitive (DXVK262-T14).
+        "pin": "eaf6f9d75bf343441dd1994ee81b00d194af100b",
     },
     {
         "name": "opengnm",

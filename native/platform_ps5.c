@@ -378,6 +378,12 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
         PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
         PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1;
 #endif
+#if defined(PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC) && PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC
+    /* Private measurement build (DXVK262-T14): report VK_EXT_transform_feedback
+     * so the capture witness can negotiate it. The ordinary profile waits for
+     * that witness's strict verification. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_TRANSFORM_FEEDBACK;
+#endif
     /* VK_KHR_synchronization2: vkCmdPipelineBarrier2, vkQueueSubmit2 and
      * the event commands convert onto the Vulkan 1.0 barrier and submit
      * routes; the SDK-linked sync2 witness executed all three phases with

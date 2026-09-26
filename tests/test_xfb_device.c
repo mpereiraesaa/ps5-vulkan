@@ -317,6 +317,18 @@ static void recording(void)
     assert(!begin->xfb.buffers[1].buffer);
     assert(begin->xfb.counters[0].buffer == x.counter && begin->xfb.counters[0].offset == 8 &&
            begin->xfb.counters[0].size == 4 && !begin->xfb.counters[1].buffer);
+    /* Submission re-validates the immutable record: live ranges, a counter
+     * dword, capture ranges only on BEGIN, and the feature still enabled. */
+    assert(ps5vk_xfb_operation_valid(x.device, begin));
+    struct ps5vk_operation copy = *begin;
+    copy.xfb.counters[0].size = 8;
+    assert(!ps5vk_xfb_operation_valid(x.device, &copy));
+    copy = *begin;
+    copy.type = PS5VK_TRANSFORM_FEEDBACK_END;
+    assert(!ps5vk_xfb_operation_valid(x.device, &copy));
+    copy = *begin;
+    copy.xfb.buffers[0].size = 2048;
+    assert(!ps5vk_xfb_operation_valid(x.device, &copy));
     /* Capture is fixed while active: no rebind, no pipeline change, no end of
      * the subpass or of the pass, no end of recording. */
     assert(vkEndCommandBuffer(c) == VK_ERROR_UNKNOWN);
