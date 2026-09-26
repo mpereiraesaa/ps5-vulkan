@@ -27820,7 +27820,7 @@
   },
   "profiles": {
     "compute": {
-      "apiVersion": 4194304,
+      "apiVersion": 4206592,
       "buffer_device_address_query": {
         "bufferDeviceAddress": true,
         "bufferDeviceAddressCaptureReplay": false,
@@ -27895,7 +27895,7 @@
       "vendorID": 4098
     },
     "graphics": {
-      "apiVersion": 4194304,
+      "apiVersion": 4206592,
       "buffer_device_address_query": {
         "bufferDeviceAddress": true,
         "bufferDeviceAddressCaptureReplay": false,

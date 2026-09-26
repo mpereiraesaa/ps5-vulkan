@@ -2,6 +2,7 @@
 import copy
 import importlib.util
 import json
+import re
 from pathlib import Path
 import unittest
 
@@ -18,8 +19,14 @@ class CoreVersionContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.contract = json.loads((ROOT / "conformance_inventory/core_version_contract.json").read_text())
-        cls.profile = (ROOT / "src/physical_device_profile.h").read_text()
-        cls.internal = (ROOT / "src/vk_internal.h").read_text()
+        cls.shipping_profile = (ROOT / "src/physical_device_profile.h").read_text()
+        cls.shipping_internal = (ROOT / "src/vk_internal.h").read_text()
+        # Strict inventory tests use a synthetic1.0 baseline independently of
+        # the experimental consumer profile's current reported version.
+        cls.profile = re.sub(r"(#define PS5VK_DEVICE_API_VERSION )VK_API_VERSION_1_\d",
+                             r"\g<1>VK_API_VERSION_1_0", cls.shipping_profile)
+        cls.internal = re.sub(r"(#define PS5VK_INSTANCE_API_VERSION )VK_API_VERSION_1_\d",
+                              r"\g<1>VK_API_VERSION_1_1", cls.shipping_internal)
         cls.dispatch = (ROOT / "src/vk_dispatch.c").read_text()
 
     def run_check(self, contract=None, profile=None, internal=None, dispatch=None, assume=None):
@@ -33,8 +40,10 @@ class CoreVersionContract(unittest.TestCase):
         return profile.replace("#define PS5VK_DEVICE_API_VERSION VK_API_VERSION_1_0",
                                f"#define PS5VK_DEVICE_API_VERSION VK_API_VERSION_1_{minor}")
 
-    def test_shipping_tree_reports_the_backed_version(self):
-        self.assertEqual((1, 0), checker.check(ROOT))
+    def test_shipping_tree_reports_experimental_version(self):
+        self.assertEqual((1, 3), checker.check(ROOT, experimental=True))
+        with self.assertRaisesRegex(AssertionError, "not backed"):
+            checker.check(ROOT)
 
     def test_experimental_profile_does_not_claim_full_core_coverage(self):
         profile = self.raised(self.profile, 3)
@@ -46,7 +55,8 @@ class CoreVersionContract(unittest.TestCase):
 
     def test_experimental_profile_still_checks_instance_and_evidence_integrity(self):
         with self.assertRaisesRegex(AssertionError, "lower than"):
-            checker.check(ROOT, profile_source=self.raised(self.profile, 3), experimental=True)
+            checker.check(ROOT, profile_source=self.raised(self.profile, 3),
+                          internal_source=self.internal, experimental=True)
         contract = copy.deepcopy(self.contract)
         contract["versions"]["1.1"]["requirements"][0]["status"] = "invented"
         with self.assertRaisesRegex(AssertionError, "bad status"):

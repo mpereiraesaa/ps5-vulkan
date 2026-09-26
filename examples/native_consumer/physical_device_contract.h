@@ -161,7 +161,7 @@ static void report_physical_device_contract(VkInstance instance,
             "unsupported image-format zero report");
 
     const VkPhysicalDeviceLimits *limits = &props->limits;
-    REQUIRE(props->apiVersion == VK_API_VERSION_1_0 &&
+    REQUIRE(props->apiVersion == VK_API_VERSION_1_3 &&
             props->vendorID == 0x1002 && props->deviceID == 0 &&
             props->deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU &&
             limits->maxStorageBufferRange == UINT32_C(268435456) &&

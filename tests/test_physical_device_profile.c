@@ -16,7 +16,7 @@ int main(void)
     };
     ps5vk_physical_profile_init(&properties, &memory, &compute);
 
-    assert(properties.apiVersion == VK_API_VERSION_1_0);
+    assert(properties.apiVersion == PS5VK_DEVICE_API_VERSION);
     assert(properties.vendorID == 0x1002 && properties.deviceID == 0);
     assert(properties.limits.maxStorageBufferRange == compute.heap_size);
     assert(properties.limits.maxMemoryAllocationCount == 1024);

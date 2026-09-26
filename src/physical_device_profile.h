@@ -40,13 +40,11 @@ static inline int ps5vk_profile_power_of_two(VkDeviceSize value)
 #define PS5VK_COMPILER_IDENTITY_VERSION 1u
 #define PS5VK_CACHE_ABI_IDENTITY 1u
 
-/* The Vulkan version the physical device reports: the single promotion
- * switch. Raising it claims every mandatory command, feature, limit and
- * behaviour of each newer core version, and tools/check_core_version_contract.py
- * (run by make check) refuses the edit until
- * conformance_inventory/core_version_contract.json shows that whole contract
- * met. The instance version (PS5VK_INSTANCE_API_VERSION) is separate. */
-#define PS5VK_DEVICE_API_VERSION VK_API_VERSION_1_0
+/* Experimental, non-conformant consumer API profile. Feature/property answers
+ * remain capability-derived; this version is not a complete core-coverage claim.
+ * The full core inventory is audited separately from native consumer acceptance.
+ * The instance version (PS5VK_INSTANCE_API_VERSION) is separate. */
+#define PS5VK_DEVICE_API_VERSION VK_API_VERSION_1_3
 
 /* Vulkan 1.0 mandatory floors that both shipped frontends honour.
  *

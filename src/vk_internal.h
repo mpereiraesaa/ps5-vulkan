@@ -388,7 +388,7 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform);
  * instance-level additions (vkEnumerateInstanceVersion and the core
  * vkEnumeratePhysicalDeviceGroups) are implemented. It does not raise the
  * physical device, which still reports Vulkan 1.0. */
-#define PS5VK_INSTANCE_API_VERSION VK_API_VERSION_1_1
+#define PS5VK_INSTANCE_API_VERSION VK_API_VERSION_1_3
 struct VkPhysicalDevice_T {
     VkInstance instance;
     struct ps5vk_platform platform;
