@@ -409,6 +409,8 @@ static uint32_t texel(uint32_t k)
            ((255u - (k & 255u)) << 24);
 }
 
+static uint32_t texel_word(uint32_t k) { return texel(k) ^ 0x5a5a5a5au; }
+
 static int run_witness(void)
 {
     VkResult result = VK_SUCCESS;
@@ -426,13 +428,16 @@ static int run_witness(void)
     static VkDescriptorImageInfo infos[IMAGES];
     VkImage target = VK_NULL_HANDLE; VkDeviceMemory target_memory = VK_NULL_HANDLE;
     VkImageView target_view = VK_NULL_HANDLE;
-    struct buffer upload = {0}, output = {0}, readback = {0};
-    VkDescriptorSetLayout compute_set_layout = VK_NULL_HANDLE, pixel_set_layout = VK_NULL_HANDLE;
+    struct buffer upload = {0}, output = {0}, readback = {0}, texels = {0}, texel_output = {0};
+    static VkBufferView texel_views[COMPUTE_IMAGES];
+    VkDescriptorSetLayout compute_set_layout = VK_NULL_HANDLE, pixel_set_layout = VK_NULL_HANDLE,
+        texel_set_layout = VK_NULL_HANDLE;
     VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
-    VkDescriptorSet sets[2] = {VK_NULL_HANDLE};
-    VkShaderModule compute_module = VK_NULL_HANDLE;
-    VkPipelineLayout compute_layout = VK_NULL_HANDLE, pixel_layout = VK_NULL_HANDLE;
-    VkPipeline compute_pipeline = VK_NULL_HANDLE;
+    VkDescriptorSet sets[3] = {VK_NULL_HANDLE};
+    VkShaderModule compute_module = VK_NULL_HANDLE, texel_module = VK_NULL_HANDLE;
+    VkPipelineLayout compute_layout = VK_NULL_HANDLE, pixel_layout = VK_NULL_HANDLE,
+        texel_layout = VK_NULL_HANDLE;
+    VkPipeline compute_pipeline = VK_NULL_HANDLE, texel_pipeline = VK_NULL_HANDLE;
     struct graphics g = {0};
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     VkCommandPool pool = VK_NULL_HANDLE;
@@ -516,16 +521,23 @@ static int run_witness(void)
         {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, IMAGES, VK_SHADER_STAGE_FRAGMENT_BIT, NULL};
     set_layout_info.bindingCount = 1; set_layout_info.pBindings = &pixel_binding;
     TRY(vkCreateDescriptorSetLayout(device, &set_layout_info, NULL, &pixel_set_layout));
+    /* Texel set: UNIFORM_TEXEL_BUFFER[1023] + the output buffer = 1024. */
+    VkDescriptorSetLayoutBinding texel_bindings[2] = {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, COMPUTE_IMAGES, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+    set_layout_info.bindingCount = 2; set_layout_info.pBindings = texel_bindings;
+    TRY(vkCreateDescriptorSetLayout(device, &set_layout_info, NULL, &texel_set_layout));
     ps5log_printf(PS5LOG_MARK, MARK "_STEP layouts");
     VkDescriptorPoolSize pool_sizes[] = {
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, COMPUTE_IMAGES + IMAGES},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, COMPUTE_IMAGES},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
     VkDescriptorPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = 2, .poolSizeCount = 2, .pPoolSizes = pool_sizes};
+        .maxSets = 3, .poolSizeCount = 3, .pPoolSizes = pool_sizes};
     TRY(vkCreateDescriptorPool(device, &pool_info, NULL, &descriptor_pool));
-    VkDescriptorSetLayout set_layouts[2] = {compute_set_layout, pixel_set_layout};
+    VkDescriptorSetLayout set_layouts[3] = {compute_set_layout, pixel_set_layout, texel_set_layout};
     VkDescriptorSetAllocateInfo set_info = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = descriptor_pool, .descriptorSetCount = 2, .pSetLayouts = set_layouts};
+        .descriptorPool = descriptor_pool, .descriptorSetCount = 3, .pSetLayouts = set_layouts};
     TRY(vkAllocateDescriptorSets(device, &set_info, sets));
     ps5log_printf(PS5LOG_MARK, MARK "_STEP sets");
     VkDescriptorBufferInfo output_info = {output.buffer, 0, VK_WHOLE_SIZE};
@@ -540,6 +552,28 @@ static int run_witness(void)
          .descriptorCount = IMAGES, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
          .pImageInfo = infos}};
     vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
+    /* 1023 R32_UINT views over one buffer, one distinct word each. */
+    TRY(make_buffer(device, COMPUTE_IMAGES * 4u, VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT, &texels));
+    for (uint32_t k = 0; k < COMPUTE_IMAGES; ++k)
+        memcpy(texels.host + 4u * k, &(uint32_t){texel_word(k)}, 4);
+    TRY(sync_memory(device, texels.memory, 0));
+    TRY(make_buffer(device, IMAGES * 4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &texel_output));
+    memset(texel_output.host, 0xcd, IMAGES * 4u);
+    TRY(sync_memory(device, texel_output.memory, 0));
+    for (uint32_t k = 0; k < COMPUTE_IMAGES; ++k) {
+        VkBufferViewCreateInfo view_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+            .buffer = texels.buffer, .format = VK_FORMAT_R32_UINT, .offset = 4u * k, .range = 4};
+        TRY(vkCreateBufferView(device, &view_info, NULL, &texel_views[k]));
+    }
+    VkDescriptorBufferInfo texel_output_info = {texel_output.buffer, 0, VK_WHOLE_SIZE};
+    VkWriteDescriptorSet texel_writes[2] = {
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = sets[2], .dstBinding = 0,
+         .descriptorCount = COMPUTE_IMAGES, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+         .pTexelBufferView = texel_views},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = sets[2], .dstBinding = 1,
+         .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+         .pBufferInfo = &texel_output_info}};
+    vkUpdateDescriptorSets(device, 2, texel_writes, 0, NULL);
     ps5log_printf(PS5LOG_MARK, MARK "_STEP written");
 
     VkShaderModuleCreateInfo shader_info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -558,6 +592,14 @@ static int run_witness(void)
         .layout = compute_layout};
     TRY(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &compute_info, NULL, &compute_pipeline));
     ps5log_printf(PS5LOG_MARK, MARK "_STEP compute_pipeline");
+    shader_info.codeSize = sizeof(descriptor_capacity_texel_spirv);
+    shader_info.pCode = descriptor_capacity_texel_spirv;
+    TRY(vkCreateShaderModule(device, &shader_info, NULL, &texel_module));
+    layout_info.pSetLayouts = &texel_set_layout;
+    TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &texel_layout));
+    compute_info.stage.module = texel_module; compute_info.layout = texel_layout;
+    TRY(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &compute_info, NULL, &texel_pipeline));
+    ps5log_printf(PS5LOG_MARK, MARK "_STEP texel_pipeline");
     TRY(make_graphics(device, pixel_layout, descriptor_capacity_frag_spirv,
                       sizeof(descriptor_capacity_frag_spirv), SIDE, SIDE, VK_FALSE, &g));
     ps5log_printf(PS5LOG_MARK, MARK "_STEP graphics_pipeline");
@@ -576,6 +618,10 @@ static int run_witness(void)
     vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
     vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, compute_layout, 0, 1,
                             &sets[0], 0, NULL);
+    vkCmdDispatch(command, 1, 1, 1);
+    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, texel_pipeline);
+    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, texel_layout, 0, 1,
+                            &sets[2], 0, NULL);
     vkCmdDispatch(command, 1, 1, 1);
     host_barrier(command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
     TRY(vkEndCommandBuffer(command));
@@ -599,6 +645,7 @@ static int run_witness(void)
     TRY(vkEndCommandBuffer(command));
     TRY(submit_wait(device, queue, fence, command, &pending));
     TRY(sync_memory(device, output.memory, 1));
+    TRY(sync_memory(device, texel_output.memory, 1));
     TRY(sync_memory(device, readback.memory, 1));
 
     uint32_t compute_mismatches = 0, pixel_mismatches = 0, first_compute = UINT32_MAX,
@@ -616,7 +663,18 @@ static int run_witness(void)
         " pixel_mismatches=%u first_pixel=%d guard=%08x digest_compute=%08x digest_pixels=%08x",
         compute_mismatches, (int)first_compute, pixel_mismatches, (int)first_pixel, guard,
         digest_bytes(output.host, COMPUTE_IMAGES * 4u), digest_bytes(readback.host, IMAGES * 4u));
+    uint32_t texel_mismatches = 0, first_texel = UINT32_MAX;
+    for (uint32_t k = 0; k < COMPUTE_IMAGES; ++k) {
+        uint32_t value; memcpy(&value, texel_output.host + 4u * k, 4);
+        if (value != texel_word(k)) { ++texel_mismatches; if (first_texel == UINT32_MAX) first_texel = k; }
+    }
+    uint32_t texel_guard; memcpy(&texel_guard, texel_output.host + 4u * COMPUTE_IMAGES, 4);
+    ps5log_printf(PS5LOG_MARK, MARK "_TEXEL_RESULT texel_mismatches=%u first_texel=%d guard=%08x"
+        " digest_texel=%08x", texel_mismatches, (int)first_texel, texel_guard,
+        digest_bytes(texel_output.host, COMPUTE_IMAGES * 4u));
     REQUIRE(!compute_mismatches, "compute: 1023 sampled images in a 1024-descriptor set");
+    REQUIRE(!texel_mismatches, "compute: 1023 uniform texel buffers in a 1024-descriptor set");
+    REQUIRE(texel_guard == sentinel, "compute: texel output guard untouched");
     REQUIRE(guard == sentinel, "compute: output guard untouched");
     REQUIRE(!pixel_mismatches, "graphics: 1024 sampled images in one set");
 
@@ -632,12 +690,20 @@ cleanup:
     if (framebuffer) vkDestroyFramebuffer(device, framebuffer, NULL);
     destroy_graphics(device, &g);
     if (compute_pipeline) vkDestroyPipeline(device, compute_pipeline, NULL);
+    if (texel_pipeline) vkDestroyPipeline(device, texel_pipeline, NULL);
+    if (texel_layout) vkDestroyPipelineLayout(device, texel_layout, NULL);
+    if (texel_module) vkDestroyShaderModule(device, texel_module, NULL);
     if (pixel_layout) vkDestroyPipelineLayout(device, pixel_layout, NULL);
     if (compute_layout) vkDestroyPipelineLayout(device, compute_layout, NULL);
     if (compute_module) vkDestroyShaderModule(device, compute_module, NULL);
     if (descriptor_pool) vkDestroyDescriptorPool(device, descriptor_pool, NULL);
     if (pixel_set_layout) vkDestroyDescriptorSetLayout(device, pixel_set_layout, NULL);
     if (compute_set_layout) vkDestroyDescriptorSetLayout(device, compute_set_layout, NULL);
+    if (texel_set_layout) vkDestroyDescriptorSetLayout(device, texel_set_layout, NULL);
+    for (uint32_t k = 0; k < COMPUTE_IMAGES; ++k)
+        if (texel_views[k]) vkDestroyBufferView(device, texel_views[k], NULL);
+    destroy_buffer(device, &texel_output);
+    destroy_buffer(device, &texels);
     if (target_view) vkDestroyImageView(device, target_view, NULL);
     if (target) vkDestroyImage(device, target, NULL);
     if (target_memory) vkFreeMemory(device, target_memory, NULL);

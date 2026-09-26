@@ -12,7 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_dxvk_descriptor_capacity_witness import (  # noqa: E402
-    DRAWS, IMAGES, PROFILES, STRIDE, source_word, texel)
+    DRAWS, IMAGES, PROFILES, STRIDE, source_word, texel, texel_word)
 from run_consumer import close_and_confirm, control, running, wait_for_log  # noqa: E402
 
 SENTINEL = 0xcdcdcdcd
@@ -25,10 +25,11 @@ def fnv1a(payload: bytes) -> int:
     return digest
 
 
-def expected_capacity() -> tuple[int, int]:
+def expected_capacity() -> tuple[int, int, int]:
     compute = b"".join(struct.pack("<I", texel(k)) for k in range(IMAGES - 1))
     pixels = b"".join(struct.pack("<I", texel(k)) for k in range(IMAGES))
-    return fnv1a(compute), fnv1a(pixels)
+    texels = b"".join(struct.pack("<I", texel_word(k)) for k in range(IMAGES - 1))
+    return fnv1a(compute), fnv1a(pixels), fnv1a(texels)
 
 
 def expected_dynamic() -> tuple[int, str]:
@@ -56,14 +57,17 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     if (mark + "_FAILURE" in text or re.findall(mark + r"_RETIRED resources=(\w+)", text) != ["clean"]):
         raise ValueError("witness failed or did not retire cleanly")
     if variant == "capacity":
-        compute, pixels = expected_capacity()
+        compute, pixels, texels = expected_capacity()
+        texel_result = re.findall(mark + r"_TEXEL_RESULT texel_mismatches=(\d+) first_texel=(-?\d+)"
+                                  r" guard=([0-9a-f]{8}) digest_texel=([0-9a-f]{8})", text)
         result = re.findall(mark + r"_RESULT compute_mismatches=(\d+) first_compute=(-?\d+)"
                             r" pixel_mismatches=(\d+) first_pixel=(-?\d+) guard=([0-9a-f]{8})"
                             r" digest_compute=([0-9a-f]{8}) digest_pixels=([0-9a-f]{8})", text)
         if (f"{mark}_START images={IMAGES} compute_set={IMAGES} pixel_set={IMAGES}" not in text or
                 f"{mark}_UPLOADED images={IMAGES}" not in text or
                 result != [("0", "-1", "0", "-1", f"{SENTINEL:08x}", f"{compute:08x}",
-                            f"{pixels:08x}")]):
+                            f"{pixels:08x}")] or
+                texel_result != [("0", "-1", f"{SENTINEL:08x}", f"{texels:08x}")]):
             raise ValueError("capacity data, guard or digest mismatch")
     else:
         compute, pixels = expected_dynamic()

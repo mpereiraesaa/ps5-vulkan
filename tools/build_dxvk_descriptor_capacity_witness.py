@@ -2,8 +2,9 @@
 """Build the bounded public-SDK descriptor-set capacity witnesses.
 
 --variant capacity: 1024 distinct sampled images; a compute set of exactly
-1024 descriptors (SAMPLED_IMAGE[1023] plus the output buffer) and a fragment
-set of SAMPLED_IMAGE[1024]. --variant dynamic: per-dispatch and per-draw
+1024 descriptors (SAMPLED_IMAGE[1023] plus the output buffer), a second one
+of UNIFORM_TEXEL_BUFFER[1023] plus the output buffer, and a fragment set of
+SAMPLED_IMAGE[1024]. --variant dynamic: per-dispatch and per-draw
 dynamic offsets, a live rewrite of a bound set and the refusal of the stale
 command buffer. Both use the ordinary SDK; they measure a capacity the device
 does not report yet. Shaders use only constant descriptor indices.
@@ -49,6 +50,16 @@ def capacity_compute_source(images: int = IMAGES - 1) -> str:
     return "\n".join(lines + ["}"]) + "\n"
 
 
+def capacity_texel_source(buffers: int = IMAGES - 1) -> str:
+    lines = ["#version 450", "#extension GL_EXT_samplerless_texture_functions : require",
+             "layout(local_size_x=1) in;",
+             f"layout(set=0,binding=0) uniform utextureBuffer texels[{buffers}];",
+             "layout(set=0,binding=1,std430) writeonly buffer Out { uint v[]; } o;",
+             "void main()", "{"]
+    lines += [f"    o.v[{k}]=texelFetch(texels[{k}],0).x;" for k in range(buffers)]
+    return "\n".join(lines + ["}"]) + "\n"
+
+
 def capacity_fragment_source() -> str:
     lines = ["#version 450", "#extension GL_EXT_samplerless_texture_functions : require",
              f"layout(set=0,binding=0) uniform texture2D images[{IMAGES}];",
@@ -78,6 +89,10 @@ def texel(k: int) -> int:
             ((255 - (k & 255)) << 24))
 
 
+def texel_word(k: int) -> int:
+    return texel(k) ^ 0x5a5a5a5a
+
+
 def source_word(s: int, i: int, c: int) -> int:
     return (0xb0000000 if s else 0xa0000000) | (i << 8) | (c << 4) | 0x5
 
@@ -85,6 +100,7 @@ def source_word(s: int, i: int, c: int) -> int:
 def shader_sources() -> dict:
     return {"descriptor_capacity_comp_spirv": ("comp", capacity_compute_source()),
             "descriptor_capacity_frag_spirv": ("frag", capacity_fragment_source()),
+            "descriptor_capacity_texel_spirv": ("comp", capacity_texel_source()),
             "descriptor_dynamic_comp_spirv": ("comp", DYNAMIC_COMPUTE),
             "descriptor_dynamic_frag_spirv": ("frag", DYNAMIC_FRAGMENT),
             "descriptor_capacity_vert_spirv": ("vert", (ROOT / VERTEX).read_text()),
