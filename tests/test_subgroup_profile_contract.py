@@ -39,6 +39,19 @@ class SubgroupProfileContract(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "API version"):
             self.validate(report=report)
 
+    def test_core_aggregate_subgroup_bit_requires_reaudit(self):
+        """On Vulkan 1.3 the two bits have a core aggregate route; reporting
+        either one true through it needs a contract review."""
+        for name in ("shaderSubgroupExtendedTypes", "subgroupBroadcastDynamicId"):
+            with self.subTest(name=name):
+                report = copy.deepcopy(self.report)
+                report["profiles"]["graphics"].setdefault("core_version_queries", {})[
+                    "VkPhysicalDeviceVulkan12Features"] = {
+                        "shaderSubgroupExtendedTypes": False,
+                        "subgroupBroadcastDynamicId": False, name: True}
+                with self.assertRaisesRegex(AssertionError, "core subgroup query"):
+                    self.validate(report=report)
+
     def test_core_11_command_alias_requires_reaudit(self):
         dispatch = self.dispatch_source.replace(
             "ENTRY(vkGetPhysicalDeviceFeatures2KHR, INSTANCE),",

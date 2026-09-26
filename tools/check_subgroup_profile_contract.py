@@ -133,13 +133,22 @@ def check_cts(utils, broadcast, arithmetic, contract):
 def check_reporting(contract, report, matrix, profile_source, device_source,
                     dispatch_source):
     current = contract["current"]
-    require(current["api"] == "1.0", "contract must describe current Vulkan 1.0 report")
+    # Re-audited for the experimental Vulkan 1.3.0 report: both bits have a
+    # core query/create route through VkPhysicalDeviceVulkan12Features, which
+    # answers false, and vkCreateDevice refuses a request for either.
+    require(current["api"] == "1.3", "contract must describe current Vulkan 1.3 report")
     require(current["shaderSubgroupExtendedTypes"] is False and
             current["subgroupBroadcastDynamicId"] is False, "contract enables subgroup bits")
     for profile in ("compute", "graphics"):
-        require(report["profiles"][profile]["apiVersion"] == 4194304,
+        require(report["profiles"][profile]["apiVersion"] == 4206592,
                 f"{profile} public API version changed")
-    require("#define PS5VK_DEVICE_API_VERSION VK_API_VERSION_1_0\n" in profile_source and
+        aggregate = report["profiles"][profile].get("core_version_queries", {}).get(
+            "VkPhysicalDeviceVulkan12Features")
+        require(aggregate is None or
+                (aggregate.get("shaderSubgroupExtendedTypes") is False and
+                 aggregate.get("subgroupBroadcastDynamicId") is False),
+                f"{profile} core subgroup query changed; re-audit subgroup profile")
+    require("#define PS5VK_DEVICE_API_VERSION VK_API_VERSION_1_3\n" in profile_source and
             "properties->apiVersion = PS5VK_DEVICE_API_VERSION;" in profile_source,
             "source API version changed; re-audit subgroup profile")
     exported = set(re.findall(r"ENTRY\((vk\w+),\s*(?:GLOBAL|INSTANCE|DEVICE)\)",
@@ -225,6 +234,9 @@ def check(root=ROOT):
                     (root / "src/physical_device_profile.h").read_text(),
                     (root / "src/vk_device.c").read_text(),
                     (root / "src/vk_dispatch.c").read_text())
+    core = (root / "src/vk_core_version.c").read_text()
+    require(not re.search(r"->(shaderSubgroupExtendedTypes|subgroupBroadcastDynamicId)\s*=", core),
+            "core Vulkan 1.2 subgroup bit is assigned; re-audit subgroup profile")
     sources = list((root / "src").glob("*.c")) + list((root / "native").glob("*.c"))
     check_core_sources(contract, (root / "include/ps5vk/ps5vk.h").read_text(),
                        "\n".join(path.read_text() for path in sources))
@@ -232,4 +244,4 @@ def check(root=ROOT):
 
 if __name__ == "__main__":
     check()
-    print("Subgroup profile contract: current public bits and API remain off")
+    print("Subgroup profile contract: current public subgroup bits remain off")
