@@ -298,6 +298,9 @@ static int run_witness(void)
         .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info};
     TRY(vkCreateDevice(physical, &device_info, NULL, &device));
     ps5log_printf(PS5LOG_MARK, MARK "_START sizes=128,256,512,768,1023");
+    /* The compiler's own stage lines (stderr) join the log. */
+    setenv("PSBC_DEBUG_STAGE", "1", 1);
+    ps5log_printf(PS5LOG_MARK, MARK "_STDERR capture=%d", ps5log_capture_stdio(PS5LOG_CAPTURE_STDERR));
     for (unsigned n = 0; n < 5; ++n) {
         VkDescriptorSetLayoutBinding bindings[2] = {
             {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, bisect_images[n], VK_SHADER_STAGE_COMPUTE_BIT, NULL},
