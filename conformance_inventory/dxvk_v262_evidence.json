@@ -2,8 +2,9 @@
   "schema": "ps5vk-dxvk-evidence/1",
   "profile_id": "VP_DXVK_d3d11_level_11_0_baseline",
   "capability_probe": {
-    "artifact_sha256": "829ddacfa0cb688d51913d2ba6cdc3d4c98460f82ae0aa9baf7b2b9b7435aca1",
+    "artifact_sha256": "ac46bfca58296f3d3876a7fc376f9d3f968d901a525141addf1ace6a7b06bdfd",
     "satisfied_ids": [
+      "extension:VK_EXT_robustness2",
       "extension:VK_EXT_transform_feedback",
       "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
       "feature:VkPhysicalDeviceFeatures:depthClamp",
@@ -25,6 +26,8 @@
       "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
       "feature:VkPhysicalDeviceFeatures:tessellationShader",
       "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+      "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor",
+      "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2",
       "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
       "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
       "feature:VkPhysicalDeviceVulkan11Features:multiview",
@@ -37,6 +40,7 @@
       "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
       "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+      "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering",
       "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
       "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
       "feature:VkPhysicalDeviceVulkan13Features:synchronization2",
@@ -46,8 +50,8 @@
     ],
     "runs": [
       {
-        "id": "20260926T024716317Z_PPSA99994_ps5vk_0x6ce3120b9d3b",
-        "log_sha256": "a2d75c52e7661cd1f4eae429b58447482fdc601ab339c5f1738353958515c185"
+        "id": "20260926T031405453Z_PPSA99994_ps5vk_0x6e59b86caee4",
+        "log_sha256": "ae0152c4d8f082d5e8d961ab6c405b6e50afdbd408373b18394dc1d1c83644fe"
       }
     ],
     "transport": "ps5log/1",
@@ -109,16 +113,142 @@
       {
         "route": "VK_KHR_imageless_framebuffer",
         "imagelessFramebuffer": "1"
+      },
+      {
+        "route": "VK_EXT_robustness2",
+        "robustBufferAccess2": "1",
+        "nullDescriptor": "1"
+      },
+      {
+        "route": "VK_KHR_dynamic_rendering",
+        "dynamicRendering": "1"
       }
     ],
     "requirements": 62,
-    "satisfied": 39,
-    "blockers": 23,
+    "satisfied": 43,
+    "blockers": 19,
     "device_api": "1.0.0",
-    "device_extensions": 22,
-    "source_matrix_sha256": "ba3097f9bcd818acb214827d5e7750a1db3284adcf28e4c29a80968b4503d1e2"
+    "device_extensions": 31,
+    "source_matrix_sha256": "75101af0450b1f765e5150d71fe3df413c4b60aefb39d30ed7452dc084f02b94"
   },
   "historical_capability_probes": [
+    {
+      "artifact_sha256": "829ddacfa0cb688d51913d2ba6cdc3d4c98460f82ae0aa9baf7b2b9b7435aca1",
+      "satisfied_ids": [
+        "extension:VK_EXT_transform_feedback",
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+        "feature:VkPhysicalDeviceFeatures:depthClamp",
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+        "feature:VkPhysicalDeviceFeatures:geometryShader",
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+        "feature:VkPhysicalDeviceFeatures:independentBlend",
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+        "feature:VkPhysicalDeviceFeatures:multiViewport",
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+        "feature:VkPhysicalDeviceFeatures:tessellationShader",
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+        "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
+        "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
+        "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+        "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+        "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
+        "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
+        "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+        "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+        "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
+        "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
+        "feature:VkPhysicalDeviceVulkan13Features:synchronization2",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+      ],
+      "runs": [
+        {
+          "id": "20260926T024716317Z_PPSA99994_ps5vk_0x6ce3120b9d3b",
+          "log_sha256": "a2d75c52e7661cd1f4eae429b58447482fdc601ab339c5f1738353958515c185"
+        }
+      ],
+      "transport": "ps5log/1",
+      "verifier": "tools/verify_dxvk_probe.py",
+      "query_routes": [
+        {
+          "route": "VK_KHR_multiview",
+          "multiview": "1",
+          "maxMultiviewViewCount": "6",
+          "maxMultiviewInstanceIndex": "134217727"
+        },
+        {
+          "route": "VK_KHR_uniform_buffer_standard_layout",
+          "uniformBufferStandardLayout": "1"
+        },
+        {
+          "route": "VK_KHR_vulkan_memory_model",
+          "vulkanMemoryModel": "1",
+          "vulkanMemoryModelDeviceScope": "1"
+        },
+        {
+          "route": "VK_KHR_buffer_device_address",
+          "bufferDeviceAddress": "1"
+        },
+        {
+          "route": "VK_EXT_host_query_reset",
+          "hostQueryReset": "1"
+        },
+        {
+          "route": "VK_KHR_sampler_mirror_clamp_to_edge",
+          "samplerMirrorClampToEdge": "1"
+        },
+        {
+          "route": "VK_KHR_timeline_semaphore",
+          "timelineSemaphore": "1",
+          "maxTimelineSemaphoreValueDifference": "18446744073709551615"
+        },
+        {
+          "route": "VK_KHR_separate_depth_stencil_layouts",
+          "separateDepthStencilLayouts": "1"
+        },
+        {
+          "route": "VK_EXT_shader_demote_to_helper_invocation",
+          "shaderDemoteToHelperInvocation": "1"
+        },
+        {
+          "route": "VK_KHR_shader_terminate_invocation",
+          "shaderTerminateInvocation": "1"
+        },
+        {
+          "route": "VK_KHR_synchronization2",
+          "synchronization2": "1"
+        },
+        {
+          "route": "VK_EXT_transform_feedback",
+          "transformFeedback": "1",
+          "geometryStreams": "1"
+        },
+        {
+          "route": "VK_KHR_imageless_framebuffer",
+          "imagelessFramebuffer": "1"
+        }
+      ],
+      "requirements": 62,
+      "satisfied": 39,
+      "blockers": 23,
+      "device_api": "1.0.0",
+      "device_extensions": 22,
+      "source_matrix_sha256": "ba3097f9bcd818acb214827d5e7750a1db3284adcf28e4c29a80968b4503d1e2"
+    },
     {
       "artifact_sha256": "ebcf7eb50f99aa206596c9d072108c051e2961f6a4e0fe34e85040914454a5df",
       "satisfied_ids": [

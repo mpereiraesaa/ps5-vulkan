@@ -6524,3 +6524,32 @@ reported (eboot
 above describe the profile before this change. The capability probe is not
 re-measured either: the change adds no device extension and no DXVK
 requirement row.
+
+## Combined evidence for the robustness2, routes, render and coherent promotions (2026-09-26)
+
+The four promotions above (robustness2; memory requirements 2, dedicated
+allocation, bind memory 2 and descriptor update templates; dynamic rendering,
+copy commands 2 and maintenance1; the host-coherent memory type) landed as one
+stack on top of the imageless framebuffer promotion. Each family's own witness
+and probe runs are recorded in its section; the counts quoted there describe
+the tree each was first measured on. One capability probe and one acceptance
+run measured the whole stack.
+
+**Public-ABI capability probe.** Eboot SHA-256
+`ac46bfca58296f3d3876a7fc376f9d3f968d901a525141addf1ace6a7b06bdfd`, run
+`20260926T031405453Z_PPSA99994_ps5vk_0x6e59b86caee4`, log SHA-256
+`ae0152c4d8f082d5e8d961ab6c405b6e50afdbd408373b18394dc1d1c83644fe`: API 1.0.0,
+31 device extensions, 43/62, with the synchronization2, transform feedback,
+imageless framebuffer, robustness2 and dynamic rendering routes queried
+explicitly.
+
+The frozen acceptance selection on the same tree, with the second
+(host-coherent) memory type reported (eboot
+`10a1859338b791e9f2e220095e3e78c14cd1657845c3acd7c3c39e3527f61daf`, run
+`20260926T031417276Z_PPSA99994_upstream-cts_0x6e5c79244671`, log SHA-256
+`0aeda568b439f700e2079b58b138e62b2ef02b4d0fdaef57c5e5aeb818b106d6`), passed
+879/879.
+
+The DXVK matrix has **41/62 ready and 21 blockers**;
+`tools/check_dxvk_backlog.py --check` reports 40 implementation-ready original
+blockers and 40 profile-satisfied ones.

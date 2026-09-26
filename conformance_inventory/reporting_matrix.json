@@ -2259,6 +2259,45 @@
         "note": "no selected case requires this bit",
         "status": "not-selected"
       },
+      "detail": "the VK_EXT_robustness2 route bounds buffer descriptors by their exact range and vertex fetches by the vertex descriptor record count; the public-SDK compute and vertex-input witnesses read zero out of range",
+      "feature": "robustBufferAccess2",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the VK_EXT_robustness2 route turns VK_NULL_HANDLE descriptors and vertex buffers into all-zero records; the public-SDK compute and vertex-input witnesses read zero through them",
+      "feature": "nullDescriptor",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "the Vulkan 1.0 KHR route with its depth_stencil_resolve dependency records vkCmdBeginRenderingKHR onto the render-pass path; the public-SDK render witness drew, copied back and compared through it",
+      "feature": "dynamicRendering",
+      "kind": "extension-feature",
+      "profile": "graphics",
+      "reported": true,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
       "detail": "alphaToOneEnable is rejected (src/vk_graphics_pipeline.c)",
       "feature": "alphaToOne",
       "kind": "feature",
@@ -3548,6 +3587,45 @@
       },
       "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
       "feature": "imagelessFramebuffer",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "robustBufferAccess2",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "nullDescriptor",
+      "kind": "extension-feature",
+      "profile": "compute",
+      "reported": false,
+      "verdict": "satisfied"
+    },
+    {
+      "applicable_cts": {
+        "cases": [],
+        "note": "no selected case requires this bit",
+        "status": "not-selected"
+      },
+      "detail": "compute-only build: the graphics execution path this feature needs is not built into this profile",
+      "feature": "dynamicRendering",
       "kind": "extension-feature",
       "profile": "compute",
       "reported": false,
@@ -27762,12 +27840,19 @@
         "VK_KHR_timeline_semaphore"
       ],
       "extension_route_queries": {
+        "VK_EXT_robustness2": {
+          "nullDescriptor": false,
+          "robustBufferAccess2": false
+        },
         "VK_EXT_shader_demote_to_helper_invocation": {
           "shaderDemoteToHelperInvocation": false
         },
         "VK_EXT_transform_feedback": {
           "geometryStreams": false,
           "transformFeedback": false
+        },
+        "VK_KHR_dynamic_rendering": {
+          "dynamicRendering": false
         },
         "VK_KHR_imageless_framebuffer": {
           "imagelessFramebuffer": false
@@ -27833,6 +27918,11 @@
         "VK_KHR_separate_depth_stencil_layouts",
         "VK_EXT_shader_demote_to_helper_invocation",
         "VK_KHR_shader_terminate_invocation",
+        "VK_EXT_robustness2",
+        "VK_KHR_maintenance1",
+        "VK_KHR_copy_commands2",
+        "VK_KHR_depth_stencil_resolve",
+        "VK_KHR_dynamic_rendering",
         "VK_KHR_format_feature_flags2",
         "VK_KHR_image_format_list",
         "VK_KHR_synchronization2",
@@ -27840,12 +27930,19 @@
         "VK_KHR_imageless_framebuffer"
       ],
       "extension_route_queries": {
+        "VK_EXT_robustness2": {
+          "nullDescriptor": true,
+          "robustBufferAccess2": true
+        },
         "VK_EXT_shader_demote_to_helper_invocation": {
           "shaderDemoteToHelperInvocation": true
         },
         "VK_EXT_transform_feedback": {
           "geometryStreams": true,
           "transformFeedback": true
+        },
+        "VK_KHR_dynamic_rendering": {
+          "dynamicRendering": true
         },
         "VK_KHR_imageless_framebuffer": {
           "imagelessFramebuffer": true
@@ -28267,7 +28364,7 @@
   ],
   "summary": {
     "features": {
-      "satisfied": 136
+      "satisfied": 142
     },
     "format_query_consistency": {
       "satisfied": 60
