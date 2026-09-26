@@ -273,13 +273,14 @@ class DiagnosticIntegrationRecipe(unittest.TestCase):
         self.assertEqual(build.sdk_build_environment({}, Path("/sdk"),
             ["PS5VK_MAINTENANCE4_DIAGNOSTIC"])["PS5VK_MAINTENANCE4_DIAGNOSTIC"], "1")
 
-    def test_only_switches_the_sdk_build_knows_are_applied(self):
+    def test_integration_recipe_needs_no_sdk_measurement_switches(self):
         present, absent = build.diagnostic_integration_switches(
             'for name in ("PS5VK_MAINTENANCE4_DIAGNOSTIC",):')
-        self.assertEqual(present, ["PS5VK_MAINTENANCE4_DIAGNOSTIC"])
-        self.assertEqual(len(present) + len(absent), len(build.DXVK_DIAGNOSTIC_SWITCHES))
+        self.assertEqual((present, absent), ([], []))
         present, absent = build.diagnostic_integration_switches("")
-        self.assertEqual(absent, ["PS5VK_MAINTENANCE4_DIAGNOSTIC"])
+        self.assertEqual((present, absent), ([], []))
+        self.assertNotIn("PS5VK_MAINTENANCE4_DIAGNOSTIC",
+                         (ROOT / "tools/build_sdk.py").read_text())
 
     def test_every_switch_is_a_default_off_diagnostic(self):
         for name in build.DXVK_DIAGNOSTIC_SWITCHES:

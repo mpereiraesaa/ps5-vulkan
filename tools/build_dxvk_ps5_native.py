@@ -111,9 +111,7 @@ FILTER_DIAGNOSTIC = """    if (properties.apiVersion < VK_MAKE_API_VERSION(0, 1,
 # The measurement switches the native DXVK DIAGNOSTIC runs use: every
 # default-off route DXVK 2.6.2 reaches before its first readback. Only the
 # ones tools/build_sdk.py knows are applied; the rest are recorded as absent.
-DXVK_DIAGNOSTIC_SWITCHES = (
-    "PS5VK_MAINTENANCE4_DIAGNOSTIC",
-)
+DXVK_DIAGNOSTIC_SWITCHES: tuple[str, ...] = ()
 
 
 def diagnostic_integration_switches(build_sdk_source: str) -> tuple[list[str], list[str]]:
