@@ -1564,7 +1564,7 @@ static void narrow_storage_features(void)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
         .pNext = &query_unknown};
     vkGetPhysicalDeviceProperties2KHR(p, &properties2);
-    assert(properties2.properties.apiVersion == VK_API_VERSION_1_0);
+    assert(properties2.properties.apiVersion == PS5VK_DEVICE_API_VERSION);
     assert(query_unknown.sType == VK_STRUCTURE_TYPE_MAX_ENUM && !query_unknown.pNext);
 
     VkPhysicalDeviceProperties2 wrong_properties2;
@@ -1977,7 +1977,8 @@ static void unadvertised_subgroup_properties(void)
     VkInstance i = features2_instance();
     VkPhysicalDevice p = physical(i);
     assert(VK_API_VERSION_MAJOR(p->platform.properties.apiVersion) == 1);
-    assert(VK_API_VERSION_MINOR(p->platform.properties.apiVersion) == 0);
+    assert(VK_API_VERSION_MINOR(p->platform.properties.apiVersion) ==
+           VK_API_VERSION_MINOR(PS5VK_DEVICE_API_VERSION));
     VkPhysicalDeviceSubgroupProperties subgroup = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
         .subgroupSize = 99u,
@@ -1990,7 +1991,7 @@ static void unadvertised_subgroup_properties(void)
     vkGetPhysicalDeviceProperties2KHR(p, &properties);
     assert(!subgroup.subgroupSize && !subgroup.supportedStages &&
            !subgroup.supportedOperations && !subgroup.quadOperationsInAllStages);
-    assert(properties.properties.apiVersion == VK_API_VERSION_1_0);
+    assert(properties.properties.apiVersion == PS5VK_DEVICE_API_VERSION);
     /* A platform that measured compute BASIC reports exactly that. */
     p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
     subgroup.quadOperationsInAllStages = VK_TRUE;
@@ -2153,7 +2154,7 @@ static void vulkan11_instance_version(void)
     PFN_vkEnumerateInstanceVersion enumerate_version = (PFN_vkEnumerateInstanceVersion)
         vkGetInstanceProcAddr(NULL, "vkEnumerateInstanceVersion");
     assert(enumerate_version == vkEnumerateInstanceVersion);
-    assert(enumerate_version(&version) == VK_SUCCESS && version == VK_API_VERSION_1_1);
+    assert(enumerate_version(&version) == VK_SUCCESS && version == PS5VK_INSTANCE_API_VERSION);
     assert(enumerate_version(NULL) == VK_ERROR_UNKNOWN);
     assert(!vkGetInstanceProcAddr(NULL, "vkEnumeratePhysicalDeviceGroups"));
 
@@ -2167,11 +2168,14 @@ static void vulkan11_instance_version(void)
             .pApplicationInfo = &app};
         VkInstance i = VK_NULL_HANDLE;
         assert(vkCreateInstance(&info, NULL, &i) == VK_SUCCESS && i);
-        assert(i->api_version == VK_API_VERSION_1_1);
+        const uint32_t requested = VK_MAKE_API_VERSION(0,
+            VK_API_VERSION_MAJOR(requests[n]), VK_API_VERSION_MINOR(requests[n]), 0);
+        assert(i->api_version == (requested < PS5VK_INSTANCE_API_VERSION ?
+                                 requested : PS5VK_INSTANCE_API_VERSION));
         VkPhysicalDevice p = physical(i);
         VkPhysicalDeviceProperties properties;
         vkGetPhysicalDeviceProperties(p, &properties);
-        assert(properties.apiVersion == VK_API_VERSION_1_0);
+        assert(properties.apiVersion == PS5VK_DEVICE_API_VERSION);
         assert(vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroups") ==
                (PFN_vkVoidFunction)vkEnumeratePhysicalDeviceGroups);
         assert(!vkGetInstanceProcAddr(i, "vkEnumeratePhysicalDeviceGroupsKHR"));
@@ -2181,9 +2185,11 @@ static void vulkan11_instance_version(void)
         assert(vkGetInstanceProcAddr(i, "vkGetPhysicalDeviceExternalSemaphoreProperties") ==
                (PFN_vkVoidFunction)vkGetPhysicalDeviceExternalSemaphoreProperties);
         /* Device-level core 1.1 names stay absent from both lookups. */
-        assert(!vkGetInstanceProcAddr(i, "vkTrimCommandPool"));
+        assert(!!vkGetInstanceProcAddr(i, "vkTrimCommandPool") ==
+               (PS5VK_DEVICE_API_VERSION >= VK_API_VERSION_1_1));
         assert(!vkGetInstanceProcAddr(i, "vkGetDeviceQueue2"));
-        assert(!vkGetInstanceProcAddr(i, "vkBindBufferMemory2"));
+        assert(!!vkGetInstanceProcAddr(i, "vkBindBufferMemory2") ==
+               (PS5VK_DEVICE_API_VERSION >= VK_API_VERSION_1_1));
         /* The core query names answer exactly as the KHR route does. */
         VkPhysicalDeviceFeatures2 core = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
         VkPhysicalDeviceFeatures2 khr = core;
@@ -2193,7 +2199,7 @@ static void vulkan11_instance_version(void)
         VkPhysicalDeviceProperties2 properties2 = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
         vkGetPhysicalDeviceProperties2(p, &properties2);
-        assert(properties2.properties.apiVersion == VK_API_VERSION_1_0);
+        assert(properties2.properties.apiVersion == PS5VK_DEVICE_API_VERSION);
         VkQueueFamilyProperties2 family = {.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2};
         uint32_t families = 1;
         vkGetPhysicalDeviceQueueFamilyProperties2(p, &families, &family);

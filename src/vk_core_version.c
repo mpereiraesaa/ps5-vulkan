@@ -36,6 +36,8 @@ struct extension_features {
     VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures demote;
     VkPhysicalDeviceShaderTerminateInvocationFeatures terminate;
     VkPhysicalDeviceMaintenance4Features maintenance4;
+    VkPhysicalDeviceSynchronization2Features synchronization2;
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering;
     VkPhysicalDeviceFeatures2 core;
 };
 
@@ -58,6 +60,8 @@ static void query_extension_features(VkPhysicalDevice p, struct extension_featur
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES, &f->demote},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES, &f->terminate},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES, &f->maintenance4},
+        {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES, &f->synchronization2},
+        {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, &f->dynamic_rendering},
     };
     void *next = NULL;
     for (size_t n = sizeof(chain) / sizeof(chain[0]); n-- > 0;) {
@@ -133,6 +137,8 @@ static void fill_vulkan13_features(VkPhysicalDevice p, VkPhysicalDeviceVulkan13F
     out->shaderDemoteToHelperInvocation = f.demote.shaderDemoteToHelperInvocation;
     out->shaderTerminateInvocation = f.terminate.shaderTerminateInvocation;
     out->maintenance4 = f.maintenance4.maintenance4;
+    out->synchronization2 = f.synchronization2.synchronization2;
+    out->dynamicRendering = f.dynamic_rendering.dynamicRendering;
 }
 
 int ps5vk_core_version_features(VkPhysicalDevice p, VkBaseOutStructure *next)
@@ -165,6 +171,7 @@ struct extension_properties {
     VkPhysicalDevicePointClippingProperties point_clipping;
     VkPhysicalDeviceTimelineSemaphoreProperties timeline;
     VkPhysicalDeviceMaintenance4Properties maintenance4;
+    VkPhysicalDeviceDepthStencilResolveProperties resolve;
     VkPhysicalDeviceProperties2 core;
 };
 
@@ -172,6 +179,8 @@ static void query_extension_properties(VkPhysicalDevice p, struct extension_prop
 {
     memset(e, 0, sizeof(*e));
     e->maintenance4.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES;
+    e->resolve.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES;
+    e->maintenance4.pNext = &e->resolve;
     e->timeline.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES;
     e->timeline.pNext = &e->maintenance4;
     e->point_clipping.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES;
@@ -270,9 +279,11 @@ static void fill_vulkan12_properties(VkPhysicalDevice p, VkPhysicalDeviceVulkan1
      * member stays false, which also means no independent control. */
     out->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE;
     out->roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE;
-    /* Descriptor indexing, depth/stencil resolve and minmax filtering are not
-     * reported, so their limits stay zero. Integer colour attachments have no
-     * reported role. */
+    out->supportedDepthResolveModes = e.resolve.supportedDepthResolveModes;
+    out->supportedStencilResolveModes = e.resolve.supportedStencilResolveModes;
+    out->independentResolveNone = e.resolve.independentResolveNone;
+    out->independentResolve = e.resolve.independentResolve;
+    /* Descriptor indexing and minmax filtering remain unreported. */
     out->maxTimelineSemaphoreValueDifference = e.timeline.maxTimelineSemaphoreValueDifference;
 }
 
@@ -349,6 +360,62 @@ int ps5vk_core_version_properties(VkPhysicalDevice p, VkBaseOutStructure *next)
 
 /* ---- device creation ----------------------------------------------------- */
 
+/* An aggregate and its constituent feature structures cannot coexist in a
+ * device-create chain, even when every member is false. Check the whole chain
+ * before processing requests, so order never changes the result. */
+VkResult ps5vk_core_version_validate_chain(const VkBaseInStructure *chain)
+{
+    uint32_t aggregates = 0, individual = 0;
+    for (const VkBaseInStructure *s = chain; s; s = s->pNext) {
+        uint32_t aggregate = 0, member = 0;
+        switch (s->sType) {
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES: aggregate = 1; break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES: aggregate = 2; break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES: aggregate = 4; break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES:
+            member = 1; break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES:
+            member = 2; break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES:
+            member = 4; break;
+        default: break;
+        }
+        if (aggregate & aggregates) return VK_ERROR_UNKNOWN;
+        aggregates |= aggregate;
+        individual |= member;
+    }
+    return aggregates & individual ? VK_ERROR_UNKNOWN : VK_SUCCESS;
+}
+
 struct core_enable {
     VkStructureType type;
     size_t offset;
@@ -381,6 +448,8 @@ static const struct core_enable core_enables[] = {
     V13(shaderDemoteToHelperInvocation, 0, PS5VK_T09_FEATURE_SHADER_DEMOTE_TO_HELPER_INVOCATION),
     V13(shaderTerminateInvocation, 0, PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION),
     V13(maintenance4, 0, PS5VK_T09_FEATURE_MAINTENANCE4),
+    V13(synchronization2, 0, PS5VK_T09_FEATURE_SYNCHRONIZATION2),
+    V13(dynamicRendering, 0, PS5VK_T09_FEATURE_DYNAMIC_RENDERING),
 };
 #undef V11
 #undef V12
@@ -462,10 +531,19 @@ void ps5vk_core_version_promote(VkDevice d)
     if (version >= VK_API_VERSION_1_2) {
         d->timeline_extension_enabled = VK_TRUE;
         d->create_renderpass2_extension_enabled = VK_TRUE;
+        d->image_format_list_extension_enabled = VK_TRUE;
+        d->depth_stencil_resolve_extension_enabled = VK_TRUE;
     }
     if (version >= VK_API_VERSION_1_3) {
         d->maintenance4_extension_enabled = VK_TRUE;
         d->copy_commands2_extension_enabled = VK_TRUE;
         d->extended_dynamic_state_extension_enabled = VK_TRUE;
+        /* Unlike the optional extension feature, this state is core in 1.3. */
+        d->extended_dynamic_state_enabled =
+            !!(d->physical->platform.supported_features_t09 & PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE);
+        d->synchronization2_extension_enabled = VK_TRUE;
+        d->dynamic_rendering_extension_enabled = VK_TRUE;
+        d->dynamic_rendering_enabled |=
+            !!(d->enabled_features_t09 & PS5VK_T09_FEATURE_DYNAMIC_RENDERING);
     }
 }

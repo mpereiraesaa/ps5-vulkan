@@ -6,8 +6,7 @@
 /* Core Vulkan 1.1-1.3 query/creation structures and core command names.
  *
  * Everything here is gated on the version the physical device reports, which
- * is Vulkan 1.0 today: until PS5VK_DEVICE_API_VERSION is raised, none of these
- * structures is answered or accepted and no core-named alias resolves. Values
+ * controls which structures are answered and which core aliases resolve. Values
  * are projections of the existing per-extension answers, never separate
  * claims. */
 
@@ -29,6 +28,7 @@ int ps5vk_core_version_properties(VkPhysicalDevice p, VkBaseOutStructure *next);
 VkResult ps5vk_core_version_enable(VkPhysicalDevice p, const VkBaseInStructure *next,
                                    uint32_t *seen, uint32_t *enabled,
                                    uint32_t *enabled_t09);
+VkResult ps5vk_core_version_validate_chain(const VkBaseInStructure *chain);
 
 /* vkCreateDevice: behaviour promoted into the effective version is on without
  * the extension, so the per-extension gates (d->*_extension_enabled) open. */
