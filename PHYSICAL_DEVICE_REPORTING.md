@@ -113,15 +113,19 @@ tests. The compute-only build intentionally does not apply graphics limits and
 continues to classify those rows as blockers for that separate profile.
 
 The same is true of the four sampled-descriptor limits, which therefore left the
-table above: the graphics profile reports `maxPerStageDescriptorSamplers = 16`,
-`maxPerStageDescriptorSampledImages = 16`, `maxDescriptorSetSamplers = 96` and
-`maxDescriptorSetSampledImages = 96`. Those are the Vulkan 1.0 floors, taken from
-the shared qualified constants in `src/graphics_limits.h` that
-`ps5vk_physical_profile_valid` also bounds against the descriptor table capacity,
-so the report cannot drift from the contract it was qualified against. Two owned
-witnesses support them and are recorded in `VALIDATION.md`: ninety-six combined
-image samplers inside a single set, and ninety-six across four sets read by one
-stage. Storage-image and input-attachment descriptor limits remain blocked, and
+table above: the graphics profile reports `maxPerStageDescriptorSamplers = 16`
+and `maxDescriptorSetSamplers = 96`, the Vulkan 1.0 floors taken from the shared
+qualified constants in `src/graphics_limits.h`, and
+`maxPerStageDescriptorSampledImages = 1024`, `maxDescriptorSetSampledImages =
+1024` and `maxPerStageResources = 1024`, the set capacity `PS5VK_MAX_DESCRIPTORS`.
+`ps5vk_physical_profile_valid` bounds all of them against the descriptor table
+capacity, so the report cannot drift from the contract it was qualified against.
+The sampler floors rest on two owned witnesses recorded in `VALIDATION.md`:
+ninety-six combined image samplers inside a single set, and ninety-six across
+four sets read by one stage. The sampled-image values rest on the descriptor
+capacity witness: 1024 distinct sampled images read by one fragment stage from
+one set, and 1023 sampled images or 1023 uniform texel buffers (the same
+accounting class) read with an output buffer from 1024-descriptor compute sets. Storage-image and input-attachment descriptor limits remain blocked, and
 the compute-only build continues to record all four as below-floor.
 
 `sampledImageIntegerSampleCounts` now reports `VK_SAMPLE_COUNT_1_BIT` in both

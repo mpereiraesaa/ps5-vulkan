@@ -285,7 +285,8 @@ static inline int ps5vk_physical_profile_valid(
         !limits->maxSampleMaskWords ||
         limits->discreteQueuePriorities < PS5VK_REQUIRED_QUEUE_PRIORITIES ||
         limits->maxBoundDescriptorSets != PS5VK_MAX_SETS ||
-        limits->maxPerStageResources != PS5VK_REPORTED_STAGE_RESOURCES ||
+        limits->maxPerStageResources < PS5VK_REPORTED_STAGE_RESOURCES ||
+        limits->maxPerStageResources > PS5VK_MAX_DESCRIPTORS ||
         !limits->maxComputeSharedMemorySize ||
         !limits->maxComputeWorkGroupInvocations)
         return 0;

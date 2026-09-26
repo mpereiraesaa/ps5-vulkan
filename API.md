@@ -417,6 +417,14 @@ smaller incompatible layer pitches. The graphics profile reports
   buffers and eight dynamic uniform buffers. Host contracts currently prove
   this API state machine; hardware evidence is stated only when a corresponding
   native receipt is listed in `VALIDATION.md`.
+- One descriptor set holds up to 1024 descriptors (`maxPerSetDescriptors`,
+  answered through the Vulkan 1.1 maintenance3 structure once that version is
+  reported). The graphics profile reports `maxPerStageDescriptorSampledImages`,
+  `maxDescriptorSetSampledImages` and `maxPerStageResources` at 1024: a native
+  witness reads 1024 distinct sampled images from one fragment-stage set, and
+  1023 sampled images or 1023 uniform texel buffers from a 1024-descriptor
+  compute set. Samplers stay at 16 per stage and 96 per set, storage and
+  uniform buffers at 128, and dynamic buffers at 8 uniform and 4 storage.
 - Partial descriptor-set binding is accepted, but every set and descriptor used
   by the compiled shader must be bound and defined before dispatch.
 - Pipeline layouts expose up to 256 bytes of 4-byte-aligned push constants.

@@ -6553,3 +6553,31 @@ The frozen acceptance selection on the same tree, with the second
 The DXVK matrix has **41/62 ready and 21 blockers**;
 `tools/check_dxvk_backlog.py --check` reports 40 implementation-ready original
 blockers and 40 profile-satisfied ones.
+
+## Descriptor set capacity: 1024 descriptors in one set (2026-09-26)
+
+Descriptor sets are sized from their layout, and per-draw and per-dispatch
+tables from the compiled program, up to `PS5VK_MAX_DESCRIPTORS = 1024` records
+per set. The public-SDK capacity witness
+(`tools/build_dxvk_descriptor_capacity_witness.py --variant capacity`, strict
+verification in `tools/run_dxvk_descriptor_capacity_witness.py`) uploads 1024
+distinct one-texel images and reads them through constant indices:
+
+- a compute set of exactly 1024 descriptors, `SAMPLED_IMAGE[1023]` plus the
+  output buffer, compared word for word with the oracle and a guard word;
+- a fragment-stage set of `SAMPLED_IMAGE[1024]`, one image per pixel of a
+  32x32 target, read back and compared with the same oracle.
+
+| Eboot SHA-256 | Run | Result |
+|---|---|---|
+| `72a80e2fdfb459b00094e4296d19eda0493f1abf444641814aad8a964067d92c` | `20260926T015917366Z_PPSA99994_ps5vk_0x6a44c544427e` | strict pass, lifecycle clean |
+| same | `20260926T015926506Z_PPSA99994_ps5vk_0x6a46e601675f` | strict pass, lifecycle clean |
+
+The witness now also reads a compute set of `UNIFORM_TEXEL_BUFFER[1023]` plus
+the output buffer (1023 `R32_UINT` views over one buffer), the other member of
+the sampled-image accounting class. On this evidence the graphics profile
+reports `maxPerStageDescriptorSampledImages`, `maxDescriptorSetSampledImages`
+and `maxPerStageResources` as 1024, and the Vulkan 1.1 `maxPerSetDescriptors`
+contract row is satisfied. Samplers, storage and uniform buffers, and dynamic
+buffers keep their earlier qualified values; storage images and input
+attachments stay blocked.

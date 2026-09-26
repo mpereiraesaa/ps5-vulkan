@@ -78,9 +78,9 @@ for an unmodified, truthful route:**
 1. **Device API version 1.3.** DXVK filters every device below 1.3.
    `tools/check_core_version_contract.py` blocks raising the reported
    version while any mandatory 1.1/1.2/1.3 item is missing; run it with
-   `--assume-version 1.N` to list them. The largest items are
-   `maxPerSetDescriptors` ≥ 1024 (128 today; needs set-owned descriptor
-   tables). `maxMemoryAllocationSize`/`maxBufferSize` ≥ 2^30 are answered by
+   `--assume-version 1.N` to list them. `maxPerSetDescriptors` ≥ 1024 is
+   satisfied: sets are layout-sized and the descriptor capacity witness reads
+   full 1024-descriptor sets on hardware. `maxMemoryAllocationSize`/`maxBufferSize` ≥ 2^30 are answered by
    the 1.25 GiB graphics heap (one 1 GiB allocation plus headroom).
 2. **Transform feedback — promoted (T14).** The FL 10_0+ gate requires
    `transformFeedback` and `geometryStreams`; both are public through

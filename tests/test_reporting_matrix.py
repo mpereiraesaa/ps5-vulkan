@@ -131,9 +131,9 @@ class TestReportingMatrix(unittest.TestCase):
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         rows = {(row["profile"], row["limit"]): row for row in data["limits"]}
         for name, value in (("maxPerStageDescriptorSamplers", 16),
-                            ("maxPerStageDescriptorSampledImages", 16),
+                            ("maxPerStageDescriptorSampledImages", 1024),
                             ("maxDescriptorSetSamplers", 96),
-                            ("maxDescriptorSetSampledImages", 96)):
+                            ("maxDescriptorSetSampledImages", 1024)):
             row = rows[("graphics", name)]
             self.assertEqual(row["reported"], value, name)
             self.assertEqual(row["verdict"], "satisfied", name)
@@ -142,6 +142,10 @@ class TestReportingMatrix(unittest.TestCase):
             compute = rows[("compute", name)]
             self.assertEqual(compute["verdict"], "blocker", name)
             self.assertIn("compute-only build", compute["detail"], name)
+        # The per-stage resource ceiling follows the witnessed set capacity in
+        # graphics; the compute-only build keeps the qualified 128.
+        self.assertEqual(rows[("graphics", "maxPerStageResources")]["reported"], 1024)
+        self.assertEqual(rows[("compute", "maxPerStageResources")]["reported"], 128)
         # A dropped value is still a violation unless it is a documented blocker.
         core = json.loads((ROOT / "conformance_inventory/core_target.json").read_text())
         sampler_row = next(r for r in core["limits"]["rows"]
