@@ -1,6 +1,6 @@
 {
   "current_driver": {
-    "api_version": "1.0.0",
+    "api_version": "1.3.0",
     "device_extensions": [
       "VK_EXT_extended_dynamic_state",
       "VK_EXT_host_query_reset",
@@ -24,6 +24,7 @@
       "VK_KHR_imageless_framebuffer",
       "VK_KHR_maintenance1",
       "VK_KHR_maintenance2",
+      "VK_KHR_maintenance4",
       "VK_KHR_multiview",
       "VK_KHR_sampler_mirror_clamp_to_edge",
       "VK_KHR_separate_depth_stencil_layouts",
@@ -36,86 +37,94 @@
       "VK_KHR_vulkan_memory_model"
     ],
     "native_probe": {
-      "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
-      "blockers": 19,
-      "device_api": "1.0.0",
-      "device_extensions": 32,
+      "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
+      "blockers": 16,
+      "device_api": "1.3.0",
+      "device_extensions": 33,
+      "observed": {
+        "api-version:apiVersion": 4206592,
+        "extension:VK_EXT_robustness2": 1,
+        "extension:VK_EXT_transform_feedback": 1,
+        "feature:VkPhysicalDeviceFeatures:depthBiasClamp": 1,
+        "feature:VkPhysicalDeviceFeatures:depthClamp": 1,
+        "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance": 1,
+        "feature:VkPhysicalDeviceFeatures:dualSrcBlend": 1,
+        "feature:VkPhysicalDeviceFeatures:fillModeNonSolid": 1,
+        "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics": 1,
+        "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32": 1,
+        "feature:VkPhysicalDeviceFeatures:geometryShader": 1,
+        "feature:VkPhysicalDeviceFeatures:imageCubeArray": 1,
+        "feature:VkPhysicalDeviceFeatures:independentBlend": 1,
+        "feature:VkPhysicalDeviceFeatures:multiDrawIndirect": 1,
+        "feature:VkPhysicalDeviceFeatures:multiViewport": 1,
+        "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise": 1,
+        "feature:VkPhysicalDeviceFeatures:robustBufferAccess": 1,
+        "feature:VkPhysicalDeviceFeatures:sampleRateShading": 1,
+        "feature:VkPhysicalDeviceFeatures:shaderClipDistance": 1,
+        "feature:VkPhysicalDeviceFeatures:shaderCullDistance": 1,
+        "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended": 1,
+        "feature:VkPhysicalDeviceFeatures:tessellationShader": 1,
+        "feature:VkPhysicalDeviceFeatures:textureCompressionBC": 1,
+        "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor": 1,
+        "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2": 1,
+        "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams": 1,
+        "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback": 1,
+        "feature:VkPhysicalDeviceVulkan11Features:multiview": 1,
+        "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:shaderSubgroupExtendedTypes": 0,
+        "feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId": 0,
+        "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel": 1,
+        "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope": 1,
+        "feature:VkPhysicalDeviceVulkan13Features:computeFullSubgroups": 0,
+        "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering": 1,
+        "feature:VkPhysicalDeviceVulkan13Features:inlineUniformBlock": 0,
+        "feature:VkPhysicalDeviceVulkan13Features:maintenance4": 1,
+        "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl": 0,
+        "feature:VkPhysicalDeviceVulkan13Features:robustImageAccess": 0,
+        "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation": 1,
+        "feature:VkPhysicalDeviceVulkan13Features:shaderIntegerDotProduct": 0,
+        "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation": 1,
+        "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory": 0,
+        "feature:VkPhysicalDeviceVulkan13Features:subgroupSizeControl": 0,
+        "feature:VkPhysicalDeviceVulkan13Features:synchronization2": 1,
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex": 134217727,
+        "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount": 6,
+        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference": 18446744073709551615,
+        "property:VkPhysicalDeviceVulkan13Properties:maxBufferSize": 1073741824,
+        "property:VkPhysicalDeviceVulkan13Properties:maxDescriptorSetInlineUniformBlocks": 0,
+        "property:VkPhysicalDeviceVulkan13Properties:maxDescriptorSetUpdateAfterBindInlineUniformBlocks": 0,
+        "property:VkPhysicalDeviceVulkan13Properties:maxInlineUniformBlockSize": 0,
+        "property:VkPhysicalDeviceVulkan13Properties:maxInlineUniformTotalSize": 0,
+        "property:VkPhysicalDeviceVulkan13Properties:maxPerStageDescriptorInlineUniformBlocks": 0,
+        "property:VkPhysicalDeviceVulkan13Properties:maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks": 0
+      },
       "query_routes": [
-        {
-          "maxMultiviewInstanceIndex": "134217727",
-          "maxMultiviewViewCount": "6",
-          "multiview": "1",
-          "route": "VK_KHR_multiview"
-        },
-        {
-          "route": "VK_KHR_uniform_buffer_standard_layout",
-          "uniformBufferStandardLayout": "1"
-        },
-        {
-          "route": "VK_KHR_vulkan_memory_model",
-          "vulkanMemoryModel": "1",
-          "vulkanMemoryModelDeviceScope": "1"
-        },
-        {
-          "bufferDeviceAddress": "1",
-          "route": "VK_KHR_buffer_device_address"
-        },
-        {
-          "hostQueryReset": "1",
-          "route": "VK_EXT_host_query_reset"
-        },
-        {
-          "route": "VK_KHR_sampler_mirror_clamp_to_edge",
-          "samplerMirrorClampToEdge": "1"
-        },
-        {
-          "maxTimelineSemaphoreValueDifference": "18446744073709551615",
-          "route": "VK_KHR_timeline_semaphore",
-          "timelineSemaphore": "1"
-        },
-        {
-          "route": "VK_KHR_separate_depth_stencil_layouts",
-          "separateDepthStencilLayouts": "1"
-        },
-        {
-          "route": "VK_EXT_shader_demote_to_helper_invocation",
-          "shaderDemoteToHelperInvocation": "1"
-        },
-        {
-          "route": "VK_KHR_shader_terminate_invocation",
-          "shaderTerminateInvocation": "1"
-        },
-        {
-          "route": "VK_KHR_synchronization2",
-          "synchronization2": "1"
-        },
         {
           "geometryStreams": "1",
           "route": "VK_EXT_transform_feedback",
           "transformFeedback": "1"
         },
         {
-          "imagelessFramebuffer": "1",
-          "route": "VK_KHR_imageless_framebuffer"
-        },
-        {
           "nullDescriptor": "1",
           "robustBufferAccess2": "1",
           "route": "VK_EXT_robustness2"
-        },
-        {
-          "dynamicRendering": "1",
-          "route": "VK_KHR_dynamic_rendering"
         }
       ],
       "requirements": 62,
       "runs": [
         {
-          "id": "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054",
-          "log_sha256": "83557ae2d7a2c3dafd1edd851ea785321e810820bc83cbc667a5e1d3808a7ea6"
+          "id": "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360",
+          "log_sha256": "ea50ccf1f110479e3ec653f8002930d294bd412e33e7abe69818f920a2367998"
         }
       ],
-      "satisfied": 43,
+      "satisfied": 46,
       "satisfied_ids": [
         "extension:VK_EXT_robustness2",
         "extension:VK_EXT_transform_feedback",
@@ -144,6 +153,7 @@
         "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
         "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
         "feature:VkPhysicalDeviceVulkan11Features:multiview",
+        "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters",
         "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
         "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
         "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
@@ -154,14 +164,16 @@
         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
         "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering",
+        "feature:VkPhysicalDeviceVulkan13Features:maintenance4",
         "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
         "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
         "feature:VkPhysicalDeviceVulkan13Features:synchronization2",
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
-        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+        "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference",
+        "property:VkPhysicalDeviceVulkan13Properties:maxBufferSize"
       ],
-      "source_matrix_sha256": "791f374ede76b2b99d1a4e8c70a6958af74f4b0794fdea6b3697af2d53ab8902",
+      "source_matrix_sha256": "289c7957a754f12a9dcdf16b1c9cd30d12eb325e1704faaa02d5a18c17dfc01b",
       "transport": "ps5log/1",
       "verifier": "tools/verify_dxvk_probe.py"
     },
@@ -199,9 +211,11 @@
   "requirements": [
     {
       "api": {
+        "detail": "The device reports 1.3.0; the pinned profile requires 1.3.204, a comparison that includes the header patch level. DXVK 2.6.2's own device filter requires Vulkan 1.3.0 and passes. Reporting a patch level would assert conformance to that Vulkan header revision; that is an owner decision, not a ledger reconciliation.",
         "expected": "1.3.204",
-        "observed": "1.0.0",
-        "state": "blocker"
+        "observed": "1.3.0",
+        "state": "blocker",
+        "via": "VkPhysicalDeviceProperties.apiVersion"
       },
       "capabilities": [
         "profile"
@@ -217,6 +231,7 @@
       "expected": "1.3.204",
       "id": "api-version:apiVersion",
       "implementation": {
+        "detail": "PS5VK_DEVICE_API_VERSION reports 1.3.0 without a patch level; the profile's 1.3.204 is not reported.",
         "refs": [
           "src/physical_device_profile.h",
           "src/vk_device.c"
@@ -226,11 +241,14 @@
       "kind": "api-version",
       "name": "apiVersion",
       "native": {
-        "note": "The public native query path reports Vulkan 1.0; this is evidence of the current blocker, not evidence for the 1.3 requirement.",
-        "observed": "1.0.0",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
+        "note": "The native capability probe observes apiVersion 1.3.0 (4206592). The pinned profile requires 1.3.204, including the header patch level, so this witnesses the remaining blocker. DXVK 2.6.2's own device filter (Vulkan 1.3.0) passes.",
+        "observed": "1.3.0",
         "refs": [
-          "VALIDATION.md#vulkan-10-device-reporting-audit-2026-09-13",
-          "examples/native_consumer/physical_device_contract.h"
+          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+        ],
+        "run_ids": [
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -240,7 +258,8 @@
       "api": {
         "expected": 1,
         "observed": 1,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "vkEnumerateDeviceExtensionProperties"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -285,7 +304,8 @@
       "api": {
         "expected": 1,
         "observed": 1,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "vkEnumerateDeviceExtensionProperties"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -328,7 +348,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -378,7 +399,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -441,7 +463,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_level11_0"
@@ -524,7 +547,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -668,7 +692,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -741,7 +766,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_level11_0"
@@ -794,7 +820,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -887,7 +914,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -930,23 +958,24 @@
       "kind": "feature",
       "name": "geometryShader",
       "native": {
-        "artifact_sha256": "f860d8fe283cd844ceba9a03e1ca4f7ba4667c3393f0a690577812b7ed642041",
-        "note": "The probe reports geometryShader=1; it executes capability queries, not geometry draws.",
+        "artifact_sha256": "ae9e32761215bb845a81d991033b84d86742a001973958153d92c92929493663",
+        "note": "The nineteen-case geometry witness, shipping fail-fast payload, verified strictly: ES->GS handoff, triangle/point/line input families under their own input assemblies (218/218 and 467/467 pixels), amplification, suppression, gl_InvocationID, per-primitive id, 32 invocations, 256 emitted vertices and 64 input/output components folded into the colour (expected=1024 covered=1024). This replaces the capability-probe query, which never executed a geometry draw.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#geometry-promotion-2026-09-17-later-window"
         ],
         "run_ids": [
-          "20260917T185949226Z_PPSA99994_ps5vk_0x2b1f4a220305"
+          "20260917T180945535Z_PPSA99994_ps5vk_0x2863f2ad4767"
         ],
-        "state": "reported-not-executed"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -998,7 +1027,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -1054,7 +1084,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_level11_0"
@@ -1145,7 +1176,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -1210,7 +1242,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -1260,7 +1293,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "vulkan10requirements"
@@ -1317,7 +1351,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -1402,7 +1437,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -1517,7 +1553,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -1627,7 +1664,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -1755,7 +1793,8 @@
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_level11_0"
@@ -1783,23 +1822,25 @@
       "kind": "feature",
       "name": "tessellationShader",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
-        "note": "The native query reports the requested value, but the probe does not execute the capability.",
+        "artifact_sha256": "2e0fc22b7de6401f7d12f2f6359efc14a223b4917100acad4c98edecf726d45c",
+        "note": "The merged default native runtime-graphics executable, with tessellation enabled by default and no experimental flag or bypass, drew the 99 tessellation, tessellation clip/cull and TCS/TES resource leaves on the console under their own upstream image oracles: 403/403 Pass, strict artifact and report identity, clean close. These leaves stay outside the frozen CTS selection, so the CTS axis records no evidence; CTS never gates the row.",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#merged-t04-tessellation-validation-2026-09-20",
+          "TESSELLATION_STATUS.md"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260920T130122695Z_PPSA99994_upstream-cts_0x1034cdef319e6"
         ],
-        "state": "reported-not-executed"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
         "expected": true,
         "observed": true,
-        "state": "satisfied"
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceFeatures"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -2094,7 +2135,6 @@
     },
     {
       "api": {
-        "detail": "VK_EXT_robustness2 feature query on Vulkan 1.0.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
@@ -2146,7 +2186,6 @@
     },
     {
       "api": {
-        "detail": "VK_EXT_robustness2 feature query on Vulkan 1.0.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
@@ -2198,7 +2237,6 @@
     },
     {
       "api": {
-        "detail": "VK_EXT_transform_feedback feature query on Vulkan 1.0.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
@@ -2247,7 +2285,6 @@
     },
     {
       "api": {
-        "detail": "VK_EXT_transform_feedback feature query on Vulkan 1.0.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
@@ -2297,11 +2334,10 @@
     },
     {
       "api": {
-        "detail": "Equivalent KHR field; Vulkan 1.2 aggregate structs and API 1.3 remain unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_multiview"
+        "via": "VkPhysicalDeviceVulkan11Features"
       },
       "capabilities": [
         "vulkan11requirements"
@@ -2403,10 +2439,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceVulkan11Features"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -2440,9 +2476,15 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "Reviewed KHR and Vulkan 1.1 aggregate query and opt-in; BaseVertex, BaseInstance and DrawIndex come from the draw's user SGPRs on the direct, indexed and indirect routes.",
+        "refs": [
+          "native/platform_ps5.c",
+          "src/ps5vk_compiler.c",
+          "src/spirv_graphics_interface.c",
+          "src/vk_core_version.c",
+          "src/vk_device.c"
+        ],
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "shaderDrawParameters",
@@ -2457,15 +2499,14 @@
         ],
         "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
-        "detail": "Equivalent KHR feature on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_buffer_device_address"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -2520,11 +2561,10 @@
     },
     {
       "api": {
-        "detail": "EXT feature query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_EXT_host_query_reset"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -2568,11 +2608,10 @@
     },
     {
       "api": {
-        "detail": "VK_KHR_imageless_framebuffer feature query on Vulkan 1.0; the VkPhysicalDeviceVulkan12Features aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_imageless_framebuffer"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -2622,11 +2661,10 @@
     },
     {
       "api": {
-        "detail": "KHR device extension on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_sampler_mirror_clamp_to_edge"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "d3d11_baseline"
@@ -2722,11 +2760,10 @@
     },
     {
       "api": {
-        "detail": "Equivalent KHR feature on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_separate_depth_stencil_layouts"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -2794,10 +2831,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -2815,20 +2852,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:shaderSubgroupExtendedTypes",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "shaderSubgroupExtendedTypes",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -2836,10 +2873,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -2857,20 +2894,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "subgroupBroadcastDynamicId",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -2878,11 +2915,10 @@
     },
     {
       "api": {
-        "detail": "Equivalent KHR query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_timeline_semaphore"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -2952,11 +2988,10 @@
     },
     {
       "api": {
-        "detail": "Equivalent KHR field; aggregate Vulkan 1.2 structures remain unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_uniform_buffer_standard_layout"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -3007,11 +3042,10 @@
     },
     {
       "api": {
-        "detail": "KHR feature query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_vulkan_memory_model"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3067,11 +3101,10 @@
     },
     {
       "api": {
-        "detail": "KHR feature query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_vulkan_memory_model"
+        "via": "VkPhysicalDeviceVulkan12Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3117,10 +3150,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3138,20 +3171,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:computeFullSubgroups",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "computeFullSubgroups",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -3159,11 +3192,10 @@
     },
     {
       "api": {
-        "detail": "VK_KHR_dynamic_rendering feature query on Vulkan 1.0; the VkPhysicalDeviceVulkan13Features aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_dynamic_rendering"
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3211,10 +3243,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3232,20 +3264,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:inlineUniformBlock",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "inlineUniformBlock",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -3253,10 +3285,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": true,
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3274,31 +3306,35 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:maintenance4",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
+        "detail": "Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; creation-description memory requirements, maxBufferSize and LocalSizeId with constant or direct specialization-constant operands. Not implemented yet: LocalSizeId operands that are compound OpSpecConstantOp expressions are refused (src/vk_pipeline.c local_size); a producer output vector wider than the consumer's input is refused by the graphics interface policy.",
+        "refs": [
+          "native/platform_ps5.c",
+          "src/vk_memory.c",
+          "src/vk_pipeline.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
       "name": "maintenance4",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
+        "note": "The native query reports the requested value, but the probe does not execute the capability.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
-        "state": "witnessed-blocker"
+        "state": "reported-not-executed"
       },
       "verdict": "blocker"
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3316,20 +3352,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "pipelineCreationCacheControl",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -3337,10 +3373,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3361,20 +3397,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:robustImageAccess",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "robustImageAccess",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -3382,11 +3418,10 @@
     },
     {
       "api": {
-        "detail": "VK_EXT_shader_demote_to_helper_invocation feature query on Vulkan 1.0; the VkPhysicalDeviceVulkan13Features aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_EXT_shader_demote_to_helper_invocation"
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3431,10 +3466,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3452,20 +3487,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:shaderIntegerDotProduct",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "shaderIntegerDotProduct",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -3473,11 +3508,10 @@
     },
     {
       "api": {
-        "detail": "VK_KHR_shader_terminate_invocation feature query on Vulkan 1.0; the VkPhysicalDeviceVulkan13Features aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_shader_terminate_invocation"
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3522,10 +3556,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3543,20 +3577,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "shaderZeroInitializeWorkgroupMemory",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -3564,10 +3598,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": true,
-        "observed": null,
-        "state": "blocker"
+        "observed": false,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3585,20 +3619,20 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:subgroupSizeControl",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "feature",
       "name": "subgroupSizeControl",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -3606,11 +3640,10 @@
     },
     {
       "api": {
-        "detail": "VK_KHR_synchronization2 feature query on Vulkan 1.0; the VkPhysicalDeviceVulkan13Features aggregate is unadvertised.",
         "expected": true,
         "observed": true,
         "state": "satisfied",
-        "via": "VK_KHR_synchronization2"
+        "via": "VkPhysicalDeviceVulkan13Features"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3657,11 +3690,10 @@
     },
     {
       "api": {
-        "detail": "Equivalent KHR field; Vulkan 1.2 aggregate structs and API 1.3 remain unadvertised.",
         "expected": 134217727,
         "observed": 134217727,
         "state": "satisfied",
-        "via": "VK_KHR_multiview"
+        "via": "VkPhysicalDeviceVulkan11Properties"
       },
       "capabilities": [
         "vulkan11requirements"
@@ -3754,11 +3786,10 @@
     },
     {
       "api": {
-        "detail": "Equivalent KHR field; Vulkan 1.2 aggregate structs and API 1.3 remain unadvertised.",
         "expected": 6,
         "observed": 6,
         "state": "satisfied",
-        "via": "VK_KHR_multiview"
+        "via": "VkPhysicalDeviceVulkan11Properties"
       },
       "capabilities": [
         "vulkan11requirements"
@@ -3851,11 +3882,10 @@
     },
     {
       "api": {
-        "detail": "Equivalent KHR query on Vulkan 1.0; the Vulkan 1.2 aggregate is unadvertised.",
         "expected": 2147483647,
         "observed": 18446744073709551615,
         "state": "satisfied",
-        "via": "VK_KHR_timeline_semaphore"
+        "via": "VkPhysicalDeviceVulkan12Properties"
       },
       "capabilities": [
         "vulkan12requirements"
@@ -3924,10 +3954,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": 1073741824,
-        "observed": null,
-        "state": "blocker"
+        "observed": 1073741824,
+        "state": "satisfied",
+        "via": "VkPhysicalDeviceVulkan13Properties"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3947,31 +3977,36 @@
       "expected": 1073741824,
       "id": "property:VkPhysicalDeviceVulkan13Properties:maxBufferSize",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
-        "refs": [],
-        "state": "missing"
+        "detail": "maxBufferSize is the graphics profile's 2^30 single-allocation budget, aligned to the storage offset alignment; vkCreateBuffer, vkAllocateMemory and vkBindBufferMemory accept a buffer of that size.",
+        "refs": [
+          "src/device_profile_report.h",
+          "src/vk_core_version.c",
+          "src/vk_device.c"
+        ],
+        "state": "implemented"
       },
       "kind": "property",
       "name": "maxBufferSize",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
-        "note": "Exact native query evidence witnessed the current blocker.",
+        "artifact_sha256": "922a30dc538e461a1b3c8f0f39f0878c0393d54ac5a6996c4bc1e44c5a67a6ca",
+        "note": "Public-SDK heap witness, no SDK switches: three iterations each create a 1 GiB VkBuffer whose requirements report exactly 2^30 bytes, bind it to one 1 GiB allocation and GPU-write 64 KiB windows at offsets 0, 512 MiB and 1 GiB - 64 KiB through storage-buffer descriptors, with zero value and guard mismatches; an allocation one granule above 1 GiB is refused. Strictly re-verified from the receipt (log sha256 4da5d280149601c917a1707e379e2773039a59a5d95b921a5d1c0d09d138323f).",
         "refs": [
-          "VALIDATION.md#dxvk-262-public-abi-capability-probe"
+          "VALIDATION.md#dxvk-1-gib-buffer-witness-2026-09-25",
+          "tools/run_dxvk_heap_witness.py"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260925T221655760Z_PPSA99994_ps5vk_0x5e227aaceb74"
         ],
-        "state": "witnessed-blocker"
+        "state": "native-evidence"
       },
-      "verdict": "blocker"
+      "verdict": "satisfied"
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": 4,
-        "observed": null,
-        "state": "blocker"
+        "observed": 0,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Properties"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -3987,20 +4022,20 @@
       "expected": 4,
       "id": "property:VkPhysicalDeviceVulkan13Properties:maxDescriptorSetInlineUniformBlocks",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports 0; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "property",
       "name": "maxDescriptorSetInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -4008,10 +4043,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": 4,
-        "observed": null,
-        "state": "blocker"
+        "observed": 0,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Properties"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -4027,20 +4062,20 @@
       "expected": 4,
       "id": "property:VkPhysicalDeviceVulkan13Properties:maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports 0; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "property",
       "name": "maxDescriptorSetUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -4048,10 +4083,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": 256,
-        "observed": null,
-        "state": "blocker"
+        "observed": 0,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Properties"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -4067,20 +4102,20 @@
       "expected": 256,
       "id": "property:VkPhysicalDeviceVulkan13Properties:maxInlineUniformBlockSize",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports 0; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "property",
       "name": "maxInlineUniformBlockSize",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -4088,10 +4123,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": 4,
-        "observed": null,
-        "state": "blocker"
+        "observed": 0,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Properties"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -4107,20 +4142,20 @@
       "expected": 4,
       "id": "property:VkPhysicalDeviceVulkan13Properties:maxInlineUniformTotalSize",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports 0; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "property",
       "name": "maxInlineUniformTotalSize",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -4128,10 +4163,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": 4,
-        "observed": null,
-        "state": "blocker"
+        "observed": 0,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Properties"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -4147,20 +4182,20 @@
       "expected": 4,
       "id": "property:VkPhysicalDeviceVulkan13Properties:maxPerStageDescriptorInlineUniformBlocks",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports 0; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "property",
       "name": "maxPerStageDescriptorInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -4168,10 +4203,10 @@
     },
     {
       "api": {
-        "detail": "The public device reports Vulkan 1.0 and does not expose this profile structure.",
         "expected": 4,
-        "observed": null,
-        "state": "blocker"
+        "observed": 0,
+        "state": "blocker",
+        "via": "VkPhysicalDeviceVulkan13Properties"
       },
       "capabilities": [
         "vulkan13requirements"
@@ -4187,20 +4222,20 @@
       "expected": 4,
       "id": "property:VkPhysicalDeviceVulkan13Properties:maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks",
       "implementation": {
-        "detail": "No reviewed Vulkan 1.1+ or extension-feature implementation is advertised.",
+        "detail": "The public query reports 0; no reviewed implementation of this requirement exists.",
         "refs": [],
         "state": "missing"
       },
       "kind": "property",
       "name": "maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks",
       "native": {
-        "artifact_sha256": "be0fdecaac47411c2c690a5f981a8ec30bee7769a2631276e406f7ba75777025",
+        "artifact_sha256": "d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7",
         "note": "Exact native query evidence witnessed the current blocker.",
         "refs": [
           "VALIDATION.md#dxvk-262-public-abi-capability-probe"
         ],
         "run_ids": [
-          "20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054"
+          "20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"
         ],
         "state": "witnessed-blocker"
       },
@@ -4219,11 +4254,11 @@
     "tag_object": "e2373f9421f2c70583aea75c54219fbdcd67959c"
   },
   "summary": {
-    "blocker": 21,
+    "blocker": 17,
     "dimensions": {
       "api": {
-        "blocker": 19,
-        "satisfied": 43
+        "blocker": 16,
+        "satisfied": 46
       },
       "cts": {
         "fail": 0,
@@ -4231,15 +4266,15 @@
         "pass": 30
       },
       "implementation": {
-        "blocker": 19,
-        "satisfied": 43
+        "blocker": 17,
+        "satisfied": 45
       },
       "native": {
-        "blocker": 20,
-        "satisfied": 42
+        "blocker": 17,
+        "satisfied": 45
       }
     },
     "requirements": 62,
-    "satisfied": 41
+    "satisfied": 45
   }
 }

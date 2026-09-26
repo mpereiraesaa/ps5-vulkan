@@ -53,6 +53,50 @@ onscreen DXVK presentation, all Vulkan 1.3 contracts or conformance. General
 core coverage remains a separate audit. Implemented command/feature paths and
 remaining resource limits are listed in [API.md](API.md).
 
+## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
+
+The public capability probe was rebuilt from clean `main` (`aa7f36e8`) with
+no SDK switches and run once on PS5: eboot SHA-256
+`d43c14d7f5bbd0857b935e631ffb67c81d5a49be4d0b62e8933f8147dc2486d7`, run
+`20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360`. `tools/verify_dxvk_probe.py`
+verified it strictly: device API **1.3.0**, 33 device extensions, 46/62
+requested values met, read through the Vulkan 1.1/1.2/1.3 aggregate
+structures. It is the current probe in `dxvk_v262_evidence.json`; every
+earlier Vulkan 1.0 probe is kept under `historical_capability_probes` and is
+not relabelled. `tools/check_dxvk_profile.py` now requires each recorded probe
+value to equal the public host query of the same row (`coreVersionQueries` in
+`tools/dump_device_reporting.c`), so a reporting change cannot leave a stale
+current score.
+
+The four-axis matrix is **45/62 ready with 17 blockers**. Four rows the query
+already met gained admitted execution evidence: `geometryShader` (the
+nineteen-case witness in [the geometry promotion](#geometry-promotion-2026-09-17-later-window)),
+`tessellationShader` (the 403/403 default-profile run in
+[the T04 validation](#merged-t04-tessellation-validation-2026-09-20)),
+`shaderDrawParameters` (its existing witness, now with an implementation
+review) and `maxBufferSize` ([the 1 GiB buffer witness](#dxvk-1-gib-buffer-witness-2026-09-25)).
+`maintenance4` stays blocked: compound `LocalSizeId` specialization
+expressions and wider producer output vectors are refused, and no witness
+executes its creation-description memory-requirement queries directly.
+`apiVersion` stays blocked: the profile requires 1.3.204 including the patch
+level, and the device reports 1.3.0. DXVK's own 1.3.0 device filter passes.
+The other 15 blockers are queried false or zero: two Vulkan 1.2 subgroup
+features, seven Vulkan 1.3 features and six inline uniform block limits
+(`inlineUniformBlock` is one of the seven).
+
+## DXVK 1 GiB buffer witness (2026-09-25)
+
+`examples/dxvk_heap_witness` (built by `tools/build_dxvk_heap_witness.py`, no SDK
+switches) creates a 1 GiB `VkBuffer` three times. Each time its requirements
+report exactly 2^30 bytes; it is bound to one 1 GiB allocation, and a compute
+dispatch writes 64 KiB windows at offsets 0, 512 MiB and 1 GiB - 64 KiB through
+storage-buffer descriptors. An allocation one granule above 1 GiB is refused.
+Eboot SHA-256 `922a30dc538e461a1b3c8f0f39f0878c0393d54ac5a6996c4bc1e44c5a67a6ca`, run
+`20260925T221655760Z_PPSA99994_ps5vk_0x5e227aaceb74`, log SHA-256
+`4da5d280149601c917a1707e379e2773039a59a5d95b921a5d1c0d09d138323f`:
+`tools/run_dxvk_heap_witness.py` verifies it strictly, with zero value and
+guard mismatches in every window, a bounded fence, and all resources retired.
+
 The compute BASIC promotion (#569) used the ordinary SDK, eboot SHA-256
 `367a0e166bbca1fa5c5da45b19f2781db8ca65d20a00310019db87d596fecc96`, run
 `20260926T005334401Z_PPSA99994_ps5vk_0x66aebd64c59f`: 896 outputs,
@@ -2006,7 +2050,10 @@ DXVK v2.6.2 source identity. `tools/check_dxvk_profile.py --check` joins each
 leaf to public API reporting, reviewed implementation, exact CTS and exact
 native evidence with an AND rule across all four axes.
 
-The current checked result is **20/62 satisfied and 42 blockers**. Core
+For the current checked result, see
+[the Vulkan 1.3 probe ledger](#dxvk-profile-ledger-on-the-vulkan-13-probe-2026-09-26).
+The rest of this section is the 2026-09-15 record. It then read **20/62
+satisfied and 42 blockers**. Core
 `robustBufferAccess`, the three multiview requirements, the three indirect and
 indexed draw features (`drawIndirectFirstInstance`, `multiDrawIndirect`,
 `fullDrawIndexUint32`), the clip/cull pair, `fragmentStoresAndAtomics`,

@@ -1514,7 +1514,11 @@ def main() -> int:
                                "timeline_semaphore_query": dump["timelineSemaphoreQuery"],
                                "separate_depth_stencil_layouts_query":
                                    dump["separateDepthStencilLayoutsQuery"],
-                               "extension_route_queries": dump["extensionRouteQueries"]}
+                               "extension_route_queries": dump["extensionRouteQueries"],
+                               # Vulkan 1.1/1.2/1.3 aggregate members the DXVK
+                               # profile requires, as the public
+                               # Features2/Properties2 chain answers them.
+                               "core_version_queries": dump["coreVersionQueries"]}
 
                      for profile, dump in dumps.items()},
         "limits": limits,

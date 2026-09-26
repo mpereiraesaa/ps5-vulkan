@@ -26,7 +26,9 @@ class DxvkMatrixTests(unittest.TestCase):
         document = matrix.generate()
         row = next(item for item in document["requirements"]
                    if item["id"] == matrix.SAMPLER_MIRROR_CLAMP_ID)
-        self.assertEqual("VK_KHR_sampler_mirror_clamp_to_edge", row["api"]["via"])
+        # Vulkan 1.3 answers the core aggregate; the KHR extension still ships.
+        self.assertEqual("VkPhysicalDeviceVulkan12Features", row["api"]["via"])
+        self.assertIn("VK_KHR_sampler_mirror_clamp_to_edge", matrix.implemented_device_extensions())
         self.assertEqual(("satisfied", "implemented", "cts-focused-pass",
                           "native-evidence", "satisfied"),
                          tuple(row[axis]["state"] for axis in
@@ -274,7 +276,7 @@ class DxvkMatrixTests(unittest.TestCase):
             self.assertNotEqual("not-run", row["native"]["state"], identifier)
             self.assertEqual("implemented", row["implementation"]["state"], identifier)
             self.assertEqual("cts-pass", row["cts"]["state"], identifier)
-            self.assertEqual("VK_KHR_multiview", row["api"]["via"], identifier)
+            self.assertEqual(identifier.split(":")[1], row["api"]["via"], identifier)
             self.assertEqual("satisfied", row["verdict"], identifier)
             self.assertEqual(48, len(row["cts"]["cases"]))
         # Both properties name exactly the run that measured their floor.
@@ -284,10 +286,11 @@ class DxvkMatrixTests(unittest.TestCase):
         # Three multiview rows, the three T03 draw rows, the clip/cull pair, the
         # independently witnessed fragment-storage and dual-source features, and
         # the four T05 rasterization and viewport features, and the four T07
-        # resource/query features advance; API 1.3 remains a separate blocker.
+        # resource/query features advance; the 1.3.204 profile version remains
+        # a separate blocker.
 
-        self.assertEqual(41, document["summary"]["satisfied"])
-        self.assertEqual(21, document["summary"]["blocker"])
+        self.assertEqual(45, document["summary"]["satisfied"])
+        self.assertEqual(17, document["summary"]["blocker"])
 
 
     def test_t07_public_rows_have_all_four_axes_and_original_cts_cases(self):
@@ -315,55 +318,56 @@ class DxvkMatrixTests(unittest.TestCase):
                          [row["id"] for row in document["requirements"]])
         self.assertEqual(62, document["summary"]["requirements"])
 
-        self.assertEqual(41, document["summary"]["satisfied"])
-        self.assertEqual(21, document["summary"]["blocker"])
+        self.assertEqual(45, document["summary"]["satisfied"])
+        self.assertEqual(17, document["summary"]["blocker"])
 
         self.assertEqual(
             [
-                         "extension:VK_EXT_robustness2",
-                         "extension:VK_EXT_transform_feedback",
-                         "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
-                         "feature:VkPhysicalDeviceFeatures:depthClamp",
-                         "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
-                         "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
-                         "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
-                         "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
-                         "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
-                         "feature:VkPhysicalDeviceFeatures:imageCubeArray",
-                         "feature:VkPhysicalDeviceFeatures:independentBlend",
-                         "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
-                         "feature:VkPhysicalDeviceFeatures:multiViewport",
-                         "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
-                         "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
-                         "feature:VkPhysicalDeviceFeatures:sampleRateShading",
-                         "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
-                         "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
-                         "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
-                         "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
-                         "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor",
-                         "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2",
-                         "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
-                         "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
-                         "feature:VkPhysicalDeviceVulkan11Features:multiview",
-                         "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
-
-                         "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
-                         "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
-                         "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
-
-                         "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
-                         "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
-
-                         "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
-                         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
-                         "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
-                         "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering",
-                         "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
-                         "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
-                         "feature:VkPhysicalDeviceVulkan13Features:synchronization2",
-                         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
-                         "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
-                         "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference"
+                "extension:VK_EXT_robustness2",
+                "extension:VK_EXT_transform_feedback",
+                "feature:VkPhysicalDeviceFeatures:depthBiasClamp",
+                "feature:VkPhysicalDeviceFeatures:depthClamp",
+                "feature:VkPhysicalDeviceFeatures:drawIndirectFirstInstance",
+                "feature:VkPhysicalDeviceFeatures:dualSrcBlend",
+                "feature:VkPhysicalDeviceFeatures:fillModeNonSolid",
+                "feature:VkPhysicalDeviceFeatures:fragmentStoresAndAtomics",
+                "feature:VkPhysicalDeviceFeatures:fullDrawIndexUint32",
+                "feature:VkPhysicalDeviceFeatures:geometryShader",
+                "feature:VkPhysicalDeviceFeatures:imageCubeArray",
+                "feature:VkPhysicalDeviceFeatures:independentBlend",
+                "feature:VkPhysicalDeviceFeatures:multiDrawIndirect",
+                "feature:VkPhysicalDeviceFeatures:multiViewport",
+                "feature:VkPhysicalDeviceFeatures:occlusionQueryPrecise",
+                "feature:VkPhysicalDeviceFeatures:robustBufferAccess",
+                "feature:VkPhysicalDeviceFeatures:sampleRateShading",
+                "feature:VkPhysicalDeviceFeatures:shaderClipDistance",
+                "feature:VkPhysicalDeviceFeatures:shaderCullDistance",
+                "feature:VkPhysicalDeviceFeatures:shaderImageGatherExtended",
+                "feature:VkPhysicalDeviceFeatures:tessellationShader",
+                "feature:VkPhysicalDeviceFeatures:textureCompressionBC",
+                "feature:VkPhysicalDeviceRobustness2FeaturesEXT:nullDescriptor",
+                "feature:VkPhysicalDeviceRobustness2FeaturesEXT:robustBufferAccess2",
+                "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:geometryStreams",
+                "feature:VkPhysicalDeviceTransformFeedbackFeaturesEXT:transformFeedback",
+                "feature:VkPhysicalDeviceVulkan11Features:multiview",
+                "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters",
+                "feature:VkPhysicalDeviceVulkan12Features:bufferDeviceAddress",
+                "feature:VkPhysicalDeviceVulkan12Features:hostQueryReset",
+                "feature:VkPhysicalDeviceVulkan12Features:imagelessFramebuffer",
+                "feature:VkPhysicalDeviceVulkan12Features:samplerMirrorClampToEdge",
+                "feature:VkPhysicalDeviceVulkan12Features:separateDepthStencilLayouts",
+                "feature:VkPhysicalDeviceVulkan12Features:timelineSemaphore",
+                "feature:VkPhysicalDeviceVulkan12Features:uniformBufferStandardLayout",
+                "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModel",
+                "feature:VkPhysicalDeviceVulkan12Features:vulkanMemoryModelDeviceScope",
+                "feature:VkPhysicalDeviceVulkan13Features:dynamicRendering",
+                "feature:VkPhysicalDeviceVulkan13Features:shaderDemoteToHelperInvocation",
+                "feature:VkPhysicalDeviceVulkan13Features:shaderTerminateInvocation",
+                "feature:VkPhysicalDeviceVulkan13Features:synchronization2",
+                "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewInstanceIndex",
+                "property:VkPhysicalDeviceVulkan11Properties:maxMultiviewViewCount",
+                "property:VkPhysicalDeviceVulkan12Properties:maxTimelineSemaphoreValueDifference",
+                "property:VkPhysicalDeviceVulkan13Properties:maxBufferSize"
             ],
             [row["id"] for row in document["requirements"]
              if row["verdict"] == "satisfied"])
@@ -454,8 +458,8 @@ class DxvkMatrixTests(unittest.TestCase):
                     self.assertEqual(single["capability_probe"]["artifact_sha256"],
                                      row["native"]["artifact_sha256"], row["id"])
 
-                self.assertEqual(41, document["summary"]["satisfied"])
-                self.assertEqual(21, document["summary"]["blocker"])
+                self.assertEqual(45, document["summary"]["satisfied"])
+                self.assertEqual(17, document["summary"]["blocker"])
 
             finally:
                 matrix.EVIDENCE = original
@@ -606,6 +610,165 @@ class DxvkMatrixTests(unittest.TestCase):
         self.assertEqual(["cts-fail"], policy["cts_blocking_states"])
         self.assertIn("never blocks", policy["cts_scope"])
         self.assertIn("never whole-suite CTS or conformance", policy["cts_scope"])
+
+
+class CurrentProbeTests(unittest.TestCase):
+    """The recorded current probe is the API axis; it must agree with public
+    reporting row by row, and a stale probe can never produce a current score."""
+
+    def generate_with(self, evidence=None, reporting=None):
+        originals = matrix.EVIDENCE, matrix.REPORTING
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                if evidence is not None:
+                    matrix.EVIDENCE = Path(tmp) / "evidence.json"
+                    matrix.EVIDENCE.write_text(json.dumps(evidence))
+                if reporting is not None:
+                    matrix.REPORTING = Path(tmp) / "reporting.json"
+                    matrix.REPORTING.write_text(json.dumps(reporting))
+                return matrix.generate()
+            finally:
+                matrix.EVIDENCE, matrix.REPORTING = originals
+
+    def setUp(self):
+        self.evidence = json.loads(matrix.EVIDENCE.read_text())
+        self.reporting = json.loads(matrix.REPORTING.read_text())
+        self.profile = json.loads(derive.OUTPUT.read_text())
+
+    def test_current_probe_equals_public_reporting(self):
+        probe = self.evidence["capability_probe"]
+        graphics = self.reporting["profiles"]["graphics"]
+        self.assertEqual(probe["device_api"], ".".join(
+            map(str, matrix.decode_vk_version(graphics["apiVersion"]))))
+        extensions = matrix.implemented_device_extensions()
+        self.assertEqual(probe["device_extensions"], len(extensions))
+        reports = {row["feature"]: row for row in self.reporting["features"]
+                   if row.get("profile") == "graphics"}
+        for row in self.profile["requirements"]:
+            with self.subTest(row=row["id"]):
+                public, _ = matrix.public_observation(row, graphics, reports, extensions)
+                self.assertEqual(probe["observed"][row["id"]], public)
+
+    def test_current_probe_is_the_vulkan_13_run(self):
+        probe = self.evidence["capability_probe"]
+        self.assertEqual("1.3.0", probe["device_api"])
+        self.assertEqual(33, probe["device_extensions"])
+        self.assertEqual(46, probe["satisfied"])
+        self.assertEqual(["20260926T093641794Z_PPSA99994_ps5vk_0x833a95f2c360"],
+                         [run["id"] for run in probe["runs"]])
+        # Every archived probe stays a Vulkan 1.0 record; none is relabelled.
+        archived = self.evidence["historical_capability_probes"]
+        self.assertIn("20260926T062757231Z_PPSA99994_ps5vk_0x78edeb11a054",
+                      {run["id"] for old in archived for run in old["runs"]})
+        self.assertEqual({"1.0.0"}, {old["device_api"] for old in archived})
+
+    def test_probe_value_drift_fails(self):
+        for identifier, value in (
+                ("property:VkPhysicalDeviceVulkan13Properties:maxBufferSize", 1 << 29),
+                ("feature:VkPhysicalDeviceVulkan13Features:maintenance4", 0),
+                ("feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId", 1)):
+            with self.subTest(identifier=identifier):
+                evidence = copy.deepcopy(self.evidence)
+                probe = evidence["capability_probe"]
+                probe["observed"][identifier] = value
+                row = next(r for r in self.profile["requirements"] if r["id"] == identifier)
+                met = value >= matrix.wire_expected(row)
+                ids = set(probe["satisfied_ids"]) - {identifier} | ({identifier} if met else set())
+                probe["satisfied_ids"] = sorted(ids)
+                probe["satisfied"], probe["blockers"] = len(ids), 62 - len(ids)
+                with self.assertRaisesRegex(ValueError, "no longer matches public reporting"):
+                    self.generate_with(evidence=evidence)
+
+    def test_public_reporting_change_invalidates_the_current_probe(self):
+        reporting = copy.deepcopy(self.reporting)
+        reporting["profiles"]["graphics"]["core_version_queries"][
+            "VkPhysicalDeviceVulkan13Features"]["maintenance4"] = False
+        with self.assertRaisesRegex(ValueError, "no longer matches public reporting"):
+            self.generate_with(reporting=reporting)
+        reporting = copy.deepcopy(self.reporting)
+        reporting["profiles"]["graphics"]["apiVersion"] = 4194304
+        with self.assertRaisesRegex(ValueError, "no longer matches public reporting"):
+            self.generate_with(reporting=reporting)
+
+    def test_stale_probe_cannot_be_current(self):
+        # An archived Vulkan 1.0 probe put back as current: no observations.
+        evidence = copy.deepcopy(self.evidence)
+        evidence["capability_probe"] = copy.deepcopy(
+            evidence["historical_capability_probes"][-1])
+        with self.assertRaisesRegex(ValueError, "capability-probe evidence"):
+            self.generate_with(evidence=evidence)
+        # The same Vulkan 1.0 record with observations still disagrees with the
+        # public Vulkan 1.3 report.
+        stale = copy.deepcopy(self.evidence)
+        stale["capability_probe"]["device_api"] = "1.0.0"
+        stale["capability_probe"]["observed"]["api-version:apiVersion"] = 4194304
+        with self.assertRaisesRegex(ValueError, "no longer matches public reporting"):
+            self.generate_with(evidence=stale)
+        # Archiving the current run while keeping it current is refused.
+        archived = copy.deepcopy(self.evidence)
+        archived["historical_capability_probes"].append(
+            copy.deepcopy(archived["capability_probe"]))
+        with self.assertRaisesRegex(ValueError, "not newer than an archived probe"):
+            self.generate_with(evidence=archived)
+        # A self-inconsistent satisfied set is refused.
+        drift = copy.deepcopy(self.evidence)
+        drift["capability_probe"]["satisfied_ids"].pop()
+        with self.assertRaisesRegex(ValueError, "satisfied set drift"):
+            self.generate_with(evidence=drift)
+
+    def test_api_version_compares_the_patch_level(self):
+        row = next(r for r in self.profile["requirements"] if r["kind"] == "api-version")
+        self.assertEqual("1.3.204", row["expected"])
+        axis = matrix.api_axis(row, 4206592, 4206592, "apiVersion")
+        self.assertEqual(("blocker", "1.3.0"), (axis["state"], axis["observed"]))
+        self.assertIn("DXVK 2.6.2's own device filter requires Vulkan 1.3.0", axis["detail"])
+        axis = matrix.api_axis(row, (1 << 22) | (3 << 12) | 204,
+                               (1 << 22) | (3 << 12) | 204, "apiVersion")
+        self.assertEqual("satisfied", axis["state"])
+        document = matrix.generate()
+        rows = {r["id"]: r for r in document["requirements"]}
+        self.assertEqual("blocker", rows[row["id"]]["verdict"])
+        self.assertEqual("missing", rows[row["id"]]["implementation"]["state"])
+
+    def test_admitted_native_receipts_and_maintenance4_gap(self):
+        rows = {r["id"]: r for r in matrix.generate()["requirements"]}
+        for identifier, run, artifact in (
+                ("feature:VkPhysicalDeviceFeatures:geometryShader",
+                 "20260917T180945535Z_PPSA99994_ps5vk_0x2863f2ad4767",
+                 "ae9e32761215bb845a81d991033b84d86742a001973958153d92c92929493663"),
+                ("feature:VkPhysicalDeviceFeatures:tessellationShader",
+                 "20260920T130122695Z_PPSA99994_upstream-cts_0x1034cdef319e6",
+                 "2e0fc22b7de6401f7d12f2f6359efc14a223b4917100acad4c98edecf726d45c"),
+                ("property:VkPhysicalDeviceVulkan13Properties:maxBufferSize",
+                 "20260925T221655760Z_PPSA99994_ps5vk_0x5e227aaceb74",
+                 "922a30dc538e461a1b3c8f0f39f0878c0393d54ac5a6996c4bc1e44c5a67a6ca")):
+            with self.subTest(identifier=identifier):
+                row = rows[identifier]
+                self.assertEqual([run], row["native"]["run_ids"])
+                self.assertEqual(artifact, row["native"]["artifact_sha256"])
+                self.assertEqual("satisfied", row["verdict"])
+        m4 = rows["feature:VkPhysicalDeviceVulkan13Features:maintenance4"]
+        self.assertEqual(("satisfied", "missing", "reported-not-executed", "blocker"),
+                         (m4["api"]["state"], m4["implementation"]["state"],
+                          m4["native"]["state"], m4["verdict"]))
+        self.assertIn("compound OpSpecConstantOp", m4["implementation"]["detail"])
+
+    def test_core_implementation_needs_every_citation_and_the_query(self):
+        identifier = "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters"
+        self.assertEqual("implemented", matrix.core_implementation(
+            identifier, {"state": "satisfied"})["state"])
+        self.assertEqual("missing", matrix.core_implementation(
+            identifier, {"state": "blocker"})["state"])
+        original = matrix.CORE_IMPLEMENTATIONS[identifier]
+        try:
+            matrix.CORE_IMPLEMENTATIONS[identifier] = dict(
+                original, citations=original["citations"] + (("src/vk_device.c", "no-such-token"),))
+            result = matrix.core_implementation(identifier, {"state": "satisfied"})
+            self.assertEqual("missing", result["state"])
+            self.assertIn("no-such-token", result["detail"])
+        finally:
+            matrix.CORE_IMPLEMENTATIONS[identifier] = original
+
 
 if __name__ == "__main__":
     unittest.main()

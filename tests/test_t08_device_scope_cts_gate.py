@@ -18,12 +18,17 @@ class DeviceScopeCtsGate(unittest.TestCase):
         report = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         evidence = json.loads((ROOT / "conformance_inventory/dxvk_v262_evidence.json").read_text())
         matrix = json.loads((ROOT / "conformance_inventory/dxvk_v262_matrix.json").read_text())
+        # The device reports Vulkan 1.3.0: the probe reads DeviceScope through
+        # the core aggregate, and the KHR route stays public beside it.
         for profile in ("compute", "graphics"):
-            self.assertEqual(report["profiles"][profile]["apiVersion"], 4194304)
-        route = next(item for item in evidence["capability_probe"]["query_routes"]
-                     if item["route"] == "VK_KHR_vulkan_memory_model")
-        self.assertEqual((route["vulkanMemoryModel"], route["vulkanMemoryModelDeviceScope"]),
-                         ("1", "1"))
+            self.assertEqual(report["profiles"][profile]["apiVersion"], 4206592)
+            self.assertEqual(report["profiles"][profile]["memory_model_query"],
+                             {"route": "VK_KHR_vulkan_memory_model",
+                              "vulkanMemoryModel": True,
+                              "vulkanMemoryModelDeviceScope": True})
+            self.assertIs(report["profiles"][profile]["core_version_queries"][
+                "VkPhysicalDeviceVulkan12Features"]["vulkanMemoryModelDeviceScope"], True)
+        self.assertEqual(evidence["capability_probe"]["observed"][ID], 1)
         row = next(item for item in matrix["requirements"] if item["id"] == ID)
         self.assertEqual((row["api"]["state"], row["cts"]["state"], row["verdict"]),
                          ("satisfied", "not-mapped", "satisfied"))
