@@ -89,16 +89,45 @@ for an unmodified, truthful route:**
    public-SDK capture witness. A D3D11 stream-output shader with no pixel
    shader bound still needs a pipeline without a fragment stage, which the
    frontend refuses.
-3. **Measured routes still behind a default-off switch:** maintenance4 only,
-   which cannot be exposed on a 1.0 device. Every other measured route ships
-   with a passing native witness: extended dynamic state (including dynamic
-   primitive topology and vertex input binding stride), synchronization2,
-   format feature flags 2 and image format lists (RGBA8 UNORM/SRGB only),
-   storage texel buffer views, imageless framebuffer, robustness2,
-   descriptor update templates, memory requirements 2, dedicated allocation,
-   bind memory 2, dynamic rendering with depth/stencil resolve, maintenance1,
-   copy commands 2 and the host-coherent memory type (whose control did not
-   observe stale data without cache maintenance, see VALIDATION.md).
+3. **What is still behind a default-off switch, and why.** Every measured
+   route DXVK 2.6.2's D3D11 path reaches ships with a passing native witness:
+   extended dynamic state (including dynamic topology and stride),
+   synchronization2, format feature flags 2 and image format lists (RGBA8
+   UNORM/SRGB only), storage texel buffer views, imageless framebuffer,
+   robustness2, descriptor update templates, memory requirements 2, dedicated
+   allocation, bind memory 2, dynamic rendering with depth/stencil resolve,
+   maintenance1, copy commands 2 and the host-coherent memory type (whose
+   control did not observe stale data without cache maintenance, see
+   VALIDATION.md). The switches left are either not routes or cannot be
+   reported truthfully yet, and none gates anything the pinned DXVK's D3D11
+   path requests (it never asks for `shaderInt16` or `shaderInt8`, and its
+   DXBC translation emits no subgroup operations):
+   - `PS5VK_MAINTENANCE4_DIAGNOSTIC`: `VK_KHR_maintenance4` requires a
+     Vulkan 1.1 device and has no Vulkan 1.0 route. It ships with the device
+     version (item 1).
+   - `PS5VK_SHADER_INT16_DIAGNOSTIC`: core `shaderInt16` allows the `Int16`
+     capability in every stage. Only the compute adapter forwards the
+     compiler's Int16 option, and the evidence is one original compute CTS
+     leaf. Missing: the graphics adapter's Int16 option and a vertex/fragment
+     Int16 witness with applicable original CTS.
+   - `PS5VK_SHADER_INT8_DIAGNOSTIC`: a compute-only compiler probe. Public
+     `shaderInt8` (Vulkan 1.2, or `VK_KHR_shader_float16_int8`) covers every
+     stage. Missing: the graphics path and the KHR extension route. Only
+     DXVK's D3D9 front end enables it.
+   - `PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC` and `PS5VK_SUBGROUP_IADD_DIAGNOSTIC`:
+     compute-only broadcast and integer-add measurements (bounded typed
+     witnesses and original CTS in VALIDATION.md). The public
+     `supportedOperations` bits are whole sets: BALLOT needs every ballot
+     operation and ARITHMETIC every operation over every supported type,
+     including floats. The DXVK rows `subgroupBroadcastDynamicId` and
+     `shaderSubgroupExtendedTypes` are Vulkan 1.2 features and wait for the
+     device version.
+   - `PS5VK_SAMPLE_RATE_DIAGNOSTIC`: not a route. `sampleRateShading` ships;
+     the switch is the register-override instrument that measured it.
+   - `PS5VK_OPTIONAL_STAGE_DIAGNOSTIC`: not a route. Geometry and tessellation
+     ship; the switch only lets the optional-stage witness builds skip feature
+     negotiation.
+   - `PS5VK_GEOMETRY_KEY_DIAG`: pipeline-key refusal logging only.
 4. **Core-named commands and the Vulkan 1.1/1.2/1.3 query structures.**
    DXVK uses only core names and the aggregate structures; the diagnostic
    payload translates them onto the extension routes. The driver-side
