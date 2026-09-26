@@ -999,12 +999,13 @@ KNOWN_BLOCKERS = {
     "maxFragmentOutputAttachments": "one color attachment per render pass; a second needs the native witness",
     "maxFragmentCombinedOutputResources": "one color attachment plus the single sampled descriptor",
     "maxVertexInputBindings": "compute-only build: graphics limits are not applied; graphics supports 16 bindings (VERTEX_INPUT.md)",
-    # The graphics profile reports the Vulkan 1.0 floors for these four; only the
-    # compute-only build, which applies no graphics limits, stays below them.
+    # The graphics profile reports the Vulkan 1.0 floors for samplers and the
+    # witnessed set capacity for sampled images; only the compute-only build,
+    # which applies no graphics limits, stays below them.
     "maxPerStageDescriptorSamplers": "compute-only build: graphics limits are not applied; graphics reports the floor of 16",
     "maxDescriptorSetSamplers": "compute-only build: graphics limits are not applied; graphics reports the floor of 96",
-    "maxPerStageDescriptorSampledImages": "compute-only build: graphics limits are not applied; graphics reports the floor of 16",
-    "maxDescriptorSetSampledImages": "compute-only build: graphics limits are not applied; graphics reports the floor of 96",
+    "maxPerStageDescriptorSampledImages": "compute-only build: graphics limits are not applied; graphics reports 1024",
+    "maxDescriptorSetSampledImages": "compute-only build: graphics limits are not applied; graphics reports 1024",
     "maxPerStageDescriptorStorageImages": "bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
     "maxDescriptorSetStorageImages": "bounded R32_UINT storage-image route has not qualified the Vulkan descriptor-count floor",
     "maxPerStageDescriptorInputAttachments": "no input attachment support (subpass dependencies rejected)",

@@ -36,6 +36,9 @@ class DescriptorCapacityWitness(unittest.TestCase):
         self.assertIn("enum { DRAWS = 4, STRIDE = 256, SLOTS = 2 * DRAWS };", SOURCE)
         self.assertEqual(build.texel(0), 0xff004000)
         self.assertEqual(len({build.texel(k) for k in range(build.IMAGES)}), build.IMAGES)
+        self.assertIn("static uint32_t texel_word(uint32_t k) { return texel(k) ^ 0x5a5a5a5au; }",
+                      SOURCE)
+        self.assertEqual(build.texel_word(0), 0xa55a1a5a)
 
     def test_shaders_use_constant_indices_and_full_sets(self):
         compute = build.capacity_compute_source()
@@ -44,6 +47,9 @@ class DescriptorCapacityWitness(unittest.TestCase):
         self.assertIn("uniform texture2D images[1024];", fragment)
         self.assertEqual(1023, len(re.findall(r"images\[\d+\]", compute)) - 1)
         self.assertEqual(1024, len(re.findall(r"case \d+u:", fragment)))
+        texels = build.capacity_texel_source()
+        self.assertIn("uniform utextureBuffer texels[1023];", texels)
+        self.assertEqual(1023, len(re.findall(r"texels\[\d+\],0", texels)))
         glslang = shutil.which("glslangValidator")
         if not glslang:
             self.skipTest("glslangValidator required")
@@ -58,13 +64,19 @@ class DescriptorCapacityWitness(unittest.TestCase):
         return run.verify(log, receipt, artifact)
 
     def test_capacity_verification(self):
-        compute, pixels = run.expected_capacity()
+        compute, pixels, texels = run.expected_capacity()
         good = ("DESCRIPTOR_CAPACITY_WITNESS_START images=1024 compute_set=1024 pixel_set=1024\n"
                 "DESCRIPTOR_CAPACITY_WITNESS_UPLOADED images=1024\n"
                 f"DESCRIPTOR_CAPACITY_WITNESS_RESULT compute_mismatches=0 first_compute=-1"
                 f" pixel_mismatches=0 first_pixel=-1 guard=cdcdcdcd digest_compute={compute:08x}"
-                f" digest_pixels={pixels:08x}\nDESCRIPTOR_CAPACITY_WITNESS_RETIRED resources=clean\n")
+                f" digest_pixels={pixels:08x}\nDESCRIPTOR_CAPACITY_WITNESS_TEXEL_RESULT"
+                f" texel_mismatches=0 first_texel=-1 guard=cdcdcdcd digest_texel={texels:08x}\n"
+                "DESCRIPTOR_CAPACITY_WITNESS_RETIRED resources=clean\n")
         self.assertTrue(self.verify("capacity", good)["strict_verified"])
+        with self.assertRaises(ValueError):
+            self.verify("capacity", good.replace("texel_mismatches=0", "texel_mismatches=1"))
+        with self.assertRaises(ValueError):
+            self.verify("capacity", good.replace(f"digest_texel={texels:08x}", "digest_texel=00000000"))
         with self.assertRaises(ValueError):
             self.verify("capacity", good.replace("pixel_mismatches=0", "pixel_mismatches=3"))
 

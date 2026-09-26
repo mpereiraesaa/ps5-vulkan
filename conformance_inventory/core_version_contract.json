@@ -214,8 +214,8 @@
      "id": "limit:maxPerSetDescriptors",
      "kind": "limit",
      "requirement": ">= 1024",
-     "status": "in-progress",
-     "note": "a set holds PS5VK_MAX_DESCRIPTORS = 1024 descriptors on the host path (layout-sized storage, compute tables sized from the program); native 1024-entry witnesses pending",
+     "status": "satisfied",
+     "evidence": "a set holds PS5VK_MAX_DESCRIPTORS = 1024 descriptors (layout-sized storage, per-draw and per-dispatch tables sized from the program); the native descriptor capacity witness reads 1024 sampled images from one fragment-stage set and 1023 sampled images or uniform texel buffers from 1024-descriptor compute sets (tools/run_dxvk_descriptor_capacity_witness.py)",
      "dxvk": true
     },
     {

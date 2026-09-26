@@ -2,13 +2,7 @@
 #define PS5VK_DESCRIPTOR_H
 #include "vk_internal.h"
 
-/* Implementation bounds, not a claim of Vulkan minimum-limit conformance.
- * PS5VK_MAX_DESCRIPTORS is one set's capacity (maxPerSetDescriptors) and the
- * descriptor budget of one pipeline stage; PS5VK_MAX_BINDINGS matches the
- * compiler's PSBC_MAX_DESCRIPTOR_BINDINGS and the 64-bit per-set
- * used-binding masks. Set storage is sized from each layout, never from this
- * bound. */
-enum { PS5VK_MAX_BINDINGS = 64, PS5VK_MAX_DESCRIPTORS = 1024, PS5VK_MAX_SETS = 4 };
+#include "descriptor_capacity.h"
 /* Dynamic buffer descriptors one set layout may declare: the reported
  * maxDescriptorSetUniformBuffersDynamic (8) plus
  * maxDescriptorSetStorageBuffersDynamic (4). Their bind-time offsets are

@@ -18040,11 +18040,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 96 must be >= 96",
+      "detail": "core: reported 1024 must be >= 96",
       "kind": "limit",
       "limit": "maxDescriptorSetSampledImages",
       "profile": "graphics",
-      "reported": 96,
+      "reported": 1024,
       "verdict": "satisfied"
     },
     {
@@ -18055,7 +18055,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 96; blocker: compute-only build: graphics limits are not applied; graphics reports the floor of 96",
+      "detail": "core: reported 1 must be >= 96; blocker: compute-only build: graphics limits are not applied; graphics reports 1024",
       "kind": "limit",
       "limit": "maxDescriptorSetSampledImages",
       "profile": "compute",
@@ -21370,11 +21370,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 16 must be >= 16",
+      "detail": "core: reported 1024 must be >= 16",
       "kind": "limit",
       "limit": "maxPerStageDescriptorSampledImages",
       "profile": "graphics",
-      "reported": 16,
+      "reported": 1024,
       "verdict": "satisfied"
     },
     {
@@ -21385,7 +21385,7 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 1 must be >= 16; blocker: compute-only build: graphics limits are not applied; graphics reports the floor of 16",
+      "detail": "core: reported 1 must be >= 16; blocker: compute-only build: graphics limits are not applied; graphics reports 1024",
       "kind": "limit",
       "limit": "maxPerStageDescriptorSampledImages",
       "profile": "compute",
@@ -21820,11 +21820,11 @@
         ],
         "status": "diagnostic"
       },
-      "detail": "core: reported 128 must be >= 128",
+      "detail": "core: reported 1024 must be >= 128",
       "kind": "limit",
       "limit": "maxPerStageResources",
       "profile": "graphics",
-      "reported": 128,
+      "reported": 1024,
       "verdict": "satisfied"
     },
     {

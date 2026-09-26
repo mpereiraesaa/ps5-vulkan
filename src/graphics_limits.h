@@ -2,6 +2,7 @@
 #define PS5VK_GRAPHICS_LIMITS_H
 #include <vulkan/vulkan_core.h>
 #include "color_attachment_contract.h"
+#include "descriptor_capacity.h"
 /* Execution envelope derived from native viewport/target/layout/fetch code.
  * Not Vulkan minimum-limit compliance or validation at maximum dimensions.
  * Texture precision/inter-stage limits are not inferred from GPU branding. */
@@ -72,16 +73,19 @@ static inline void ps5vk_graphics_limits(VkPhysicalDeviceLimits *limits)
      * the value is only meaningful on a platform that advertises the feature,
      * which is the shipping graphics profile since 2026-09-21. */
     limits->maxFragmentDualSrcAttachments=1;
-    /* The sampled descriptor limits are the qualified minima from the shared
-     * constants above, not independent report literals: one set carries the
-     * whole descriptor table the runtime draw ABI addresses, and the stage
-     * reads as many records as the table layout reserves. Samplers and sampled
-     * images share the table, so both limit pairs carry the same values.
-     * Compute storage-buffer limits and the shared resource ceiling stay. */
+    /* Samplers stay at the qualified minima from the shared constants above:
+     * no witness reads more separate or combined sampler records. Sampled
+     * images and uniform texel buffers (the sampled-image accounting class)
+     * are reported at the full set capacity: the descriptor capacity witness
+     * reads 1024 distinct sampled images from one fragment-stage set, and 1023
+     * sampled images and 1023 uniform texel buffers from 1024-descriptor
+     * compute sets. The same witness backs the per-stage resource ceiling.
+     * Buffer limits stay at the capacity they were qualified at. */
     limits->maxPerStageDescriptorSamplers=PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS;
-    limits->maxPerStageDescriptorSampledImages=PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS;
+    limits->maxPerStageDescriptorSampledImages=PS5VK_MAX_DESCRIPTORS;
     limits->maxDescriptorSetSamplers=PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS;
-    limits->maxDescriptorSetSampledImages=PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS;
+    limits->maxDescriptorSetSampledImages=PS5VK_MAX_DESCRIPTORS;
+    limits->maxPerStageResources=PS5VK_MAX_DESCRIPTORS;
     limits->maxSamplerAllocationCount=PS5VK_MAX_SAMPLERS;
     limits->maxFramebufferWidth=PS5VK_MAX_COLOR_DIMENSION;
     limits->maxFramebufferHeight=PS5VK_MAX_COLOR_DIMENSION;

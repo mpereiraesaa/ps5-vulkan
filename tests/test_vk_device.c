@@ -127,19 +127,19 @@ static void lifecycle(void)
         .maxPerStageDescriptorStorageBuffers=128,.maxDescriptorSetStorageBuffers=128,.maxPerStageResources=128};
     ps5vk_graphics_limits(&gl);
     assert(gl.maxComputeWorkGroupInvocations==1024 && gl.nonCoherentAtomSize==64);
-    assert(gl.maxPerStageDescriptorStorageBuffers==128 && gl.maxDescriptorSetStorageBuffers==128 && gl.maxPerStageResources==128);
+    assert(gl.maxPerStageDescriptorStorageBuffers==128 && gl.maxDescriptorSetStorageBuffers==128);
+    assert(gl.maxPerStageResources==PS5VK_MAX_DESCRIPTORS && PS5VK_MAX_DESCRIPTORS==1024);
     assert(gl.maxImageDimension1D==PS5VK_MAX_IMAGE_1D &&
         gl.maxImageDimension2D==16383 &&
         gl.maxImageDimension3D==PS5VK_MAX_IMAGE_3D &&
         gl.maxImageDimensionCube==PS5VK_MAX_IMAGE_CUBE &&
         gl.maxImageArrayLayers==PS5VK_MAX_IMAGE_ARRAY_LAYERS);
-    /* Sampled descriptors report the qualified Vulkan 1.0 floors, not the old
-     * one-descriptor contract: one set carries the whole table the runtime draw
-     * ABI addresses and one stage reads as many records as the layout reserves. */
+    /* Samplers report the qualified Vulkan 1.0 floors; sampled images (and
+     * uniform texel buffers) report the witnessed full set capacity. */
     assert(gl.maxPerStageDescriptorSamplers==PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS &&
-        gl.maxPerStageDescriptorSampledImages==PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS);
+        gl.maxPerStageDescriptorSampledImages==PS5VK_MAX_DESCRIPTORS);
     assert(gl.maxDescriptorSetSamplers==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS &&
-        gl.maxDescriptorSetSampledImages==PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS);
+        gl.maxDescriptorSetSampledImages==PS5VK_MAX_DESCRIPTORS);
     assert(gl.maxSamplerAllocationCount==PS5VK_MAX_SAMPLERS && PS5VK_MAX_SAMPLERS==4096);
     /* DXVK262-T06 independentBlend is promoted: the ABI, the render pass, the
      * framebuffer, the pipeline key and the native per-target programming carry
@@ -293,16 +293,24 @@ static void lifecycle(void)
         assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
             queue_flags, 1, 1));
         /* Sampled-descriptor limits: the shipped graphics profile reports the
-         * qualified minima, and both a dropped value and an inflated claim past
-         * the descriptor table capacity fail the profile. */
+         * qualified sampler minima and the full set capacity for sampled
+         * images, and both a dropped value and an inflated claim past the
+         * descriptor table capacity fail the profile. */
         assert(profile.limits.maxPerStageDescriptorSamplers ==
                PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS &&
-               profile.limits.maxPerStageDescriptorSampledImages ==
-               PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS &&
+               profile.limits.maxPerStageDescriptorSampledImages == PS5VK_MAX_DESCRIPTORS &&
                profile.limits.maxDescriptorSetSamplers ==
                PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS &&
-               profile.limits.maxDescriptorSetSampledImages ==
-               PS5VK_QUALIFIED_SET_SAMPLED_DESCRIPTORS);
+               profile.limits.maxDescriptorSetSampledImages == PS5VK_MAX_DESCRIPTORS &&
+               profile.limits.maxPerStageResources == PS5VK_MAX_DESCRIPTORS);
+        broken = profile;
+        broken.limits.maxPerStageResources = PS5VK_MAX_DESCRIPTORS + 1;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
+        broken = profile;
+        broken.limits.maxPerStageResources = 127;
+        assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
+            queue_flags, 1, 1));
         broken = profile;
         broken.limits.maxPerStageDescriptorSamplers = PS5VK_QUALIFIED_STAGE_SAMPLED_DESCRIPTORS - 1;
         assert(!ps5vk_physical_profile_valid(&broken, &profile_memory, max_allocation,
