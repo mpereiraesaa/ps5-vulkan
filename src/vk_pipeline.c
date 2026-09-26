@@ -8,6 +8,12 @@
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define COMPUTE_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define COMPUTE_MARK(...) ((void)0)
+#endif
 static int module_valid(const uint32_t *words, size_t count)
 {
     if (!words || count < 5 || words[0] != 0x07230203 || !words[3] || words[4]) return 0;
@@ -299,7 +305,7 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
         const uint32_t dwords = ps5vk_compute_record_dwords(b->type);
         if (b->set >= layout->set_count || !(p->descriptor_set_mask & (1u << b->set)) ||
             b->binding >= PS5VK_MAX_BINDINGS || b->table_dword % 4 || !dwords ||
-            b->table_dword > 128u - dwords) return 0;
+            b->table_dword > PS5VK_MAX_TABLE_DWORDS - dwords) return 0;
         const struct ps5vk_binding *binding = &layout->sets[b->set].binding[b->binding];
         if (layout->sets[b->set].type[b->binding] != b->type ||
             binding->count <= b->element || !(binding->stages & VK_SHADER_STAGE_COMPUTE_BIT)) return 0;
@@ -313,7 +319,7 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
     return 1;
 }
 
-static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *info,
+static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_heap, VkDevice d, const VkComputePipelineCreateInfo *info,
                                 const VkAllocationCallbacks *a, VkPipeline *out)
 {
     if (info->sType != VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO || !info->layout ||
@@ -344,8 +350,9 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
 
     const struct ps5vk_compiled_program *program = NULL;
     struct ps5vk_cache_entry *entry = NULL;
-    struct ps5vk_compiled_program compiled_storage = {0};
+#define compiled_storage (*compiled_heap)
     uint32_t *compiled_code = NULL;
+    COMPUTE_MARK("PS5VK_COMPUTE_PIPELINE phase=begin words=%zu", info->stage.module->word_count);
 
     struct ps5vk_cache_key key;
     if (!ps5vk_cache_build_key(info->stage.module->words, info->stage.module->word_count,
@@ -362,6 +369,8 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
                     info->stage.pName, info->layout, info->stage.pSpecializationInfo,
                     compile_features,
                     &compiled_storage, &compiled_code);
+                COMPUTE_MARK("PS5VK_COMPUTE_PIPELINE phase=compiled rc=%d descriptors=%u code_words=%zu",
+                             (int)cr, compiled_storage.descriptor_count, compiled_storage.code_words);
                 if (cr == VK_SUCCESS) {
                     compiled_storage.code = compiled_code;
                     entry = ps5vk_compilation_cache_insert(d->pipeline_cache, &key,
@@ -397,6 +406,7 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
         if (compiled_code) free(compiled_code);
         return VK_ERROR_UNKNOWN;
     }
+    COMPUTE_MARK("PS5VK_COMPUTE_PIPELINE phase=validate cached=%d", entry != NULL);
     if (!program_valid(program, info->stage.module, info->layout, info->stage.pName, dims)) {
         if (compiled_code) free(compiled_code);
         if (entry) ps5vk_cache_entry_release(d->pipeline_cache, entry);
@@ -428,6 +438,19 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     if (compiled_code) free(compiled_code);
     ++d->pipeline_objects; *out = p;
     return VK_SUCCESS;
+}
+#undef compiled_storage
+static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *info,
+                                const VkAllocationCallbacks *a, VkPipeline *out)
+{
+    /* Heap, not stack: the program carries PS5VK_MAX_DESCRIPTORS records
+     * and the caller may be an application thread with a small stack. */
+    struct ps5vk_compiled_program *compiled = calloc(1, sizeof(*compiled));
+    if (!compiled) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    VkResult result = create_pipeline_inner(compiled, d, info, a, out);
+    COMPUTE_MARK("PS5VK_COMPUTE_PIPELINE phase=end rc=%d", (int)result);
+    free(compiled);
+    return result;
 }
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(VkDevice d, VkPipelineCache cache,
     uint32_t count, const VkComputePipelineCreateInfo *infos, const VkAllocationCallbacks *a, VkPipeline *out)

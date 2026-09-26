@@ -1,5 +1,11 @@
 #include "ps5vk_compiler.h"
 #include "compile_stack.h"
+#if defined(PS5VK_TARGET_PS5) && PS5VK_TARGET_PS5
+#include "ps5log.h"
+#define COMPUTE_MARK(...) ps5log_printf(PS5LOG_MARK, __VA_ARGS__)
+#else
+#define COMPUTE_MARK(...) ((void)0)
+#endif
 #include "descriptor_table_layout.h"
 #include "spirv_descriptor_types.h"
 #include "libpsbc/psbc_compile.h"
@@ -287,7 +293,9 @@ static VkResult runtime_compile_compute_features(
     }
 
     PsbcShaderOutput out = {0};
+    COMPUTE_MARK("PS5VK_COMPUTE_COMPILE phase=psbc bindings=%u", opts.descriptor_binding_count);
     PsbcResult res = psbc_compile_shader(spirv, spirv_words * sizeof(uint32_t), &opts, &out);
+    COMPUTE_MARK("PS5VK_COMPUTE_COMPILE phase=psbc_done rc=%d bytes=%zu", (int)res, out.machine_code_size);
     if (res != PSBC_RESULT_OK || !out.machine_code || !out.machine_code_size || (out.machine_code_size % 4) != 0) {
         if (out.machine_code) psbc_free_output(&out);
         return res == PSBC_RESULT_UNSUPPORTED_CAPABILITY ?
@@ -450,8 +458,11 @@ VkResult ps5vk_runtime_compile_compute_features(
 {
     struct compute_compile_call call = {spirv, spirv_words, entry_name, layout,
         specialization, feature_mask, out_program, out_code, VK_ERROR_UNKNOWN};
+    COMPUTE_MARK("PS5VK_COMPUTE_COMPILE phase=spawn words=%zu", spirv_words);
     if (ps5vk_compile_on_sized_stack(compute_compile_call, &call))
         return VK_ERROR_OUT_OF_HOST_MEMORY;
+    COMPUTE_MARK("PS5VK_COMPUTE_COMPILE phase=joined rc=%d descriptors=%u",
+                 (int)call.result, out_program->descriptor_count);
     return call.result;
 }
 

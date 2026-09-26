@@ -35,7 +35,7 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         const uint32_t dwords = ps5vk_compute_record_dwords(b->type);
         if (b->set >= PS5VK_MAX_SETS || !(p->descriptor_set_mask & (1u << b->set)) ||
             b->binding >= PS5VK_MAX_BINDINGS || b->table_dword % 4 || !dwords ||
-            b->table_dword > 128u - dwords)
+            b->table_dword > PS5VK_MAX_TABLE_DWORDS - dwords)
             return 0;
         uint64_t end = (b->table_dword + dwords) * 4;
         if (end > table_bytes[b->set]) table_bytes[b->set] = end;
