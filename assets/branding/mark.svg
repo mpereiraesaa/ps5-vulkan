@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">ps5-vulkan project mark</title>
+  <rect width="256" height="256" rx="48" fill="#101827"/>
+  <g transform="translate(32 32)">
+    <rect x="16" y="16" width="160" height="160" rx="32" fill="#151d30" stroke="#657293" stroke-width="2"/>
+    <g stroke="#657293" stroke-width="4" stroke-linecap="round">
+      <path d="M55 4v12M96 4v12M137 4v12M55 176v12M96 176v12M137 176v12M4 55h12M4 96h12M4 137h12M176 55h12M176 96h12M176 137h12"/>
+    </g>
+    <path d="M42 48h36l37 64-19 34z" fill="#b6a7ff"/>
+    <path d="M114 48h36L96 146l-18-32z" fill="#fa6375"/>
+    <path d="m96 146 19-34 18 32-37 21z" fill="#8c79f1"/>
+  </g>
+</svg>
