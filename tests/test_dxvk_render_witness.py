@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from run_dxvk_render_witness import (  # noqa: E402
     EXTENT, SAMPLE_POINTS, expected_digest, expected_image, front_facing_clockwise, rgba,
-    verify, expected_compute_digest)
+    verify, expected_compute_digest, expected_inline_digest)
 
 ARTIFACT = dict(profile="dxvk-render-public-sdk-witness", extent=64, format="R8G8B8A8_UNORM",
                 diagnostic_switch=None, eboot_sha256="artifact-sha")
@@ -151,6 +151,47 @@ class CacheVerify(unittest.TestCase):
     def test_artifact_cannot_cross_profiles(self):
         for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),
                               (self.log(), dict(self.artifact, diagnostic_switch=None))):
+            with self.subTest(artifact=artifact), self.assertRaises(ValueError):
+                verify(log, receipt(log), artifact)
+
+
+class InlineVerify(unittest.TestCase):
+    artifact = dict(ARTIFACT, profile="dxvk-inline-compute-public-sdk-witness",
+                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=1)
+    compute = ("DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 mismatches=0 guards=0 digest=" +
+               expected_inline_digest() + " submissions=1 fence=complete resources=retired\n")
+
+    def log(self, compute=None):
+        return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP",
+            (self.compute if compute is None else compute).encode() + b"DXVK_RENDER_WITNESS_STEP")
+
+    def test_exact_inline_result(self):
+        log = self.log()
+        result = verify(log, receipt(log), self.artifact)
+        self.assertTrue(result["strict_verified"])
+        self.assertEqual(result["total_submissions"], 2)
+
+    def test_inline_requires_each_result_and_ownership_field(self):
+        variants = ["", self.compute * 2, self.compute + "DXVK_INLINE_WITNESS_COMPUTE malformed\n"]
+        for old, new in (("routes=4", "routes=3"), ("words=1024", "words=1023"),
+                         ("mismatches=0", "mismatches=1"), ("guards=0", "guards=1"),
+                         (expected_inline_digest(), "00000000"), ("submissions=1", "submissions=0"),
+                         ("complete", "timeout"), ("retired", "pending")):
+            variants.append(self.compute.replace(old, new))
+        for compute in variants:
+            log = self.log(compute)
+            with self.subTest(compute=compute), self.assertRaises(ValueError):
+                verify(log, receipt(log), self.artifact)
+        for log in (self.compute.encode() + fixture_log(), fixture_log() + self.compute.encode(),
+                    self.log() + b"DXVK_RENDER_WITNESS_PENDING resources=retained\n"):
+            with self.assertRaises(ValueError):
+                verify(log, receipt(log), self.artifact)
+
+    def test_inline_cannot_cross_profiles_or_versions(self):
+        for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),
+                             (self.log(), dict(self.artifact, inline_execution_version=0)),
+                             (self.log(), dict(self.artifact, diagnostic_switch=None)),
+                             (CacheVerify().log(), self.artifact), (self.log(), CacheVerify.artifact)):
             with self.subTest(artifact=artifact), self.assertRaises(ValueError):
                 verify(log, receipt(log), artifact)
 

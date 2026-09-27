@@ -22,6 +22,8 @@ from run_consumer import close_and_confirm, control, running, wait_for_log  # no
 EXTENT = 64
 PROFILE = "dxvk-render-public-sdk-witness"
 CACHE_PROFILE = "dxvk-cache-public-sdk-witness"
+INLINE_PROFILE = "dxvk-inline-compute-public-sdk-witness"
+INLINE_SWITCH = "PS5VK_INLINE_UNIFORM_DIAGNOSTIC"
 CACHE_SWITCH = "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC"
 VIEWPORT = (0.0, 64.0, 64.0, -64.0)
 SAMPLE_POINTS = ((0, 0), (47, 63), (48, 0), (63, 40), (63, 63))
@@ -90,13 +92,24 @@ def expected_compute_digest() -> str:
     return f"{fnv(b''.join(v.to_bytes(4, 'little') for v in values)):08x}"
 
 
+def expected_inline_digest() -> str:
+    value = 2166136261
+    for route in range(4):
+        for i in range(256):
+            word = ((0x10203040 + route * 1009 + (i % 70) * 37) * 3 + (i ^ 0x13579bdf)) & 0xffffffff
+            value = ((value ^ word) * 16777619) & 0xffffffff
+    return f"{value:08x}"
+
+
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     cache_variant = artifact.get("profile") == CACHE_PROFILE
-    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE) or
+    inline_variant = artifact.get("profile") == INLINE_PROFILE
+    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE, INLINE_PROFILE) or
             artifact.get("extent") != EXTENT or
             artifact.get("format") != "R8G8B8A8_UNORM" or
-            artifact.get("diagnostic_switch") != (CACHE_SWITCH if cache_variant else None) or
-            (cache_variant and artifact.get("cache_execution_version") != 2)):
+            artifact.get("diagnostic_switch") != (INLINE_SWITCH if inline_variant else CACHE_SWITCH if cache_variant else None) or
+            (cache_variant and artifact.get("cache_execution_version") != 2) or
+            (inline_variant and artifact.get("inline_execution_version") != 1)):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or
@@ -145,12 +158,23 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             raise ValueError("cache creation, lifetime or discard query failed")
     elif "DXVK_CACHE_WITNESS_" in text:
         raise ValueError("cache log requires cache witness artifact")
+    if inline_variant:
+        compute = re.findall(r"DXVK_INLINE_WITNESS_COMPUTE routes=(\d+) words=(\d+) "
+                             r"mismatches=(\d+) guards=(\d+) digest=([0-9a-f]{8}) "
+                             r"submissions=(\d+) fence=(\w+) resources=(\w+)", text)
+        if (text.count("DXVK_INLINE_WITNESS_COMPUTE") != 1 or
+                compute != [("4", "1024", "0", "0", expected_inline_digest(), "1", "complete", "retired")] or
+                text.index("DXVK_RENDER_WITNESS_START") >= text.index("DXVK_INLINE_WITNESS_COMPUTE") or
+                text.index("DXVK_INLINE_WITNESS_COMPUTE") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("inline compute result, ordering or retirement failed")
+    elif "DXVK_INLINE_WITNESS_" in text:
+        raise ValueError("inline log requires inline witness artifact")
     if "DXVK_RENDER_WITNESS_PENDING" in text:
         raise ValueError("submission still owns resources")
     return {
         "profile": artifact["profile"],
         "strict_verified": True,
-        "total_submissions": 2 if cache_variant else 1,
+        "total_submissions": 2 if cache_variant or inline_variant else 1,
         "run_id": receipt["run_id"],
         "extent": EXTENT,
         "visible_markers": visible,
@@ -175,7 +199,7 @@ def main() -> int:
         raise RuntimeError("refusing to launch while a title is active")
     artifact = json.loads(args.artifact.read_text())
     eboot = args.dist / "eboot.bin"
-    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE) or
+    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE, INLINE_PROFILE) or
             hashlib.sha256(eboot.read_bytes()).hexdigest() != artifact.get("eboot_sha256")):
         raise RuntimeError("artifact identity mismatch")
     known = {path.name for path in args.runs_dir.glob("*_PPSA99994_ps5vk_*.log")}

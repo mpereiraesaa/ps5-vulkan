@@ -4,7 +4,9 @@
 Dynamic rendering, copy_commands2, maintenance1 and extended dynamic state all
 ship, so the default witness uses the ordinary SDK. --cache-control builds an
 explicit diagnostic SDK variant for compute/graphics cold misses, warm
-derivatives and discard execution; compiling it is not hardware evidence."""
+derivatives and discard execution. --inline-uniform adds the inline compute
+update/copy/template oracle to the ordinary render witness. Neither build
+is hardware evidence."""
 
 import argparse
 import hashlib
@@ -49,8 +51,11 @@ def checked_spirv(payload: bytes) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cache-control", action="store_true",
+    variants = parser.add_mutually_exclusive_group()
+    variants.add_argument("--cache-control", action="store_true",
                         help="build the diagnostic compute/graphics cache execution variant")
+    variants.add_argument("--inline-uniform", action="store_true",
+                          help="build the diagnostic inline compute update/copy/template variant")
     args = parser.parse_args()
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
@@ -62,7 +67,8 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    name = "dxvk-cache-witness" if args.cache_control else "dxvk-render-witness"
+    name = ("dxvk-inline-witness" if args.inline_uniform else
+            "dxvk-cache-witness" if args.cache_control else "dxvk-render-witness")
     build = ROOT / "build" / name
     dist = ROOT / ("dist-" + name) / "PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
@@ -74,6 +80,8 @@ def main() -> None:
     }
     if args.cache_control:
         shaders["dxvk_cache_compute_spirv"] = ROOT / "experiments/compute/cache_witness.comp"
+    if args.inline_uniform:
+        shaders["dxvk_inline_compute_spirv"] = ROOT / "experiments/compute/inline_witness.comp"
     arrays = []
     shader_hashes = {}
     for name, shader_source in shaders.items():
@@ -87,13 +95,14 @@ def main() -> None:
     (build / "dxvk_render_witness_shaders.h").write_text(
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
 
-    # Only the explicit variant enables the unpromoted cache-control route.
+    # Only explicit variants enable their unpromoted diagnostic routes.
     sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
     # Refuse ambient diagnostics: the receipt must describe the actual SDK.
     for key, value in sdk_env.items():
         if key.startswith("PS5VK_") and "DIAGNOSTIC" in key and value != "0":
             raise SystemExit(f"unset ambient diagnostic {key} before building witness")
     sdk_env["PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC"] = "1" if args.cache_control else "0"
+    sdk_env["PS5VK_INLINE_UNIFORM_DIAGNOSTIC"] = "1" if args.inline_uniform else "0"
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/dxvk_render_witness/main.c"
@@ -102,6 +111,7 @@ def main() -> None:
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         *(["-DPS5VK_CACHE_CONTROL_WITNESS=1"] if args.cache_control else []),
+        *(["-DPS5VK_INLINE_UNIFORM_WITNESS=1"] if args.inline_uniform else []),
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger),
@@ -150,10 +160,15 @@ def main() -> None:
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness",
+        "profile": ("dxvk-inline-compute-public-sdk-witness" if args.inline_uniform else
+                    "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness"),
+        "inline_execution_version": 1 if args.inline_uniform else None,
         "cache_execution_version": 2 if args.cache_control else None,
         "extent": 64, "format": "R8G8B8A8_UNORM",
-        "diagnostic_switch": "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC" if args.cache_control else None,
+        "diagnostic_switch": ("PS5VK_INLINE_UNIFORM_DIAGNOSTIC" if args.inline_uniform else
+                              "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC" if args.cache_control else None),
+        "inline_compute_sha256": hashlib.sha256((source.parent / "inline_compute.h").read_bytes()).hexdigest()
+            if args.inline_uniform else None,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),

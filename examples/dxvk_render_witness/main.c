@@ -49,6 +49,9 @@
 #ifdef PS5VK_CACHE_CONTROL_WITNESS
 #include "cache_compute.h"
 #endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+#include "inline_compute.h"
+#endif
 
 enum { EXTENT = 64, STAGING = 64 * 1024 };
 /* DXVK's staging slice sits at an offset inside a shared buffer. */
@@ -168,6 +171,10 @@ static int run_witness(void)
     VkPhysicalDevicePipelineCreationCacheControlFeatures cache_control = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES};
 #endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    VkPhysicalDeviceInlineUniformBlockFeatures inline_uniform = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES};
+#endif
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {
@@ -177,7 +184,13 @@ static int run_witness(void)
 #ifdef PS5VK_CACHE_CONTROL_WITNESS
     eds.pNext = &cache_control;
 #endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    eds.pNext = &inline_uniform;
+#endif
     vkGetPhysicalDeviceFeatures2KHR(physical, &features2);
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    REQUIRE(inline_uniform.inlineUniformBlock, "inline uniform reported");
+#endif
 #ifdef PS5VK_CACHE_CONTROL_WITNESS
     REQUIRE(cache_control.pipelineCreationCacheControl, "cache control reported");
 #endif
@@ -197,6 +210,10 @@ static int run_witness(void)
 #ifdef PS5VK_CACHE_CONTROL_WITNESS
         VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME,
 #endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+        VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,
+        VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME,
+#endif
     };
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &dynamic_rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
@@ -214,6 +231,15 @@ static int run_witness(void)
         "warm_derivatives=1 factor=5 mismatches=%u guards=%u inputs=%u digest=%08x "
         "submissions=1 fence=complete resources=retired", compute.mismatches,
         compute.guards, compute.inputs, compute.digest);
+#endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    struct inline_compute_result inline_result;
+    result = inline_compute_witness(device, queue, dxvk_inline_compute_spirv,
+        sizeof(dxvk_inline_compute_spirv), &submission_pending, &inline_result);
+    if (result != VK_SUCCESS) { failed = inline_result.step; goto cleanup; }
+    ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 "
+        "mismatches=%u guards=%u digest=%08x submissions=1 fence=complete resources=retired",
+        inline_result.mismatches, inline_result.guards, inline_result.digest);
 #endif
     PFN_vkCmdBeginRenderingKHR begin_rendering = PROC(device, vkCmdBeginRenderingKHR);
     PFN_vkCmdEndRenderingKHR end_rendering = PROC(device, vkCmdEndRenderingKHR);
