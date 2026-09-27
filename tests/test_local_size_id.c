@@ -293,6 +293,46 @@ static uint32_t *boolean_vector_dimension(const uint32_t *words, size_t count,
     return out;
 }
 
+/* form: scalar integer, scalar boolean, integer vector, boolean vector. */
+static uint32_t *null_form_dimension(const uint32_t *words,size_t count,uint32_t lhs,
+                                      uint32_t one,unsigned form,size_t *out_count)
+{
+    size_t functions=5;uint32_t integer=0,boolean=0,vector=0,next=words[3];
+    for(;functions<count;functions+=words[functions]>>16) {
+        if((words[functions]&0xffff)==43 && words[functions+2]==lhs)integer=words[functions+1];
+        if((words[functions]&0xffff)==20)boolean=words[functions+1];
+        if((words[functions]&0xffff)==54)break;
+    }
+    assert(integer && functions<count);
+    uint32_t extra[32];unsigned n=0;
+#define WORD(v) do {extra[n++]=(v);} while(0)
+    if((form&1) && !boolean) {boolean=next++;WORD(2u<<16|20u);WORD(boolean);}
+    uint32_t element=(form&1)?boolean:integer;
+    if(form>=2) {
+        for(size_t i=5;i<functions;i+=words[i]>>16)
+            if((words[i]&0xffff)==23 && words[i]>>16==4 && words[i+2]==element && words[i+3]==2)vector=words[i+1];
+        if(!vector) {vector=next++;WORD(4u<<16|23u);WORD(vector);WORD(element);WORD(2);}
+    }
+    uint32_t null=next++;WORD(3u<<16|46u);WORD(form>=2?vector:element);WORD(null);
+    uint32_t operand=null;
+    if(form>=2) {operand=next++;WORD(6u<<16|52u);WORD(element);WORD(operand);WORD(81);WORD(null);WORD(1);}
+    uint32_t result=next++;
+    if(form&1) {WORD(7u<<16|52u);WORD(integer);WORD(result);WORD(169);WORD(operand);WORD(one);WORD(lhs);}
+    else {WORD(6u<<16|52u);WORD(integer);WORD(result);WORD(128);WORD(lhs);WORD(operand);}
+#undef WORD
+    *out_count=count+n;uint32_t *out=malloc(*out_count*4);assert(out);
+    memcpy(out,words,functions*4);memcpy(out+functions,extra,n*4);
+    memcpy(out+functions+n,words+functions,(count-functions)*4);out[3]=next;
+    for(size_t i=5;i<functions;) {
+        unsigned length=out[i]>>16;
+        if((out[i]&0xffff)==331 && out[i+2]==38)out[i+3]=result;
+        if((out[i]&0xffff)==71 && length==4 && out[i+2]==11 && out[i+3]==25)
+            for(unsigned j=0;j<length;++j)out[i+j]=1u<<16;
+        i+=length;
+    }
+    return out;
+}
+
 int main(void)
 {
     size_t bytes = 0;
@@ -347,6 +387,51 @@ int main(void)
     /* Set the feature directly to isolate shader admission from device
      * negotiation. The compiled workgroup/code equal the literal form. */
     device->enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
+    /* Null integer/bool scalars and vectors may participate in a nonzero
+     * LocalSizeId expression. The old frontend refused these while the real
+     * compiler independently resolved every form to 64x1x1. */
+    for (unsigned form=0; form<4; ++form) {
+        size_t expr_count;
+        uint32_t *expr=null_form_dimension(by_id,count,id64,id1,form,&expr_count);
+        VkPipeline selected=NULL;
+        assert(build(device,layout,expr,expr_count*4,&selected)==VK_SUCCESS);
+        assert(selected->program.local_size[0]==64 && selected->program.local_size[1]==1 &&
+               selected->program.local_size[2]==1);
+        vkDestroyPipeline(device,selected,NULL);
+        size_t null_at=0, types_at=0;
+        for (size_t i=5;i<expr_count;i+=expr[i]>>16) {
+            unsigned op=expr[i]&0xffff;
+            if (op==46) null_at=i;
+            if (!types_at && op>=19 && op<=39) types_at=i;
+        }
+        assert(null_at && types_at);
+        /* A null is not a specialization constant. Reject its SpecId even
+         * when the caller supplies no specialization map. */
+        uint32_t *decorated=malloc((expr_count+4)*4);assert(decorated);
+        memcpy(decorated,expr,types_at*4);
+        const uint32_t annotation[]={4u<<16|71u,expr[null_at+2],1,17};
+        memcpy(decorated+types_at,annotation,16);
+        memcpy(decorated+types_at+4,expr+types_at,(expr_count-types_at)*4);
+        VkPipeline refused=NULL;
+        assert(build(device,layout,decorated,(expr_count+4)*4,&refused)!=VK_SUCCESS && !refused);
+        free(decorated);
+        /* Extra operands must not turn a malformed ConstantNull into zero. */
+        uint32_t *malformed=malloc((expr_count+1)*4);assert(malformed);
+        memcpy(malformed,expr,(null_at+3)*4);malformed[null_at]=4u<<16|46u;
+        malformed[null_at+3]=0;
+        memcpy(malformed+null_at+4,expr+null_at+3,(expr_count-null_at-3)*4);
+        assert(build(device,layout,malformed,(expr_count+1)*4,&refused)!=VK_SUCCESS && !refused);
+        free(malformed);
+        if (!(form&1)) {
+            /* Direct scalar zero, including extraction from a null vector,
+             * remains an invalid launch dimension. */
+            for (size_t i=5;i<expr_count;i+=expr[i]>>16)
+                if ((expr[i]&0xffff)==331 && expr[i+2]==38) expr[i+3]=expr[3]-2;
+            assert(build(device,layout,expr,expr_count*4,&refused)!=VK_SUCCESS && !refused);
+        }
+        free(expr);
+    }
+
     assert(build(device, layout, by_id, bytes, &pipeline) == VK_SUCCESS);
     assert(!memcmp(pipeline->program.local_size, reference->program.local_size,
                    sizeof(reference->program.local_size)));

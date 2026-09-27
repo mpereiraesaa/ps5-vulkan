@@ -159,6 +159,20 @@ static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4
     }
     if (types != 1 || *components < 2 || *components > 4) return 0;
     unsigned op = definition[0] & 0xffff, length = definition[0] >> 16;
+    if (op == 46) { /* ConstantNull: integer/boolean vectors only. */
+        if (length != 3) return 0;
+        unsigned scalar_types = 0;
+        for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+            const uint32_t *w = module->words + i;
+            unsigned opcode = w[0] & 0xffff, size = w[0] >> 16;
+            if ((opcode == 20 && size == 2 && w[1] == *element_type) ||
+                (opcode == 21 && size == 4 && w[1] == *element_type && w[2] == 32))
+                ++scalar_types;
+        }
+        if (scalar_types != 1) return 0;
+        memset(values, 0, *components * sizeof(*values));
+        return 1;
+    }
     if (op == 44 || op == 51) {
         if (length != 3 + *components) return 0;
         for (unsigned i = 0; i < *components; ++i) {
@@ -211,7 +225,7 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
     --*budget;
     const uint32_t *expression = NULL;
     uint32_t type = 0, spec_id = 0, literal_kind = 0;
-    int is_spec = 0, found = 0, decorated = 0;
+    int is_spec = 0, is_null = 0, found = 0, decorated = 0;
     for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
         const uint32_t *w = module->words + i;
         uint32_t op = w[0] & 0xffff;
@@ -223,6 +237,9 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
             type = w[1]; *value = op == 41 || op == 48;
             is_spec = op == 48 || op == 49; literal_kind = 2; ++found;
         }
+        if (op == 46 && (w[0] >> 16) == 3 && w[2] == id) {
+            type = w[1]; *value = 0; is_null = 1; ++found;
+        }
         if (op == 52 && (w[0] >> 16) >= 5 && w[2] == id) {
             type = w[1]; expression = w; ++found;
         }
@@ -230,7 +247,7 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
             spec_id = w[3]; ++decorated;
         }
     }
-    if (found != 1 || decorated > 1) return 0;
+    if (found != 1 || decorated > 1 || (is_null && decorated)) return 0;
     int scalar = 0;
     *kind = 0;
     for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
