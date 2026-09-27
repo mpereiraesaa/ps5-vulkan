@@ -274,6 +274,11 @@ def main():
             raise SystemExit("PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC must be 0 or 1")
         if zero_initialize_diagnostic == "1":
             native_cflags.append("-DPS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC=1")
+        subgroup_size_diagnostic = os.environ.get("PS5VK_SUBGROUP_SIZE_DIAGNOSTIC", "0")
+        if subgroup_size_diagnostic not in {"0", "1"}:
+            raise SystemExit("PS5VK_SUBGROUP_SIZE_DIAGNOSTIC must be 0 or 1")
+        if subgroup_size_diagnostic == "1":
+            native_cflags.append("-DPS5VK_SUBGROUP_SIZE_DIAGNOSTIC=1")
         inline_uniform_diagnostic = os.environ.get("PS5VK_INLINE_UNIFORM_DIAGNOSTIC", "0")
         if inline_uniform_diagnostic not in {"0", "1"}:
             raise SystemExit("PS5VK_INLINE_UNIFORM_DIAGNOSTIC must be 0 or 1")

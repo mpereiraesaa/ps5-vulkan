@@ -362,6 +362,12 @@ struct ps5vk_queue_backend {
     void (*release)(VkDevice, void *);
 };
 
+/* Additional opt-ins after the two existing feature words were filled. */
+enum ps5vk_v13_feature_bits {
+    PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL = 1u << 0,
+    PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS = 1u << 1,
+};
+
 /* Link-selected platform implementation. Production must query/configure its
  * native backend; test binaries provide explicit mock implementations. */
 struct ps5vk_platform {
@@ -379,6 +385,7 @@ struct ps5vk_platform {
      * to advertise a Vulkan feature without a native backend contract. */
     uint32_t supported_features;
     uint32_t supported_features_t09;
+    uint32_t supported_features_v13;
     /* DIAGNOSTIC ONLY, never set by a shipping build: open the
      * VK_KHR_maintenance4 route although the device reports Vulkan 1.0, so a
      * diagnostic DXVK run can be measured past it. The registry requires
@@ -444,8 +451,8 @@ struct VkDevice_T {
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
     uint32_t enabled_features_t09;
-    /* Fixed-wave compute stage contracts; not publicly enabled until the
-     * platform capability and native validation route are provided. */
+    uint32_t enabled_features_v13;
+    /* Fixed-wave compute stage contracts derived from negotiated V13 bits. */
     VkBool32 subgroup_size_control_enabled;
     VkBool32 compute_full_subgroups_enabled;
     VkBool32 device_group_extension_enabled;

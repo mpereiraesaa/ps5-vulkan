@@ -587,6 +587,7 @@ def implemented_device_extensions() -> set[str]:
         "PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC",
         "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC",
         "PS5VK_INLINE_UNIFORM_DIAGNOSTIC",
+        "PS5VK_SUBGROUP_SIZE_DIAGNOSTIC",
 
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 
@@ -603,10 +604,10 @@ def implemented_device_extensions() -> set[str]:
                 raise ValueError(f"malformed {name} guard")
             platform_source = pattern.sub("", platform_source)
     platform_source = re.sub(r"/\*.*?\*/|//[^\n]*", "", platform_source, flags=re.DOTALL)
-    assignments = re.findall(r"platform->supported_features(?:_t09)?\s*(?:\|=|=)\s*(.*?);",
+    assignments = re.findall(r"platform->supported_features(?:_t09|_v13)?\s*(?:\|=|=)\s*(.*?);",
                              platform_source, re.DOTALL)
     shipping_bits = {bit for assignment in assignments
-                     for bit in re.findall(r"PS5VK_(?:T09_)?FEATURE_[A-Z0-9_]+", assignment)}
+                     for bit in re.findall(r"PS5VK_(?:(?:T09|V13)_)?FEATURE_[A-Z0-9_]+", assignment)}
     gates = {
         "VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME": {
             "PS5VK_FEATURE_STORAGE_BUFFER_8BIT", "PS5VK_FEATURE_STORAGE_BUFFER_16BIT"},
@@ -648,6 +649,8 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_DEDICATED_ALLOCATION"},
         "VK_KHR_BIND_MEMORY_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_BIND_MEMORY2"},
         "VK_KHR_MAINTENANCE_4_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE4"},
+        "VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME": {
+            "PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL", "PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS"},
         "VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK"},
         "VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME": {

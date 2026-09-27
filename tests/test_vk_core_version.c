@@ -547,8 +547,92 @@ static void inline_uniform_negotiation(void)
     }
 }
 
+static void subgroup_size_negotiation(void)
+{
+    const uint32_t versions[]={VK_API_VERSION_1_0,VK_API_VERSION_1_1,VK_API_VERSION_1_2,VK_API_VERSION_1_3};
+    for(unsigned v=0;v<4;++v) {
+        VkInstance instance;VkPhysicalDevice p=physical(&instance,versions[v]);
+        p->platform.properties.apiVersion=versions[v];
+        VkPhysicalDeviceSubgroupSizeControlFeatures f={
+            .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES};
+        VkPhysicalDeviceFeatures2 query={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,.pNext=&f};
+        VkPhysicalDeviceSubgroupSizeControlProperties props={
+            .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES};
+        VkPhysicalDeviceProperties2 property={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,.pNext=&props};
+        const char *extension=VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME;
+        float priority=1;
+        VkDeviceQueueCreateInfo queue={.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount=1,.pQueuePriorities=&priority};
+        VkDeviceCreateInfo info={.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.pNext=&f,
+            .queueCreateInfoCount=1,.pQueueCreateInfos=&queue,.enabledExtensionCount=1,.ppEnabledExtensionNames=&extension};
+        VkDevice d=NULL;
+        p->platform.supported_features_v13=PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL|PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS;
+        vkGetPhysicalDeviceFeatures2(p,&query);assert(!f.subgroupSizeControl && !f.computeFullSubgroups);
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        p->platform.supported_features_t09|=PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+        vkGetPhysicalDeviceFeatures2(p,&query);vkGetPhysicalDeviceProperties2(p,&property);
+        VkExtensionProperties available[64];uint32_t count=64,found=0;
+        assert(vkEnumerateDeviceExtensionProperties(p,NULL,&count,available)==VK_SUCCESS);
+        for(uint32_t i=0;i<count;++i) found+=!strcmp(available[i].extensionName,extension);
+        if(!v) {
+            assert(!found && !f.subgroupSizeControl && !f.computeFullSubgroups && !props.minSubgroupSize);
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+            vkDestroyInstance(instance,NULL);continue;
+        }
+        assert(found==1 && f.subgroupSizeControl && f.computeFullSubgroups);
+        assert(props.minSubgroupSize==32 && props.maxSubgroupSize==32 &&
+            props.maxComputeWorkgroupSubgroups==p->platform.properties.limits.maxComputeWorkGroupInvocations/32 &&
+            props.requiredSubgroupSizeStages==VK_SHADER_STAGE_COMPUTE_BIT);
+        if(v<3) assert(create(p,&f,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        for(unsigned mask=0;mask<4;++mask) {
+            f.subgroupSizeControl=!!(mask&1);f.computeFullSubgroups=!!(mask&2);
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS);
+            assert(d->subgroup_size_control_enabled==f.subgroupSizeControl &&
+                d->compute_full_subgroups_enabled==f.computeFullSubgroups && d->enabled_features_v13==mask);
+            vkDestroyDevice(d,NULL);
+        }
+        for(unsigned bit=0;bit<2;++bit) {
+            p->platform.supported_features_v13=1u<<bit;
+            vkGetPhysicalDeviceFeatures2(p,&query);
+            assert(f.subgroupSizeControl==(bit==0) && f.computeFullSubgroups==(bit==1));
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS);vkDestroyDevice(d,NULL);
+            f.subgroupSizeControl=f.computeFullSubgroups=VK_TRUE;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        }
+        p->platform.supported_features_v13=3;
+        f.subgroupSizeControl=2;assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+        f.subgroupSizeControl=VK_TRUE;f.computeFullSubgroups=2;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);f.computeFullSubgroups=VK_TRUE;
+        VkPhysicalDeviceSubgroupSizeControlFeatures duplicate=f;f.pNext=&duplicate;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);f.pNext=NULL;
+        if(v==3) {
+            VkPhysicalDeviceVulkan13Features core={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+            query.pNext=&core;vkGetPhysicalDeviceFeatures2(p,&query);
+            assert(core.subgroupSizeControl && core.computeFullSubgroups);
+            memset(&core,0,sizeof(core));core.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            core.subgroupSizeControl=core.computeFullSubgroups=VK_TRUE;
+            assert(create(p,&core,&d)==VK_SUCCESS && d->subgroup_size_control_enabled && d->compute_full_subgroups_enabled);
+            vkDestroyDevice(d,NULL);
+            assert(create(p,&f,&d)==VK_SUCCESS && d->enabled_features_v13==3);vkDestroyDevice(d,NULL);
+            core.pNext=&f;assert(create(p,&core,&d)==VK_ERROR_UNKNOWN && !d);core.pNext=NULL;
+            VkPhysicalDeviceVulkan13Properties cprops={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
+            property.pNext=&cprops;vkGetPhysicalDeviceProperties2(p,&property);
+            assert(cprops.minSubgroupSize==props.minSubgroupSize && cprops.maxSubgroupSize==props.maxSubgroupSize &&
+                cprops.maxComputeWorkgroupSubgroups==props.maxComputeWorkgroupSubgroups &&
+                cprops.requiredSubgroupSizeStages==props.requiredSubgroupSizeStages);
+            p->platform.supported_features_v13=0;
+            assert(create(p,&core,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            vkGetPhysicalDeviceProperties2(p,&property);assert(!cprops.requiredSubgroupSizeStages && cprops.minSubgroupSize==32);
+            instance->api_version=VK_API_VERSION_1_0;p->platform.supported_features_v13=3;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        }
+        vkDestroyInstance(instance,NULL);
+    }
+}
+
 int main(void)
 {
+    subgroup_size_negotiation();
     dormant_on_vulkan_1_0();
     projections_when_reported();
     effective_version_is_the_lower();

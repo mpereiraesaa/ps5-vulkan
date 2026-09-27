@@ -27,7 +27,7 @@ int ps5vk_core_version_properties(VkPhysicalDevice p, VkBaseOutStructure *next);
  * not report; `seen` rejects duplicates. */
 VkResult ps5vk_core_version_enable(VkPhysicalDevice p, const VkBaseInStructure *next,
                                    uint32_t *seen, uint32_t *enabled,
-                                   uint32_t *enabled_t09);
+                                   uint32_t *enabled_t09, uint32_t *enabled_v13);
 VkResult ps5vk_core_version_validate_chain(const VkBaseInStructure *chain);
 
 /* vkCreateDevice: behaviour promoted into the effective version is on without

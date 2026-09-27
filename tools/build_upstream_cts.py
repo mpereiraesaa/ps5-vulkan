@@ -53,6 +53,7 @@ def tessellation_build_profile(environment):
             "PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC",
             "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC",
             "PS5VK_INLINE_UNIFORM_DIAGNOSTIC",
+            "PS5VK_SUBGROUP_SIZE_DIAGNOSTIC",
         )
     }
     return {

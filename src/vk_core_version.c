@@ -40,6 +40,7 @@ struct extension_features {
     VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures zero_initialize;
     VkPhysicalDevicePipelineCreationCacheControlFeatures cache_control;
     VkPhysicalDeviceInlineUniformBlockFeatures inline_uniform;
+    VkPhysicalDeviceSubgroupSizeControlFeatures subgroup_size;
     VkPhysicalDeviceSynchronization2Features synchronization2;
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering;
     VkPhysicalDeviceFeatures2 core;
@@ -67,6 +68,7 @@ static void query_extension_features(VkPhysicalDevice p, struct extension_featur
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES, &f->zero_initialize},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES, &f->cache_control},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES, &f->inline_uniform},
+        {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES, &f->subgroup_size},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES, &f->synchronization2},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, &f->dynamic_rendering},
     };
@@ -147,6 +149,8 @@ static void fill_vulkan13_features(VkPhysicalDevice p, VkPhysicalDeviceVulkan13F
     out->shaderZeroInitializeWorkgroupMemory = f.zero_initialize.shaderZeroInitializeWorkgroupMemory;
     out->pipelineCreationCacheControl = f.cache_control.pipelineCreationCacheControl;
     out->inlineUniformBlock = f.inline_uniform.inlineUniformBlock;
+    out->subgroupSizeControl = f.subgroup_size.subgroupSizeControl;
+    out->computeFullSubgroups = f.subgroup_size.computeFullSubgroups;
     out->synchronization2 = f.synchronization2.synchronization2;
     out->dynamicRendering = f.dynamic_rendering.dynamicRendering;
 }
@@ -182,6 +186,7 @@ struct extension_properties {
     VkPhysicalDeviceTimelineSemaphoreProperties timeline;
     VkPhysicalDeviceMaintenance4Properties maintenance4;
     VkPhysicalDeviceInlineUniformBlockProperties inline_uniform;
+    VkPhysicalDeviceSubgroupSizeControlProperties subgroup_size;
     VkPhysicalDeviceDepthStencilResolveProperties resolve;
     VkPhysicalDeviceProperties2 core;
 };
@@ -194,6 +199,8 @@ static void query_extension_properties(VkPhysicalDevice p, struct extension_prop
     e->maintenance4.pNext = &e->resolve;
     e->resolve.pNext = &e->inline_uniform;
     e->inline_uniform.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES;
+    e->inline_uniform.pNext = &e->subgroup_size;
+    e->subgroup_size.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES;
     e->timeline.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES;
     e->timeline.pNext = &e->maintenance4;
     e->point_clipping.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES;
@@ -308,14 +315,10 @@ static void fill_vulkan13_properties(VkPhysicalDevice p, VkPhysicalDeviceVulkan1
     memset(out, 0, sizeof(*out));
     out->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES;
     out->pNext = keep;
-    if (e.subgroup.supportedStages) {
-        /* One fixed subgroup size: the reported one is both bounds. */
-        out->minSubgroupSize = e.subgroup.subgroupSize;
-        out->maxSubgroupSize = e.subgroup.subgroupSize;
-        out->maxComputeWorkgroupSubgroups = e.subgroup.subgroupSize ?
-            p->platform.properties.limits.maxComputeWorkGroupInvocations /
-                e.subgroup.subgroupSize : 0;
-    }
+    out->minSubgroupSize = e.subgroup_size.minSubgroupSize;
+    out->maxSubgroupSize = e.subgroup_size.maxSubgroupSize;
+    out->maxComputeWorkgroupSubgroups = e.subgroup_size.maxComputeWorkgroupSubgroups;
+    out->requiredSubgroupSizeStages = e.subgroup_size.requiredSubgroupSizeStages;
     /* Texel-buffer offsets follow the 1.0 alignment; no single-texel rule. */
     out->storageTexelBufferOffsetAlignmentBytes =
         p->platform.properties.limits.minTexelBufferOffsetAlignment;
@@ -440,17 +443,22 @@ struct core_enable {
     size_t offset;
     uint32_t bit;      /* enabled_features bit, or 0 */
     uint32_t bit_t09;  /* enabled_features_t09 bit, or 0 */
+    uint32_t bit_v13;  /* enabled_features_v13 bit, or 0 */
 };
 
 #define V11(member, bit, t09) {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, \
-    offsetof(VkPhysicalDeviceVulkan11Features, member), bit, t09}
+    offsetof(VkPhysicalDeviceVulkan11Features, member), bit, t09, 0}
 #define V12(member, bit, t09) {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, \
-    offsetof(VkPhysicalDeviceVulkan12Features, member), bit, t09}
+    offsetof(VkPhysicalDeviceVulkan12Features, member), bit, t09, 0}
 #define V13(member, bit, t09) {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, \
-    offsetof(VkPhysicalDeviceVulkan13Features, member), bit, t09}
+    offsetof(VkPhysicalDeviceVulkan13Features, member), bit, t09, 0}
 /* The same enabled bits the per-extension structures set. A reported member
  * without an entry enables no gate of its own. */
 static const struct core_enable core_enables[] = {
+    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        offsetof(VkPhysicalDeviceVulkan13Features, subgroupSizeControl), 0, 0, PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL},
+    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        offsetof(VkPhysicalDeviceVulkan13Features, computeFullSubgroups), 0, 0, PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS},
     V11(storageBuffer16BitAccess, PS5VK_FEATURE_STORAGE_BUFFER_16BIT, 0),
     V11(multiview, PS5VK_FEATURE_MULTIVIEW, 0),
     V11(shaderDrawParameters, PS5VK_FEATURE_SHADER_DRAW_PARAMETERS, 0),
@@ -479,9 +487,9 @@ static const struct core_enable core_enables[] = {
 
 VkResult ps5vk_core_version_enable(VkPhysicalDevice p, const VkBaseInStructure *next,
                                    uint32_t *seen, uint32_t *enabled,
-                                   uint32_t *enabled_t09)
+                                   uint32_t *enabled_t09, uint32_t *enabled_v13)
 {
-    if (!p || !next || !seen || !enabled || !enabled_t09) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (!p || !next || !seen || !enabled || !enabled_t09 || !enabled_v13) return VK_ERROR_FEATURE_NOT_PRESENT;
     const uint32_t version = ps5vk_effective_api_version(p);
     size_t size, first;
     uint32_t minimum, flag;
@@ -518,7 +526,7 @@ VkResult ps5vk_core_version_enable(VkPhysicalDevice p, const VkBaseInStructure *
     *seen |= flag;
     const unsigned char *requested = (const unsigned char *)next;
     const unsigned char *supported = (const unsigned char *)&reported;
-    uint32_t add = 0, add_t09 = 0;
+    uint32_t add = 0, add_t09 = 0, add_v13 = 0;
     for (size_t offset = first; offset + sizeof(VkBool32) <= size; offset += sizeof(VkBool32)) {
         VkBool32 want, have;
         memcpy(&want, requested + offset, sizeof(want));
@@ -530,10 +538,12 @@ VkResult ps5vk_core_version_enable(VkPhysicalDevice p, const VkBaseInStructure *
             if (core_enables[n].type == next->sType && core_enables[n].offset == offset) {
                 add |= core_enables[n].bit;
                 add_t09 |= core_enables[n].bit_t09;
+                add_v13 |= core_enables[n].bit_v13;
             }
     }
     *enabled |= add;
     *enabled_t09 |= add_t09;
+    *enabled_v13 |= add_v13;
     return VK_SUCCESS;
 }
 

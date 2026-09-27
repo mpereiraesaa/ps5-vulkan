@@ -33,6 +33,17 @@ class NativeDiagnosticOptions(unittest.TestCase):
         self.assertIn(f"{name} must be 0 or 1", (ROOT / "tools/build_sdk.py").read_text())
         self.assertNotIn(name, (ROOT / "src/vk_device.c").read_text())
 
+    def test_subgroup_size_diagnostic_has_distinct_build_identity(self):
+        from tools.build_upstream_cts import tessellation_build_profile
+        name = "PS5VK_SUBGROUP_SIZE_DIAGNOSTIC"
+        self.assertEqual("0", tessellation_build_profile({})["switches"][name])
+        measured = tessellation_build_profile({name: "1"})
+        self.assertTrue(measured["experimental"])
+        self.assertEqual("1", measured["switches"][name])
+        self.assertIn(f"#if defined({name}) && {name}", (ROOT / "native/platform_ps5.c").read_text())
+        self.assertIn(f"{name} must be 0 or 1", (ROOT / "tools/build_sdk.py").read_text())
+        self.assertNotIn(name, (ROOT / "src/vk_device.c").read_text())
+
     def test_inline_uniform_diagnostic_has_distinct_build_identity(self):
         from tools.build_upstream_cts import tessellation_build_profile
         name = "PS5VK_INLINE_UNIFORM_DIAGNOSTIC"
