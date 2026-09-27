@@ -6,7 +6,8 @@ enum { OP_TYPE_BOOL = 20, OP_TYPE_INT = 21, OP_TYPE_FLOAT = 22,
        OP_TYPE_VECTOR = 23, OP_TYPE_MATRIX = 24, OP_TYPE_ARRAY = 28,
        OP_TYPE_RUNTIME_ARRAY = 29, OP_TYPE_STRUCT = 30, OP_TYPE_POINTER = 32,
        OP_CONSTANT = 43, OP_VARIABLE = 59, OP_DECORATE = 71,
-       OP_MEMBER_DECORATE = 72 };
+       OP_MEMBER_DECORATE = 72, OP_DECORATION_GROUP = 73,
+       OP_GROUP_DECORATE = 74, OP_GROUP_MEMBER_DECORATE = 75 };
 enum { DEC_BLOCK = 2, DEC_BUFFER_BLOCK = 3, DEC_ROW_MAJOR = 4,
        DEC_COL_MAJOR = 5, DEC_ARRAY_STRIDE = 6, DEC_MATRIX_STRIDE = 7,
        DEC_OFFSET = 35, STORAGE_UNIFORM = 2 };
@@ -149,6 +150,9 @@ static int parse_types(const uint32_t *words, size_t count, struct state *s)
                 for (uint32_t i = 0; i < t->member_count; ++i)
                     t->members[i].type = w[i + 2];
             }
+        } else if (op == OP_DECORATION_GROUP) {
+            if (n != 2 || !valid_id(s, id) || s->types[id].kind) return 0;
+            s->types[id].kind = op;
         } else if (op == OP_CONSTANT && n == 4) {
             id = w[2];
             if (!valid_id(s, id) || !valid_id(s, w[1])) return 0;
@@ -162,49 +166,81 @@ static int parse_types(const uint32_t *words, size_t count, struct state *s)
     return 1;
 }
 
+/* Direct and grouped annotations share the same payload validation. n counts
+ * the decoration enumerant and its operands, excluding target/member ids. */
+static int decorate_type(struct state *s, uint32_t id, const uint32_t *d, uint32_t n)
+{
+    if (!valid_id(s, id) || !n) return 0;
+    struct type *t = &s->types[id];
+    switch (d[0]) {
+    case DEC_BLOCK:
+        if (n != 1 || t->block) return 0;
+        t->block = 1; break;
+    case DEC_BUFFER_BLOCK:
+        if (n != 1 || t->buffer_block) return 0;
+        t->buffer_block = 1; break;
+    case DEC_ARRAY_STRIDE:
+        if (n != 2 || t->has_stride ||
+            (t->kind != OP_TYPE_ARRAY && t->kind != OP_TYPE_RUNTIME_ARRAY)) return 0;
+        t->has_stride = 1; t->stride = d[1]; break;
+    default: break;
+    }
+    return 1;
+}
+
+static int decorate_member(struct state *s, uint32_t id, uint32_t member,
+                           const uint32_t *d, uint32_t n)
+{
+    if (!valid_id(s, id) || s->types[id].kind != OP_TYPE_STRUCT ||
+        member >= s->types[id].member_count || !n) return 0;
+    struct member *m = &s->types[id].members[member];
+    switch (d[0]) {
+    case DEC_OFFSET:
+        if (n != 2 || m->has_offset) return 0;
+        m->has_offset = 1; m->offset = d[1]; break;
+    case DEC_MATRIX_STRIDE:
+        if (n != 2 || m->has_matrix_stride) return 0;
+        m->has_matrix_stride = 1; m->matrix_stride = d[1]; break;
+    case DEC_ROW_MAJOR:
+        if (n != 1 || m->row_major) return 0;
+        m->row_major = 1; break;
+    case DEC_COL_MAJOR:
+        if (n != 1 || m->col_major) return 0;
+        m->col_major = 1; break;
+    default: break;
+    }
+    return 1;
+}
+
 static int parse_decorations(const uint32_t *words, size_t count, struct state *s)
 {
-    for (size_t at = 5; at < count;) {
-        uint32_t n = words[at] >> 16, op = words[at] & 0xffffu;
+    for (size_t at = 5; at < count; at += words[at] >> 16) {
+        const uint32_t n = words[at] >> 16, op = words[at] & 0xffffu;
         const uint32_t *w = words + at;
-        if (op == OP_DECORATE && n >= 3) {
-            if (!valid_id(s, w[1])) return 0;
-            struct type *t = &s->types[w[1]];
-            switch (w[2]) {
-            case DEC_BLOCK:
-                if (n != 3 || t->block) return 0;
-                t->block = 1; break;
-            case DEC_BUFFER_BLOCK:
-                if (n != 3 || t->buffer_block) return 0;
-                t->buffer_block = 1; break;
-            case DEC_ARRAY_STRIDE:
-                if (n != 4 || t->has_stride ||
-                    (t->kind != OP_TYPE_ARRAY && t->kind != OP_TYPE_RUNTIME_ARRAY))
-                    return 0;
-                t->has_stride = 1; t->stride = w[3]; break;
-            default: break;
-            }
-        } else if (op == OP_MEMBER_DECORATE && n >= 4) {
-            if (!valid_id(s, w[1]) || s->types[w[1]].kind != OP_TYPE_STRUCT ||
-                w[2] >= s->types[w[1]].member_count) return 0;
-            struct member *m = &s->types[w[1]].members[w[2]];
-            switch (w[3]) {
-            case DEC_OFFSET:
-                if (n != 5 || m->has_offset) return 0;
-                m->has_offset = 1; m->offset = w[4]; break;
-            case DEC_MATRIX_STRIDE:
-                if (n != 5 || m->has_matrix_stride) return 0;
-                m->has_matrix_stride = 1; m->matrix_stride = w[4]; break;
-            case DEC_ROW_MAJOR:
-                if (n != 4 || m->row_major) return 0;
-                m->row_major = 1; break;
-            case DEC_COL_MAJOR:
-                if (n != 4 || m->col_major) return 0;
-                m->col_major = 1; break;
-            default: break;
+        if (op == OP_DECORATE) {
+            if (n < 3 || !valid_id(s, w[1])) return 0;
+            if (s->types[w[1]].kind != OP_DECORATION_GROUP &&
+                !decorate_type(s, w[1], w + 2, n - 2)) return 0;
+        } else if (op == OP_MEMBER_DECORATE) {
+            if (n < 4 || !decorate_member(s, w[1], w[2], w + 3, n - 3)) return 0;
+        } else if (op == OP_GROUP_DECORATE || op == OP_GROUP_MEMBER_DECORATE) {
+            if (n < 3 || !valid_id(s, w[1]) || s->types[w[1]].kind != OP_DECORATION_GROUP ||
+                (op == OP_GROUP_MEMBER_DECORATE && (n < 4 || n % 2))) return 0;
+            const uint32_t step = op == OP_GROUP_MEMBER_DECORATE ? 2 : 1;
+            for (uint32_t i = 2; i < n; i += step) {
+                if (!valid_id(s, w[i]) || s->types[w[i]].kind == OP_DECORATION_GROUP ||
+                    (step == 2 && (s->types[w[i]].kind != OP_TYPE_STRUCT ||
+                        w[i + 1] >= s->types[w[i]].member_count))) return 0;
+                /* A group may carry several annotations and apply to several
+                 * targets. Member applications supply the index for each pair. */
+                for (size_t d = 5; d < count; d += words[d] >> 16) {
+                    const uint32_t dn = words[d] >> 16;
+                    if ((words[d] & 0xffffu) != OP_DECORATE || dn < 3 || words[d + 1] != w[1]) continue;
+                    if (step == 1 ? !decorate_type(s, w[i], words + d + 2, dn - 2) :
+                        !decorate_member(s, w[i], w[i + 1], words + d + 2, dn - 2)) return 0;
+                }
             }
         }
-        at += n;
     }
     return 1;
 }

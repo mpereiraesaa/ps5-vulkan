@@ -38,6 +38,48 @@ def instructions(words):
     assert at == len(words)
 
 
+def group_annotations(words, selected=None):
+    """Keep executable instructions intact; group selected layout annotations."""
+    result = words[:5]
+    groups = {}
+    for at, size, op in instructions(words):
+        decoration_at = 2 if op == 71 else 3
+        if op not in (71, 72) or size <= decoration_at:
+            result.extend(words[at:at + size])
+            continue
+        payload = tuple(words[at + decoration_at:at + size])
+        if payload[0] not in (2, 3, 4, 5, 6, 7, 35) or (selected is not None and payload[0] not in selected):
+            result.extend(words[at:at + size])
+            continue
+        key = op, payload
+        if key not in groups:
+            group = result[3]
+            result[3] += 1
+            groups[key] = group
+            result.extend([(2 << 16) | 73, group])
+            result.extend([((2 + len(payload)) << 16) | 71, group, *payload])
+        group = groups[key]
+        if op == 71:
+            result.extend([(3 << 16) | 74, group, words[at + 1]])
+        else:
+            result.extend([(4 << 16) | 75, group, words[at + 1], words[at + 2]])
+    # Merge applications to exercise multiple type targets or member pairs.
+    applications = {}
+    for at, size, op in instructions(result):
+        if op in (74, 75):
+            applications.setdefault((op, result[at + 1]), []).extend(result[at + 2:at + size])
+    merged = result[:5]
+    for at, size, op in instructions(result):
+        if op in (74, 75):
+            key = op, result[at + 1]
+            targets = applications.pop(key, None)
+            if targets is not None:
+                merged.extend([((2 + len(targets)) << 16) | op, key[1], *targets])
+        else:
+            merged.extend(result[at:at + size])
+    return merged
+
+
 class UboLayout(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -80,6 +122,62 @@ class UboLayout(unittest.TestCase):
         self.assertFalse(self.valid(compact, False))
         self.assertTrue(self.valid(legacy, False))
         self.assertTrue(self.valid(legacy, True))
+
+    def test_grouped_block_cannot_bypass_std140(self):
+        compact = group_annotations(self.compile("std430"), {2})
+        self.assertTrue(self.valid(compact, True))
+        self.assertFalse(self.valid(compact, False))
+
+    def test_grouped_type_and_member_layouts(self):
+        for layout in ("std430", "std140"):
+            for order in ("row_major", "column_major"):
+                with self.subTest(layout=layout, order=order):
+                    words = self.compile(layout)
+                    if order == "column_major":
+                        # Compile a proper column-major shader, not a decoration
+                        # mutation with incompatible precomputed matrix strides.
+                        source = self.directory / f"{layout}.comp"
+                        source.write_text(source.read_text().replace("row_major", "column_major"))
+                        binary = source.with_suffix(".spv")
+                        subprocess.run(["glslangValidator", "-V", "--target-env", "vulkan1.0",
+                                        str(source), "-o", str(binary)], check=True,
+                                       capture_output=True, text=True)
+                        data = binary.read_bytes()
+                        words = list(struct.unpack(f"<{len(data) // 4}I", data))
+                    grouped = group_annotations(words)
+                    self.assertTrue(self.valid(grouped, True))
+                    self.assertEqual(self.valid(grouped, False), layout == "std140")
+                    self.assertTrue(any(op == 75 and size > 4 for _, size, op in instructions(grouped)))
+
+    def test_grouped_invalid_layout_payloads(self):
+        original = group_annotations(self.compile("std430"))
+        self.assertTrue(self.valid(original, True))
+        for decoration in (6, 7, 35):
+            at = next(at for at, size, op in instructions(original)
+                      if op == 71 and size == 4 and original[at + 2] == decoration)
+            with self.subTest(decoration=decoration):
+                bad = original.copy()
+                bad[at + 3] = 1
+                self.assertFalse(self.valid(bad, True))
+
+    def test_grouped_malformed_targets_and_members(self):
+        original = group_annotations(self.compile("std430"))
+        member = next(at for at, _, op in instructions(original) if op == 75)
+        target = next(at for at, _, op in instructions(original) if op == 74)
+        scalar = next(original[at + 1] for at, _, op in instructions(original) if op == 21)
+        mutations = [(member + 3, 0xffffffff), (member + 2, scalar),
+                     (member + 1, scalar), (target + 2, original[3]),
+                     (target + 2, original[target + 1])]
+        for index, value in mutations:
+            bad = original.copy()
+            bad[index] = value
+            self.assertFalse(self.valid(bad, True))
+        bad = original.copy()
+        size = bad[member] >> 16
+        # Remove the last member index, preserving subsequent instructions.
+        del bad[member + size - 1]
+        bad[member] = ((size - 1) << 16) | 75
+        self.assertFalse(self.valid(bad, True))
 
     def test_reject_invalid_array_stride_matrix_stride_and_offset(self):
         original = self.compile("std430")
