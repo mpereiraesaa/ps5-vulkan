@@ -3579,8 +3579,14 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "KHR and Vulkan 1.3 query/opt-in contracts exist behind an unreported platform capability. Module admission requires opt-in and a matching OpConstantNull initializer. The pinned host compiler emits zero stores and an additional workgroup barrier before application shared-memory access; a control shader without the initializer omits both. Compiler regression covers a 2048-byte shared array and checks allocation. Not implemented yet: SDK-linked delivery witness and native execution remain pending; the shipping platform does not advertise this capability.",
+        "refs": [
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_pipeline.c",
+          "tests/test_runtime_compiler.c",
+          "tests/test_vk_core_version.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",

@@ -385,6 +385,33 @@ VkResult ps5vk_program_resolve(void *context, const uint32_t *words, size_t coun
     return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
+/* Vulkan permits only a null initializer for Workgroup variables, and only
+ * with explicit shaderZeroInitializeWorkgroupMemory opt-in. Check this before
+ * calling the compiler, which otherwise assumes valid SPIR-V. */
+static VkResult workgroup_initializers(const uint32_t *words, size_t count, VkBool32 enabled)
+{
+    for (size_t i = 5; i < count; i += words[i] >> 16) {
+        const uint32_t *w = words + i;
+        if ((w[0] & 0xffff) != 59 || (w[0] >> 16) < 5 || w[3] != 4) continue;
+        if (!enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
+        if ((w[0] >> 16) != 5 || !w[1] || w[1] >= words[3] ||
+            !w[4] || w[4] >= words[3]) return INVALID;
+        uint32_t pointee = 0, initializer_type = 0;
+        unsigned pointers = 0, initializers = 0;
+        for (size_t j = 5; j < count; j += words[j] >> 16) {
+            const uint32_t *v = words + j;
+            if ((v[0] & 0xffff) == 32 && (v[0] >> 16) == 4 && v[1] == w[1] && v[2] == 4) {
+                pointee = v[3]; ++pointers;
+            }
+            if ((v[0] & 0xffff) == 46 && (v[0] >> 16) == 3 && v[2] == w[4]) {
+                initializer_type = v[1]; ++initializers;
+            }
+        }
+        if (pointers != 1 || initializers != 1 || !pointee || pointee != initializer_type) return INVALID;
+    }
+    return VK_SUCCESS;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderModuleCreateInfo *info,
     const VkAllocationCallbacks *a, VkShaderModule *out)
 {
@@ -396,6 +423,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
     if (info->codeSize > 16 * 1024 * 1024 || info->codeSize > SIZE_MAX - sizeof(struct VkShaderModule_T))
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (!module_valid(info->pCode, info->codeSize / 4)) return INVALID;
+    VkResult initialization = workgroup_initializers(info->pCode, info->codeSize / 4,
+        !!(d->enabled_features_t09 & PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY));
+    if (initialization != VK_SUCCESS) return initialization;
     if (subgroup_module_unsupported(info->pCode, info->codeSize / 4,
                                     d->platform_features,
                                     d->physical ?

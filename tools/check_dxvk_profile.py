@@ -171,6 +171,23 @@ CORE_IMPLEMENTATIONS = {
                    "vkAllocateMemory and vkBindBufferMemory accept a buffer of that size."),
         "gaps": (),
     },
+    "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory": {
+        "citations": (
+            ("src/vk_device.c", "PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY"),
+            ("src/vk_core_version.c", "V13(shaderZeroInitializeWorkgroupMemory"),
+            ("src/vk_pipeline.c", "static VkResult workgroup_initializers"),
+            ("tests/test_vk_core_version.c", "zero_initialize_negotiation"),
+            ("tests/test_runtime_compiler.c", "zero_initialize_workgroup"),
+        ),
+        "detail": ("KHR and Vulkan 1.3 query/opt-in contracts exist behind an unreported "
+                   "platform capability. Module admission requires opt-in and a matching "
+                   "OpConstantNull initializer. The pinned host compiler emits zero stores "
+                   "and an additional workgroup barrier before application shared-memory "
+                   "access; a control shader without the initializer omits both. "
+                   "Compiler regression covers a 2048-byte shared array and checks allocation."),
+        "gaps": ("SDK-linked delivery witness and native execution remain pending; "
+                 "the shipping platform does not advertise this capability",),
+    },
     "feature:VkPhysicalDeviceVulkan13Features:maintenance4": {
         "citations": (
             ("native/platform_ps5.c", "PS5VK_T09_FEATURE_MAINTENANCE4"),
@@ -598,6 +615,8 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_DEDICATED_ALLOCATION"},
         "VK_KHR_BIND_MEMORY_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_BIND_MEMORY2"},
         "VK_KHR_MAINTENANCE_4_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE4"},
+        "VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY"},
         "VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE"},
         "VK_EXT_ROBUSTNESS_2_EXTENSION_NAME": {

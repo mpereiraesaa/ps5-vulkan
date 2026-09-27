@@ -150,6 +150,57 @@ static void full_set_compile(void)
     full_set_compile_type("build/test-shaders/descriptor-capacity/descriptor_capacity_texel_spirv.spv",
                           VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 4u);
 }
+/* Compare glslang's GL_EXT_null_initializer module with the same shader
+ * without initialization. Both retain the application store and barrier. */
+static void zero_initialize_workgroup(void)
+{
+    size_t bytes;
+    uint32_t *plain = read_file("build/test-shaders/zero_initialize_workgroup.spv", &bytes);
+    assert(plain);
+    size_t initialized_bytes;
+    uint32_t *initialized = read_file("build/test-shaders/zero_initialize_workgroup_null.spv",
+                                      &initialized_bytes);
+    assert(initialized);
+    struct VkPipelineLayout_T layout = {.set_count = 1};
+    layout.sets[0].binding[0].count = 1;
+    layout.sets[0].binding[0].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    layout.sets[0].count = 1;
+    for (unsigned init = 0; init < 2; ++init) {
+        FILE *capture = tmpfile(); assert(capture);
+        fflush(stderr); int saved = dup(STDERR_FILENO); assert(saved >= 0);
+        assert(dup2(fileno(capture), STDERR_FILENO) >= 0);
+        assert(!setenv("PSBC_DEBUG_DISASM", "1", 1));
+        struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+        VkResult result = ps5vk_runtime_compile_compute(init ? initialized : plain,
+            init ? initialized_bytes / 4 : bytes / 4, "main", &layout, NULL, &program, &code);
+        assert(!unsetenv("PSBC_DEBUG_DISASM"));
+        fflush(stderr); assert(dup2(saved, STDERR_FILENO) >= 0); close(saved);
+        assert(result == VK_SUCCESS && code && program.code_words && program.local_size[0] == 64);
+        /* Undefined control lanes may be optimized away. The initialized
+         * module must allocate all 512 uints, in 512-byte register units. */
+        if (init) assert(program.lds_size >= 4);
+        long size = ftell(capture); assert(size > 0); rewind(capture);
+        char *text = calloc((size_t)size + 1, 1); assert(text);
+        assert(fread(text, 1, (size_t)size, capture) == (size_t)size); fclose(capture);
+        char *hardware = strstr(text, "After lowering to hw instructions:"); assert(hardware);
+        char *end = strstr(hardware, "PSBC executable"); assert(end); *end = 0;
+        unsigned barriers = 0;
+        for (char *at = hardware; (at = strstr(at, "s_barrier")); ++at) ++barriers;
+        assert(barriers == (init ? 2u : 1u));
+        char *zero_store = strstr(hardware, "ds_write_b128");
+        char *application_store = strstr(hardware, "ds_write_b32");
+        assert(application_store);
+        if (init) {
+            assert(strstr(text, "p_create_vector 0, 0, 0, 0"));
+            assert(zero_store && zero_store < strstr(hardware, "s_barrier") &&
+                   strstr(hardware, "s_barrier") < application_store);
+        } else assert(!zero_store);
+        free(text); free(code);
+    }
+    free(initialized); free(plain);
+}
+
 int main(void)
 {
     full_set_compile();
@@ -685,6 +736,7 @@ int main(void)
     free(spv2);
 
     robust_access_wrap();
+    zero_initialize_workgroup();
     puts("Runtime compute compiler: pass (PSBC/ACO GFX1013 ABI, CS registers, error guards, CPU reference)");
     return 0;
 }

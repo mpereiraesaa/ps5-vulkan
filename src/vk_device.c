@@ -696,6 +696,9 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
             ((VkPhysicalDeviceShaderTerminateInvocationFeatures *)next)
                 ->shaderTerminateInvocation = !!(p->platform.supported_features_t09 &
                     PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION);
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES) {
+            ((VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures *)next)->shaderZeroInitializeWorkgroupMemory =
+                !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY);
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES) {
             ((VkPhysicalDeviceMaintenance4Features *)next)->maintenance4 =
                 maintenance4_supported(p);
@@ -982,7 +985,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Thirty-three conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Thirty-five conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
@@ -991,9 +994,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
      * template, robustness2, extended dynamic state, maintenance1,
      * copy_commands2, depth/stencil resolve, dynamic rendering, format feature
      * flags 2, image format list, synchronization2, transform feedback,
-     * imageless framebuffer). Keep headroom so a new entry cannot overflow the
-     * array before this bound is revisited; each push site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 34, DEVICE_EXTENSION_SLOTS = 36 };
+     * imageless framebuffer, zero initialize workgroup memory). Keep headroom
+     * so a new entry cannot overflow the array before this bound is revisited;
+     * each push site must stay below it. */
+    enum { DEVICE_EXTENSION_PUSHES = 35, DEVICE_EXTENSION_SLOTS = 36 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -1101,6 +1105,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
         properties[total++] = (VkExtensionProperties){
             VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_KHR_BIND_MEMORY_2_SPEC_VERSION};
     }
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY) {
+        properties[total++] = (VkExtensionProperties){
+            VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_EXTENSION_NAME,
+            VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_SPEC_VERSION};
+    }
     if (maintenance4_supported(p)) {
         properties[total++] = (VkExtensionProperties){
             VK_KHR_MAINTENANCE_4_EXTENSION_NAME, VK_KHR_MAINTENANCE_4_SPEC_VERSION};
@@ -1204,6 +1213,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 memory_requirements2_extension = VK_FALSE;
     VkBool32 dedicated_allocation_extension = VK_FALSE, bind_memory2_extension = VK_FALSE;
     VkBool32 maintenance4_extension = VK_FALSE, saw_maintenance4 = VK_FALSE;
+    VkBool32 zero_initialize_extension = VK_FALSE, saw_zero_initialize = VK_FALSE;
     VkBool32 descriptor_update_template_extension = VK_FALSE;
     /* DXVK262-T10 recording routes. */
     VkBool32 extended_dynamic_state_extension = VK_FALSE;
@@ -1265,6 +1275,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &dedicated_allocation_extension;
         else if (!strcmp(name, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME))
             seen = &bind_memory2_extension;
+        else if (!strcmp(name, VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_EXTENSION_NAME))
+            seen = &zero_initialize_extension;
         else if (!strcmp(name, VK_KHR_MAINTENANCE_4_EXTENSION_NAME))
             seen = &maintenance4_extension;
         else if (!strcmp(name, VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME))
@@ -1383,6 +1395,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     if (terminate_extension &&
         (!(p->platform.supported_features_t09 &
            PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION) ||
+         !features2_available))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (zero_initialize_extension &&
+        (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY) ||
          !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if ((memory_requirements2_extension && !memory_requirements2_supported(p)) ||
@@ -1731,6 +1747,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 if (!terminate_extension)
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
+            }
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES) {
+            if (saw_zero_initialize) return INVALID;
+            saw_zero_initialize = VK_TRUE;
+            const VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures *features =
+                (const VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures *)next;
+            if (!valid_bool(features->shaderZeroInitializeWorkgroupMemory)) return INVALID;
+            if (features->shaderZeroInitializeWorkgroupMemory) {
+                if ((!zero_initialize_extension && core_version < VK_API_VERSION_1_3) ||
+                    !(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY;
             }
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES) {
             if (saw_maintenance4) return INVALID;

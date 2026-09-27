@@ -572,6 +572,8 @@ test-compiler: build/libpsbc.host.a test-shaders
 	$(MAKE) test-runtime-graphics-native
 	mkdir -p build/tests
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cts_ssbo_local_barrier.comp -o build/test-shaders/cts_ssbo_local_barrier.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/zero_initialize_workgroup.comp -o build/test-shaders/zero_initialize_workgroup.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp -DZERO_INITIALIZE=1 experiments/compute/zero_initialize_workgroup.comp -o build/test-shaders/zero_initialize_workgroup_null.spv
 	$(GLSLANG) -V --target-env vulkan1.2 -S comp experiments/compute/t08_subgroup_int8_iadd_runtime.comp -o build/test-shaders/t08_subgroup_int8_iadd_runtime.spv
 	$(GLSLANG) -V --target-env vulkan1.2 -S comp experiments/compute/t08_subgroup_iadd_runtime.comp -o build/test-shaders/t08_subgroup_iadd_runtime.spv
 	$(PYTHON) tools/build_dxvk_descriptor_capacity_witness.py --shaders-only build/test-shaders/descriptor-capacity
