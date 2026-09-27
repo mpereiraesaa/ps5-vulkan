@@ -96,6 +96,8 @@ static VkResult descriptor_plan(VkDevice d,const struct ps5vk_operation *op,
              * declaration so an unknown entry can never look unused. */
             const uint64_t used=ps5vk_runtime_resource_bindings(runtime,hull,s);
             if(runtime->enabled && used && !(used&(UINT64_C(1)<<b)))continue;
+            if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK &&
+               !d->inline_uniform_block_enabled)return VK_ERROR_FEATURE_NOT_PRESENT;
             for(unsigned e=0;e<binding->count;++e) {
                 unsigned index=binding->first+e;
                 if(!set->defined[index])return VK_ERROR_UNKNOWN;
@@ -283,7 +285,10 @@ static VkResult prepare_draw(VkDevice d, const struct ps5vk_operation *op, const
                 unsigned index=binding->first+e;
                 uint32_t *words=table+(tables.binding[s][b].byte_offset+
                     e*tables.binding[s][b].byte_stride)/4;
-                if(graphics_buffer_type(set->signature.type[b])) {
+                if(set->signature.type[b]==VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+                    rc=ps5vk_inline_uniform_descriptor(d,set,b,
+                        tables.binding[s][b].byte_offset/4,table,table,tables.set_bytes[s]/4);
+                } else if(graphics_buffer_type(set->signature.type[b])) {
                     VkDeviceSize dynamic=0;
                     if(ps5vk_dynamic_descriptor_type(set->signature.type[b])) {
                         const uint32_t slot=ps5vk_dynamic_slot(&set->signature,index);

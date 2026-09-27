@@ -2,6 +2,7 @@
 #define PS5VK_DESCRIPTOR_ENCODE_H
 #include "vk_pipeline.h"
 #include "descriptor_table_layout.h"
+#include "inline_uniform_descriptor.h"
 #include <string.h>
 /* nullDescriptor (VK_EXT_robustness2): the record written for a
  * VK_NULL_HANDLE buffer, buffer view or image view is all zero, the GFX10
@@ -24,12 +25,6 @@ VkResult ps5vk_buffer_descriptor(VkDevice device,
  * PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER). Failure leaves out untouched. */
 VkResult ps5vk_texel_buffer_descriptor(VkDevice device, VkBufferView view,
     uint32_t capability, uint32_t out[4]);
-/* Encode an inline record and snapshot into scratch, but point the record
- * at the final GPU-visible table. The caller owns that table until completion.
- * Both buffers must have capacity_dwords words. No GPU operation is performed. */
-VkResult ps5vk_inline_uniform_descriptor(VkDevice device, VkDescriptorSet set,
-    uint32_t binding, uint32_t table_dword, uint32_t *table, uint32_t *scratch,
-    size_t capacity_dwords);
 /* GFX1013 raw storage-buffer table for the audited compiler ABI. No uploads or
  * GPU work. Failure leaves the caller's table untouched. */
 VkResult ps5vk_descriptor_encode(VkDevice device,

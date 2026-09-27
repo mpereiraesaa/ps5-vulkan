@@ -1554,8 +1554,9 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 const VkDescriptorType type=set->signature.type[b];
                 const int buffer_type=ps5vk_graphics_buffer_type(type);
                 const int input_type=type==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-                /* Roles with no image layout: a separate S# and a texel V#. */
-                const int layoutless_type=type==VK_DESCRIPTOR_TYPE_SAMPLER ||
+                const int inline_type=type==VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+                /* Inline bytes, separate S# and texel V# have no image layout. */
+                const int layoutless_type=inline_type || type==VK_DESCRIPTOR_TYPE_SAMPLER ||
                     type==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
                 if(binding->count && !ps5vk_graphics_sampled_image_type(type) &&
                    !buffer_type && !input_type && !layoutless_type) {
@@ -1574,6 +1575,12 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 for(unsigned e=0;e<binding->count;++e) {
                     unsigned index=binding->first+e;
                     if(!set->defined[index]){rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=16;goto fail;}
+                    if(inline_type) {
+                        if(!d->inline_uniform_block_enabled) {
+                            rc=VK_ERROR_FEATURE_NOT_PRESENT;draw_site=__LINE__;goto fail;
+                        }
+                        continue; /* prepare_draw snapshots the inline bytes */
+                    }
                     if(buffer_type) {
                         /* The encoder resolves and validates the base address;
                          * a null handle is encoded only as the zeroed

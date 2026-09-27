@@ -25,6 +25,7 @@ static inline int ps5vk_graphics_descriptor_type(VkDescriptorType type)
     return ps5vk_graphics_buffer_type(type) ||
         ps5vk_graphics_sampled_image_type(type) ||
         type==VK_DESCRIPTOR_TYPE_SAMPLER ||
+        type==VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ||
         type==VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
         type==VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 }

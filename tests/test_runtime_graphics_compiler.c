@@ -1418,6 +1418,15 @@ static void check_subpass_fetch_compilation(void)
     assert(p->fragment.metadata.descriptor_set_valid[0]);
     assert(p->fragment.metadata.descriptor_used_binding_mask[0]==UINT64_C(0x3));
     ps5vk_runtime_graphics_free(NULL,out);
+    sets[0].type[1]=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;sets[0].inline_bytes[1]=20;
+    assert(ps5vk_runtime_graphics_supported(&key));out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(p->fragment.metadata.descriptor_used_binding_mask[0]==3);
+    assert(p->fragment.metadata.descriptor_bindings[1].type==PSBC_DESCRIPTOR_UNIFORM_BUFFER &&
+        p->fragment.metadata.descriptor_bindings[1].array_size==1 &&
+        p->fragment.metadata.descriptor_bindings[1].offset==32);
+    ps5vk_runtime_graphics_free(NULL,out);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
     /* The same module without the layout's signature is refused, which is the
      * shape that produced the wrong reading: the refusal is the missing
@@ -1498,6 +1507,15 @@ static void check_geometry_stage_descriptor_visibility(void)
     assert(p->vertex.metadata.descriptor_set_valid[0]);
     assert(p->arguments.vertex_descriptor_valid[0]);
     ps5vk_runtime_graphics_free(NULL,out);
+    sets[0].type[0]=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;sets[0].inline_bytes[0]=256;
+    assert(ps5vk_runtime_graphics_supported(&key));out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(p->vertex.metadata.descriptor_set_valid[0] && p->arguments.vertex_descriptor_valid[0]);
+    assert(p->vertex.metadata.descriptor_bindings[0].type==PSBC_DESCRIPTOR_UNIFORM_BUFFER &&
+        p->vertex.metadata.descriptor_bindings[0].array_size==1);
+    ps5vk_runtime_graphics_free(NULL,out);
+    sets[0].type[0]=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;sets[0].inline_bytes[0]=0;
     /* A shared layout may keep a binding for an absent geometry stage.
      * Neither remaining stage reads it or receives its descriptor table. */
     struct ps5vk_graphics_key without_geometry=key;
@@ -2161,6 +2179,26 @@ static void check_descriptor_options(void)
     for(unsigned s=0;s<4;++s) {
         const PsbcDescriptorBinding *b=&options.descriptor_bindings[s];
         assert(b->set==s && b->binding==2 && b->array_size==2 && !b->offset && b->stride==16);
+    }
+    {
+        struct ps5vk_set_signature original[4];memcpy(original,sets,sizeof(sets));
+        const uint32_t sizes[4]={4,20,128,256};
+        for(unsigned s=0;s<4;++s) {
+            sets[s].type[2]=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+            sets[s].binding[2].count=1;sets[s].inline_bytes[2]=sizes[s];sets[s].count=0;
+            for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+                sets[s].binding[b].first=sets[s].count;
+                sets[s].count+=sets[s].binding[b].count;
+            }
+        }
+        assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_VERTEX_BIT,&options)==VK_SUCCESS);
+        for(unsigned s=0;s<4;++s)assert(options.descriptor_bindings[s].type==PSBC_DESCRIPTOR_UNIFORM_BUFFER &&
+            options.descriptor_bindings[s].array_size==1 && options.descriptor_bindings[s].stride==16);
+        assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_FRAGMENT_BIT,&options)==VK_SUCCESS);
+        for(unsigned s=0;s<4;++s)assert(options.descriptor_bindings[s].binding==7 &&
+            options.descriptor_bindings[s].offset==16+((sizes[s]+15)&~15u));
+        memcpy(sets,original,sizeof(sets));
+        assert(ps5vk_runtime_graphics_descriptor_options(&key,VK_SHADER_STAGE_VERTEX_BIT,&options)==VK_SUCCESS);
     }
     PsbcCompileOptions saved=options;
     sets[3].binding[8].first--;

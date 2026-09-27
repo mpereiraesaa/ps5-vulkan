@@ -683,6 +683,7 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
             PsbcDescriptorType type;
             switch(key->descriptor_sets[s].type[b]) {
             case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER;break;
+            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
