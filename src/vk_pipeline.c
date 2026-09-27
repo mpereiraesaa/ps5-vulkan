@@ -119,6 +119,87 @@ VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
     if (found != 1) return VK_FALSE;
     *out = id; return VK_TRUE;
 }
+/* Constant expressions used for launch dimensions share one recursion/visit
+ * budget, including vector operands. Never let an unused lane hide a cycle. */
+static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
+                          const VkSpecializationInfo *specialization,
+                          unsigned depth, unsigned *budget, unsigned *kind);
+static const uint32_t *constant_definition(VkShaderModule module, uint32_t id)
+{
+    if (!id || id >= module->words[3]) return NULL;
+    const uint32_t *definition = NULL;
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        unsigned op = w[0] & 0xffff, length = w[0] >> 16;
+        if (((op >= 41 && op <= 46) || (op >= 48 && op <= 52)) &&
+            length >= 3 && w[2] == id) {
+            if (definition) return NULL;
+            definition = w;
+        }
+    }
+    return definition;
+}
+static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4],
+                           unsigned *components, uint32_t *element_type,
+                           const VkSpecializationInfo *specialization,
+                           unsigned depth, unsigned *budget)
+{
+    if (depth >= 64 || !*budget) return 0;
+    --*budget;
+    const uint32_t *definition = constant_definition(module, id);
+    if (!definition) return 0;
+    unsigned types = 0;
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        unsigned op = w[0] & 0xffff, length = w[0] >> 16;
+        if (op == 71 && length >= 3 && w[1] == id && w[2] == 1) return 0;
+        if (op == 23 && length == 4 && w[1] == definition[1]) {
+            *element_type = w[2]; *components = w[3]; ++types;
+        }
+    }
+    if (types != 1 || *components < 2 || *components > 4) return 0;
+    unsigned op = definition[0] & 0xffff, length = definition[0] >> 16;
+    if (op == 44 || op == 51) {
+        if (length != 3 + *components) return 0;
+        for (unsigned i = 0; i < *components; ++i) {
+            const uint32_t *child = constant_definition(module, definition[3 + i]);
+            unsigned kind;
+            if (!child || child[1] != *element_type ||
+                !constant_value(module, definition[3 + i], &values[i], specialization,
+                                depth + 1, budget, &kind)) return 0;
+        }
+        return 1;
+    }
+    if (op != 52 || length < 5) return 0;
+    uint32_t a[4], b[4], at = 0, bt = 0;
+    unsigned an = 0, bn = 0;
+    if (definition[3] == 79) { /* VectorShuffle: lane selectors are literals. */
+        if (length != 6 + *components ||
+            !constant_vector(module, definition[4], a, &an, &at, specialization, depth + 1, budget) ||
+            !constant_vector(module, definition[5], b, &bn, &bt, specialization, depth + 1, budget) ||
+            at != *element_type || bt != *element_type) return 0;
+        for (unsigned i = 0; i < *components; ++i) {
+            uint32_t lane = definition[6 + i];
+            if (lane >= an + bn) return 0; /* Includes undefined components. */
+            values[i] = lane < an ? a[lane] : b[lane - an];
+        }
+        return 1;
+    }
+    if (definition[3] == 82) { /* CompositeInsert into a vector. */
+        const uint32_t *object = constant_definition(module, definition[4]);
+        const uint32_t *vector = length == 7 ? constant_definition(module, definition[5]) : NULL;
+        unsigned kind;
+        uint32_t value;
+        if (!object || !vector || object[1] != *element_type || vector[1] != definition[1] ||
+            definition[6] >= *components ||
+            !constant_value(module, definition[4], &value, specialization, depth + 1, budget, &kind) ||
+            !constant_vector(module, definition[5], values, &an, &at, specialization, depth + 1, budget))
+            return 0;
+        values[definition[6]] = value;
+        return 1;
+    }
+    return 0;
+}
 /* Resolve a scalar 32-bit integer or boolean, including a specialized workgroup
  * dimension. Keep this in agreement with the compiler's specialization input:
  * defaults apply only when the application did not supply that SpecId. */
@@ -174,6 +255,16 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
         int comparison = op >= 170 && op <= 179;
         uint32_t a, b = 0, c = 0;
         unsigned ak = 0, bk = 0, ck = 0;
+        if (op == 81) { /* CompositeExtract from a vector. */
+            uint32_t lanes[4], element_type = 0;
+            unsigned components = 0;
+            if (decorated || length != 6 ||
+                !constant_vector(module, expression[4], lanes, &components, &element_type,
+                                 specialization, depth + 1, budget) ||
+                element_type != type || expression[5] >= components) return 0;
+            *value = lanes[expression[5]];
+            return 1;
+        }
         if (decorated || length != (select ? 7u : unary ? 5u : 6u) ||
             !constant_value(module, expression[4], &a, specialization, depth + 1, budget, &ak) ||
             (!unary && !constant_value(module, expression[5], &b, specialization, depth + 1, budget, &bk)) ||
@@ -251,7 +342,8 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
 }
 /* LocalSize (OpExecutionMode, mode 17) or, when the device enabled
  * maintenance4, LocalSizeId (OpExecutionModeId 331, mode 38) whose three
- * operands are scalar 32-bit constants or integer specialization expressions.
+ * operands are scalar 32-bit constants or specialization expressions, including
+ * scalar extraction from integer/boolean vectors.
  * Exactly one execution mode names the entry. Unsupported expression types
  * remain rejected rather than guessed from their defaults. */
 static int local_size(VkShaderModule module, const char *name, uint32_t dims[3],

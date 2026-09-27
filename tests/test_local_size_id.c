@@ -222,6 +222,77 @@ static uint32_t *conditional_dimension(const uint32_t *words, size_t count,
     return out;
 }
 
+/* Construct, insert, shuffle, then extract a vector lane. All indices are
+ * literal operands; the source components still carry scalar specialization. */
+static uint32_t *vector_dimension(const uint32_t *words, size_t count,
+                                  uint32_t x, uint32_t one, unsigned source, unsigned lane)
+{
+    size_t functions = 5;
+    uint32_t type = 0, vector_type = 0;
+    for (; functions < count; functions += words[functions] >> 16) {
+        if (((words[functions] & 0xffff) == 50 || (words[functions] & 0xffff) == 48 ||
+             (words[functions] & 0xffff) == 49) && words[functions + 2] == x)
+            type = words[functions + 1];
+        if ((words[functions] & 0xffff) == 54) break;
+    }
+    assert(type && functions < count && source < 3);
+    for (size_t i = 5; i < functions; i += words[i] >> 16)
+        if ((words[i] & 0xffff) == 23 && words[i + 2] == type && words[i + 3] == 4)
+            vector_type = words[i + 1];
+    uint32_t base = words[3], vt = vector_type ? vector_type : base;
+    uint32_t declarations[] = {
+        4u << 16 | 23u, base, type, 4,
+        7u << 16 | 51u, vt, base + 1, x, one, x, one,
+        7u << 16 | 52u, vt, base + 2, 82, one, base + 1, 0,
+        10u << 16 | 52u, vt, base + 3, 79, base + 1, base + 2, 6, 4, 1, 0,
+        6u << 16 | 52u, type, base + 4, 81, base + 1 + source, lane,
+    };
+    if (vector_type)
+        for (unsigned i = 0; i < 4; ++i) declarations[i] = 1u << 16;
+    assert(sizeof(declarations) == 34 * sizeof(uint32_t));
+    uint32_t *out = malloc((count + 34) * sizeof(*out));
+    assert(out);
+    memcpy(out, words, functions * sizeof(*out));
+    memcpy(out + functions, declarations, sizeof(declarations));
+    memcpy(out + functions + 34, words + functions, (count - functions) * sizeof(*out));
+    out[3] += 5;
+    for (size_t i = 5; i < functions;) {
+        unsigned length = out[i] >> 16;
+        if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = base + 4;
+        if ((out[i] & 0xffff) == 71 && length == 4 && out[i + 2] == 11 && out[i + 3] == 25)
+            for (unsigned j = 0; j < length; ++j) out[i + j] = 1u << 16;
+        i += length;
+    }
+    return out;
+}
+
+/* Feed a boolean vector extraction to an integer select instead of using
+ * the boolean directly as a launch dimension. */
+static uint32_t *boolean_vector_dimension(const uint32_t *words, size_t count,
+                                          uint32_t yes, uint32_t no, unsigned source, unsigned lane)
+{
+    uint32_t *vector = vector_dimension(words, count, yes, no, source, lane);
+    size_t functions = 5;
+    uint32_t one = constant_id(words, count, 1), size32 = constant_id(words, count, 32), type = 0;
+    for (; functions < count + 34; functions += vector[functions] >> 16) {
+        if ((vector[functions] & 0xffff) == 43 && vector[functions + 2] == one)
+            type = vector[functions + 1];
+        if ((vector[functions] & 0xffff) == 54) break;
+    }
+    assert(one && size32 && type && functions < count + 34);
+    uint32_t *out = malloc((count + 41) * sizeof(*out));
+    assert(out);
+    memcpy(out, vector, functions * sizeof(*out));
+    uint32_t select[] = {7u << 16 | 52u, type, vector[3], 169, vector[3] - 1, size32, one};
+    memcpy(out + functions, select, sizeof(select));
+    memcpy(out + functions + 7, vector + functions, (count + 34 - functions) * sizeof(*out));
+    out[3]++;
+    for (size_t i = 5; i < functions; i += out[i] >> 16)
+        if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = vector[3];
+    free(vector);
+    return out;
+}
+
 int main(void)
 {
     size_t bytes = 0;
@@ -305,6 +376,44 @@ int main(void)
     assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
                              &warm32) == VK_SUCCESS);
     assert(warm32->program.local_size[0] == 32);
+    const unsigned specialized_lane[3][4] = {{1, 0, 1, 0}, {0, 0, 1, 0}, {1, 0, 0, 1}};
+    for (unsigned source = 0; source < 3; ++source) {
+        for (unsigned lane = 0; lane < 4; ++lane) {
+            uint32_t *vector = vector_dimension(specialized, count + 4, id64, id1, source, lane);
+            VkPipeline selected;
+            assert(build(device, layout, vector, bytes + 152, &selected) == VK_SUCCESS);
+            assert(selected->program.local_size[0] == (specialized_lane[source][lane] ? 64 : 1));
+            vkDestroyPipeline(device, selected, NULL);
+            for (unsigned repeat = 0; repeat < 3; ++repeat) {
+                x = repeat == 1 ? 16 : 32;
+                assert(build_specialized(device, layout, vector, bytes + 152, &specialization,
+                                         &selected) == VK_SUCCESS);
+                assert(selected->program.local_size[0] == (specialized_lane[source][lane] ? x : 1));
+                vkDestroyPipeline(device, selected, NULL);
+            }
+            device->enabled_features_t09 &= ~PS5VK_T09_FEATURE_MAINTENANCE4;
+            assert(build(device, layout, vector, bytes + 152, &refused) != VK_SUCCESS && !refused);
+            device->enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
+            free(vector);
+        }
+    }
+    /* Reject malformed indices, unsupported undefined shuffle lanes and a cycle in an
+     * unselected component before the real compiler sees the malformed DAG. */
+    for (unsigned invalid = 0; invalid < 5; ++invalid) {
+        uint32_t *vector = vector_dimension(specialized, count + 4, id64, id1, 2, 0);
+        for (size_t i = 5; i < count + 38; i += vector[i] >> 16) {
+            unsigned op = vector[i] & 0xffff;
+            if (op == 52 && vector[i + 3] == 81 && invalid == 0) vector[i + 5] = 4;
+            if (op == 52 && vector[i + 3] == 82 && invalid == 1) vector[i + 6] = 4;
+            if (op == 52 && vector[i + 3] == 79 && (invalid == 2 || invalid == 3))
+                vector[i + 9] = invalid == 2 ? 8 : UINT32_MAX;
+            if (op == 51 && vector[i + 2] == specialized[3] + 1 && invalid == 4)
+                vector[i + 6] = specialized[3] + 4;
+        }
+        assert(build(device, layout, vector, bytes + 152, &refused) != VK_SUCCESS && !refused);
+        free(vector);
+    }
+    x = 32;
     const unsigned ops[] = {128, 130, 132, 134, 135, 137, 138, 139, 194, 195, 196, 197, 198, 199};
     const uint32_t expected[] = {33, 31, 32, 32, 32, 0, 0, 0, 16, 16, 64, 33, 33, 0};
     for (unsigned i = 0; i < sizeof(ops) / sizeof(ops[0]); ++i) {
@@ -351,6 +460,22 @@ int main(void)
                                  &selected) == VK_SUCCESS);
         assert(selected->program.local_size[0] == (i ? 32 : 1));
         vkDestroyPipeline(device, selected, NULL);
+    }
+    for (unsigned source = 0; source < 3; ++source) {
+        for (unsigned lane = 0; lane < 4; ++lane) {
+            uint32_t *vector = boolean_vector_dimension(boolean_spec, count + 33,
+                specialized[3] + 2, specialized[3] + 3, source, lane);
+            for (unsigned input = 0; input < 2; ++input) {
+                VkPipeline selected;
+                truth = input ? 2 : VK_FALSE;
+                assert(build_specialized(device, layout, vector, bytes + 296, &truth_info,
+                                         &selected) == VK_SUCCESS);
+                assert(selected->program.local_size[0] ==
+                       (input && specialized_lane[source][lane] ? 32 : 1));
+                vkDestroyPipeline(device, selected, NULL);
+            }
+            free(vector);
+        }
     }
     /* A select condition must be boolean, and a workgroup dimension must
      * remain integer even though its expression may consume booleans. */
@@ -429,7 +554,7 @@ int main(void)
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     free(literal); free(by_id); free(spec);
-    puts("LocalSizeId: scalar integer, boolean and conditional specialization expressions under maintenance4 "
+    puts("LocalSizeId: scalar and vector specialization expressions under maintenance4 "
          "(host compiler, no GPU evidence)");
     return 0;
 }

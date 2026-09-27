@@ -755,7 +755,9 @@ class CurrentProbeTests(unittest.TestCase):
                       m4["implementation"]["detail"])
         self.assertIn("integer comparisons, boolean specialization and conditional selection",
                       m4["implementation"]["detail"])
-        self.assertIn("conversions or composite extraction remain refused",
+        self.assertIn("vector construction, insertion, shuffle and scalar extraction",
+                      m4["implementation"]["detail"])
+        self.assertIn("conversions or nested aggregate extraction remain refused",
                       m4["implementation"]["detail"])
         self.assertIn("147 float/int/uint interface cases across VS/TCS/TES/GS/FS",
                       m4["implementation"]["detail"])

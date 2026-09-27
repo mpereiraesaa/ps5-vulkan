@@ -184,6 +184,7 @@ CORE_IMPLEMENTATIONS = {
                    "LocalSizeId with constants, direct specialization and bounded scalar "
                    "32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, "
                    "integer comparisons, boolean specialization and conditional selection, "
+                   "plus vector construction, insertion, shuffle and scalar extraction, "
                    "checked against the host compiler. Whole-location producer vectors may "
                    "be wider than consumer vectors when maintenance4 is enabled; the "
                    "VS-to-FS path has cache opt-in guards. Permanent real-compiler tests "
@@ -191,7 +192,7 @@ CORE_IMPLEMENTATIONS = {
                    "and per-patch boundaries, with no native delivery claim."),
         "gaps": (
             "LocalSizeId compound OpSpecConstantOp expressions involving conversions "
-            "or composite extraction remain refused "
+            "or nested aggregate extraction remain refused "
             "(src/vk_pipeline.c local_size)",
         ),
     },
