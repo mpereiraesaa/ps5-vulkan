@@ -6,6 +6,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class UpstreamResourceQueryRegistrationTests(unittest.TestCase):
+    def test_descriptor_copy_factory_preserves_original_body(self):
+        package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
+        builder = (ROOT / "tools/build_upstream_cts.py").read_text()
+        self.assertIn('#include "vktBindingDescriptorCopyTests.hpp"', package)
+        self.assertIn('bindingModelGroup->addChild(vkt::BindingModel::createDescriptorCopyTests(m_testCtx))', package)
+        self.assertIn('cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingDescriptorCopyTests.cpp"', builder)
+        self.assertNotIn('focused_sources / "vktBindingDescriptorCopyTests.cpp"', builder)
+
     def test_original_factories_are_registered_under_manifest_paths(self):
         package = (ROOT / "cts/upstream/package_ps5.cpp").read_text()
         self.assertIn('#include "vktQueryPoolTests.hpp"', package)

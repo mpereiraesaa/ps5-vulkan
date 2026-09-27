@@ -1042,6 +1042,7 @@ def main(argv=None):
         # compressed-format sampling tests.
         cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureTestUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingDescriptorCopyTests.cpp",
         focused_sources / "vktBindingBufferDeviceAddressTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp",

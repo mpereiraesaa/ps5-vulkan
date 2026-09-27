@@ -10,6 +10,7 @@
 #include "vktTextureFilteringTests.hpp"
 #include "vktImagelessFramebufferTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
+#include "vktBindingDescriptorCopyTests.hpp"
 #include "vktBindingBufferDeviceAddressTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktSynchronizationBasicEventTests.hpp"
@@ -189,10 +190,11 @@ void FocusedVkTestPackage::init(void)
         addChild(textureGroup.release());
     }
 
-    // binding_model.shader_access group
+    // Original binding model factories; cases.txt filters the selected leaves.
     {
         de::MovePtr<tcu::TestCaseGroup> bindingModelGroup(new tcu::TestCaseGroup(m_testCtx, "binding_model"));
         bindingModelGroup->addChild(vkt::BindingModel::createShaderAccessTests(m_testCtx));
+        bindingModelGroup->addChild(vkt::BindingModel::createDescriptorCopyTests(m_testCtx));
         // Original BDA test body, support gate and GPU oracle. The build copy
         // bounds registration to two base-address compute cases; cases.txt
         // remains the execution filter for measurement versus acceptance.
