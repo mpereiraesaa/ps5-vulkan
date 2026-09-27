@@ -119,23 +119,28 @@ VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
     if (found != 1) return VK_FALSE;
     *out = id; return VK_TRUE;
 }
-/* Resolve a scalar 32-bit integer, including a directly specialized workgroup
+/* Resolve a scalar 32-bit integer or boolean, including a specialized workgroup
  * dimension. Keep this in agreement with the compiler's specialization input:
  * defaults apply only when the application did not supply that SpecId. */
 static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
                           const VkSpecializationInfo *specialization,
-                          unsigned depth, unsigned *budget)
+                          unsigned depth, unsigned *budget, unsigned *kind)
 {
     if (!id || id >= module->words[3] || depth >= 64 || !*budget) return 0;
     --*budget;
     const uint32_t *expression = NULL;
-    uint32_t type = 0, spec_id = 0;
+    uint32_t type = 0, spec_id = 0, literal_kind = 0;
     int is_spec = 0, found = 0, decorated = 0;
     for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
         const uint32_t *w = module->words + i;
         uint32_t op = w[0] & 0xffff;
         if ((op == 43 || op == 50) && w[0] >> 16 == 4 && w[2] == id) {
-            type = w[1]; *value = w[3]; is_spec = op == 50; ++found;
+            type = w[1]; *value = w[3]; is_spec = op == 50; literal_kind = 1; ++found;
+        }
+        if ((op == 41 || op == 42 || op == 48 || op == 49) &&
+            (w[0] >> 16) == 3 && w[2] == id) {
+            type = w[1]; *value = op == 41 || op == 48;
+            is_spec = op == 48 || op == 49; literal_kind = 2; ++found;
         }
         if (op == 52 && (w[0] >> 16) >= 5 && w[2] == id) {
             type = w[1]; expression = w; ++found;
@@ -145,25 +150,43 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
         }
     }
     if (found != 1 || decorated > 1) return 0;
-    int integer = 0;
+    int scalar = 0;
+    *kind = 0;
     for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
         const uint32_t *w = module->words + i;
-        if ((w[0] & 0xffff) == 21 && w[0] >> 16 == 4 && w[1] == type && w[2] == 32)
-            ++integer;
+        if ((w[0] & 0xffff) == 21 && w[0] >> 16 == 4 && w[1] == type && w[2] == 32) {
+            ++scalar; *kind = 1;
+        }
+        if ((w[0] & 0xffff) == 20 && w[0] >> 16 == 2 && w[1] == type) {
+            ++scalar; *kind = 2;
+        }
     }
-    if (integer != 1) return 0;
+    if (scalar != 1 || (literal_kind && literal_kind != *kind)) return 0;
     if (expression) {
-        /* Scalar integer specialization expressions. Use unsigned arithmetic
+        /* Scalar integer and boolean specialization expressions. Use unsigned arithmetic
          * for modular SPIR-V results and wider signed intermediates so host
          * overflow, division and shifts never invoke undefined C behavior.
          * Bound recursion and total visits, including cyclic malformed IDs. */
         unsigned op = expression[3], length = expression[0] >> 16;
-        int unary = op == 126 || op == 200;
-        uint32_t a, b = 0;
-        if (decorated || length != (unary ? 5u : 6u) ||
-            !constant_value(module, expression[4], &a, specialization, depth + 1, budget) ||
-            (!unary && !constant_value(module, expression[5], &b, specialization, depth + 1, budget)))
+        int unary = op == 126 || op == 168 || op == 200;
+        int select = op == 169;
+        int logical = op >= 164 && op <= 168;
+        int comparison = op >= 170 && op <= 179;
+        uint32_t a, b = 0, c = 0;
+        unsigned ak = 0, bk = 0, ck = 0;
+        if (decorated || length != (select ? 7u : unary ? 5u : 6u) ||
+            !constant_value(module, expression[4], &a, specialization, depth + 1, budget, &ak) ||
+            (!unary && !constant_value(module, expression[5], &b, specialization, depth + 1, budget, &bk)) ||
+            (select && !constant_value(module, expression[6], &c, specialization, depth + 1, budget, &ck)))
             return 0;
+        if (select) {
+            if (ak != 2 || bk != *kind || ck != *kind) return 0;
+            *value = a ? b : c;
+            return 1;
+        }
+        unsigned operand_kind = logical ? 2u : 1u;
+        if (*kind != (logical || comparison ? 2u : 1u) ||
+            ak != operand_kind || (!unary && bk != operand_kind)) return 0;
         int64_t sa = a <= INT32_MAX ? (int64_t)a : (int64_t)a - 0x100000000LL;
         int64_t sb = b <= INT32_MAX ? (int64_t)b : (int64_t)b - 0x100000000LL;
         switch (op) {
@@ -182,6 +205,21 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
             if (r && ((r < 0) != (sb < 0))) r += sb;
             *value = (uint32_t)r; break;
         }
+        case 164: *value = !!a == !!b; break;
+        case 165: *value = !!a != !!b; break;
+        case 166: *value = a || b; break;
+        case 167: *value = a && b; break;
+        case 168: *value = !a; break;
+        case 170: *value = a == b; break;
+        case 171: *value = a != b; break;
+        case 172: *value = a > b; break;
+        case 173: *value = sa > sb; break;
+        case 174: *value = a >= b; break;
+        case 175: *value = sa >= sb; break;
+        case 176: *value = a < b; break;
+        case 177: *value = sa < sb; break;
+        case 178: *value = a <= b; break;
+        case 179: *value = sa <= sb; break;
         case 194: if (b >= 32) return 0; *value = a >> b; break;
         case 195: if (b >= 32) return 0;
                   *value = a >> b;
@@ -208,6 +246,7 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
             entry->size > specialization->dataSize - entry->offset) return 0;
         memcpy(value, (const uint8_t *)specialization->pData + entry->offset, sizeof(*value));
     }
+    if (*kind == 2) *value = !!*value;
     return 1;
 }
 /* LocalSize (OpExecutionMode, mode 17) or, when the device enabled
@@ -228,8 +267,11 @@ static int local_size(VkShaderModule module, const char *name, uint32_t dims[3],
         } else if ((w[0] & 0xffff) == 331 && w[0] >> 16 == 6 && w[1] == id && w[2] == 38) {
             if (!local_size_id) return 0;
             unsigned budget = 4096;
-            for (unsigned n = 0; n < 3; ++n)
-                if (!constant_value(module, w[3 + n], &dims[n], specialization, 0, &budget)) return 0;
+            for (unsigned n = 0; n < 3; ++n) {
+                unsigned kind;
+                if (!constant_value(module, w[3 + n], &dims[n], specialization, 0, &budget, &kind) ||
+                    kind != 1) return 0;
+            }
             ++found;
         }
     }

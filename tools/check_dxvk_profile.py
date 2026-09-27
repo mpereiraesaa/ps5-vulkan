@@ -181,10 +181,11 @@ CORE_IMPLEMENTATIONS = {
                    "creation-description memory requirements, maxBufferSize and "
                    "LocalSizeId with constants, direct specialization and bounded scalar "
                    "32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, "
+                   "integer comparisons, boolean specialization and conditional selection, "
                    "checked against the host compiler."),
         "gaps": (
-            "LocalSizeId compound OpSpecConstantOp expressions involving comparisons, "
-            "selection, conversions or composite extraction remain refused "
+            "LocalSizeId compound OpSpecConstantOp expressions involving conversions "
+            "or composite extraction remain refused "
             "(src/vk_pipeline.c local_size)",
             "a producer output vector wider than the consumer's input is refused by the "
             "graphics interface policy",

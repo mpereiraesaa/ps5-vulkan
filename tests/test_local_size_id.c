@@ -108,7 +108,8 @@ static VkResult build(VkDevice device, VkPipelineLayout layout, const uint32_t *
 
 /* Turn the X dimension into a decorated OpSpecConstant without changing the
  * module's ID space. Annotations precede types, as required by SPIR-V. */
-static uint32_t *specialize_dimension(const uint32_t *words, size_t count, uint32_t id)
+static uint32_t *specialize_dimension(const uint32_t *words, size_t count, uint32_t id,
+                                      uint32_t spec_id)
 {
     size_t types = 5;
     while (types < count && (words[types] & 0xffff) != 19)
@@ -117,13 +118,15 @@ static uint32_t *specialize_dimension(const uint32_t *words, size_t count, uint3
     uint32_t *out = malloc((count + 4) * sizeof(*out));
     assert(out);
     memcpy(out, words, types * sizeof(*out));
-    uint32_t decoration[4] = {4u << 16 | 71u, id, 1u, 7u};
+    uint32_t decoration[4] = {4u << 16 | 71u, id, 1u, spec_id};
     memcpy(out + types, decoration, sizeof(decoration));
     memcpy(out + types + 4, words + types, (count - types) * sizeof(*out));
     unsigned found = 0;
     for (size_t i = 5; i < count + 4; i += out[i] >> 16)
-        if ((out[i] & 0xffff) == 43 && out[i] >> 16 == 4 && out[i + 2] == id) {
-            out[i] = 4u << 16 | 50u;
+        if (((out[i] & 0xffff) == 43 || (out[i] & 0xffff) == 41 ||
+             (out[i] & 0xffff) == 42) && out[i + 2] == id) {
+            unsigned opcode = (out[i] & 0xffff) + 7;
+            out[i] = (out[i] & 0xffff0000u) | opcode;
             ++found;
         }
     assert(found == 1);
@@ -160,6 +163,58 @@ static uint32_t *expression_dimension(const uint32_t *words, size_t count,
         if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = words[3];
         /* The legacy fixture also declares BuiltIn WorkgroupSize, which
          * overrides execution modes. Remove that decoration for this test. */
+        if ((out[i] & 0xffff) == 71 && length == 4 && out[i + 2] == 11 && out[i + 3] == 25)
+            for (unsigned j = 0; j < length; ++j) out[i + j] = 1u << 16;
+        i += length;
+    }
+    return out;
+}
+
+/* Select a literal launch size from a specialized integer comparison or a
+ * boolean expression. Keep the selected sizes independent of the compared
+ * value so negative signed inputs exercise comparisons without huge launches. */
+static uint32_t *conditional_dimension(const uint32_t *words, size_t count,
+                                      uint32_t lhs, uint32_t one, unsigned op)
+{
+    size_t functions = 5;
+    uint32_t type = 0, boolean_type = 0;
+    for (; functions < count; functions += words[functions] >> 16) {
+        if ((words[functions] & 0xffff) == 50 && words[functions + 2] == lhs)
+            type = words[functions + 1];
+        if ((words[functions] & 0xffff) == 20) boolean_type = words[functions + 1];
+        if ((words[functions] & 0xffff) == 54) break;
+    }
+    assert(type && functions < count);
+    uint32_t base = words[3];
+    uint32_t boolean = boolean_type ? boolean_type : base;
+    uint32_t declarations[] = {
+        2u << 16 | 20u, base,                         /* bool */
+        4u << 16 | 43u, type, base + 1, 32,          /* uint 32 */
+        3u << 16 | 41u, boolean, base + 2,              /* true */
+        3u << 16 | 42u, boolean, base + 3,              /* false */
+        6u << 16 | 52u, boolean, base + 4, op, lhs, one,
+        7u << 16 | 52u, type, base + 5, 169, base + 4, base + 1, one,
+    };
+    if (boolean_type) declarations[0] = declarations[1] = 1u << 16;
+    if (op >= 164 && op <= 168) {
+        declarations[16] = base + 2;
+        declarations[17] = base + 3;
+        if (op == 168) {
+            declarations[12] = 5u << 16 | 52u;
+            declarations[17] = 1u << 16;
+        }
+    }
+    const size_t extra = sizeof(declarations) / sizeof(*declarations);
+    assert(extra == 25);
+    uint32_t *out = malloc((count + extra) * sizeof(*out));
+    assert(out);
+    memcpy(out, words, functions * sizeof(*out));
+    memcpy(out + functions, declarations, sizeof(declarations));
+    memcpy(out + functions + extra, words + functions, (count - functions) * sizeof(*out));
+    out[3] += 6;
+    for (size_t i = 5; i < functions;) {
+        unsigned length = out[i] >> 16;
+        if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = base + 5;
         if ((out[i] & 0xffff) == 71 && length == 4 && out[i + 2] == 11 && out[i + 3] == 25)
             for (unsigned j = 0; j < length; ++j) out[i + j] = 1u << 16;
         i += length;
@@ -230,7 +285,7 @@ int main(void)
     VkPipeline refused;
     assert(build(device, layout, spec, bytes, &refused) != VK_SUCCESS && !refused);
 
-    uint32_t *specialized = specialize_dimension(by_id, count, id64);
+    uint32_t *specialized = specialize_dimension(by_id, count, id64, 7);
     VkPipeline default_size, size32, size16, warm32;
     assert(build(device, layout, specialized, bytes + 16, &default_size) == VK_SUCCESS);
     assert(default_size->program.local_size[0] == 64);
@@ -265,6 +320,50 @@ int main(void)
         } else assert(result != VK_SUCCESS && !expr_pipeline);
         free(expression);
     }
+    const unsigned condition_ops[] = {164, 165, 166, 167, 168, 170, 171, 172,
+                                      173, 174, 175, 176, 177, 178, 179};
+    const uint32_t positive[] = {1, 32, 32, 1, 1, 1, 32, 32, 32, 32, 32, 1, 1, 1, 1};
+    const uint32_t negative[] = {1, 32, 32, 1, 1, 1, 32, 32, 1, 32, 1, 1, 32, 1, 32};
+    for (unsigned i = 0; i < sizeof(condition_ops) / sizeof(condition_ops[0]); ++i) {
+        uint32_t *conditional = conditional_dimension(specialized, count + 4, id64, id1,
+                                                      condition_ops[i]);
+        VkPipeline selected;
+        assert(build(device, layout, conditional, bytes + 116, &selected) == VK_SUCCESS);
+        assert(selected->program.local_size[0] == positive[i]);
+        vkDestroyPipeline(device, selected, NULL);
+        x = UINT32_MAX;
+        assert(build_specialized(device, layout, conditional, bytes + 116, &specialization,
+                                 &selected) == VK_SUCCESS);
+        assert(selected->program.local_size[0] == negative[i]);
+        vkDestroyPipeline(device, selected, NULL);
+        free(conditional);
+    }
+    uint32_t *boolean_input = conditional_dimension(specialized, count + 4, id64, id1, 166);
+    uint32_t *boolean_spec = specialize_dimension(boolean_input, count + 29, specialized[3] + 2, 9);
+    VkBool32 truth = VK_FALSE;
+    VkSpecializationMapEntry truth_map = {.constantID = 9, .size = sizeof(truth)};
+    VkSpecializationInfo truth_info = {.mapEntryCount = 1, .pMapEntries = &truth_map,
+        .dataSize = sizeof(truth), .pData = &truth};
+    for (unsigned i = 0; i < 2; ++i) {
+        VkPipeline selected;
+        truth = i ? 2 : VK_FALSE; /* Every nonzero VkBool32 represents true. */
+        assert(build_specialized(device, layout, boolean_spec, bytes + 132, &truth_info,
+                                 &selected) == VK_SUCCESS);
+        assert(selected->program.local_size[0] == (i ? 32 : 1));
+        vkDestroyPipeline(device, selected, NULL);
+    }
+    /* A select condition must be boolean, and a workgroup dimension must
+     * remain integer even though its expression may consume booleans. */
+    for (size_t i = 5; i < count + 29; i += boolean_input[i] >> 16)
+        if ((boolean_input[i] & 0xffff) == 52 && boolean_input[i + 3] == 169)
+            boolean_input[i + 4] = id1;
+    assert(build(device, layout, boolean_input, bytes + 116, &refused) != VK_SUCCESS && !refused);
+    for (size_t i = 5; i < count + 33; i += boolean_spec[i] >> 16)
+        if ((boolean_spec[i] & 0xffff) == 331 && boolean_spec[i + 2] == 38)
+            boolean_spec[i + 3] = specialized[3] + 2;
+    assert(build(device, layout, boolean_spec, bytes + 132, &refused) != VK_SUCCESS && !refused);
+    free(boolean_input); free(boolean_spec);
+    x = 32;
     const unsigned unary_ops[] = {126, 200};
     for (unsigned i = 0; i < 2; ++i) {
         uint32_t *first = expression_dimension(specialized, count + 4, id64, 0, unary_ops[i]);
@@ -330,7 +429,7 @@ int main(void)
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     free(literal); free(by_id); free(spec);
-    puts("LocalSizeId: constants and scalar integer specialization expressions under maintenance4 "
+    puts("LocalSizeId: scalar integer, boolean and conditional specialization expressions under maintenance4 "
          "(host compiler, no GPU evidence)");
     return 0;
 }

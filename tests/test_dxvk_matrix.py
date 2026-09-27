@@ -753,7 +753,9 @@ class CurrentProbeTests(unittest.TestCase):
                           m4["native"]["state"], m4["verdict"]))
         self.assertIn("32-bit integer arithmetic/bitwise OpSpecConstantOp",
                       m4["implementation"]["detail"])
-        self.assertIn("selection, conversions or composite extraction remain refused",
+        self.assertIn("integer comparisons, boolean specialization and conditional selection",
+                      m4["implementation"]["detail"])
+        self.assertIn("conversions or composite extraction remain refused",
                       m4["implementation"]["detail"])
 
     def test_core_implementation_needs_every_citation_and_the_query(self):
