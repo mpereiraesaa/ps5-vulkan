@@ -85,12 +85,18 @@ def expected_digest() -> str:
     return f"{fnv(b''.join(v.to_bytes(4, 'little') for v in image)):08x}"
 
 
+def expected_compute_digest() -> str:
+    values = [(17 * i + 11) * 5 + (i ^ 0x13579bdf) for i in range(1024)]
+    return f"{fnv(b''.join(v.to_bytes(4, 'little') for v in values)):08x}"
+
+
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     cache_variant = artifact.get("profile") == CACHE_PROFILE
     if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE) or
             artifact.get("extent") != EXTENT or
             artifact.get("format") != "R8G8B8A8_UNORM" or
-            artifact.get("diagnostic_switch") != (CACHE_SWITCH if cache_variant else None)):
+            artifact.get("diagnostic_switch") != (CACHE_SWITCH if cache_variant else None) or
+            (cache_variant and artifact.get("cache_execution_version") != 2)):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or
@@ -120,12 +126,20 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             "DXVK_RENDER_WITNESS_FAILURE" in text):
         raise ValueError("render, readback, fence or cleanup failed")
     if cache_variant:
+        compute = re.findall(r"DXVK_CACHE_WITNESS_COMPUTE words=(\d+) cold_misses=(\d+) "
+                             r"warm_derivatives=(\d+) factor=(\d+) mismatches=(\d+) guards=(\d+) "
+                             r"inputs=(\d+) digest=([0-9a-f]{8}) submissions=(\d+) "
+                             r"fence=(\w+) resources=(\w+)", text)
+        if (compute != [("1024", "2", "1", "5", "0", "0", "0", expected_compute_digest(),
+                         "1", "complete", "retired")] or
+                text.index("DXVK_RENDER_WITNESS_START") >= text.index("DXVK_CACHE_WITNESS_COMPUTE")):
+            raise ValueError("compute cache execution or retirement failed")
         created = re.findall(r"DXVK_CACHE_WITNESS_CREATED cold_misses=(\d+) "
                              r"warm_derivatives=(\d+) bases_retired=(\d+) cache_retired=(\d+)", text)
         queries = re.findall(r"DXVK_CACHE_WITNESS_QUERIES normal=(\d+) discard=(\d+)", text)
         if (created != [("2", "2", "2", "1")] or len(queries) != 1 or
                 not 0 < int(queries[0][0]) < 2**64 - 1 or queries[0][1] != "0" or
-                text.index("DXVK_RENDER_WITNESS_START") >= text.index("DXVK_CACHE_WITNESS_CREATED") or
+                text.index("DXVK_CACHE_WITNESS_COMPUTE") >= text.index("DXVK_CACHE_WITNESS_CREATED") or
                 text.index("DXVK_CACHE_WITNESS_CREATED") >= text.index("DXVK_CACHE_WITNESS_QUERIES") or
                 text.index("DXVK_CACHE_WITNESS_QUERIES") >= text.index("DXVK_RENDER_WITNESS_STEP")):
             raise ValueError("cache creation, lifetime or discard query failed")
@@ -136,6 +150,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     return {
         "profile": artifact["profile"],
         "strict_verified": True,
+        "total_submissions": 2 if cache_variant else 1,
         "run_id": receipt["run_id"],
         "extent": EXTENT,
         "visible_markers": visible,

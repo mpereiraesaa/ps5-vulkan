@@ -46,6 +46,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+#include "cache_compute.h"
+#endif
+
 enum { EXTENT = 64, STAGING = 64 * 1024 };
 /* DXVK's staging slice sits at an offset inside a shared buffer. */
 enum { FULL_OFFSET = 4096, SUB_OFFSET = 24576 + 256, SUB_X = 40, SUB_Y = 24,
@@ -201,6 +205,16 @@ static int run_witness(void)
     TRY(vkCreateDevice(physical, &device_info, NULL, &device));
     vkGetDeviceQueue(device, 0, 0, &queue);
     REQUIRE(queue, "queue exists");
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    struct cache_compute_result compute;
+    result = cache_compute_witness(device, queue, dxvk_cache_compute_spirv,
+        sizeof(dxvk_cache_compute_spirv), &submission_pending, &compute);
+    if (result != VK_SUCCESS) { failed = compute.step; goto cleanup; }
+    ps5log_printf(PS5LOG_MARK, "DXVK_CACHE_WITNESS_COMPUTE words=1024 cold_misses=2 "
+        "warm_derivatives=1 factor=5 mismatches=%u guards=%u inputs=%u digest=%08x "
+        "submissions=1 fence=complete resources=retired", compute.mismatches,
+        compute.guards, compute.inputs, compute.digest);
+#endif
     PFN_vkCmdBeginRenderingKHR begin_rendering = PROC(device, vkCmdBeginRenderingKHR);
     PFN_vkCmdEndRenderingKHR end_rendering = PROC(device, vkCmdEndRenderingKHR);
     PFN_vkCmdSetViewportWithCountEXT set_viewports = PROC(device, vkCmdSetViewportWithCountEXT);

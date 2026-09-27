@@ -106,8 +106,12 @@ were the same thing:
   compiler and emitted-state coverage. The public-SDK render witness has an
   offline-buildable `--cache-control` variant: cold misses, warm derivatives,
   destroyed bases/cache, image readback, and normal/discard occlusion controls.
-  It uses a default-off diagnostic SDK and has not been executed on hardware;
-  a compute dispatch witness remains pending. Four repeated-pipeline cases remain
+  The same diagnostic now dispatches a cached compute derivative whose
+  specialization differs from its base, checking all 1024 output words, unchanged
+  input and byte guards after a bounded fence. Host tests share that public-API
+  sequence with the real compiler and a synthetic queue, including deliberately
+  corrupted output/input/guards; they do not execute GPU instructions.
+  It uses a default-off diagnostic SDK and has not been executed on hardware. Four repeated-pipeline cases remain
   separate precondition diagnostics: they require unreported HOST_CACHED memory,
   and the pinned factory swaps its repetition/parity arguments. Their results
   cannot establish repeated initialization. Earlier dated sections below record the smaller selections used

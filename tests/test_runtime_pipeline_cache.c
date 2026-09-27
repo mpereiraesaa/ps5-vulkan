@@ -168,6 +168,118 @@ static void cache_control(VkDevice d, const VkComputePipelineCreateInfo *base)
     d->enabled_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
 }
 
+/* Run the actual public-SDK witness helper with the real host compiler and
+ * a synthetic queue. The queue checks the recording and injects controlled
+ * data; this proves the oracle and object contracts, not shader execution. */
+#include "vk_queue.h"
+#include "../examples/dxvk_render_witness/cache_compute.h"
+static unsigned witness_fault, witness_launches;
+static uint32_t witness_code_hash[2];
+static VkResult witness_compile(void *context, const uint32_t *spirv, size_t words,
+    const char *entry, VkPipelineLayout layout, const VkSpecializationInfo *specialization,
+    uint32_t features, struct ps5vk_compiled_program *program, uint32_t **code)
+{
+    VkResult r = counted_compile(context, spirv, words, entry, layout, specialization,
+        features, program, code);
+    assert(r == VK_SUCCESS && compile_calls <= 2);
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < program->code_words; ++i) hash = (hash ^ (*code)[i]) * 16777619u;
+    witness_code_hash[compile_calls - 1] = hash;
+    return r;
+}
+struct witness_job { uint64_t serial; unsigned char *data; };
+static VkResult witness_prepare(VkDevice device, const struct ps5vk_submission *s, void **out)
+{
+    assert(s->count == 1 && s->buffers[0]->operation_count == 3);
+    const struct ps5vk_operation *ops = s->buffers[0]->operations;
+    assert(ops[0].type == PS5VK_BARRIER && ops[1].type == PS5VK_DISPATCH &&
+        ops[2].type == PS5VK_BARRIER);
+    assert(ops[0].src_stage == VK_PIPELINE_STAGE_HOST_BIT &&
+        ops[0].dst_stage == VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT &&
+        ops[0].src_access == VK_ACCESS_HOST_WRITE_BIT &&
+        ops[0].dst_access == (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT));
+    assert(ops[2].src_stage == VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT &&
+        ops[2].dst_stage == VK_PIPELINE_STAGE_HOST_BIT &&
+        ops[2].src_access == VK_ACCESS_SHADER_WRITE_BIT &&
+        ops[2].dst_access == VK_ACCESS_HOST_READ_BIT);
+    assert(ops[1].groups[0] == 16 && ops[1].groups[1] == 1 && ops[1].groups[2] == 1);
+    assert(ops[1].pipeline->program.code_words && compile_calls == 2 &&
+        witness_code_hash[0] != witness_code_hash[1]);
+    uint32_t executable_hash = 2166136261u;
+    for (size_t i = 0; i < ops[1].pipeline->program.code_words; ++i)
+        executable_hash = (executable_hash ^ ops[1].pipeline->program.code[i]) * 16777619u;
+    assert(executable_hash == witness_code_hash[1]);
+    VkDescriptorSet set = ops[1].sets[0];
+    assert(set && set->buffers[0].buffer == set->buffers[1].buffer &&
+        set->buffers[0].offset == CACHE_INPUT && set->buffers[1].offset == CACHE_OUTPUT &&
+        set->buffers[0].range == CACHE_WORDS * 4 && set->buffers[1].range == CACHE_WORDS * 4);
+    struct witness_job *job = calloc(1, sizeof(*job));
+    assert(job); job->serial = s->serial;
+    void *address; VkDeviceSize size;
+    assert(ps5vk_buffer_span(device, set->buffers[0].buffer, 0, VK_WHOLE_SIZE,
+        &address, &size) == VK_SUCCESS && size >= CACHE_BYTES);
+    job->data = address; *out = job;
+    return VK_SUCCESS;
+}
+static VkResult witness_launch(VkDevice d, void *data)
+{
+    (void)d; struct witness_job *job = data; ++witness_launches;
+    for (uint32_t i = 0; i < CACHE_WORDS; ++i) {
+        uint32_t input, value;
+        memcpy(&input, job->data + CACHE_INPUT + i * 4, 4);
+        value = input * (witness_fault == 1 ? 3u : 5u) + (i ^ 0x13579bdfu);
+        memcpy(job->data + CACHE_OUTPUT + i * 4, &value, 4);
+    }
+    if (witness_fault == 2) job->data[CACHE_OUTPUT - 1] ^= 1;
+    if (witness_fault == 3) job->data[CACHE_INPUT] ^= 1;
+    return VK_SUCCESS;
+}
+static VkResult witness_poll(VkDevice d, void *data, uint64_t *serial)
+{ (void)d; *serial = ((struct witness_job *)data)->serial; return VK_SUCCESS; }
+static void witness_release(VkDevice d, void *data) { (void)d; free(data); }
+static uint64_t witness_clock(void *context) { (void)context; return 0; }
+static void witness_pause(void *context, uint64_t timeout)
+{ (void)context; (void)timeout; assert(!"synthetic queue should complete on first poll"); }
+static void check_compute_execution_witness(VkDevice d)
+{
+    size_t bytes;
+    uint32_t *words = read_file("build/test-shaders/cache_witness.spv", &bytes);
+    assert(words);
+    struct ps5vk_compilation_cache *saved_cache = d->pipeline_cache;
+    struct ps5vk_queue_backend saved_backend = d->submit_backend;
+    struct ps5vk_progress saved_progress = d->progress;
+    d->progress = (struct ps5vk_progress){NULL, ps5vk_queue_poll, witness_clock, witness_pause};
+    unsigned pipelines = d->pipeline_objects, descriptors = d->descriptor_objects;
+    d->enabled_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    d->compiler.compile = witness_compile;
+    d->submit_backend = (struct ps5vk_queue_backend){witness_prepare, witness_launch,
+        witness_poll, witness_release};
+    VkQueue queue; vkGetDeviceQueue(d, 0, 0, &queue);
+    for (witness_fault = 0; witness_fault < 4; ++witness_fault) {
+        d->pipeline_cache = ps5vk_compilation_cache_create(8, 1024 * 1024);
+        assert(d->pipeline_cache); compile_calls = witness_launches = 0;
+        VkBool32 pending = VK_TRUE;
+        struct cache_compute_result result;
+        VkResult rc = cache_compute_witness(d, queue, words, bytes, &pending, &result);
+        if (rc != (witness_fault ? VK_ERROR_UNKNOWN : VK_SUCCESS))
+            fprintf(stderr, "compute witness fault=%u rc=%d step=%s\n", witness_fault, rc, result.step);
+        assert(rc == (witness_fault ? VK_ERROR_UNKNOWN : VK_SUCCESS));
+        assert(!pending && compile_calls == 2 && witness_launches == 1);
+        assert(result.mismatches == (witness_fault == 1 ? CACHE_WORDS : 0));
+        assert(result.guards == (witness_fault == 2) && result.inputs == (witness_fault == 3));
+        assert(d->pipeline_objects == pipelines && d->descriptor_objects == descriptors &&
+            !d->buffers && !d->memories && !d->command_pools && !d->fences && !d->pipeline_caches &&
+            !d->lifetime_errors);
+        ps5vk_compilation_cache_destroy(d->pipeline_cache);
+    }
+    d->pipeline_cache = saved_cache; d->submit_backend = saved_backend;
+    d->progress = saved_progress;
+    d->enabled_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    d->compiler.compile = ps5vk_compiler_adapter_compile;
+    free(words);
+    puts("SDK compute cache witness: pass (real compiler, synthetic queue, three oracle faults; no GPU)");
+}
+
 int main(void)
 {
     size_t spv_bytes = 0;
@@ -396,6 +508,8 @@ int main(void)
         assert(unknown_bit == VK_NULL_HANDLE);
         device->enabled_features = 0;
     }
+
+    check_compute_execution_witness(device);
 
     /* Teardown */
     vkDestroyPipeline(device, pipeline3, NULL);

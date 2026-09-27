@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from run_dxvk_render_witness import (  # noqa: E402
     EXTENT, SAMPLE_POINTS, expected_digest, expected_image, front_facing_clockwise, rgba,
-    verify)
+    verify, expected_compute_digest)
 
 ARTIFACT = dict(profile="dxvk-render-public-sdk-witness", extent=64, format="R8G8B8A8_UNORM",
                 diagnostic_switch=None, eboot_sha256="artifact-sha")
@@ -93,14 +93,19 @@ class Verify(unittest.TestCase):
 
 class CacheVerify(unittest.TestCase):
     artifact = dict(ARTIFACT, profile="dxvk-cache-public-sdk-witness",
-                    diagnostic_switch="PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC")
+                    diagnostic_switch="PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC", cache_execution_version=2)
     created = ("DXVK_CACHE_WITNESS_CREATED cold_misses=2 warm_derivatives=2 "
                "bases_retired=2 cache_retired=1\n")
     queries = "DXVK_CACHE_WITNESS_QUERIES normal=3072 discard=0\n"
 
-    def log(self, created=None, queries=None):
+    compute = ("DXVK_CACHE_WITNESS_COMPUTE words=1024 cold_misses=2 warm_derivatives=1 "
+               "factor=5 mismatches=0 guards=0 inputs=0 digest=" + expected_compute_digest() +
+               " submissions=1 fence=complete resources=retired\n")
+
+    def log(self, created=None, queries=None, compute=None):
         return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP",
-            ((self.created if created is None else created) +
+            ((self.compute if compute is None else compute) +
+             (self.created if created is None else created) +
              (self.queries if queries is None else queries)).encode() + b"DXVK_RENDER_WITNESS_STEP")
 
     def test_cache_image_and_lifetime_result(self):
@@ -124,6 +129,24 @@ class CacheVerify(unittest.TestCase):
                     self.log().replace(b"full_mismatches=0", b"full_mismatches=1")):
             with self.subTest(log=log), self.assertRaises(ValueError):
                 verify(log, receipt(log), self.artifact)
+
+    def test_compute_result_requires_every_contract(self):
+        variants = ["", self.compute * 2]
+        for old, new in (("words=1024", "words=1023"), ("factor=5", "factor=3"),
+                         ("cold_misses=2", "cold_misses=1"),
+                         ("warm_derivatives=1", "warm_derivatives=0"),
+                         ("mismatches=0", "mismatches=1"), ("guards=0", "guards=1"),
+                         ("inputs=0", "inputs=1"), (expected_compute_digest(), "00000000"),
+                         ("submissions=1", "submissions=0"), ("complete", "timeout"),
+                         ("retired", "pending")):
+            variants.append(self.compute.replace(old, new))
+        for compute in variants:
+            log = self.log(compute=compute)
+            with self.subTest(compute=compute), self.assertRaises(ValueError):
+                verify(log, receipt(log), self.artifact)
+        log = self.log()
+        with self.assertRaises(ValueError):
+            verify(log, receipt(log), dict(self.artifact, cache_execution_version=1))
 
     def test_artifact_cannot_cross_profiles(self):
         for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),

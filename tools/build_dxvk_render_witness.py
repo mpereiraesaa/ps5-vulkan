@@ -3,8 +3,8 @@
 
 Dynamic rendering, copy_commands2, maintenance1 and extended dynamic state all
 ship, so the default witness uses the ordinary SDK. --cache-control builds an
-explicit diagnostic SDK variant for cold misses, warm derivatives and discard
-execution; compiling it is not hardware evidence."""
+explicit diagnostic SDK variant for compute/graphics cold misses, warm
+derivatives and discard execution; compiling it is not hardware evidence."""
 
 import argparse
 import hashlib
@@ -50,7 +50,7 @@ def checked_spirv(payload: bytes) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cache-control", action="store_true",
-                        help="build the diagnostic graphics cache/discard execution variant")
+                        help="build the diagnostic compute/graphics cache execution variant")
     args = parser.parse_args()
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
@@ -72,6 +72,8 @@ def main() -> None:
         "dxvk_render_witness_vert_spirv": ROOT / "experiments/graphics/dxvk_render_witness.vert",
         "dxvk_render_witness_frag_spirv": ROOT / "experiments/graphics/dxvk_render_witness.frag",
     }
+    if args.cache_control:
+        shaders["dxvk_cache_compute_spirv"] = ROOT / "experiments/compute/cache_witness.comp"
     arrays = []
     shader_hashes = {}
     for name, shader_source in shaders.items():
@@ -149,11 +151,14 @@ def main() -> None:
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
         "profile": "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness",
+        "cache_execution_version": 2 if args.cache_control else None,
         "extent": 64, "format": "R8G8B8A8_UNORM",
         "diagnostic_switch": "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC" if args.cache_control else None,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "cache_compute_sha256": hashlib.sha256((source.parent / "cache_compute.h").read_bytes()).hexdigest()
+            if args.cache_control else None,
     }
     artifact_path = dist.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")
