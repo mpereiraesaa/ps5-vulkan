@@ -758,8 +758,98 @@ static void integer_dot_negotiation(void)
 }
 #undef ASSERT_DOT_NOT_ACCELERATED
 
+static void image_robustness_negotiation(void)
+{
+    const uint32_t versions[] = {VK_API_VERSION_1_0, VK_API_VERSION_1_1,
+                                VK_API_VERSION_1_2, VK_API_VERSION_1_3};
+    for (unsigned app = 0; app < 4; ++app) for (unsigned hw = 0; hw < 4; ++hw) {
+        VkInstance instance;
+        VkPhysicalDevice p = physical(&instance, versions[app]);
+        p->platform.properties.apiVersion = versions[hw];
+        const VkBool32 core_route = app == 3 && hw == 3;
+        VkBaseOutStructure sentinel = {.sType = (VkStructureType)0x7ffffffe};
+        VkPhysicalDeviceImageRobustnessFeatures f = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES,
+            .pNext = &sentinel, .robustImageAccess = VK_TRUE};
+        VkPhysicalDeviceFeatures2 query = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &f};
+        const char *extensions[] = {VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME,
+                                   VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME};
+        float priority = 1;
+        VkDeviceQueueCreateInfo queue = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount = 1, .pQueuePriorities = &priority};
+        VkDeviceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &f,
+            .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue,
+            .enabledExtensionCount = 1, .ppEnabledExtensionNames = extensions};
+        VkDevice d = NULL;
+        for (unsigned supported = 0; supported < 2; ++supported) {
+            p->platform.supported_features_v13 = supported ? PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS : 0;
+            f.robustImageAccess = !supported; f.pNext = &sentinel;
+            vkGetPhysicalDeviceFeatures2(p, &query);
+            assert(f.robustImageAccess == supported && f.pNext == &sentinel);
+            assert(sentinel.sType == (VkStructureType)0x7ffffffe);
+            VkExtensionProperties available[64]; uint32_t count = 64, found = 0;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, available) == VK_SUCCESS);
+            for (uint32_t n = 0; n < count; ++n)
+                if (!strcmp(available[n].extensionName, extensions[0])) {
+                    ++found; assert(available[n].specVersion == VK_EXT_IMAGE_ROBUSTNESS_SPEC_VERSION);
+                }
+            assert(found == supported);
+            f.pNext = NULL; f.robustImageAccess = VK_TRUE;
+            assert(vkCreateDevice(p, &info, NULL, &d) ==
+                (supported ? VK_SUCCESS : VK_ERROR_EXTENSION_NOT_PRESENT));
+            if (d) { assert(d->enabled_features_v13 == PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS); vkDestroyDevice(d, NULL); }
+            if (!supported) assert(create(p, &f, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        }
+        /* Query/enumeration/extension enable do not implicitly enable a feature. */
+        f.robustImageAccess = VK_FALSE;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS && !d->enabled_features_v13);
+        vkDestroyDevice(d, NULL);
+        f.robustImageAccess = VK_TRUE;
+        assert(create(p, &f, &d) == (core_route ? VK_SUCCESS : VK_ERROR_FEATURE_NOT_PRESENT));
+        if (d) { assert(d->enabled_features_v13 == PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS); vkDestroyDevice(d, NULL); }
+        info.enabledExtensionCount = 2;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        info.enabledExtensionCount = 1;
+        f.robustImageAccess = 2;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        f.robustImageAccess = VK_TRUE;
+        VkPhysicalDeviceImageRobustnessFeatures duplicate = f; f.pNext = &duplicate;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d); f.pNext = NULL;
+        if (app == 0) {
+            instance->features2_extension_enabled = VK_FALSE;
+            assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+            instance->features2_extension_enabled = VK_TRUE;
+        }
+        /* Robustness1 does not imply robustness2, buffer robustness or null descriptors. */
+        VkPhysicalDeviceRobustness2FeaturesEXT r2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+            .robustImageAccess2 = VK_TRUE, .robustBufferAccess2 = VK_TRUE, .nullDescriptor = VK_TRUE};
+        query.pNext = &r2; vkGetPhysicalDeviceFeatures2(p, &query);
+        assert(!r2.robustImageAccess2 && !r2.robustBufferAccess2 && !r2.nullDescriptor);
+        VkPhysicalDeviceVulkan13Features core = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            .robustImageAccess = VK_TRUE};
+        assert(create(p, &core, &d) == (core_route ? VK_SUCCESS : VK_ERROR_FEATURE_NOT_PRESENT));
+        if (d) { assert(d->enabled_features_v13 == PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS); vkDestroyDevice(d, NULL); }
+        if (core_route) {
+            query.pNext = &core; vkGetPhysicalDeviceFeatures2(p, &query);
+            assert(core.robustImageAccess && !core.shaderIntegerDotProduct && !core.subgroupSizeControl);
+            core.robustImageAccess = 2;
+            assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d); core.robustImageAccess = VK_TRUE;
+            core.pNext = &f;
+            assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d); core.pNext = NULL;
+            f.pNext = &core;
+            assert(create(p, &f, &d) == VK_ERROR_UNKNOWN && !d); f.pNext = NULL;
+            p->platform.supported_features_v13 = 0;
+            assert(create(p, &core, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            vkGetPhysicalDeviceFeatures2(p, &query); assert(!core.robustImageAccess);
+        }
+        vkDestroyInstance(instance, NULL);
+    }
+}
+
 int main(void)
 {
+    image_robustness_negotiation();
     integer_dot_negotiation();
     subgroup_size_negotiation();
     dormant_on_vulkan_1_0();

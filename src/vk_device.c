@@ -589,6 +589,11 @@ static VkBool32 integer_dot_supported(VkPhysicalDevice p)
 {
     return !!(p->platform.supported_features_v13 & PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT);
 }
+/* The platform keeps this bit clear until image robustness has native evidence. */
+static VkBool32 image_robustness_supported(VkPhysicalDevice p)
+{
+    return !!(p->platform.supported_features_v13 & PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS);
+}
 static uint32_t subgroup_size_supported(VkPhysicalDevice p)
 {
     if (ps5vk_physical_api_version(p) < VK_API_VERSION_1_1 ||
@@ -713,6 +718,9 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
             ((VkPhysicalDeviceShaderTerminateInvocationFeatures *)next)
                 ->shaderTerminateInvocation = !!(p->platform.supported_features_t09 &
                     PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION);
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES) {
+            ((VkPhysicalDeviceImageRobustnessFeatures *)next)->robustImageAccess =
+                image_robustness_supported(p);
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES) {
             ((VkPhysicalDeviceShaderIntegerDotProductFeatures *)next)->shaderIntegerDotProduct =
                 integer_dot_supported(p);
@@ -1051,10 +1059,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
      * copy_commands2, depth/stencil resolve, dynamic rendering, format feature
      * flags 2, image format list, synchronization2, transform feedback,
      * imageless framebuffer, zero initialize workgroup memory, cache control,
-     * inline uniform block, subgroup size control, integer dot product). Keep headroom
+     * inline uniform block, subgroup size control, integer dot product, image robustness). Keep headroom
      * so a new entry cannot overflow the array before this bound is revisited;
      * each push site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 39, DEVICE_EXTENSION_SLOTS = 40 };
+    enum { DEVICE_EXTENSION_PUSHES = 40, DEVICE_EXTENSION_SLOTS = 48 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -1161,6 +1169,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (bind_memory2_supported(p)) {
         properties[total++] = (VkExtensionProperties){
             VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_KHR_BIND_MEMORY_2_SPEC_VERSION};
+    }
+    if (image_robustness_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME, VK_EXT_IMAGE_ROBUSTNESS_SPEC_VERSION};
     }
     if (integer_dot_supported(p)) {
         properties[total++] = (VkExtensionProperties){
@@ -1292,6 +1304,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 inline_uniform_extension = VK_FALSE, saw_inline_uniform = VK_FALSE;
     VkBool32 subgroup_size_extension = VK_FALSE, saw_subgroup_size = VK_FALSE;
     VkBool32 integer_dot_extension = VK_FALSE, saw_integer_dot = VK_FALSE;
+    VkBool32 image_robustness_extension = VK_FALSE, saw_image_robustness = VK_FALSE;
     uint32_t enabled_features_v13 = 0;
     VkBool32 descriptor_update_template_extension = VK_FALSE;
     /* DXVK262-T10 recording routes. */
@@ -1358,6 +1371,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &integer_dot_extension;
         else if (!strcmp(name, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME))
             seen = &subgroup_size_extension;
+        else if (!strcmp(name, VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME))
+            seen = &image_robustness_extension;
         else if (!strcmp(name, VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME))
             seen = &inline_uniform_extension;
         else if (!strcmp(name, VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME))
@@ -1483,6 +1498,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!(p->platform.supported_features_t09 &
            PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION) ||
          !features2_available))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (image_robustness_extension && (!image_robustness_supported(p) || !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (integer_dot_extension && (!integer_dot_supported(p) || !features2_available))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -1847,6 +1864,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                 if (!terminate_extension)
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
+            }
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES) {
+            if (saw_image_robustness) return INVALID;
+            saw_image_robustness = VK_TRUE;
+            const VkPhysicalDeviceImageRobustnessFeatures *f =
+                (const VkPhysicalDeviceImageRobustnessFeatures *)next;
+            if (!valid_bool(f->robustImageAccess)) return INVALID;
+            if (f->robustImageAccess) {
+                if ((!image_robustness_extension && core_version < VK_API_VERSION_1_3) ||
+                    !image_robustness_supported(p)) return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_v13 |= PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS;
             }
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES) {
             if (saw_integer_dot) return INVALID;
