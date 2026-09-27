@@ -201,6 +201,81 @@ static void zero_initialize_workgroup(void)
     free(initialized); free(plain);
 }
 
+/* Replace one direct decoration with a newly defined group and application,
+ * preserving the SPIR-V annotation section and every executable instruction. */
+static uint32_t group_decoration(uint32_t **module, size_t *words, uint32_t target,
+                                uint32_t decoration)
+{
+    uint32_t *old = *module;
+    for (size_t at = 5; at < *words; at += old[at] >> 16) {
+        const uint32_t n = old[at] >> 16;
+        if ((old[at] & 0xffffu) != 71u || n < 3 || old[at + 1] != target ||
+            old[at + 2] != decoration) continue;
+        uint32_t *grouped = malloc((*words + 5) * sizeof(*grouped)); assert(grouped);
+        memcpy(grouped, old, at * 4);
+        const uint32_t group = old[3]; grouped[3] = group + 1;
+        grouped[at] = (2u << 16) | 73u; grouped[at + 1] = group;
+        memcpy(grouped + at + 2, old + at, n * 4); grouped[at + 3] = group;
+        grouped[at + 2 + n] = (3u << 16) | 74u;
+        grouped[at + 3 + n] = group; grouped[at + 4 + n] = target;
+        memcpy(grouped + at + n + 5, old + at + n, (*words - at - n) * 4);
+        free(old); *module = grouped; *words += 5; return group;
+    }
+    assert(!"decoration to group is missing"); return 0;
+}
+
+static void inline_grouped_decorations(const uint32_t *source, size_t words,
+    VkPipelineLayout layout, uint32_t variable_id, uint32_t block_id)
+{
+    uint32_t *spv = malloc(words * 4); assert(spv); memcpy(spv, source, words * 4);
+    const uint32_t block_group = group_decoration(&spv, &words, block_id, 2u);
+    group_decoration(&spv, &words, variable_id, 34u);
+    const uint32_t binding_group = group_decoration(&spv, &words, variable_id, 33u);
+    assert(ps5vk_spirv_descriptor_types_match(spv, words, layout->set_count, layout->sets));
+    struct ps5vk_compiled_program program; uint32_t *code = NULL;
+    assert(ps5vk_runtime_compile_compute(spv, words, "main", layout, NULL,
+        &program, &code) == VK_SUCCESS && code && program.descriptor_count == 4);
+    assert(program.descriptors[0].type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK &&
+        program.descriptors[1].table_dword == 12 && program.descriptors[3].table_dword == 20);
+    free(code); code = NULL;
+    unsigned checked = 0;
+    for (size_t at = 5; at < words; at += spv[at] >> 16) {
+        const uint32_t op = spv[at] & 0xffffu;
+        size_t change = 0; uint32_t value = 0;
+        if (op == 71u && spv[at + 1] == block_group) {
+            change = at + 2; value = 3u; /* grouped BufferBlock */
+        } else if (op == 59u && spv[at + 2] == variable_id) {
+            change = at + 3; value = 12u; /* grouped binding, wrong storage */
+        }
+        if (change) {
+            uint32_t saved = spv[change]; spv[change] = value;
+            assert(!ps5vk_spirv_descriptor_types_match(spv, words, layout->set_count, layout->sets));
+            assert(ps5vk_runtime_compile_compute(spv, words, "main", layout, NULL,
+                &program, &code) == VK_ERROR_FEATURE_NOT_PRESENT && !code);
+            spv[change] = saved; ++checked;
+        }
+        if (op == 74u && spv[at + 1] == binding_group) {
+            const uint32_t target = spv[at + 2];
+            spv[at + 2] = binding_group; /* group cannot target itself */
+            assert(!ps5vk_spirv_descriptor_types_match(spv, words, layout->set_count, layout->sets));
+            spv[at + 2] = spv[3]; /* target outside bound */
+            assert(!ps5vk_spirv_descriptor_types_match(spv, words, layout->set_count, layout->sets));
+            spv[at + 2] = target;
+            spv[at + 1] = block_id; /* group operand must be a group */
+            assert(!ps5vk_spirv_descriptor_types_match(spv, words, layout->set_count, layout->sets));
+            spv[at + 1] = binding_group; ++checked;
+        }
+    }
+    assert(checked == 3);
+    /* A direct binding conflicting with the grouped binding must not override
+     * it or hide the inline variable from type validation. */
+    uint32_t *conflict = realloc(spv, (words + 4) * 4); assert(conflict); spv = conflict;
+    spv[words] = (4u << 16) | 71u; spv[words + 1] = variable_id;
+    spv[words + 2] = 33u; spv[words + 3] = 1u;
+    assert(!ps5vk_spirv_descriptor_types_match(spv, words + 4, layout->set_count, layout->sets));
+    free(spv);
+}
+
 /* Compile a real UBO shader as inline storage, with other resources after its
  * payload in the same table. Preserve the original module's executable code;
  * only remap descriptor decorations to exercise the canonical mixed layout. */
@@ -286,6 +361,7 @@ static void inline_uniform_compile(void)
     REFUSE_WORD(pointer + 3, spv[3]); /* invalid pointee */
     REFUSE_WORD(variable + 1, spv[3]); /* invalid pointer */
 #undef REFUSE_WORD
+    inline_grouped_decorations(spv, words, &layout, inline_id, spv[pointer + 3]);
     free(spv);
 
     /* Arrays inside a uniform block remain legal; arrays OF blocks do not. */
@@ -424,6 +500,28 @@ int main(void)
         separate_layout.sets[0].type[b]=swapped[b];
         assert(!ps5vk_spirv_descriptor_types_match(separate_spv,separate_bytes/4,1,
             separate_layout.sets));
+    }
+    /* The same resource checks apply when all descriptor coordinates are
+     * grouped, including opaque samplers/images rather than only UBO blocks. */
+    size_t grouped_words = separate_bytes / 4;
+    const uint32_t original_bound = separate_spv[3];
+    unsigned grouped_coordinates = 0;
+    for (size_t at = 5; at < grouped_words;) {
+        const uint32_t n = separate_spv[at] >> 16;
+        if ((separate_spv[at] & 0xffffu) == 71u && n == 4 &&
+            separate_spv[at + 1] < original_bound &&
+            (separate_spv[at + 2] == 33u || separate_spv[at + 2] == 34u)) {
+            group_decoration(&separate_spv, &grouped_words,
+                separate_spv[at + 1], separate_spv[at + 2]);
+            ++grouped_coordinates; at = 5;
+        } else at += n;
+    }
+    assert(grouped_coordinates == 8); separate_bytes = grouped_words * 4;
+    for (uint32_t b = 0; b < 4; ++b) {
+        for (uint32_t k = 0; k < 4; ++k) separate_layout.sets[0].type[k] = separate_types[k];
+        assert(ps5vk_spirv_descriptor_types_match(separate_spv, grouped_words, 1, separate_layout.sets));
+        separate_layout.sets[0].type[b] = swapped[b];
+        assert(!ps5vk_spirv_descriptor_types_match(separate_spv, grouped_words, 1, separate_layout.sets));
     }
     /* Bindings the layout does not name are not this check's business. */
     for(uint32_t k=0;k<4;++k)separate_layout.sets[0].type[k]=separate_types[k];
