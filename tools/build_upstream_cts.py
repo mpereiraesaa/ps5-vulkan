@@ -55,6 +55,7 @@ def tessellation_build_profile(environment):
             "PS5VK_INLINE_UNIFORM_DIAGNOSTIC",
             "PS5VK_SUBGROUP_SIZE_DIAGNOSTIC",
             "PS5VK_INTEGER_DOT_DIAGNOSTIC",
+            "PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC",
         )
     }
     return {

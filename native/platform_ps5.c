@@ -406,6 +406,10 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * The original message-passing CTS factory requires core Vulkan 1.1, so
      * the KHR route has a separate bounded native witness. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+#if defined(PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC) && PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC
+    /* Measurement only: image bounds and native numerical acceptance pending. */
+    platform->supported_features_v13 |= PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS;
+#endif
 #if defined(PS5VK_INTEGER_DOT_DIAGNOSTIC) && PS5VK_INTEGER_DOT_DIAGNOSTIC
     /* Measurement only: compiler contracts do not prove numerical GPU results. */
     platform->supported_features_v13 |= PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;
