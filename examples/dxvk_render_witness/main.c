@@ -52,6 +52,9 @@
 #ifdef PS5VK_INLINE_UNIFORM_WITNESS
 #include "inline_compute.h"
 #include "inline_graphics.h"
+#ifndef PS5VK_INLINE_GRAPHICS_STAGE
+#define PS5VK_INLINE_GRAPHICS_STAGE 0
+#endif
 #endif
 
 enum { EXTENT = 64, STAGING = 64 * 1024 };
@@ -312,7 +315,11 @@ static int run_witness(void)
     TRY(vkCreateShaderModule(device, &module_info[1], NULL, &fragment));
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
 #ifdef PS5VK_INLINE_UNIFORM_WITNESS
-    TRY(inline_graphics_descriptors(device, &inline_layout, &inline_pool, &inline_set));
+    TRY(inline_graphics_descriptors(device, &inline_layout, &inline_pool, &inline_set, PS5VK_INLINE_GRAPHICS_STAGE));
+    ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_GRAPHICS stage=%s blocks=%u bytes=%u",
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_VERTEX_BIT?"vertex":
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_FRAGMENT_BIT?"fragment":"small",
+        PS5VK_INLINE_GRAPHICS_STAGE?4u:2u,PS5VK_INLINE_GRAPHICS_STAGE?1024u:24u);
     layout_info.setLayoutCount = 1;
     layout_info.pSetLayouts = &inline_layout;
 #endif

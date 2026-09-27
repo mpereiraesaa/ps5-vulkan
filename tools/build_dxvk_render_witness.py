@@ -56,7 +56,11 @@ def main() -> None:
                         help="build the diagnostic compute/graphics cache execution variant")
     variants.add_argument("--inline-uniform", action="store_true",
                           help="build the diagnostic inline compute and graphics execution variant")
+    parser.add_argument("--inline-graphics-boundary", choices=("vertex", "fragment"),
+                        help="exercise four256-byte blocks in the selected graphics stage")
     args = parser.parse_args()
+    if args.inline_graphics_boundary and not args.inline_uniform:
+        parser.error("--inline-graphics-boundary requires --inline-uniform")
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
@@ -69,6 +73,8 @@ def main() -> None:
     logger = lab / "projects/logging_server/client"
     name = ("dxvk-inline-witness" if args.inline_uniform else
             "dxvk-cache-witness" if args.cache_control else "dxvk-render-witness")
+    if args.inline_graphics_boundary:
+        name += "-" + args.inline_graphics_boundary + "-boundary"
     build = ROOT / "build" / name
     dist = ROOT / ("dist-" + name) / "PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
@@ -85,6 +91,10 @@ def main() -> None:
         shaders["dxvk_inline_compute_spirv"] = ROOT / "experiments/compute/inline_witness.comp"
         shaders["dxvk_inline_boundary_spirv"] = ROOT / "experiments/compute/inline_boundary.comp"
         shaders["dxvk_inline_split_spirv"] = ROOT / "experiments/compute/inline_split.comp"
+    if args.inline_graphics_boundary:
+        shaders["dxvk_render_witness_frag_spirv"] = ROOT / "experiments/graphics/dxvk_render_witness.frag"
+        stage = "vert" if args.inline_graphics_boundary == "vertex" else "frag"
+        shaders["dxvk_render_witness_" + stage + "_spirv"] = ROOT / ("experiments/graphics/dxvk_inline_boundary." + stage)
     arrays = []
     shader_hashes = {}
     for name, shader_source in shaders.items():
@@ -115,6 +125,8 @@ def main() -> None:
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         *(["-DPS5VK_CACHE_CONTROL_WITNESS=1"] if args.cache_control else []),
         *(["-DPS5VK_INLINE_UNIFORM_WITNESS=1"] if args.inline_uniform else []),
+        *(["-DPS5VK_INLINE_GRAPHICS_STAGE=" + ("1" if args.inline_graphics_boundary == "vertex" else "16")]
+          if args.inline_graphics_boundary else []),
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger),
@@ -165,7 +177,8 @@ def main() -> None:
     artifact = {
         "profile": ("dxvk-inline-public-sdk-witness" if args.inline_uniform else
                     "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness"),
-        "inline_execution_version": 4 if args.inline_uniform else None,
+        "inline_execution_version": 5 if args.inline_uniform else None,
+        "inline_graphics_stage": (args.inline_graphics_boundary or "small") if args.inline_uniform else None,
         "cache_execution_version": 2 if args.cache_control else None,
         "extent": 64, "format": "R8G8B8A8_UNORM",
         "diagnostic_switch": ("PS5VK_INLINE_UNIFORM_DIAGNOSTIC" if args.inline_uniform else

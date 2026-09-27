@@ -79,7 +79,7 @@ enum { EXTENT = 64, STAGING = 64 * 1024, FULL_OFFSET = 4096, SUB_OFFSET = 24576 
 static const uint32_t vs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 0, 1, 0x6e69616d, 0};
 static const uint32_t fs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 4, 1, 0x6e69616d, 0};
 
-static void run_trace(VkBool32 cache_variant, VkBool32 inline_variant)
+static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
 {
     warm[0] = warm[1] = VK_FALSE;
     compiled = 0;
@@ -167,10 +167,23 @@ static void run_trace(VkBool32 cache_variant, VkBool32 inline_variant)
     VkDescriptorPool inline_pool=VK_NULL_HANDLE;
     VkDescriptorSet inline_set=VK_NULL_HANDLE;
     if(inline_variant) {
-        assert(inline_graphics_descriptors(device,&inline_layout,&inline_pool,&inline_set)==VK_SUCCESS);
-        const uint32_t expected[]={4,4,64,255,0x13579bdfu,0x2468ace0u};
-        assert(inline_set->inline_uniform.bytes[0]==20 && inline_set->inline_uniform.bytes[1]==4);
-        assert(!memcmp(inline_set->inline_data,expected,sizeof(expected)));
+        assert(inline_graphics_descriptors(device,&inline_layout,&inline_pool,&inline_set,
+            inline_variant==2?VK_SHADER_STAGE_VERTEX_BIT:inline_variant==3?VK_SHADER_STAGE_FRAGMENT_BIT:0)==VK_SUCCESS);
+        if(inline_variant==1) {
+            const uint32_t expected[]={4,4,64,255,0x13579bdfu,0x2468ace0u};
+            assert(inline_set->inline_uniform.bytes[0]==20 && inline_set->inline_uniform.bytes[1]==4);
+            assert(!memcmp(inline_set->inline_data,expected,sizeof(expected)));
+        } else {
+            assert(inline_set->inline_uniform.blocks==4 && inline_set->inline_uniform.total_bytes==1024);
+            for(unsigned b=0;b<4;++b) {
+                assert(inline_set->signature.binding[b].stages==(inline_variant==2?VK_SHADER_STAGE_VERTEX_BIT:VK_SHADER_STAGE_FRAGMENT_BIT));
+                assert(inline_set->inline_uniform.bytes[b]==256);
+            }
+            for(unsigned i=0;i<256;++i) {
+                uint32_t value;memcpy(&value,inline_set->inline_data+i*4,4);
+                assert(value==0x4b000001u+i*37u);
+            }
+        }
         layout_info.setLayoutCount=1;layout_info.pSetLayouts=&inline_layout;
     }
     VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -420,7 +433,7 @@ static void run_trace(VkBool32 cache_variant, VkBool32 inline_variant)
     for (unsigned n = 0; n < 3; ++n) {
         unsigned k = cache_variant ? (n == 0 ? 4 : n + 5) : n + 2;
         const struct ps5vk_operation *draw = &command->operations[k];
-        if(inline_variant) assert(draw->sets[0]==inline_set && draw->pipeline->sets[0].inline_bytes[0]==20);
+        if(inline_variant) assert(draw->sets[0]==inline_set && draw->pipeline->sets[0].inline_bytes[0]==(inline_variant==1?20u:256u));
         assert(draw->type == PS5VK_DRAW && draw->vertex_count == 6 &&
                draw->first_vertex == 6u * n && draw->viewport_count == 1 &&
                draw->viewports[0].height == -(float)EXTENT && draw->viewports[0].y == (float)EXTENT &&
@@ -509,5 +522,7 @@ int main(void)
     run_trace(VK_FALSE,VK_FALSE);
     run_trace(VK_TRUE,VK_FALSE);
     run_trace(VK_FALSE,VK_TRUE);
+    run_trace(VK_FALSE,2);
+    run_trace(VK_FALSE,3);
     return 0;
 }

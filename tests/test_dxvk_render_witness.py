@@ -157,18 +157,19 @@ class CacheVerify(unittest.TestCase):
 
 class InlineVerify(unittest.TestCase):
     artifact = dict(ARTIFACT, profile="dxvk-inline-public-sdk-witness",
-                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=4)
+                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=5, inline_graphics_stage="small")
     compute = ("DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 mismatches=0 guards=0 digest=" +
                expected_inline_digest() + " submissions=1 fence=complete resources=retired\n")
 
     boundary = ("DXVK_INLINE_WITNESS_BOUNDARY blocks=4 bytes=1024 routes=4 words=1024 mismatches=0 guards=0 digest=" +
                 expected_inline_digest(256) + " submissions=1 fence=complete resources=retired\n")
 
+    graphics = "DXVK_INLINE_WITNESS_GRAPHICS stage=small blocks=2 bytes=24\n"
     split = boundary.replace("WITNESS_BOUNDARY blocks=4", "WITNESS_SPLIT sets=4 blocks=4")
 
     def log(self, compute=None):
         return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP",
-            ((self.compute if compute is None else compute) + self.boundary + self.split).encode() + b"DXVK_RENDER_WITNESS_STEP")
+            ((self.compute if compute is None else compute) + self.boundary + self.split + self.graphics).encode() + b"DXVK_RENDER_WITNESS_STEP")
 
     def test_exact_inline_result(self):
         log = self.log()
@@ -215,12 +216,35 @@ class InlineVerify(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 verify(log,receipt(log),self.artifact)
 
+    def test_graphics_boundary_stage_and_capacity(self):
+        for stage in ("vertex", "fragment"):
+            marker=f"DXVK_INLINE_WITNESS_GRAPHICS stage={stage} blocks=4 bytes=1024\n"
+            log=self.log().replace(self.graphics.encode(),marker.encode())
+            artifact=dict(self.artifact,inline_graphics_stage=stage)
+            self.assertTrue(verify(log,receipt(log),artifact)["strict_verified"])
+            for bad in ("",marker*2,marker.replace("blocks=4","blocks=2"),
+                        marker.replace("bytes=1024","bytes=24"),
+                        marker.replace(stage,"fragment" if stage=="vertex" else "vertex")):
+                altered=log.replace(marker.encode(),bad.encode())
+                with self.subTest(stage=stage,bad=bad),self.assertRaises(ValueError):
+                    verify(altered,receipt(altered),artifact)
+            with self.assertRaises(ValueError):verify(log,receipt(log),self.artifact)
+
+    def test_fragment_boundary_all_words_are_visible(self):
+        image,_,_=expected_image()
+        for word in range(256):
+            pixels=[y*64+x for y in range(64) for x in range(48) if x%16+(y%16)*16==word]
+            self.assertEqual(len(pixels),12)
+            self.assertTrue(all(image[p]!=0xffff00ff for p in pixels))
+
     def test_inline_cannot_cross_profiles_or_versions(self):
         for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),
                              (self.log(), dict(self.artifact, profile="dxvk-inline-compute-public-sdk-witness")),
                              (self.log(), dict(self.artifact, inline_execution_version=1)),
                              (self.log(), dict(self.artifact, inline_execution_version=2)),
                              (self.log(), dict(self.artifact, inline_execution_version=3)),
+                             (self.log(), dict(self.artifact, inline_execution_version=4)),
+                             (self.log(), dict(self.artifact, inline_graphics_stage=None)),
                              (self.log(), dict(self.artifact, diagnostic_switch=None)),
                              (CacheVerify().log(), self.artifact), (self.log(), CacheVerify.artifact)):
             with self.subTest(artifact=artifact), self.assertRaises(ValueError):

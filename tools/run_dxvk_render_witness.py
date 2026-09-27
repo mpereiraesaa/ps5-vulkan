@@ -109,7 +109,8 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             artifact.get("format") != "R8G8B8A8_UNORM" or
             artifact.get("diagnostic_switch") != (INLINE_SWITCH if inline_variant else CACHE_SWITCH if cache_variant else None) or
             (cache_variant and artifact.get("cache_execution_version") != 2) or
-            (inline_variant and artifact.get("inline_execution_version") != 4)):
+            (inline_variant and (artifact.get("inline_execution_version") != 5 or
+                                 artifact.get("inline_graphics_stage") not in ("small", "vertex", "fragment")))):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or
@@ -183,6 +184,13 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
                 text.index("DXVK_INLINE_WITNESS_BOUNDARY") >= text.index("DXVK_INLINE_WITNESS_SPLIT") or
                 text.index("DXVK_INLINE_WITNESS_SPLIT") >= text.index("DXVK_RENDER_WITNESS_STEP")):
             raise ValueError("inline split-set result, ordering or retirement failed")
+        graphics = re.findall(r"DXVK_INLINE_WITNESS_GRAPHICS stage=(\w+) blocks=(\d+) bytes=(\d+)", text)
+        stage = artifact["inline_graphics_stage"]
+        if (text.count("DXVK_INLINE_WITNESS_GRAPHICS") != 1 or
+                graphics != [(stage, "2" if stage == "small" else "4", "24" if stage == "small" else "1024")] or
+                text.index("DXVK_INLINE_WITNESS_SPLIT") >= text.index("DXVK_INLINE_WITNESS_GRAPHICS") or
+                text.index("DXVK_INLINE_WITNESS_GRAPHICS") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("inline graphics stage, capacity or ordering mismatch")
     elif "DXVK_INLINE_WITNESS_" in text:
         raise ValueError("inline log requires inline witness artifact")
     if "DXVK_RENDER_WITNESS_PENDING" in text:
