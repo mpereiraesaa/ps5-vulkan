@@ -454,6 +454,37 @@ int main(void)
     assert(acquired==3);
     d.graphics_compiled_release=compiled_release;
     {
+        VkGraphicsPipelineCreateInfo batch[2]={info,info};
+        batch[0].flags=VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+        batch[1].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+        batch[1].basePipelineIndex=0;
+        VkPipeline outputs[2], derivative;
+        assert(vkCreateGraphicsPipelines(&d,0,2,batch,NULL,outputs)==VK_SUCCESS);
+        VkPipeline parent=outputs[0],child=outputs[1];
+        assert(parent->allow_derivatives && !child->allow_derivatives);
+        batch[1].basePipelineIndex=-1;batch[1].basePipelineHandle=parent;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&batch[1],NULL,&derivative)==VK_SUCCESS && derivative);
+        batch[1].basePipelineHandle=child;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&batch[1],NULL,outputs)<0 && !outputs[0]);
+        batch[1].basePipelineHandle=parent;parent->device=VK_NULL_HANDLE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&batch[1],NULL,outputs)<0 && !outputs[0]);
+        parent->device=&d;parent->graphics=VK_FALSE;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&batch[1],NULL,outputs)<0 && !outputs[0]);
+        parent->graphics=VK_TRUE;batch[1].basePipelineIndex=0;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&batch[1],NULL,outputs)<0 && !outputs[0]);
+        batch[1].basePipelineHandle=VK_NULL_HANDLE;
+        for(int index=-2;index<=1;++index) {
+            batch[1].basePipelineIndex=index;
+            assert(vkCreateGraphicsPipelines(&d,0,1,&batch[1],NULL,outputs)<0 && !outputs[0]);
+        }
+        batch[0].flags=0;batch[1].basePipelineIndex=0;
+        assert(vkCreateGraphicsPipelines(&d,0,2,batch,NULL,outputs)<0 && outputs[0] && !outputs[1]);
+        vkDestroyPipeline(&d,outputs[0],NULL);
+        vkDestroyPipeline(&d,parent,NULL);
+        assert(child->graphics_state && derivative->graphics_state);
+        vkDestroyPipeline(&d,child,NULL);vkDestroyPipeline(&d,derivative,NULL);
+    }
+    {
         VkGraphicsPipelineCreateInfo batch[3]={info,info,info};
         VkPipeline outputs[3];
         batch[0].flags=VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;

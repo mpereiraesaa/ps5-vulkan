@@ -133,6 +133,11 @@ static void dispatch_base_flag(void)
     vkDestroyPipeline(&d, pipeline, NULL);
     ci.flags |= VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
     assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_SUCCESS);
+    assert(pipeline->dispatch_base_enabled && pipeline->allow_derivatives);
+    vkDestroyPipeline(&d, pipeline, NULL);
+    ci.flags |= VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
                                     &pipeline) != VK_SUCCESS);
     assert(!pipeline);
     vkDestroyPipelineLayout(&d, l, NULL);

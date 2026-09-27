@@ -39,7 +39,7 @@ class UpstreamSelectionTests(unittest.TestCase):
         paths = self.gate._pipeline_cache_control_leaf_paths(text)
         self.assertEqual(16, len(paths))  # Excludes maintenance5's separate initializer form.
         selected = [c for c in manifest["diagnostics"] if c["category"] == "pipeline-cache-control-pending"]
-        self.assertEqual(6, len(selected))
+        self.assertEqual(8, len(selected))
         self.assertTrue(all(c["path"] in paths and c["expected_status"] == "Pass" for c in selected))
         self.assertTrue(all("compute_pipelines" in c["path"] for c in selected))
         self.assertFalse(any(c["path"] in paths for c in manifest["cases"]))
@@ -134,10 +134,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # to acceptance. T07 adds 322 original BC, gather, precise-query and
         # cube-array cases. T09 adds 50 original timeline-semaphore,
         # renderpass2 write-mask and D32_SFLOAT_S8_UINT stencil/depth leaves
-        # (combined and separate-layouts); the 118 diagnostics record
+        # (combined and separate-layouts); the 120 diagnostics record
         # refusals, gaps and unmeasured zero-initialization cases. `leaves` counts every
         # attachment_write_mask leaf the pinned factory generates.
-        self.assertEqual((879, 118, 48),
+        self.assertEqual((879, 120, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]

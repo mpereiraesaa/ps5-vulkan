@@ -96,6 +96,72 @@ static void cache_control(VkDevice d, const VkComputePipelineCreateInfo *base)
     assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 3, infos, NULL, out) < 0);
     assert(out[0] && !out[1] && !out[2] && compile_calls == 1);
     vkDestroyPipeline(d, out[0], NULL);
+    /* Derivative hints do not require cache-control feature opt-in and do
+     * not create a different executable-cache identity. */
+    d->enabled_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    infos[0]=*base; infos[1]=*base; infos[2]=*base;
+    infos[0].flags=VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    infos[1].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT | VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    infos[1].basePipelineIndex=0;
+    infos[2].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+    infos[2].basePipelineIndex=1;
+    assert(vkCreateComputePipelines(d,0,3,infos,NULL,out)==VK_SUCCESS);
+    assert(out[0] && out[1] && out[2] && compile_calls==1);
+    VkPipeline parent=out[0], child=out[1];
+    assert(parent->allow_derivatives && child->allow_derivatives && !out[2]->allow_derivatives);
+    vkDestroyPipeline(d,out[2],NULL);
+    infos[2].basePipelineHandle=parent; infos[2].basePipelineIndex=-1;
+    d->enabled_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    infos[2].flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    VkPipeline derivative;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,&derivative)==VK_SUCCESS && derivative);
+    assert(compile_calls==1);
+    parent->allow_derivatives=VK_FALSE;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    parent->allow_derivatives=VK_TRUE;
+    parent->device=VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    parent->device=d; parent->graphics=VK_TRUE;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    parent->graphics=VK_FALSE;
+    infos[2].basePipelineIndex=0;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    infos[2].basePipelineHandle=VK_NULL_HANDLE;
+    for(int index=-2;index<=1;++index) {
+        infos[2].basePipelineIndex=index;
+        assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    }
+    infos[0].flags=0;
+    assert(vkCreateComputePipelines(d,0,2,infos,NULL,out)<0 && out[0] && !out[1]);
+    vkDestroyPipeline(d,out[0],NULL);
+    /* A derivative with different code must use its own shader, not inherit
+     * the base executable or turn a cold miss into a false cache hit. */
+    size_t xor_bytes=0;
+    uint32_t *xor_words=read_file("build/test-shaders/xor.spv",&xor_bytes);
+    assert(xor_words);
+    VkShaderModuleCreateInfo xor_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=xor_bytes,.pCode=xor_words};
+    VkShaderModule xor_module;
+    assert(vkCreateShaderModule(d,&xor_info,NULL,&xor_module)==VK_SUCCESS);
+    free(xor_words);
+    infos[2]=*base; infos[2].stage.module=xor_module;
+    infos[2].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT | VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    infos[2].basePipelineHandle=parent;infos[2].basePipelineIndex=-1;
+    VkPipeline different;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,&different)==VK_PIPELINE_COMPILE_REQUIRED && !different);
+    assert(compile_calls==1);
+    infos[2].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,&different)==VK_SUCCESS && different);
+    assert(compile_calls==2);
+    assert(different->program.code_words!=parent->program.code_words ||
+        memcmp(different->program.code,parent->program.code,parent->program.code_words*4));
+    vkDestroyShaderModule(d,xor_module,NULL);
+    vkDestroyPipeline(d,different,NULL);
+    vkDestroyPipeline(d,parent,NULL);
+    /* Both children retain their executable after the base is destroyed. */
+    assert(child->program.code_words && derivative->program.code_words);
+    assert(!memcmp(child->program.code,derivative->program.code,child->program.code_words*4));
+    vkDestroyPipeline(d,child,NULL); vkDestroyPipeline(d,derivative,NULL);
     ps5vk_compilation_cache_destroy(d->pipeline_cache);
     d->pipeline_cache = saved;
     d->compiler.compile = ps5vk_compiler_adapter_compile;

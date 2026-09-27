@@ -386,7 +386,8 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * three through five add the optional tessellation control/evaluation pair
      * and geometry after evaluation. Nothing else is accepted, so a
      * mesh or task stage still fails here. */
-    if ((in->pNext && in->renderPass) || (in->flags & ~(VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
+    if ((in->pNext && in->renderPass) || (in->flags & ~(VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT | VK_PIPELINE_CREATE_DERIVATIVE_BIT |
+                         VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
                          VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) || in->subpass >= render_pass->subpass_count ||
         (in->stageCount < 2 || in->stageCount > 5) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
@@ -658,7 +659,9 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          (depth->depthCompareOp < VK_COMPARE_OP_NEVER ||
           depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))))
         return refuse(16);
-    if (in->flags && !(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL))
+    if ((in->flags & (VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
+                      VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) &&
+        !(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_graphics_key key={
         .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
@@ -801,6 +804,7 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return rc == VK_SUCCESS ? VK_ERROR_INITIALIZATION_FAILED : rc;
     }
     p->device=d; p->allocator=saved; p->custom_allocator=custom; p->graphics=VK_TRUE;
+    p->allow_derivatives=!!(in->flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
     p->subpass=in->subpass;
     p->dynamic_rendering=in->renderPass?VK_FALSE:VK_TRUE;
     /* The multisample state the native draw state reads (DXVK262-T06): the
@@ -913,7 +917,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineC
         return refuse(18);
     VkResult rc=VK_SUCCESS;
     for (uint32_t i=0;i<count;++i) {
-        VkResult current=create(d,&infos[i],allocator,&out[i]);
+        const int32_t index=infos[i].basePipelineIndex;
+        const VkPipelineCreateFlags indexed_flags=index>=0 && (uint32_t)index<i?infos[index].flags:0;
+        VkResult current=ps5vk_pipeline_derivative_valid(d,infos[i].flags,
+            infos[i].basePipelineHandle,index,i,indexed_flags,VK_TRUE)?
+            create(d,&infos[i],allocator,&out[i]):VK_ERROR_UNKNOWN;
         if (current != VK_SUCCESS && (rc == VK_SUCCESS ||
             (rc == VK_PIPELINE_COMPILE_REQUIRED && current < 0))) rc=current;
         if (current != VK_SUCCESS && (infos[i].flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT) &&

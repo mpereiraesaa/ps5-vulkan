@@ -9955,7 +9955,7 @@
       "features_required": [
         "pipelineCreationCacheControl"
       ],
-      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
     },
     {
       "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.batch_pipelines_early_return",
@@ -9965,7 +9965,7 @@
       "features_required": [
         "pipelineCreationCacheControl"
       ],
-      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
     },
     {
       "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_explicit_caching",
@@ -9975,7 +9975,7 @@
       "features_required": [
         "pipelineCreationCacheControl"
       ],
-      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
     },
     {
       "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_no_caching",
@@ -9985,7 +9985,7 @@
       "features_required": [
         "pipelineCreationCacheControl"
       ],
-      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
     },
     {
       "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_explicit_cache",
@@ -9995,7 +9995,7 @@
       "features_required": [
         "pipelineCreationCacheControl"
       ],
-      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
     },
     {
       "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_no_cache",
@@ -10005,7 +10005,27 @@
       "features_required": [
         "pipelineCreationCacheControl"
       ],
-      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_derivative",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original derivative compute pipeline creation oracle, using the default-off cache-control measurement build. Host contracts cover base handles, earlier batch indices, cache identity and independent result ownership. Does not execute GPU work or establish native acceptance."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_derivative_index",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original derivative compute pipeline creation oracle, using the default-off cache-control measurement build. Host contracts cover base handles, earlier batch indices, cache identity and independent result ownership. Does not execute GPU work or establish native acceptance."
     }
   ]
 }

@@ -3354,7 +3354,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl",
       "implementation": {
-        "detail": "EXT and Vulkan 1.3 query/opt-in contracts gate pipeline cache-control flags. Compute and graphics cold misses refuse compilation; warm entries retain cache identity. Batch creation supports early return, null uncreated outputs and ownership of successful siblings. Dynamic topology creation rolls back a warm primary when a variant needs compilation. Externally synchronized cache creation is accepted only with opt-in. Host tests cover these contracts. Not implemented yet: SDK-linked delivery witness and native execution remain pending; the shipping platform does not advertise this capability.",
+        "detail": "EXT and Vulkan 1.3 query/opt-in contracts gate pipeline cache-control flags. Compute and graphics cold misses refuse compilation; warm entries retain cache identity. Batch creation supports early return, null uncreated outputs and ownership of successful siblings. Dynamic topology creation rolls back a warm primary when a variant needs compilation. Externally synchronized cache creation is accepted only with opt-in. Derivative hints preserve cache identity, validate same-device/type base handles or earlier batch indices with ALLOW_DERIVATIVES, and retain independent result ownership. Host tests cover these contracts. Not implemented yet: SDK-linked delivery witness and native execution remain pending; the shipping platform does not advertise this capability.",
         "refs": [
           "native/runtime_graphics_cache.c",
           "src/vk_core_version.c",

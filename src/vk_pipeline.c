@@ -593,6 +593,7 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
         !info->stage.module || info->stage.module->device != d || !info->stage.pName) return INVALID;
     if (info->pNext ||
         (info->flags & ~(VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR |
+                         VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT | VK_PIPELINE_CREATE_DERIVATIVE_BIT |
                          VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
                          VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) ||
         info->stage.pNext || info->stage.flags ||
@@ -708,6 +709,7 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
     p->device = d; p->allocator = saved; p->custom_allocator = custom;
     p->dispatch_base_enabled =
         !!(info->flags & VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR);
+    p->allow_derivatives = !!(info->flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
     p->set_count = info->layout->set_count;
     memcpy(p->sets, info->layout->sets, sizeof(p->sets));
     p->push_constant_size = info->layout->push_constant_size;
@@ -736,6 +738,17 @@ static VkResult create_pipeline(VkDevice d, const VkComputePipelineCreateInfo *i
     free(compiled);
     return result;
 }
+VkBool32 ps5vk_pipeline_derivative_valid(VkDevice d, VkPipelineCreateFlags flags,
+    VkPipeline base, int32_t base_index, uint32_t ordinal,
+    VkPipelineCreateFlags indexed_flags, VkBool32 graphics)
+{
+    if (!(flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT)) return VK_TRUE;
+    if (base_index == -1)
+        return base && base->device == d && base->graphics == graphics && base->allow_derivatives;
+    if (base || base_index < 0 || (uint32_t)base_index >= ordinal) return VK_FALSE;
+    return !!(indexed_flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(VkDevice d, VkPipelineCache cache,
     uint32_t count, const VkComputePipelineCreateInfo *infos, const VkAllocationCallbacks *a, VkPipeline *out)
 {
@@ -747,7 +760,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(VkDevice d, VkPipelineCa
     if (cache && !ps5vk_pipeline_cache_usable(d, cache)) return VK_ERROR_UNKNOWN;
     VkResult result = VK_SUCCESS;
     for (uint32_t j = 0; j < count; ++j) {
-        VkResult r = create_pipeline(d, &infos[j], a, &out[j]);
+        const int32_t index = infos[j].basePipelineIndex;
+        const VkPipelineCreateFlags indexed_flags = index >= 0 && (uint32_t)index < j ? infos[index].flags : 0;
+        VkResult r = ps5vk_pipeline_derivative_valid(d, infos[j].flags,
+            infos[j].basePipelineHandle, index, j, indexed_flags, VK_FALSE) ?
+            create_pipeline(d, &infos[j], a, &out[j]) : VK_ERROR_UNKNOWN;
         if (r != VK_SUCCESS && (result == VK_SUCCESS ||
             (result == VK_PIPELINE_COMPILE_REQUIRED && r < 0))) result = r;
         if (r != VK_SUCCESS && (infos[j].flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT) &&

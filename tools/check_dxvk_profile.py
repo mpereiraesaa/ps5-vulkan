@@ -163,7 +163,10 @@ CORE_IMPLEMENTATIONS = {
                    "null uncreated outputs and ownership of successful siblings. Dynamic "
                    "topology creation rolls back a warm primary when a variant needs "
                    "compilation. Externally synchronized cache creation is accepted "
-                   "only with opt-in. Host tests cover these contracts."),
+                   "only with opt-in. Derivative hints preserve cache identity, validate "
+                   "same-device/type base handles or earlier batch indices with "
+                   "ALLOW_DERIVATIVES, and retain independent result ownership. "
+                   "Host tests cover these contracts."),
         "gaps": ("SDK-linked delivery witness and native execution remain pending; "
                  "the shipping platform does not advertise this capability",),
     },

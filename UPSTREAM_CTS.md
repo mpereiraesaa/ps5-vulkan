@@ -95,12 +95,12 @@ were the same thing:
   and selection SHA-256
   `81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`;
   see [the T07 promotion evidence](VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
-  The manifest also carries 118 diagnostic paths, which remain outside strict
+  The manifest also carries 120 diagnostic paths, which remain outside strict
   acceptance. This includes 42 unmeasured `zero-initialize-workgroup-pending`
-  cases and six unmeasured `pipeline-cache-control-pending` compute cases for
+  cases and eight unmeasured `pipeline-cache-control-pending` compute cases for
   default-off measurement builds. The cache-control cases check creation results
-  and handles, without executing GPU work; graphics discard-only and derivative
-  routes remain implementation gaps. Four repeated-pipeline cases remain
+  and handles, including derivative bases, without executing GPU work; graphics
+  discard-only routes remain an implementation gap. Four repeated-pipeline cases remain
   separate precondition diagnostics: they require unreported HOST_CACHED memory,
   and the pinned factory swaps its repetition/parity arguments. Their results
   cannot establish repeated initialization. Earlier dated sections below record the smaller selections used
