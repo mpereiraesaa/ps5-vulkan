@@ -33,6 +33,7 @@
 
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktSpvAsmIndexingTests.hpp"
+#include "vktSpvAsmIntegerDotProductTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
 #include "vktDrawShaderDrawParametersTests.hpp"
@@ -470,6 +471,13 @@ void FocusedVkTestPackage::init(void)
         // Original Vulkan 1.0 Int16 indexing leaves give the dormant core
         // shaderInt16 route an applicable CTS oracle once it is measured.
         computeGroup->addChild(vkt::SpirVAssembly::createIndexingComputeGroup(m_testCtx));
+        // Original integer-dot shaders, support checks and numerical oracles.
+        computeGroup->addChild(vkt::SpirVAssembly::createOpSDotKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpUDotKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpSUDotKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpSDotAccSatKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpUDotAccSatKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpSUDotAccSatKHRComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocusedVolatileAtomicComputeGroup(m_testCtx));
         instructionGroup->addChild(computeGroup.release());
         spirvGroup->addChild(instructionGroup.release());

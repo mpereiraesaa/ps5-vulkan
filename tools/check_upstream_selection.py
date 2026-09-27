@@ -1078,6 +1078,53 @@ def _pipeline_cache_control_leaf_paths(text: str) -> set[str]:
 
 
 @_memoized
+def _integer_dot_32_leaf_factories(text: str) -> dict[str, str]:
+    """Derive the pinned integer-dot leaves needing only 32-bit arithmetic.
+
+    Vector Int8/Int16 and narrow outputs need additional features. Packed 4x8
+    inputs with a 32-bit output do not. This recognizer deliberately excludes
+    the narrow routes; it is not an enumeration of the entire upstream group.
+    """
+    name_function = re.search(r"string getDotProductTestName\(.*?\n\}", text, re.S)
+    expected = ('return inputInfo.name + (packingInfo.packed ? string("_packed_") : "_") + '
+                '(packingInfo.signedLHS ? "s" : "u") + (packingInfo.signedRHS ? "s" : "u") + '
+                '"_v" + de::toString(inputInfo.vecLen) + "i" + '
+                'de::toString(inputInfo.vecElemSize) + "_out" + de::toString(outSize);')
+    compact = lambda value: re.sub(r"\s+", "", value)
+    if not name_function or compact(expected) not in compact(name_function[0]):
+        return {}
+    packing = re.search(r"dotProductPacking\[\]\s*=\s*\{(.*?)\};", text, re.S)
+    if not packing:
+        return {}
+    forms = re.findall(r"\{\s*(true|false),\s*(true|false),\s*(true|false)\s*\}", packing[1])
+    vectors = {}
+    for width in (8, 32):
+        table = re.search(rf"dotProductVector{width}\[\]\s*=\s*\{{(.*?)\}};", text, re.S)
+        if not table:
+            return {}
+        vectors[width] = [(int(bits), int(size)) for bits, size in re.findall(r"\{\s*(\d+),\s*(\d+)\s*\}", table[1])]
+    result = {}
+    pattern = r"tcu::TestCaseGroup \*(create(Op(?:S|U|SU)Dot(?:AccSat)?KHR)ComputeGroup)\(tcu::TestContext &testCtx\)\s*\{"
+    for factory in re.finditer(pattern, text):
+        end = text.find("return group.release();", factory.end())
+        if end < 0:
+            return {}
+        body = text[factory.end():end]
+        group = re.search(r'new tcu::TestCaseGroup\(testCtx, "([^"]+)"\)', body)
+        if not group:
+            return {}
+        calls = re.findall(rf'add(8|32)bit{factory[2]}ComputeTests\(.*?string\("([^"]+)"\)', body, re.S)
+        for width_text, scenario in calls:
+            for width, length in vectors[int(width_text)]:
+                for packed, lhs, rhs in forms:
+                    if (packed == "true" and (width, length) != (8, 4)) or (packed == "false" and width != 32):
+                        continue
+                    signs = ("s" if lhs == "true" else "u") + ("s" if rhs == "true" else "u")
+                    leaf = f'{scenario}{"_packed_" if packed == "true" else "_"}{signs}_v{length}i{width}_out32'
+                    result[f"dEQP-VK.spirv_assembly.instruction.compute.{group[1]}.{leaf}"] = factory[1]
+    return result
+
+
 def _zero_initialize_leaf_paths(text: str) -> set[str]:
     """Recognize the pinned zero-initialize factories without accepting arbitrary
     numeric or synthesized leaf names. Source shape drift fails closed."""
@@ -1959,7 +2006,9 @@ def main() -> int:
     contract_pending: list[str] = []
     manifest_paths = {case["path"] for case in
                       manifest["cases"] + manifest.get("diagnostics", [])}
-    if multiview_util_path.is_file() and multiview_test_path.is_file():
+    needs_multiview_contract = contracts or any(
+        path.startswith("dEQP-VK.multiview.") for path in manifest_paths)
+    if needs_multiview_contract and multiview_util_path.is_file() and multiview_test_path.is_file():
         tests_text = multiview_test_path.read_text(encoding="utf-8", errors="replace")
         util_text = multiview_util_path.read_text(encoding="utf-8", errors="replace")
         leaves = _multiview_leaf_requirements(
@@ -2060,6 +2109,17 @@ def main() -> int:
                     "vkt::pipeline::createCacheControlTests(" not in integration_text or
                     "vktPipelineCreationCacheControlTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
                 failures.append(f"{path}: not produced by the registered cache-control factory")
+            continue
+
+        if source_path.name == "vktSpvAsmIntegerDotProductTests.cpp":
+            factory = _integer_dot_32_leaf_factories(text).get(path)
+            if (not factory or
+                    f"vkt::SpirVAssembly::{factory}(" not in integration_text or
+                    "vktSpvAsmIntegerDotProductTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by a registered 32-bit integer-dot factory")
+            required = {"VK_KHR_shader_integer_dot_product", "shaderIntegerDotProduct"}
+            if not required <= set(case.get("features_required", [])):
+                failures.append(f"{path}: missing integer-dot feature requirements")
             continue
 
         if source_path.name == "vktComputeZeroInitializeWorkgroupMemoryTests.cpp":

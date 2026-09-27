@@ -54,6 +54,7 @@ def tessellation_build_profile(environment):
             "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC",
             "PS5VK_INLINE_UNIFORM_DIAGNOSTIC",
             "PS5VK_SUBGROUP_SIZE_DIAGNOSTIC",
+            "PS5VK_INTEGER_DOT_DIAGNOSTIC",
         )
     }
     return {
@@ -1238,6 +1239,7 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmUtils.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIndexingTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp",
         ROOT / "cts/upstream/volatile_atomic_focus.cpp",
     ]
     for src in test_cpp:
