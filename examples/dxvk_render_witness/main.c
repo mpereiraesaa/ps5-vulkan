@@ -194,6 +194,10 @@ static int run_witness(void)
     VkPhysicalDeviceInlineUniformBlockFeatures inline_uniform = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES};
 #endif
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+    VkPhysicalDeviceMaintenance4Features maintenance4 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES};
+#endif
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {
@@ -206,7 +210,14 @@ static int run_witness(void)
 #ifdef PS5VK_INLINE_UNIFORM_WITNESS
     eds.pNext = &inline_uniform;
 #endif
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+    eds.pNext = &maintenance4;
+#endif
     vkGetPhysicalDeviceFeatures2KHR(physical, &features2);
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+    REQUIRE(maintenance4.maintenance4, "maintenance4 reported");
+    maintenance4.maintenance4 = VK_TRUE;
+#endif
 #ifdef PS5VK_INLINE_UNIFORM_WITNESS
     REQUIRE(inline_uniform.inlineUniformBlock, "inline uniform reported");
 #endif
@@ -242,6 +253,9 @@ static int run_witness(void)
 #ifdef PS5VK_INLINE_UNIFORM_WITNESS
         VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,
         VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME,
+#endif
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+        VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
 #endif
     };
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -477,6 +491,10 @@ static int run_witness(void)
         "DXVK_CACHE_WITNESS_CREATED cold_misses=2 warm_derivatives=2 bases_retired=2 cache_retired=1");
 #else
     TRY(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline));
+#endif
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+    ps5log_printf(PS5LOG_MARK,
+        "DXVK_MAINTENANCE4_INTERFACE producer=4 consumer=2 feature=enabled");
 #endif
 
     VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};

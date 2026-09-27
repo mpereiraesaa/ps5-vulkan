@@ -2942,6 +2942,24 @@ static void check_inline_witness_compilation(void)
     ps5vk_runtime_graphics_free(NULL,out);
     free((void *)key.vertex.words);free((void *)key.fragment.words);
 }
+static void check_maintenance4_render_interface(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/dxvk_maintenance4_interface.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/dxvk_maintenance4_interface.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    key.maintenance4=VK_TRUE;
+    assert(ps5vk_spirv_graphics_interface(&key) && ps5vk_runtime_graphics_supported(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->vertex.machine_code_size && p->fragment.machine_code_size);
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
 static void check_inline_boundary_compilation(VkBool32 vertex)
 {
     struct ps5vk_set_signature sets[1]={0};sets[0].count=4;
@@ -3042,6 +3060,7 @@ static void check_inline_boundary_tess_compilation(VkBool32 control)
 int main(void)
 {
     check_inline_witness_compilation();
+    check_maintenance4_render_interface();
     check_inline_boundary_compilation(VK_FALSE);
     check_inline_boundary_compilation(VK_TRUE);
     check_inline_boundary_geometry_compilation();

@@ -56,6 +56,8 @@ def main() -> None:
                         help="build the diagnostic compute/graphics cache execution variant")
     variants.add_argument("--inline-uniform", action="store_true",
                           help="build the diagnostic inline compute and graphics execution variant")
+    variants.add_argument("--maintenance4-interface", action="store_true",
+                          help="build the shipping maintenance4 relaxed graphics interface witness")
     parser.add_argument("--inline-graphics-boundary", choices=("vertex", "fragment", "geometry",
                                                         "tess-control", "tess-evaluation"),
                         help="exercise four256-byte blocks in the selected graphics stage")
@@ -73,7 +75,8 @@ def main() -> None:
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
     name = ("dxvk-inline-witness" if args.inline_uniform else
-            "dxvk-cache-witness" if args.cache_control else "dxvk-render-witness")
+            "dxvk-cache-witness" if args.cache_control else
+            "dxvk-maintenance4-witness" if args.maintenance4_interface else "dxvk-render-witness")
     if args.inline_graphics_boundary:
         name += "-" + args.inline_graphics_boundary + "-boundary"
     build = ROOT / "build" / name
@@ -85,6 +88,9 @@ def main() -> None:
         "dxvk_render_witness_vert_spirv": ROOT / "experiments/graphics/dxvk_render_witness.vert",
         "dxvk_render_witness_frag_spirv": ROOT / "experiments/graphics/dxvk_render_witness.frag",
     }
+    if args.maintenance4_interface:
+        shaders["dxvk_render_witness_vert_spirv"] = ROOT / "experiments/graphics/dxvk_maintenance4_interface.vert"
+        shaders["dxvk_render_witness_frag_spirv"] = ROOT / "experiments/graphics/dxvk_maintenance4_interface.frag"
     if args.cache_control:
         shaders["dxvk_cache_compute_spirv"] = ROOT / "experiments/compute/cache_witness.comp"
     if args.inline_uniform:
@@ -131,6 +137,7 @@ def main() -> None:
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         *(["-DPS5VK_CACHE_CONTROL_WITNESS=1"] if args.cache_control else []),
+        *(["-DPS5VK_MAINTENANCE4_INTERFACE_WITNESS=1"] if args.maintenance4_interface else []),
         *(["-DPS5VK_INLINE_UNIFORM_WITNESS=1"] if args.inline_uniform else []),
         *(["-DPS5VK_INLINE_GRAPHICS_STAGE=" + {"vertex":"1","fragment":"16","geometry":"8",
              "tess-control":"2","tess-evaluation":"4"}[args.inline_graphics_boundary]]
@@ -184,7 +191,10 @@ def main() -> None:
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
         "profile": ("dxvk-inline-public-sdk-witness" if args.inline_uniform else
-                    "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness"),
+                    "dxvk-cache-public-sdk-witness" if args.cache_control else
+                    "dxvk-maintenance4-public-sdk-witness" if args.maintenance4_interface else
+                    "dxvk-render-public-sdk-witness"),
+        "maintenance4_interface_version": 1 if args.maintenance4_interface else None,
         "inline_execution_version": 7 if args.inline_uniform else None,
         "inline_graphics_stage": ((args.inline_graphics_boundary or "small").replace("-", "_")) if args.inline_uniform else None,
         "cache_execution_version": 2 if args.cache_control else None,

@@ -23,6 +23,7 @@ EXTENT = 64
 PROFILE = "dxvk-render-public-sdk-witness"
 CACHE_PROFILE = "dxvk-cache-public-sdk-witness"
 INLINE_PROFILE = "dxvk-inline-public-sdk-witness"
+MAINTENANCE4_PROFILE = "dxvk-maintenance4-public-sdk-witness"
 INLINE_SWITCH = "PS5VK_INLINE_UNIFORM_DIAGNOSTIC"
 CACHE_SWITCH = "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC"
 VIEWPORT = (0.0, 64.0, 64.0, -64.0)
@@ -104,11 +105,13 @@ def expected_inline_digest(words=70) -> str:
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     cache_variant = artifact.get("profile") == CACHE_PROFILE
     inline_variant = artifact.get("profile") == INLINE_PROFILE
-    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE, INLINE_PROFILE) or
+    maintenance4_variant = artifact.get("profile") == MAINTENANCE4_PROFILE
+    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE, INLINE_PROFILE, MAINTENANCE4_PROFILE) or
             artifact.get("extent") != EXTENT or
             artifact.get("format") != "R8G8B8A8_UNORM" or
             artifact.get("diagnostic_switch") != (INLINE_SWITCH if inline_variant else CACHE_SWITCH if cache_variant else None) or
             (cache_variant and artifact.get("cache_execution_version") != 2) or
+            (maintenance4_variant and artifact.get("maintenance4_interface_version") != 1) or
             (inline_variant and (artifact.get("inline_execution_version") != 7 or
                                  artifact.get("inline_graphics_stage") not in ("small", "vertex", "fragment", "geometry",
                                                                                 "tess_control", "tess_evaluation")))):
@@ -119,6 +122,14 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             receipt.get("sha256") != hashlib.sha256(log).hexdigest()):
         raise ValueError("incomplete or corrupt ps5log/1 receipt")
     text = log.decode("utf-8", errors="replace")
+    maintenance4_marker = "DXVK_MAINTENANCE4_INTERFACE producer=4 consumer=2 feature=enabled"
+    if maintenance4_variant:
+        if (text.count("DXVK_MAINTENANCE4_INTERFACE") != 1 or
+                maintenance4_marker not in text or
+                text.index(maintenance4_marker) >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("maintenance4 interface pipeline missing or malformed")
+    elif "DXVK_MAINTENANCE4_INTERFACE" in text:
+        raise ValueError("maintenance4 log requires maintenance4 artifact")
     start = re.findall(r"DXVK_RENDER_WITNESS_START extent=(\d+) dynamicRendering=(\d+) "
                        r"extendedDynamicState=(\d+)", text)
     steps = re.findall(r"DXVK_RENDER_WITNESS_STEP index=(\d+) fence=complete", text)
@@ -224,7 +235,7 @@ def main() -> int:
         raise RuntimeError("refusing to launch while a title is active")
     artifact = json.loads(args.artifact.read_text())
     eboot = args.dist / "eboot.bin"
-    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE, INLINE_PROFILE) or
+    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE, INLINE_PROFILE, MAINTENANCE4_PROFILE) or
             hashlib.sha256(eboot.read_bytes()).hexdigest() != artifact.get("eboot_sha256")):
         raise RuntimeError("artifact identity mismatch")
     known = {path.name for path in args.runs_dir.glob("*_PPSA99994_ps5vk_*.log")}

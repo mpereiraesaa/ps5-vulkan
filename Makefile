@@ -606,6 +606,8 @@ native-bootstrap:
 graphics-stage-shaders:
 	mkdir -p build/runtime-graphics
 	$(GLSLANG) -V experiments/graphics/dxvk_render_witness.vert -o build/runtime-graphics/dxvk_render_witness.vert.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_maintenance4_interface.vert -o build/runtime-graphics/dxvk_maintenance4_interface.vert.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_maintenance4_interface.frag -o build/runtime-graphics/dxvk_maintenance4_interface.frag.spv
 	$(GLSLANG) -V experiments/graphics/dxvk_inline_witness.frag -o build/runtime-graphics/dxvk_inline_witness.frag.spv
 	$(GLSLANG) -V experiments/graphics/dxvk_inline_boundary.frag -o build/runtime-graphics/dxvk_inline_boundary.frag.spv
 	$(GLSLANG) -V -S geom experiments/graphics/dxvk_inline_boundary.geom -o build/runtime-graphics/dxvk_inline_boundary.geom.spv

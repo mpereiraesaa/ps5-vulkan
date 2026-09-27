@@ -91,6 +91,30 @@ class Verify(unittest.TestCase):
             verify(log, dict(receipt(log), bye=False), ARTIFACT)
 
 
+class Maintenance4InterfaceVerify(unittest.TestCase):
+    artifact = dict(ARTIFACT, profile="dxvk-maintenance4-public-sdk-witness",
+                    maintenance4_interface_version=1)
+    marker = b"DXVK_MAINTENANCE4_INTERFACE producer=4 consumer=2 feature=enabled\n"
+
+    def log(self):
+        return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP", self.marker + b"DXVK_RENDER_WITNESS_STEP")
+
+    def test_exact_interface_and_image(self):
+        log = self.log()
+        self.assertTrue(verify(log, receipt(log), self.artifact)["strict_verified"])
+        for bad in (log.replace(self.marker, b""), log.replace(self.marker, self.marker * 2),
+                    log.replace(b"producer=4", b"producer=3"),
+                    log.replace(b"consumer=2", b"consumer=4"),
+                    log.replace(b"feature=enabled", b"feature=disabled"),
+                    fixture_log() + self.marker):
+            with self.subTest(log=bad), self.assertRaises(ValueError):
+                verify(bad, receipt(bad), self.artifact)
+        with self.assertRaises(ValueError):
+            verify(log, receipt(log), dict(self.artifact, maintenance4_interface_version=0))
+        with self.assertRaises(ValueError):
+            verify(log, receipt(log), ARTIFACT)
+
+
 class CacheVerify(unittest.TestCase):
     artifact = dict(ARTIFACT, profile="dxvk-cache-public-sdk-witness",
                     diagnostic_switch="PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC", cache_execution_version=2)
