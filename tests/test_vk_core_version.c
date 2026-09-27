@@ -3,6 +3,7 @@
  * The raised version is a test-only mutation of the mocked profile; shipping
  * builds report PS5VK_DEVICE_API_VERSION. */
 #include "vk_internal.h"
+#include "vk_descriptor.h"
 #include "vk_core_version.h"
 #include "physical_device_profile.h"
 #include <assert.h>
@@ -453,6 +454,99 @@ static void cache_control_negotiation(void)
     }
 }
 
+static void inline_uniform_negotiation(void)
+{
+    const uint32_t versions[]={VK_API_VERSION_1_0,VK_API_VERSION_1_1,VK_API_VERSION_1_2,VK_API_VERSION_1_3};
+    for(unsigned v=0;v<4;++v) {
+        VkInstance instance;VkPhysicalDevice p=physical(&instance,versions[v]);
+        p->platform.properties.apiVersion=versions[v];
+        VkPhysicalDeviceInlineUniformBlockFeatures f={
+            .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES,
+            .inlineUniformBlock=VK_TRUE,.descriptorBindingInlineUniformBlockUpdateAfterBind=VK_TRUE};
+        VkPhysicalDeviceFeatures2 query={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,.pNext=&f};
+        vkGetPhysicalDeviceFeatures2(p,&query);
+        assert(!f.inlineUniformBlock && !f.descriptorBindingInlineUniformBlockUpdateAfterBind);
+        VkPhysicalDeviceInlineUniformBlockProperties limits={
+            .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES,
+            .maxInlineUniformBlockSize=UINT32_MAX};
+        VkPhysicalDeviceProperties2 properties={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,.pNext=&limits};
+        vkGetPhysicalDeviceProperties2(p,&properties);assert(!limits.maxInlineUniformBlockSize);
+        const char *extensions[]={VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,VK_KHR_MAINTENANCE_1_EXTENSION_NAME};
+        float priority=1;
+        VkDeviceQueueCreateInfo queue={.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount=1,.pQueuePriorities=&priority};
+        VkDeviceCreateInfo info={.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.pNext=&f,
+            .queueCreateInfoCount=1,.pQueueCreateInfos=&queue,
+            .enabledExtensionCount=v?1:2,.ppEnabledExtensionNames=extensions};
+        VkDevice d=NULL;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        p->platform.supported_features_t09|=PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK;
+        if(!v) {
+            vkGetPhysicalDeviceFeatures2(p,&query);assert(!f.inlineUniformBlock);
+            p->platform.supported_features_t09|=PS5VK_T09_FEATURE_MAINTENANCE1;
+            info.enabledExtensionCount=1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+            info.enabledExtensionCount=2;
+        }
+        vkGetPhysicalDeviceFeatures2(p,&query);assert(f.inlineUniformBlock && !f.descriptorBindingInlineUniformBlockUpdateAfterBind);
+        vkGetPhysicalDeviceProperties2(p,&properties);
+        assert(limits.maxInlineUniformBlockSize==PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES &&
+            limits.maxPerStageDescriptorInlineUniformBlocks==PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_STAGE &&
+            limits.maxDescriptorSetInlineUniformBlocks==PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET &&
+            limits.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks==limits.maxPerStageDescriptorInlineUniformBlocks &&
+            limits.maxDescriptorSetUpdateAfterBindInlineUniformBlocks==limits.maxDescriptorSetInlineUniformBlocks);
+        VkExtensionProperties available[64];uint32_t count=64,found=0;
+        assert(vkEnumerateDeviceExtensionProperties(p,NULL,&count,available)==VK_SUCCESS);
+        for(uint32_t i=0;i<count;++i)found+=!strcmp(available[i].extensionName,extensions[0]);
+        assert(found==1);
+        if(v<3)assert(create(p,&f,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d->inline_uniform_block_enabled &&
+            (d->enabled_features_t09&PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK));
+        VkDescriptorSetLayoutBinding binding={0,VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,16,VK_SHADER_STAGE_COMPUTE_BIT,NULL};
+        VkDescriptorSetLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount=1,.pBindings=&binding};
+        VkDescriptorSetLayout layout=NULL;
+        assert(vkCreateDescriptorSetLayout(d,&li,NULL,&layout)==VK_SUCCESS);
+        vkDestroyDescriptorSetLayout(d,layout,NULL);vkDestroyDevice(d,NULL);
+        f.inlineUniformBlock=VK_FALSE;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && !d->inline_uniform_block_enabled);
+        assert(vkCreateDescriptorSetLayout(d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+        vkDestroyDevice(d,NULL);
+        f.inlineUniformBlock=2;assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+        f.inlineUniformBlock=VK_TRUE;f.descriptorBindingInlineUniformBlockUpdateAfterBind=VK_TRUE;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        f.descriptorBindingInlineUniformBlockUpdateAfterBind=2;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+        f.descriptorBindingInlineUniformBlockUpdateAfterBind=VK_FALSE;
+        VkPhysicalDeviceInlineUniformBlockFeatures duplicate=f;f.pNext=&duplicate;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);f.pNext=NULL;
+        if(!v) {
+            instance->features2_extension_enabled=VK_FALSE;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        }
+        if(v==3) {
+            VkPhysicalDeviceVulkan13Features core={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+            query.pNext=&core;vkGetPhysicalDeviceFeatures2(p,&query);assert(core.inlineUniformBlock);
+            memset(&core,0,sizeof(core));core.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;core.inlineUniformBlock=VK_TRUE;
+            assert(create(p,&core,&d)==VK_SUCCESS && d->inline_uniform_block_enabled);vkDestroyDevice(d,NULL);
+            assert(create(p,&f,&d)==VK_SUCCESS && d->inline_uniform_block_enabled);vkDestroyDevice(d,NULL);
+            core.pNext=&f;assert(create(p,&core,&d)==VK_ERROR_UNKNOWN && !d);core.pNext=NULL;
+            VkPhysicalDeviceVulkan13Properties cprops={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
+            properties.pNext=&cprops;vkGetPhysicalDeviceProperties2(p,&properties);
+            assert(cprops.maxInlineUniformBlockSize==limits.maxInlineUniformBlockSize &&
+                cprops.maxPerStageDescriptorInlineUniformBlocks==limits.maxPerStageDescriptorInlineUniformBlocks &&
+                cprops.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks==limits.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks &&
+                cprops.maxDescriptorSetInlineUniformBlocks==limits.maxDescriptorSetInlineUniformBlocks &&
+                cprops.maxDescriptorSetUpdateAfterBindInlineUniformBlocks==limits.maxDescriptorSetUpdateAfterBindInlineUniformBlocks &&
+                cprops.maxInlineUniformTotalSize==PS5VK_MAX_INLINE_UNIFORM_TOTAL_BYTES);
+            p->platform.supported_features_t09&=~PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK;
+            assert(create(p,&core,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            vkGetPhysicalDeviceProperties2(p,&properties);assert(!cprops.maxInlineUniformBlockSize && !cprops.maxInlineUniformTotalSize);
+        }
+        vkDestroyInstance(instance,NULL);
+    }
+}
+
 int main(void)
 {
     dormant_on_vulkan_1_0();
@@ -462,6 +556,7 @@ int main(void)
     graphics_core13_negotiation();
     zero_initialize_negotiation();
     cache_control_negotiation();
+    inline_uniform_negotiation();
     puts("vk core version: dormant on 1.0, projections and core names on raised versions");
     return 0;
 }

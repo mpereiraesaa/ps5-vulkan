@@ -16,7 +16,7 @@ enum { PS5VK_MAX_PUSH_CONSTANT_BYTES = 256, PS5VK_MAX_PUSH_CONSTANT_DWORDS = 64 
  * Update-after-bind layouts are refused, so the two update-after-bind limits
  * equal the plain ones. The descriptor model does not make the feature
  * consumable: shader lowering and table snapshots exist, but public feature
- * negotiation remains disabled pending native witnesses and validation. */
+ * negotiation is diagnostic-only pending native witnesses and validation. */
 enum {
     PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES = 256,
     PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET = 4,

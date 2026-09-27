@@ -256,6 +256,8 @@ enum ps5vk_t09_feature_bits {
     PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY = 1u << 29,
     /* Cache-only pipeline creation and early return; unreported until validated. */
     PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL = 1u << 30,
+    /* Inline UBO snapshots; measurement-only until native acceptance. */
+    PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK = 1u << 31,
     /* A second, HOST_COHERENT memory type whose coherence the driver keeps at
      * map/unmap and submission boundaries (src/physical_device_profile.h).
      * Only the diagnostic witness build sets it until native proof. */

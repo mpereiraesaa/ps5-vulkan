@@ -1,4 +1,5 @@
 #include "vk_core_version.h"
+#include "vk_descriptor.h"
 #include "physical_device_profile.h"
 #include <stddef.h>
 #include <stdio.h>
@@ -38,6 +39,7 @@ struct extension_features {
     VkPhysicalDeviceMaintenance4Features maintenance4;
     VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures zero_initialize;
     VkPhysicalDevicePipelineCreationCacheControlFeatures cache_control;
+    VkPhysicalDeviceInlineUniformBlockFeatures inline_uniform;
     VkPhysicalDeviceSynchronization2Features synchronization2;
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering;
     VkPhysicalDeviceFeatures2 core;
@@ -64,6 +66,7 @@ static void query_extension_features(VkPhysicalDevice p, struct extension_featur
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES, &f->maintenance4},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES, &f->zero_initialize},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES, &f->cache_control},
+        {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES, &f->inline_uniform},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES, &f->synchronization2},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, &f->dynamic_rendering},
     };
@@ -143,6 +146,7 @@ static void fill_vulkan13_features(VkPhysicalDevice p, VkPhysicalDeviceVulkan13F
     out->maintenance4 = f.maintenance4.maintenance4;
     out->shaderZeroInitializeWorkgroupMemory = f.zero_initialize.shaderZeroInitializeWorkgroupMemory;
     out->pipelineCreationCacheControl = f.cache_control.pipelineCreationCacheControl;
+    out->inlineUniformBlock = f.inline_uniform.inlineUniformBlock;
     out->synchronization2 = f.synchronization2.synchronization2;
     out->dynamicRendering = f.dynamic_rendering.dynamicRendering;
 }
@@ -177,6 +181,7 @@ struct extension_properties {
     VkPhysicalDevicePointClippingProperties point_clipping;
     VkPhysicalDeviceTimelineSemaphoreProperties timeline;
     VkPhysicalDeviceMaintenance4Properties maintenance4;
+    VkPhysicalDeviceInlineUniformBlockProperties inline_uniform;
     VkPhysicalDeviceDepthStencilResolveProperties resolve;
     VkPhysicalDeviceProperties2 core;
 };
@@ -187,6 +192,8 @@ static void query_extension_properties(VkPhysicalDevice p, struct extension_prop
     e->maintenance4.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES;
     e->resolve.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES;
     e->maintenance4.pNext = &e->resolve;
+    e->resolve.pNext = &e->inline_uniform;
+    e->inline_uniform.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES;
     e->timeline.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES;
     e->timeline.pNext = &e->maintenance4;
     e->point_clipping.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES;
@@ -315,7 +322,13 @@ static void fill_vulkan13_properties(VkPhysicalDevice p, VkPhysicalDeviceVulkan1
     out->uniformTexelBufferOffsetAlignmentBytes =
         p->platform.properties.limits.minTexelBufferOffsetAlignment;
     out->maxBufferSize = e.maintenance4.maxBufferSize;
-    /* Inline uniform limits and integer dot product acceleration stay zero. */
+    out->maxInlineUniformBlockSize=e.inline_uniform.maxInlineUniformBlockSize;
+    out->maxPerStageDescriptorInlineUniformBlocks=e.inline_uniform.maxPerStageDescriptorInlineUniformBlocks;
+    out->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks=e.inline_uniform.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks;
+    out->maxDescriptorSetInlineUniformBlocks=e.inline_uniform.maxDescriptorSetInlineUniformBlocks;
+    out->maxDescriptorSetUpdateAfterBindInlineUniformBlocks=e.inline_uniform.maxDescriptorSetUpdateAfterBindInlineUniformBlocks;
+    out->maxInlineUniformTotalSize=out->maxInlineUniformBlockSize?PS5VK_MAX_INLINE_UNIFORM_TOTAL_BYTES:0;
+    /* Integer dot product acceleration stays zero. */
 }
 
 int ps5vk_core_version_properties(VkPhysicalDevice p, VkBaseOutStructure *next)
@@ -456,6 +469,7 @@ static const struct core_enable core_enables[] = {
     V13(maintenance4, 0, PS5VK_T09_FEATURE_MAINTENANCE4),
     V13(shaderZeroInitializeWorkgroupMemory, 0, PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY),
     V13(pipelineCreationCacheControl, 0, PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL),
+    V13(inlineUniformBlock, 0, PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK),
     V13(synchronization2, 0, PS5VK_T09_FEATURE_SYNCHRONIZATION2),
     V13(dynamicRendering, 0, PS5VK_T09_FEATURE_DYNAMIC_RENDERING),
 };

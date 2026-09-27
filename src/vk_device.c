@@ -1,4 +1,5 @@
 #include "vk_internal.h"
+#include "vk_descriptor.h"
 #include "compilation_cache.h"
 #include "physical_device_profile.h"
 #include "wsi_present_backend.h"
@@ -579,6 +580,11 @@ static VkBool32 maintenance1_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE1) != 0;
 }
+static VkBool32 inline_uniform_supported(VkPhysicalDevice p)
+{
+    return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK) &&
+        (ps5vk_physical_api_version(p) >= VK_API_VERSION_1_1 || maintenance1_supported(p));
+}
 static VkBool32 extended_dynamic_state_supported(VkPhysicalDevice p)
 {
     return (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE) != 0;
@@ -696,6 +702,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
             ((VkPhysicalDeviceShaderTerminateInvocationFeatures *)next)
                 ->shaderTerminateInvocation = !!(p->platform.supported_features_t09 &
                     PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION);
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES) {
+            VkPhysicalDeviceInlineUniformBlockFeatures *f=(VkPhysicalDeviceInlineUniformBlockFeatures *)next;
+            f->inlineUniformBlock=inline_uniform_supported(p);
+            f->descriptorBindingInlineUniformBlockUpdateAfterBind=VK_FALSE;
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES) {
             ((VkPhysicalDevicePipelineCreationCacheControlFeatures *)next)->pipelineCreationCacheControl =
                 !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL);
@@ -788,6 +798,14 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
              * USER_CLIP_PLANES_ONLY relaxation is never claimed. */
             ((VkPhysicalDevicePointClippingProperties *)next)->pointClippingBehavior =
                 VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES) {
+            VkPhysicalDeviceInlineUniformBlockProperties *v=(VkPhysicalDeviceInlineUniformBlockProperties *)next;
+            const VkBool32 supported=inline_uniform_supported(p);
+            v->maxInlineUniformBlockSize=supported?PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES:0;
+            v->maxPerStageDescriptorInlineUniformBlocks=supported?PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_STAGE:0;
+            v->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks=v->maxPerStageDescriptorInlineUniformBlocks;
+            v->maxDescriptorSetInlineUniformBlocks=supported?PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET:0;
+            v->maxDescriptorSetUpdateAfterBindInlineUniformBlocks=v->maxDescriptorSetInlineUniformBlocks;
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES) {
             /* The largest size vkCreateBuffer accepts: its aligned footprint
              * must fit one allocation (maxMemoryAllocationSize, 1 GiB on the
@@ -988,7 +1006,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (!p || !count) return INVALID;
     if (layer) return VK_ERROR_LAYER_NOT_PRESENT;
 
-    /* Thirty-six conditional pushes follow (storage class, 8-bit, 16-bit, draw
+    /* Thirty-seven conditional pushes follow (storage class, 8-bit, 16-bit, draw
      * parameters, multiview, memory model, device group, buffer address, UBO
      * layout, host query reset, sampler mirror clamp, timeline, maintenance2,
      * create_renderpass2, separate depth/stencil layouts, swapchain, demote to
@@ -997,10 +1015,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
      * template, robustness2, extended dynamic state, maintenance1,
      * copy_commands2, depth/stencil resolve, dynamic rendering, format feature
      * flags 2, image format list, synchronization2, transform feedback,
-     * imageless framebuffer, zero initialize workgroup memory, cache control). Keep headroom
+     * imageless framebuffer, zero initialize workgroup memory, cache control,
+     * inline uniform block). Keep headroom
      * so a new entry cannot overflow the array before this bound is revisited;
      * each push site must stay below it. */
-    enum { DEVICE_EXTENSION_PUSHES = 36, DEVICE_EXTENSION_SLOTS = 40 };
+    enum { DEVICE_EXTENSION_PUSHES = 37, DEVICE_EXTENSION_SLOTS = 40 };
     _Static_assert(DEVICE_EXTENSION_PUSHES <= DEVICE_EXTENSION_SLOTS,
                    "device extension array too small");
     VkExtensionProperties properties[DEVICE_EXTENSION_SLOTS];
@@ -1107,6 +1126,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (bind_memory2_supported(p)) {
         properties[total++] = (VkExtensionProperties){
             VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_KHR_BIND_MEMORY_2_SPEC_VERSION};
+    }
+    if (inline_uniform_supported(p)) {
+        properties[total++] = (VkExtensionProperties){
+            VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME, VK_EXT_INLINE_UNIFORM_BLOCK_SPEC_VERSION};
     }
     if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL) {
         properties[total++] = (VkExtensionProperties){
@@ -1223,6 +1246,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 maintenance4_extension = VK_FALSE, saw_maintenance4 = VK_FALSE;
     VkBool32 zero_initialize_extension = VK_FALSE, saw_zero_initialize = VK_FALSE;
     VkBool32 cache_control_extension = VK_FALSE, saw_cache_control = VK_FALSE;
+    VkBool32 inline_uniform_extension = VK_FALSE, saw_inline_uniform = VK_FALSE;
     VkBool32 descriptor_update_template_extension = VK_FALSE;
     /* DXVK262-T10 recording routes. */
     VkBool32 extended_dynamic_state_extension = VK_FALSE;
@@ -1284,6 +1308,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             seen = &dedicated_allocation_extension;
         else if (!strcmp(name, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME))
             seen = &bind_memory2_extension;
+        else if (!strcmp(name, VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME))
+            seen = &inline_uniform_extension;
         else if (!strcmp(name, VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME))
             seen = &cache_control_extension;
         else if (!strcmp(name, VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_EXTENSION_NAME))
@@ -1407,6 +1433,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
         (!(p->platform.supported_features_t09 &
            PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION) ||
          !features2_available))
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (inline_uniform_extension &&
+        (!inline_uniform_supported(p) || !features2_available ||
+         (core_version < VK_API_VERSION_1_1 && !maintenance1_extension)))
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (cache_control_extension &&
         (!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL) ||
@@ -1763,6 +1793,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features_t09 |= PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION;
             }
+        } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES) {
+            if (saw_inline_uniform) return INVALID;
+            saw_inline_uniform=VK_TRUE;
+            const VkPhysicalDeviceInlineUniformBlockFeatures *f=(const VkPhysicalDeviceInlineUniformBlockFeatures *)next;
+            if (!valid_bool(f->inlineUniformBlock) ||
+                !valid_bool(f->descriptorBindingInlineUniformBlockUpdateAfterBind)) return INVALID;
+            if (f->descriptorBindingInlineUniformBlockUpdateAfterBind) return VK_ERROR_FEATURE_NOT_PRESENT;
+            if (f->inlineUniformBlock) {
+                if ((!inline_uniform_extension && core_version < VK_API_VERSION_1_3) ||
+                    !inline_uniform_supported(p)) return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_t09 |= PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK;
+            }
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES) {
             if (saw_cache_control) return INVALID;
             saw_cache_control = VK_TRUE;
@@ -1885,6 +1927,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->queue.priority_class = q->pQueuePriorities[0] >= 0.5f ? 1u : 0u;
     d->enabled_features = enabled_features;
     d->enabled_features_t09 = enabled_features_t09;
+    d->inline_uniform_block_enabled = !!(enabled_features_t09 & PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK);
     d->device_group_extension_enabled = group_extension;
     d->timeline_extension_enabled = timeline_extension;
     d->maintenance2_extension_enabled = maintenance2_extension;
