@@ -280,6 +280,80 @@ static void check_compute_execution_witness(VkDevice d)
     puts("SDK compute cache witness: pass (real compiler, synthetic queue, three oracle faults; no GPU)");
 }
 
+#include "../examples/dxvk_render_witness/inline_compute.h"
+struct inline_job { uint64_t serial; unsigned char *data; uint32_t input[4][70]; };
+static unsigned inline_fault, inline_launches;
+static VkResult inline_prepare(VkDevice device, const struct ps5vk_submission *s, void **out)
+{
+    assert(s->count==1 && s->buffers[0]->operation_count==6);
+    const struct ps5vk_operation *ops=s->buffers[0]->operations;
+    assert(ops[0].type==PS5VK_BARRIER && ops[5].type==PS5VK_BARRIER);
+    assert(ops[0].src_stage==VK_PIPELINE_STAGE_HOST_BIT && ops[0].dst_stage==VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    assert(ops[0].src_access==VK_ACCESS_HOST_WRITE_BIT && ops[0].dst_access==(VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT));
+    assert(ops[5].src_stage==VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT && ops[5].dst_stage==VK_PIPELINE_STAGE_HOST_BIT);
+    assert(ops[5].src_access==VK_ACCESS_SHADER_WRITE_BIT && ops[5].dst_access==VK_ACCESS_HOST_READ_BIT);
+    struct inline_job *job=calloc(1,sizeof(*job));assert(job);job->serial=s->serial;
+    for(unsigned round=0;round<4;++round) {
+        const struct ps5vk_operation *op=&ops[round+1];
+        assert(op->type==PS5VK_DISPATCH && op->groups[0]==4 && op->groups[1]==1 && op->groups[2]==1);
+        assert(op->pipeline->program.code_words && op->pipeline==ops[1].pipeline);
+        VkDescriptorSet set=op->sets[0];assert(set && set->signature.inline_bytes[0]==20 &&
+            set->signature.inline_bytes[1]==4 && set->signature.inline_bytes[2]==256);
+        unsigned word=0;
+        for(unsigned binding=0;binding<3;++binding) {
+            for(unsigned byte=0;byte<set->inline_uniform.bytes[binding];byte+=4) {
+                uint32_t value;
+                memcpy(&value,set->inline_data+set->inline_uniform.offset[binding]+byte,4);
+                assert(value==0x10203040u+round*1009u+word*37u);
+                job->input[round][word++]=value;
+            }
+        }
+        assert(word==70 && set->buffers[3].offset==INLINE_OFFSET+round*INLINE_STRIDE &&
+            set->buffers[3].range==INLINE_RESULTS*4);
+        void *address;VkDeviceSize size;
+        assert(ps5vk_buffer_span(device,set->buffers[3].buffer,0,VK_WHOLE_SIZE,&address,&size)==VK_SUCCESS);
+        assert(size>=INLINE_BUFFER_BYTES && (!round || job->data==address));job->data=address;
+    }
+    *out=job;return VK_SUCCESS;
+}
+static VkResult inline_launch(VkDevice d,void *data)
+{
+    (void)d;struct inline_job *job=data;++inline_launches;
+    for(unsigned round=0;round<4;++round) for(unsigned i=0;i<INLINE_RESULTS;++i) {
+        if(inline_fault==3) continue; /* An untouched result must never pass. */
+        uint32_t value=job->input[round][i%70]*3u+(i^0x13579bdfu);
+        if(inline_fault==1) value^=1;
+        memcpy(job->data+INLINE_OFFSET+round*INLINE_STRIDE+i*4,&value,4);
+    }
+    if(inline_fault==2) job->data[INLINE_OFFSET-1]^=1;
+    return VK_SUCCESS;
+}
+static VkResult inline_poll(VkDevice d,void *data,uint64_t *serial)
+{ (void)d;*serial=((struct inline_job *)data)->serial;return VK_SUCCESS; }
+static void check_inline_compute_witness(VkDevice d)
+{
+    size_t bytes;uint32_t *words=read_file("build/test-shaders/inline_witness.spv",&bytes);assert(words);
+    struct ps5vk_queue_backend saved=d->submit_backend;
+    struct ps5vk_progress progress=d->progress;
+    d->inline_uniform_block_enabled=VK_TRUE;
+    d->submit_backend=(struct ps5vk_queue_backend){inline_prepare,inline_launch,inline_poll,witness_release};
+    d->progress=(struct ps5vk_progress){NULL,ps5vk_queue_poll,witness_clock,witness_pause};
+    VkQueue queue;vkGetDeviceQueue(d,0,0,&queue);
+    unsigned pipelines=d->pipeline_objects,descriptors=d->descriptor_objects;
+    for(inline_fault=0;inline_fault<4;++inline_fault) {
+        inline_launches=0;VkBool32 pending=VK_TRUE;struct inline_compute_result observed;
+        VkResult r=inline_compute_witness(d,queue,words,bytes,&pending,&observed);
+        if(r!=(inline_fault?VK_ERROR_UNKNOWN:VK_SUCCESS)) fprintf(stderr,"inline fault=%u result=%d step=%s\n",inline_fault,r,observed.step);
+        assert(r==(inline_fault?VK_ERROR_UNKNOWN:VK_SUCCESS) && !pending && inline_launches==1);
+        assert(observed.mismatches==((inline_fault==1 || inline_fault==3)?1024u:0u));
+        assert(observed.guards==(inline_fault==2));
+        assert(d->pipeline_objects==pipelines && d->descriptor_objects==descriptors &&
+            !d->buffers && !d->memories && !d->command_pools && !d->fences && !d->lifetime_errors);
+    }
+    d->inline_uniform_block_enabled=VK_FALSE;d->submit_backend=saved;d->progress=progress;free(words);
+    puts("SDK inline compute witness: pass (real compiler, synthetic queue, four update routes, three oracle faults; no GPU)");
+}
+
 int main(void)
 {
     size_t spv_bytes = 0;
@@ -510,6 +584,7 @@ int main(void)
     }
 
     check_compute_execution_witness(device);
+    check_inline_compute_witness(device);
 
     /* Teardown */
     vkDestroyPipeline(device, pipeline3, NULL);

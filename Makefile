@@ -572,6 +572,7 @@ test-compiler: build/libpsbc.host.a test-shaders
 	$(MAKE) test-runtime-graphics-native
 	mkdir -p build/tests
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cache_witness.comp -o build/test-shaders/cache_witness.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/inline_witness.comp -o build/test-shaders/inline_witness.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cts_ssbo_local_barrier.comp -o build/test-shaders/cts_ssbo_local_barrier.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/zero_initialize_workgroup.comp -o build/test-shaders/zero_initialize_workgroup.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp -DZERO_INITIALIZE=1 experiments/compute/zero_initialize_workgroup.comp -o build/test-shaders/zero_initialize_workgroup_null.spv
