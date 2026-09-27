@@ -157,13 +157,18 @@ def binary(case: Case):
     return struct.pack(f"<{len(words)}I", *words)
 
 
-def integerize_dot_add(words, case: Case):
+def integerize_dot_add(words, case: Case, *, preserve_result_bits=False):
     """Replace one float dot-plus-add in an owned test template.
 
 This is fixture generation, not runtime shader rewriting. Bitcasts retain
 buffer bits; the final integer result is converted back to the template's
 float output, leaving its stage interfaces and pipeline context unchanged.
+With preserve_result_bits=True, the result is bitcast instead. Such templates
+must immediately recover a uint with floatBitsToUint and carry it through flat
+integer interfaces; numerical float operations would invalidate the oracle.
 """
+    if type(preserve_result_bits) is not bool:
+        raise ValueError("preserve_result_bits must be boolean")
     if case.mode == "float" or len(words) < 5 or words[0] != 0x07230203:
         raise ValueError("requires an integer case and a SPIR-V template")
     instructions, index = [], 5
@@ -233,7 +238,8 @@ float output, leaving its stage interfaces and pipeline context unchanged.
     value = new_id()
     replacement += instruction({"s": 4450, "u": 4451, "su": 4452}[case.mode] + 3 * case.saturating,
                                result_type, value, *operands)
-    replacement += instruction(112 if case.mode == "u" else 111, add[1], add[2], value)
+    result_opcode = 124 if preserve_result_bits else (112 if case.mode == "u" else 111)
+    replacement += instruction(result_opcode, add[1], add[2], value)
     out = list(words[:5])
     out[3] = bound
     capabilities = instruction(17, 6019) + instruction(17, 6018 if case.packed_types is not None else 6016)
