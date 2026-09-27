@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../examples/dxvk_render_witness/inline_graphics.h"
 
 static VkResult alloc_memory(void *ctx, VkDeviceSize size, void **address, void **backing)
 {
@@ -50,7 +51,7 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
             PS5VK_T09_FEATURE_CREATE_RENDERPASS2 | PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE |
             PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
             PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1 |
-            PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL};
+            PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL | PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU", .heap_size = 1u << 22,
         .allocation_granularity = 1, .buffer_image_granularity = 1};
@@ -78,7 +79,7 @@ enum { EXTENT = 64, STAGING = 64 * 1024, FULL_OFFSET = 4096, SUB_OFFSET = 24576 
 static const uint32_t vs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 0, 1, 0x6e69616d, 0};
 static const uint32_t fs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 4, 1, 0x6e69616d, 0};
 
-static void run_trace(VkBool32 cache_variant)
+static void run_trace(VkBool32 cache_variant, VkBool32 inline_variant)
 {
     warm[0] = warm[1] = VK_FALSE;
     compiled = 0;
@@ -99,7 +100,10 @@ static void run_trace(VkBool32 cache_variant)
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, .pNext = &eds,
         .dynamicRendering = VK_TRUE};
+    VkPhysicalDeviceInlineUniformBlockFeatures inline_uniform = {
+        .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES,.inlineUniformBlock=VK_TRUE};
     if (cache_variant) eds.pNext = &cache_control;
+    if (inline_variant) eds.pNext = &inline_uniform;
     float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueCount = 1, .pQueuePriorities = &priority};
@@ -109,9 +113,10 @@ static void run_trace(VkBool32 cache_variant)
         VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
         VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_EXTENSION_NAME,
         VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME};
+    if (inline_variant) device_extensions[8]=VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME;
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &dynamic_rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
-        .enabledExtensionCount = cache_variant ? 9 : 8, .ppEnabledExtensionNames = device_extensions};
+        .enabledExtensionCount = (cache_variant || inline_variant) ? 9 : 8, .ppEnabledExtensionNames = device_extensions};
     VkDevice device = VK_NULL_HANDLE;
     assert(vkCreateDevice(physical, &device_info, NULL, &device) == VK_SUCCESS);
     device->graphics_enabled = VK_TRUE;
@@ -158,6 +163,16 @@ static void run_trace(VkBool32 cache_variant)
     for (unsigned n = 0; n < 2; ++n)
         assert(vkCreateShaderModule(device, &module_info[n], NULL, &modules[n]) == VK_SUCCESS);
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkDescriptorSetLayout inline_layout=VK_NULL_HANDLE;
+    VkDescriptorPool inline_pool=VK_NULL_HANDLE;
+    VkDescriptorSet inline_set=VK_NULL_HANDLE;
+    if(inline_variant) {
+        assert(inline_graphics_descriptors(device,&inline_layout,&inline_pool,&inline_set)==VK_SUCCESS);
+        const uint32_t expected[]={4,4,64,255,0x13579bdfu,0x2468ace0u};
+        assert(inline_set->inline_uniform.bytes[0]==20 && inline_set->inline_uniform.bytes[1]==4);
+        assert(!memcmp(inline_set->inline_data,expected,sizeof(expected)));
+        layout_info.setLayoutCount=1;layout_info.pSetLayouts=&inline_layout;
+    }
     VkPipelineLayout layout = VK_NULL_HANDLE;
     assert(vkCreatePipelineLayout(device, &layout_info, NULL, &layout) == VK_SUCCESS);
     VkPipelineShaderStageCreateInfo stages[2] = {
@@ -320,6 +335,7 @@ static void run_trace(VkBool32 cache_variant)
     if (cache_variant) vkCmdResetQueryPool(command, queries, 0, 2);
     vkCmdBeginRenderingKHR(command, &rendering);
     vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    if(inline_variant) vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&inline_set,0,NULL);
     const VkViewport viewport = {0.0f, (float)EXTENT, (float)EXTENT, -(float)EXTENT, 0.0f, 1.0f};
     const VkRect2D scissor = {{0, 0}, {EXTENT, EXTENT}};
     vkCmdSetViewportWithCountEXT(command, 1, &viewport);
@@ -404,6 +420,7 @@ static void run_trace(VkBool32 cache_variant)
     for (unsigned n = 0; n < 3; ++n) {
         unsigned k = cache_variant ? (n == 0 ? 4 : n + 5) : n + 2;
         const struct ps5vk_operation *draw = &command->operations[k];
+        if(inline_variant) assert(draw->sets[0]==inline_set && draw->pipeline->sets[0].inline_bytes[0]==20);
         assert(draw->type == PS5VK_DRAW && draw->vertex_count == 6 &&
                draw->first_vertex == 6u * n && draw->viewport_count == 1 &&
                draw->viewports[0].height == -(float)EXTENT && draw->viewports[0].y == (float)EXTENT &&
@@ -474,6 +491,8 @@ static void run_trace(VkBool32 cache_variant)
     if (discard) vkDestroyPipeline(device, discard, NULL);
     vkDestroyPipeline(device, pipeline, NULL);
     vkDestroyPipelineLayout(device, layout, NULL);
+    if(inline_pool) vkDestroyDescriptorPool(device,inline_pool,NULL);
+    if(inline_layout) vkDestroyDescriptorSetLayout(device,inline_layout,NULL);
     for (unsigned n = 0; n < 2; ++n) vkDestroyShaderModule(device, modules[n], NULL);
     vkDestroyBuffer(device, staging, NULL);
     vkFreeMemory(device, staging_memory, NULL);
@@ -487,7 +506,8 @@ static void run_trace(VkBool32 cache_variant)
 
 int main(void)
 {
-    run_trace(VK_FALSE);
-    run_trace(VK_TRUE);
+    run_trace(VK_FALSE,VK_FALSE);
+    run_trace(VK_TRUE,VK_FALSE);
+    run_trace(VK_FALSE,VK_TRUE);
     return 0;
 }

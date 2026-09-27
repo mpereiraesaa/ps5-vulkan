@@ -22,7 +22,7 @@ from run_consumer import close_and_confirm, control, running, wait_for_log  # no
 EXTENT = 64
 PROFILE = "dxvk-render-public-sdk-witness"
 CACHE_PROFILE = "dxvk-cache-public-sdk-witness"
-INLINE_PROFILE = "dxvk-inline-compute-public-sdk-witness"
+INLINE_PROFILE = "dxvk-inline-public-sdk-witness"
 INLINE_SWITCH = "PS5VK_INLINE_UNIFORM_DIAGNOSTIC"
 CACHE_SWITCH = "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC"
 VIEWPORT = (0.0, 64.0, 64.0, -64.0)
@@ -109,7 +109,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             artifact.get("format") != "R8G8B8A8_UNORM" or
             artifact.get("diagnostic_switch") != (INLINE_SWITCH if inline_variant else CACHE_SWITCH if cache_variant else None) or
             (cache_variant and artifact.get("cache_execution_version") != 2) or
-            (inline_variant and artifact.get("inline_execution_version") != 1)):
+            (inline_variant and artifact.get("inline_execution_version") != 2)):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or

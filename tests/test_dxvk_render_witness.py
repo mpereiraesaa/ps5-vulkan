@@ -156,8 +156,8 @@ class CacheVerify(unittest.TestCase):
 
 
 class InlineVerify(unittest.TestCase):
-    artifact = dict(ARTIFACT, profile="dxvk-inline-compute-public-sdk-witness",
-                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=1)
+    artifact = dict(ARTIFACT, profile="dxvk-inline-public-sdk-witness",
+                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=2)
     compute = ("DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 mismatches=0 guards=0 digest=" +
                expected_inline_digest() + " submissions=1 fence=complete resources=retired\n")
 
@@ -189,7 +189,8 @@ class InlineVerify(unittest.TestCase):
 
     def test_inline_cannot_cross_profiles_or_versions(self):
         for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),
-                             (self.log(), dict(self.artifact, inline_execution_version=0)),
+                             (self.log(), dict(self.artifact, profile="dxvk-inline-compute-public-sdk-witness")),
+                             (self.log(), dict(self.artifact, inline_execution_version=1)),
                              (self.log(), dict(self.artifact, diagnostic_switch=None)),
                              (CacheVerify().log(), self.artifact), (self.log(), CacheVerify.artifact)):
             with self.subTest(artifact=artifact), self.assertRaises(ValueError):

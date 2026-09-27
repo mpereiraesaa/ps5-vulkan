@@ -5,7 +5,7 @@ Dynamic rendering, copy_commands2, maintenance1 and extended dynamic state all
 ship, so the default witness uses the ordinary SDK. --cache-control builds an
 explicit diagnostic SDK variant for compute/graphics cold misses, warm
 derivatives and discard execution. --inline-uniform adds the inline compute
-update/copy/template oracle to the ordinary render witness. Neither build
+update/copy/template oracle and the inline fragment image oracle. Neither build
 is hardware evidence."""
 
 import argparse
@@ -55,7 +55,7 @@ def main() -> None:
     variants.add_argument("--cache-control", action="store_true",
                         help="build the diagnostic compute/graphics cache execution variant")
     variants.add_argument("--inline-uniform", action="store_true",
-                          help="build the diagnostic inline compute update/copy/template variant")
+                          help="build the diagnostic inline compute and graphics execution variant")
     args = parser.parse_args()
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
@@ -81,6 +81,7 @@ def main() -> None:
     if args.cache_control:
         shaders["dxvk_cache_compute_spirv"] = ROOT / "experiments/compute/cache_witness.comp"
     if args.inline_uniform:
+        shaders["dxvk_render_witness_frag_spirv"] = ROOT / "experiments/graphics/dxvk_inline_witness.frag"
         shaders["dxvk_inline_compute_spirv"] = ROOT / "experiments/compute/inline_witness.comp"
     arrays = []
     shader_hashes = {}
@@ -160,14 +161,16 @@ def main() -> None:
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": ("dxvk-inline-compute-public-sdk-witness" if args.inline_uniform else
+        "profile": ("dxvk-inline-public-sdk-witness" if args.inline_uniform else
                     "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness"),
-        "inline_execution_version": 1 if args.inline_uniform else None,
+        "inline_execution_version": 2 if args.inline_uniform else None,
         "cache_execution_version": 2 if args.cache_control else None,
         "extent": 64, "format": "R8G8B8A8_UNORM",
         "diagnostic_switch": ("PS5VK_INLINE_UNIFORM_DIAGNOSTIC" if args.inline_uniform else
                               "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC" if args.cache_control else None),
         "inline_compute_sha256": hashlib.sha256((source.parent / "inline_compute.h").read_bytes()).hexdigest()
+            if args.inline_uniform else None,
+        "inline_graphics_sha256": hashlib.sha256((source.parent / "inline_graphics.h").read_bytes()).hexdigest()
             if args.inline_uniform else None,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,

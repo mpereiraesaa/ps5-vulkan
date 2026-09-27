@@ -51,6 +51,7 @@
 #endif
 #ifdef PS5VK_INLINE_UNIFORM_WITNESS
 #include "inline_compute.h"
+#include "inline_graphics.h"
 #endif
 
 enum { EXTENT = 64, STAGING = 64 * 1024 };
@@ -145,6 +146,11 @@ static int run_witness(void)
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkBool32 submission_pending = VK_FALSE;
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    VkDescriptorSetLayout inline_layout = VK_NULL_HANDLE;
+    VkDescriptorPool inline_pool = VK_NULL_HANDLE;
+    VkDescriptorSet inline_set = VK_NULL_HANDLE;
+#endif
 #ifdef PS5VK_CACHE_CONTROL_WITNESS
     VkPipeline base = VK_NULL_HANDLE, discard = VK_NULL_HANDLE;
     VkPipelineCache cache = VK_NULL_HANDLE;
@@ -293,6 +299,11 @@ static int run_witness(void)
     TRY(vkCreateShaderModule(device, &module_info[0], NULL, &vertex));
     TRY(vkCreateShaderModule(device, &module_info[1], NULL, &fragment));
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    TRY(inline_graphics_descriptors(device, &inline_layout, &inline_pool, &inline_set));
+    layout_info.setLayoutCount = 1;
+    layout_info.pSetLayouts = &inline_layout;
+#endif
     TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
     /* DXVK's monolithic pipeline shape (dxvk_graphics.cpp:1388-1437). */
     VkPipelineShaderStageCreateInfo stages[2] = {
@@ -449,6 +460,9 @@ static int run_witness(void)
 #endif
     begin_rendering(command, &rendering);
     vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &inline_set, 0, NULL);
+#endif
     /* DXVK's D3D viewport: y = H, height = -H (VK_KHR_maintenance1). */
     const VkViewport viewport = {0.0f, (float)EXTENT, (float)EXTENT, -(float)EXTENT, 0.0f, 1.0f};
     const VkRect2D scissor = {{0, 0}, {EXTENT, EXTENT}};
@@ -597,6 +611,10 @@ cleanup:
         if (pool) vkDestroyCommandPool(device, pool, NULL);
         if (pipeline) vkDestroyPipeline(device, pipeline, NULL);
         if (layout) vkDestroyPipelineLayout(device, layout, NULL);
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+        if (inline_pool) vkDestroyDescriptorPool(device, inline_pool, NULL);
+        if (inline_layout) vkDestroyDescriptorSetLayout(device, inline_layout, NULL);
+#endif
         if (vertex) vkDestroyShaderModule(device, vertex, NULL);
         if (fragment) vkDestroyShaderModule(device, fragment, NULL);
         if (staging) vkDestroyBuffer(device, staging, NULL);

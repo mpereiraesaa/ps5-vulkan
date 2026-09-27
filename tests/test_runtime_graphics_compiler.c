@@ -2915,8 +2915,37 @@ static void check_maintenance4_wider_producer(void)
 
 }
 
+static void check_inline_witness_compilation(void)
+{
+    struct ps5vk_set_signature sets[1]={0};sets[0].count=2;
+    for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) sets[0].binding[b].first=b<2?b:2;
+    for(unsigned b=0;b<2;++b) {
+        sets[0].binding[b].count=1;sets[0].binding[b].stages=VK_SHADER_STAGE_FRAGMENT_BIT;
+        sets[0].type[b]=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+        sets[0].inline_bytes[b]=b?4:20;
+    }
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/dxvk_render_witness.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/dxvk_inline_witness.frag.spv"),
+        .descriptor_set_count=1,.descriptor_sets=sets,.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    assert(ps5vk_spirv_graphics_interface(&key) && ps5vk_runtime_graphics_supported(&key));
+    const void *out=NULL;assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    assert(p->fragment.machine_code_size && p->fragment.metadata.descriptor_used_binding_mask[0]==3);
+    for(unsigned b=0;b<2;++b) {
+        assert(p->fragment.metadata.descriptor_bindings[b].type==PSBC_DESCRIPTOR_UNIFORM_BUFFER);
+        assert(p->fragment.metadata.descriptor_bindings[b].array_size==1);
+        assert(p->fragment.metadata.descriptor_bindings[b].offset==(b?48u:0u));
+    }
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+}
+
 int main(void)
 {
+    check_inline_witness_compilation();
     check_maintenance4_wider_producer();
     check_t08_compiler_options();
     check_flat_interfaces();

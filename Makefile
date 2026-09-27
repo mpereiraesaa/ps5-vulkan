@@ -597,6 +597,8 @@ native-bootstrap:
 .PHONY: check-graphics-stages graphics-stage-shaders
 graphics-stage-shaders:
 	mkdir -p build/runtime-graphics
+	$(GLSLANG) -V experiments/graphics/dxvk_render_witness.vert -o build/runtime-graphics/dxvk_render_witness.vert.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_inline_witness.frag -o build/runtime-graphics/dxvk_inline_witness.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_dual_source.frag -o build/runtime-graphics/dual_source.frag.spv
