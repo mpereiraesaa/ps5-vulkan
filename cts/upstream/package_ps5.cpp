@@ -54,6 +54,7 @@
 #include "vktUniformBlockTests.hpp"
 #include "subgroups/vktSubgroupsBallotBroadcastTests.hpp"
 #include "subgroups/vktSubgroupsArithmeticTests.hpp"
+#include "subgroups/vktSubgroupsSizeControlTests.hpp"
 #include "vktQueryPoolTests.hpp"
 #include "vktShaderRenderTextureGatherTests.hpp"
 #include "vktTestGroupUtil.hpp"
@@ -111,7 +112,7 @@ FocusedVkTestPackage::~FocusedVkTestPackage(void)
 
 void FocusedVkTestPackage::init(void)
 {
-    // Original subgroup Broadcast and arithmetic factories and support checks. No subgroup
+    // Original subgroup Broadcast, arithmetic and size-control factories and support checks. No subgroup
     // leaves enter the frozen selection until the public API/profile gate is
     // satisfied and their unchanged oracles pass on hardware.
     {
@@ -119,6 +120,7 @@ void FocusedVkTestPackage::init(void)
             new tcu::TestCaseGroup(m_testCtx, "subgroups"));
         subgroupGroup->addChild(vkt::subgroups::createSubgroupsBallotBroadcastTests(m_testCtx));
         subgroupGroup->addChild(vkt::subgroups::createSubgroupsArithmeticTests(m_testCtx));
+        subgroupGroup->addChild(vkt::subgroups::createSubgroupsSizeControlTests(m_testCtx));
         addChild(subgroupGroup.release());
     }
 
