@@ -91,5 +91,46 @@ class Verify(unittest.TestCase):
             verify(log, dict(receipt(log), bye=False), ARTIFACT)
 
 
+class CacheVerify(unittest.TestCase):
+    artifact = dict(ARTIFACT, profile="dxvk-cache-public-sdk-witness",
+                    diagnostic_switch="PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC")
+    created = ("DXVK_CACHE_WITNESS_CREATED cold_misses=2 warm_derivatives=2 "
+               "bases_retired=2 cache_retired=1\n")
+    queries = "DXVK_CACHE_WITNESS_QUERIES normal=3072 discard=0\n"
+
+    def log(self, created=None, queries=None):
+        return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP",
+            ((self.created if created is None else created) +
+             (self.queries if queries is None else queries)).encode() + b"DXVK_RENDER_WITNESS_STEP")
+
+    def test_cache_image_and_lifetime_result(self):
+        log = self.log()
+        out = verify(log, receipt(log), self.artifact)
+        self.assertTrue(out["strict_verified"])
+        self.assertEqual(out["profile"], self.artifact["profile"])
+
+    def test_missing_duplicate_false_or_out_of_order_cache_evidence(self):
+        for log in (self.log(created=""), self.log(queries=""),
+                    self.log(created=self.created * 2), self.log(queries=self.queries * 2),
+                    self.log(created=self.created.replace("bases_retired=2", "bases_retired=0")),
+                    self.log(created=self.created.replace("cold_misses=2", "cold_misses=1")),
+                    self.log(created=self.created.replace("warm_derivatives=2", "warm_derivatives=1")),
+                    self.log(created=self.created.replace("cache_retired=1", "cache_retired=0")),
+                    self.log(queries=self.queries.replace("3072", "0")),
+                    self.log(queries=self.queries.replace("3072", str(2**64 - 1))),
+                    self.log(queries=self.queries.replace("discard=0", "discard=1")),
+                    self.log(created=self.queries, queries=self.created),
+                    self.log() + b"DXVK_RENDER_WITNESS_PENDING resources=retained\n",
+                    self.log().replace(b"full_mismatches=0", b"full_mismatches=1")):
+            with self.subTest(log=log), self.assertRaises(ValueError):
+                verify(log, receipt(log), self.artifact)
+
+    def test_artifact_cannot_cross_profiles(self):
+        for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),
+                              (self.log(), dict(self.artifact, diagnostic_switch=None))):
+            with self.subTest(artifact=artifact), self.assertRaises(ValueError):
+                verify(log, receipt(log), artifact)
+
+
 if __name__ == "__main__":
     unittest.main()

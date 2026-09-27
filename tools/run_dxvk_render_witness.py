@@ -21,6 +21,8 @@ from run_consumer import close_and_confirm, control, running, wait_for_log  # no
 
 EXTENT = 64
 PROFILE = "dxvk-render-public-sdk-witness"
+CACHE_PROFILE = "dxvk-cache-public-sdk-witness"
+CACHE_SWITCH = "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC"
 VIEWPORT = (0.0, 64.0, 64.0, -64.0)
 SAMPLE_POINTS = ((0, 0), (47, 63), (48, 0), (63, 40), (63, 63))
 
@@ -84,9 +86,11 @@ def expected_digest() -> str:
 
 
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
-    if (artifact.get("profile") != PROFILE or artifact.get("extent") != EXTENT or
+    cache_variant = artifact.get("profile") == CACHE_PROFILE
+    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE) or
+            artifact.get("extent") != EXTENT or
             artifact.get("format") != "R8G8B8A8_UNORM" or
-            artifact.get("diagnostic_switch") is not None):
+            artifact.get("diagnostic_switch") != (CACHE_SWITCH if cache_variant else None)):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or
@@ -115,7 +119,22 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             text.index("DXVK_RENDER_WITNESS_RESULT") >= text.index("DXVK_RENDER_WITNESS_RETIRED") or
             "DXVK_RENDER_WITNESS_FAILURE" in text):
         raise ValueError("render, readback, fence or cleanup failed")
+    if cache_variant:
+        created = re.findall(r"DXVK_CACHE_WITNESS_CREATED cold_misses=(\d+) "
+                             r"warm_derivatives=(\d+) bases_retired=(\d+) cache_retired=(\d+)", text)
+        queries = re.findall(r"DXVK_CACHE_WITNESS_QUERIES normal=(\d+) discard=(\d+)", text)
+        if (created != [("2", "2", "2", "1")] or len(queries) != 1 or
+                not 0 < int(queries[0][0]) < 2**64 - 1 or queries[0][1] != "0" or
+                text.index("DXVK_RENDER_WITNESS_START") >= text.index("DXVK_CACHE_WITNESS_CREATED") or
+                text.index("DXVK_CACHE_WITNESS_CREATED") >= text.index("DXVK_CACHE_WITNESS_QUERIES") or
+                text.index("DXVK_CACHE_WITNESS_QUERIES") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("cache creation, lifetime or discard query failed")
+    elif "DXVK_CACHE_WITNESS_" in text:
+        raise ValueError("cache log requires cache witness artifact")
+    if "DXVK_RENDER_WITNESS_PENDING" in text:
+        raise ValueError("submission still owns resources")
     return {
+        "profile": artifact["profile"],
         "strict_verified": True,
         "run_id": receipt["run_id"],
         "extent": EXTENT,
@@ -141,7 +160,7 @@ def main() -> int:
         raise RuntimeError("refusing to launch while a title is active")
     artifact = json.loads(args.artifact.read_text())
     eboot = args.dist / "eboot.bin"
-    if (artifact.get("profile") != PROFILE or
+    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE) or
             hashlib.sha256(eboot.read_bytes()).hexdigest() != artifact.get("eboot_sha256")):
         raise RuntimeError("artifact identity mismatch")
     known = {path.name for path in args.runs_dir.glob("*_PPSA99994_ps5vk_*.log")}

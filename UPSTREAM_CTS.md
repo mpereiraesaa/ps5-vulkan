@@ -103,7 +103,11 @@ were the same thing:
   graphics factory enables primitive restart on TRIANGLE_LIST without checking
   primitiveTopologyListRestart; that feature is unreported, so those cases are
   excluded. Legal vertex-only rasterizer-discard inputs have host frontend,
-  compiler and emitted-state coverage; native draw/dispatch witnesses remain pending. Four repeated-pipeline cases remain
+  compiler and emitted-state coverage. The public-SDK render witness has an
+  offline-buildable `--cache-control` variant: cold misses, warm derivatives,
+  destroyed bases/cache, image readback, and normal/discard occlusion controls.
+  It uses a default-off diagnostic SDK and has not been executed on hardware;
+  a compute dispatch witness remains pending. Four repeated-pipeline cases remain
   separate precondition diagnostics: they require unreported HOST_CACHED memory,
   and the pinned factory swaps its repetition/parity arguments. Their results
   cannot establish repeated initialization. Earlier dated sections below record the smaller selections used

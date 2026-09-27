@@ -15,6 +15,7 @@
  * mocked; no GPU work runs. */
 #include "vk_internal.h"
 #include "vk_command.h"
+#include "vk_pipeline.h"
 #include "graphics_formats.h"
 #include "graphics_program.h"
 #include "physical_device_profile.h"
@@ -41,14 +42,15 @@ static VkResult open_backend(void *ctx, struct ps5vk_memory_backend *backend)
 static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend; }
 VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
-    /* The witness build's platform bits (the shipping routes). */
+    /* Shipping render routes plus the explicit cache-control diagnostic. */
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
         .max_allocation = 1u << 22, .queue_flags = VK_QUEUE_COMPUTE_BIT,
         .supported_features = PS5VK_FEATURE_MULTIVIEW,
         .supported_features_t09 = PS5VK_T09_FEATURE_MAINTENANCE2 |
             PS5VK_T09_FEATURE_CREATE_RENDERPASS2 | PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE |
             PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
-            PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1};
+            PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1 |
+            PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU", .heap_size = 1u << 22,
         .allocation_granularity = 1, .buffer_image_granularity = 1};
@@ -56,8 +58,16 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
     return VK_SUCCESS;
 }
 static unsigned compiled;
+static VkBool32 warm[2];
 static VkResult compile_program(void *context, const struct ps5vk_graphics_key *key, const void **out)
-{ (void)context; (void)key; *out = &compiled; return VK_SUCCESS; }
+{
+    (void)context;
+    unsigned shape = !!key->rasterizer_discard;
+    if (!warm[shape] && key->fail_on_compile_required) return VK_PIPELINE_COMPILE_REQUIRED;
+    if (!warm[shape]) { warm[shape] = VK_TRUE; ++compiled; }
+    *out = &compiled;
+    return VK_SUCCESS;
+}
 static void release_program(void *context, const void *data) { (void)context; (void)data; }
 static VkResult create_graphics(VkDevice d, const void *data, uint32_t primitive, void **out)
 { (void)d; (void)data; (void)primitive; *out = malloc(1); return *out ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY; }
@@ -68,8 +78,10 @@ enum { EXTENT = 64, STAGING = 64 * 1024, FULL_OFFSET = 4096, SUB_OFFSET = 24576 
 static const uint32_t vs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 0, 1, 0x6e69616d, 0};
 static const uint32_t fs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 4, 1, 0x6e69616d, 0};
 
-int main(void)
+static void run_trace(VkBool32 cache_variant)
 {
+    warm[0] = warm[1] = VK_FALSE;
+    compiled = 0;
     const char *instance_extension = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
     VkInstanceCreateInfo instance_info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .enabledExtensionCount = 1, .ppEnabledExtensionNames = &instance_extension};
@@ -78,12 +90,16 @@ int main(void)
     uint32_t count = 1;
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     assert(vkEnumeratePhysicalDevices(instance, &count, &physical) == VK_SUCCESS);
+    VkPhysicalDevicePipelineCreationCacheControlFeatures cache_control = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
+        .pipelineCreationCacheControl = VK_TRUE};
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
         .extendedDynamicState = VK_TRUE};
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, .pNext = &eds,
         .dynamicRendering = VK_TRUE};
+    if (cache_variant) eds.pNext = &cache_control;
     float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueCount = 1, .pQueuePriorities = &priority};
@@ -91,10 +107,11 @@ int main(void)
         VK_KHR_MULTIVIEW_EXTENSION_NAME, VK_KHR_MAINTENANCE_2_EXTENSION_NAME,
         VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
         VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
-        VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_EXTENSION_NAME};
+        VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_EXTENSION_NAME,
+        VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME};
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &dynamic_rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
-        .enabledExtensionCount = 8, .ppEnabledExtensionNames = device_extensions};
+        .enabledExtensionCount = cache_variant ? 9 : 8, .ppEnabledExtensionNames = device_extensions};
     VkDevice device = VK_NULL_HANDLE;
     assert(vkCreateDevice(physical, &device_info, NULL, &device) == VK_SUCCESS);
     device->graphics_enabled = VK_TRUE;
@@ -187,8 +204,55 @@ int main(void)
         .pDepthStencilState = &depth_state, .pColorBlendState = &blend,
         .pDynamicState = &dynamic, .layout = layout, .basePipelineIndex = -1};
     VkPipeline pipeline = VK_NULL_HANDLE;
-    assert(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline) ==
-           VK_SUCCESS);
+    VkPipeline base = VK_NULL_HANDLE, discard = VK_NULL_HANDLE;
+    VkPipelineCache cache = VK_NULL_HANDLE;
+    VkQueryPool queries = VK_NULL_HANDLE;
+    VkResult result;
+#define TRY(call) assert((call) == VK_SUCCESS)
+#define REQUIRE(condition, reason) assert(condition)
+    if (cache_variant) {
+        VkPipelineCacheCreateInfo cache_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+            .flags = VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT};
+        TRY(vkCreatePipelineCache(device, &cache_info, NULL, &cache));
+        /* Cold miss must not compile. Warm derivatives execute after base retirement. */
+        pipeline_info.flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        result = vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &pipeline);
+        REQUIRE(result == VK_PIPELINE_COMPILE_REQUIRED && !pipeline, "cold graphics miss");
+        pipeline_info.flags = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+        TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &base));
+        pipeline_info.flags = VK_PIPELINE_CREATE_DERIVATIVE_BIT |
+            VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        pipeline_info.basePipelineHandle = base;
+        TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &pipeline));
+        vkDestroyPipeline(device, base, NULL); base = VK_NULL_HANDLE;
+        pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
+        pipeline_info.stageCount = 1;
+        raster.rasterizerDiscardEnable = VK_TRUE;
+        pipeline_info.pViewportState = NULL;
+        pipeline_info.pMultisampleState = NULL;
+        pipeline_info.pDepthStencilState = NULL;
+        pipeline_info.pColorBlendState = NULL;
+        pipeline_info.flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        result = vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &discard);
+        REQUIRE(result == VK_PIPELINE_COMPILE_REQUIRED && !discard, "cold discard miss");
+        pipeline_info.flags = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+        TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &base));
+        pipeline_info.flags = VK_PIPELINE_CREATE_DERIVATIVE_BIT |
+            VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        pipeline_info.basePipelineHandle = base;
+        TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &discard));
+        vkDestroyPipeline(device, base, NULL); base = VK_NULL_HANDLE;
+        vkDestroyPipelineCache(device, cache, NULL); cache = VK_NULL_HANDLE;
+        VkQueryPoolCreateInfo query_info = {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .queryType = VK_QUERY_TYPE_OCCLUSION, .queryCount = 2};
+        TRY(vkCreateQueryPool(device, &query_info, NULL, &queries));
+        assert(compiled == 2);
+    } else {
+        TRY(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline));
+        assert(compiled == 1);
+    }
+#undef TRY
+#undef REQUIRE
 
     VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     VkCommandPool pool = VK_NULL_HANDLE;
@@ -253,6 +317,7 @@ int main(void)
     VkRenderingInfo rendering = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = {{0, 0}, {EXTENT, EXTENT}}, .layerCount = 1,
         .colorAttachmentCount = 1, .pColorAttachments = &color};
+    if (cache_variant) vkCmdResetQueryPool(command, queries, 0, 2);
     vkCmdBeginRenderingKHR(command, &rendering);
     vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     const VkViewport viewport = {0.0f, (float)EXTENT, (float)EXTENT, -(float)EXTENT, 0.0f, 1.0f};
@@ -261,10 +326,18 @@ int main(void)
     vkCmdSetScissorWithCountEXT(command, 1, &scissor);
     vkCmdSetFrontFaceEXT(command, VK_FRONT_FACE_CLOCKWISE);
     vkCmdSetCullModeEXT(command, VK_CULL_MODE_NONE);
+    if (cache_variant) vkCmdBeginQuery(command, queries, 0, 0);
     vkCmdDraw(command, 6, 1, 0, 0);
+    if (cache_variant) vkCmdEndQuery(command, queries, 0);
     vkCmdSetCullModeEXT(command, VK_CULL_MODE_BACK_BIT);
     vkCmdDraw(command, 6, 1, 6, 0);
     vkCmdDraw(command, 6, 1, 12, 0);
+    if (cache_variant) {
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, discard);
+        vkCmdBeginQuery(command, queries, 1, 0);
+        vkCmdDraw(command, 18, 1, 0, 0);
+        vkCmdEndQuery(command, queries, 1);
+    }
     vkCmdEndRenderingKHR(command);
     assert(command->state == PS5VK_RECORDING);
     /* DXVK's exact global dependency from the attachment writes (host
@@ -317,16 +390,26 @@ int main(void)
     unsigned end = 0;
     for (unsigned k = 0; k < command->operation_count; ++k)
         if (command->operations[k].type == PS5VK_END_RENDER_PASS) end = k;
-    assert(command->operations[0].type == PS5VK_IMAGE_BARRIER &&
-           command->operations[1].type == PS5VK_BEGIN_RENDER_PASS && end == 5);
-    for (unsigned k = 2; k < 5; ++k) {
+    assert(command->operations[0].type == PS5VK_IMAGE_BARRIER);
+    if (cache_variant) {
+        const enum ps5vk_operation_type types[] = {PS5VK_IMAGE_BARRIER, PS5VK_QUERY_RESET,
+            PS5VK_BEGIN_RENDER_PASS, PS5VK_QUERY_BEGIN, PS5VK_DRAW, PS5VK_QUERY_END,
+            PS5VK_DRAW, PS5VK_DRAW, PS5VK_QUERY_BEGIN, PS5VK_DRAW, PS5VK_QUERY_END,
+            PS5VK_END_RENDER_PASS};
+        assert(end == sizeof(types) / sizeof(types[0]) - 1);
+        for (unsigned k = 0; k <= end; ++k) assert(command->operations[k].type == types[k]);
+        assert(command->operations[9].pipeline->rasterizer_discard &&
+               command->operations[9].vertex_count == 18);
+    } else assert(command->operations[1].type == PS5VK_BEGIN_RENDER_PASS && end == 5);
+    for (unsigned n = 0; n < 3; ++n) {
+        unsigned k = cache_variant ? (n == 0 ? 4 : n + 5) : n + 2;
         const struct ps5vk_operation *draw = &command->operations[k];
         assert(draw->type == PS5VK_DRAW && draw->vertex_count == 6 &&
-               draw->first_vertex == 6u * (k - 2u) && draw->viewport_count == 1 &&
+               draw->first_vertex == 6u * n && draw->viewport_count == 1 &&
                draw->viewports[0].height == -(float)EXTENT && draw->viewports[0].y == (float)EXTENT &&
-               draw->raster.fixed_function_resolved &&
+               draw->raster.fixed_function_resolved && !draw->pipeline->rasterizer_discard &&
                draw->raster.front_face == VK_FRONT_FACE_CLOCKWISE &&
-               draw->raster.cull_mode == (k == 2 ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT));
+               draw->raster.cull_mode == (n == 0 ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT));
     }
     const struct ps5vk_operation *postlude = &command->operations[end + 1];
     const unsigned postlude_count = command->operation_count - end - 1;
@@ -387,6 +470,8 @@ int main(void)
     vkFreeCommandBuffers(device, pool, 1, &init_barriers);
     vkFreeCommandBuffers(device, pool, 1, &init_buffer);
     vkDestroyCommandPool(device, pool, NULL);
+    if (queries) vkDestroyQueryPool(device, queries, NULL);
+    if (discard) vkDestroyPipeline(device, discard, NULL);
     vkDestroyPipeline(device, pipeline, NULL);
     vkDestroyPipelineLayout(device, layout, NULL);
     for (unsigned n = 0; n < 2; ++n) vkDestroyShaderModule(device, modules[n], NULL);
@@ -398,5 +483,11 @@ int main(void)
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     puts("dxvk render witness trace: pass (host recording and readback planning, no GPU)");
+}
+
+int main(void)
+{
+    run_trace(VK_FALSE);
+    run_trace(VK_TRUE);
     return 0;
 }

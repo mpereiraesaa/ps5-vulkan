@@ -2,8 +2,11 @@
 """Build the bounded public-SDK DXVK first-draw recording witness (DXVK262-T10).
 
 Dynamic rendering, copy_commands2, maintenance1 and extended dynamic state all
-ship, so the witness is built on the ordinary SDK as their regression check."""
+ship, so the default witness uses the ordinary SDK. --cache-control builds an
+explicit diagnostic SDK variant for cold misses, warm derivatives and discard
+execution; compiling it is not hardware evidence."""
 
+import argparse
 import hashlib
 import json
 import os
@@ -45,6 +48,10 @@ def checked_spirv(payload: bytes) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cache-control", action="store_true",
+                        help="build the diagnostic graphics cache/discard execution variant")
+    args = parser.parse_args()
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
@@ -55,8 +62,9 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    build = ROOT / "build/dxvk-render-witness"
-    dist = ROOT / "dist-dxvk-render-witness/PPSA99994"
+    name = "dxvk-cache-witness" if args.cache_control else "dxvk-render-witness"
+    build = ROOT / "build" / name
+    dist = ROOT / ("dist-" + name) / "PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -77,8 +85,13 @@ def main() -> None:
     (build / "dxvk_render_witness_shaders.h").write_text(
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
 
-    # The ordinary SDK: every route the witness negotiates ships.
+    # Only the explicit variant enables the unpromoted cache-control route.
     sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
+    # Refuse ambient diagnostics: the receipt must describe the actual SDK.
+    for key, value in sdk_env.items():
+        if key.startswith("PS5VK_") and "DIAGNOSTIC" in key and value != "0":
+            raise SystemExit(f"unset ambient diagnostic {key} before building witness")
+    sdk_env["PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC"] = "1" if args.cache_control else "0"
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/dxvk_render_witness/main.c"
@@ -86,6 +99,7 @@ def main() -> None:
     dep = build / "main.d"
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
+        *(["-DPS5VK_CACHE_CONTROL_WITNESS=1"] if args.cache_control else []),
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger),
@@ -134,9 +148,9 @@ def main() -> None:
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": "dxvk-render-public-sdk-witness",
+        "profile": "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness",
         "extent": 64, "format": "R8G8B8A8_UNORM",
-        "diagnostic_switch": None,
+        "diagnostic_switch": "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC" if args.cache_control else None,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
