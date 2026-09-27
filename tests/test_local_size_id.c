@@ -130,6 +130,43 @@ static uint32_t *specialize_dimension(const uint32_t *words, size_t count, uint3
     return out;
 }
 
+/* Append a scalar OpSpecConstantOp before functions and make X consume it.
+ * Both admission and the real compiler must independently derive its value. */
+static uint32_t *expression_dimension(const uint32_t *words, size_t count,
+                                     uint32_t lhs, uint32_t rhs, unsigned op)
+{
+    size_t functions = 5;
+    uint32_t type = 0;
+    for (; functions < count; functions += words[functions] >> 16) {
+        if (((words[functions] & 0xffff) == 50 || (words[functions] & 0xffff) == 52) &&
+            words[functions + 2] == lhs)
+            type = words[functions + 1];
+        if ((words[functions] & 0xffff) == 54) break;
+    }
+    assert(type && functions < count);
+    uint32_t *out = malloc((count + 6) * sizeof(*out));
+    assert(out);
+    memcpy(out, words, functions * sizeof(*out));
+    uint32_t expression[] = {6u << 16 | 52u, type, words[3], op, lhs, rhs};
+    if (op == 126 || op == 200) {
+        expression[0] = 5u << 16 | 52u;
+        expression[5] = 1u << 16; /* OpNop padding. */
+    }
+    memcpy(out + functions, expression, sizeof(expression));
+    memcpy(out + functions + 6, words + functions, (count - functions) * sizeof(*out));
+    out[3]++;
+    for (size_t i = 5; i < functions;) {
+        unsigned length = out[i] >> 16;
+        if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = words[3];
+        /* The legacy fixture also declares BuiltIn WorkgroupSize, which
+         * overrides execution modes. Remove that decoration for this test. */
+        if ((out[i] & 0xffff) == 71 && length == 4 && out[i + 2] == 11 && out[i + 3] == 25)
+            for (unsigned j = 0; j < length; ++j) out[i + j] = 1u << 16;
+        i += length;
+    }
+    return out;
+}
+
 int main(void)
 {
     size_t bytes = 0;
@@ -213,6 +250,60 @@ int main(void)
     assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
                              &warm32) == VK_SUCCESS);
     assert(warm32->program.local_size[0] == 32);
+    const unsigned ops[] = {128, 130, 132, 134, 135, 137, 138, 139, 194, 195, 196, 197, 198, 199};
+    const uint32_t expected[] = {33, 31, 32, 32, 32, 0, 0, 0, 16, 16, 64, 33, 33, 0};
+    for (unsigned i = 0; i < sizeof(ops) / sizeof(ops[0]); ++i) {
+        uint32_t *expression = expression_dimension(specialized, count + 4, id64, id1, ops[i]);
+        VkPipeline expr_pipeline;
+        VkResult result = build_specialized(device, layout, expression, bytes + 40,
+                                            &specialization, &expr_pipeline);
+        if (expected[i]) {
+            if (result != VK_SUCCESS) fprintf(stderr, "expression op=%u rc=%d\n", ops[i], result);
+            assert(result == VK_SUCCESS);
+            assert(expr_pipeline->program.local_size[0] == expected[i]);
+            vkDestroyPipeline(device, expr_pipeline, NULL);
+        } else assert(result != VK_SUCCESS && !expr_pipeline);
+        free(expression);
+    }
+    const unsigned unary_ops[] = {126, 200};
+    for (unsigned i = 0; i < 2; ++i) {
+        uint32_t *first = expression_dimension(specialized, count + 4, id64, 0, unary_ops[i]);
+        uint32_t *second = expression_dimension(first, count + 10, first[3] - 1, 0, unary_ops[i]);
+        VkPipeline nested;
+        assert(build_specialized(device, layout, second, bytes + 64, &specialization,
+                                 &nested) == VK_SUCCESS);
+        assert(nested->program.local_size[0] == 32);
+        vkDestroyPipeline(device, nested, NULL);
+        free(first); free(second);
+    }
+    /* Invalid divisions and oversized shift counts are rejected without
+     * asking the compiler to evaluate undefined SPIR-V results. */
+    const unsigned invalid_ops[] = {134, 135, 137, 138, 139, 194, 195, 196};
+    const uint32_t id0 = constant_id(literal, count, 0);
+    assert(id0);
+    for (unsigned i = 0; i < sizeof(invalid_ops) / sizeof(invalid_ops[0]); ++i) {
+        uint32_t *invalid = expression_dimension(specialized, count + 4, id64,
+                                                i < 5 ? id0 : id64, invalid_ops[i]);
+        assert(build_specialized(device, layout, invalid, bytes + 40, &specialization,
+                                 &refused) != VK_SUCCESS && !refused);
+        free(invalid);
+    }
+    uint32_t *expression = expression_dimension(specialized, count + 4, id64, id1, 128);
+    VkPipeline expr_default, expr_override;
+    assert(build(device, layout, expression, bytes + 40, &expr_default) == VK_SUCCESS);
+    assert(expr_default->program.local_size[0] == 65);
+    x = 16;
+    assert(build_specialized(device, layout, expression, bytes + 40, &specialization,
+                             &expr_override) == VK_SUCCESS);
+    assert(expr_override->program.local_size[0] == 17);
+    vkDestroyPipeline(device, expr_default, NULL);
+    vkDestroyPipeline(device, expr_override, NULL);
+    /* A cyclic result ID must terminate before entering the compiler. */
+    for (size_t i = 5; i < count + 10; i += expression[i] >> 16)
+        if ((expression[i] & 0xffff) == 52) expression[i + 4] = expression[i + 2];
+    assert(build(device, layout, expression, bytes + 40, &refused) != VK_SUCCESS && !refused);
+    free(expression);
+    x = 32;
     map.size = 2;
     assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
                              &refused) != VK_SUCCESS && !refused);
@@ -239,7 +330,7 @@ int main(void)
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     free(literal); free(by_id); free(spec);
-    puts("LocalSizeId: constants and direct specialization workgroup dimensions under maintenance4 "
+    puts("LocalSizeId: constants and scalar integer specialization expressions under maintenance4 "
          "(host compiler, no GPU evidence)");
     return 0;
 }

@@ -179,10 +179,13 @@ CORE_IMPLEMENTATIONS = {
         ),
         "detail": ("Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; "
                    "creation-description memory requirements, maxBufferSize and "
-                   "LocalSizeId with constant or direct specialization-constant operands."),
+                   "LocalSizeId with constants, direct specialization and bounded scalar "
+                   "32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, "
+                   "checked against the host compiler."),
         "gaps": (
-            "LocalSizeId operands that are compound OpSpecConstantOp expressions are "
-            "refused (src/vk_pipeline.c local_size)",
+            "LocalSizeId compound OpSpecConstantOp expressions involving comparisons, "
+            "selection, conversions or composite extraction remain refused "
+            "(src/vk_pipeline.c local_size)",
             "a producer output vector wider than the consumer's input is refused by the "
             "graphics interface policy",
         ),

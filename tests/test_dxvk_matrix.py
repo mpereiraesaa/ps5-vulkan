@@ -751,7 +751,10 @@ class CurrentProbeTests(unittest.TestCase):
         self.assertEqual(("satisfied", "missing", "reported-not-executed", "blocker"),
                          (m4["api"]["state"], m4["implementation"]["state"],
                           m4["native"]["state"], m4["verdict"]))
-        self.assertIn("compound OpSpecConstantOp", m4["implementation"]["detail"])
+        self.assertIn("32-bit integer arithmetic/bitwise OpSpecConstantOp",
+                      m4["implementation"]["detail"])
+        self.assertIn("selection, conversions or composite extraction remain refused",
+                      m4["implementation"]["detail"])
 
     def test_core_implementation_needs_every_citation_and_the_query(self):
         identifier = "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters"
