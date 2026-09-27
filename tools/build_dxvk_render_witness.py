@@ -83,6 +83,7 @@ def main() -> None:
     if args.inline_uniform:
         shaders["dxvk_render_witness_frag_spirv"] = ROOT / "experiments/graphics/dxvk_inline_witness.frag"
         shaders["dxvk_inline_compute_spirv"] = ROOT / "experiments/compute/inline_witness.comp"
+        shaders["dxvk_inline_boundary_spirv"] = ROOT / "experiments/compute/inline_boundary.comp"
     arrays = []
     shader_hashes = {}
     for name, shader_source in shaders.items():
@@ -163,7 +164,7 @@ def main() -> None:
     artifact = {
         "profile": ("dxvk-inline-public-sdk-witness" if args.inline_uniform else
                     "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness"),
-        "inline_execution_version": 2 if args.inline_uniform else None,
+        "inline_execution_version": 3 if args.inline_uniform else None,
         "cache_execution_version": 2 if args.cache_control else None,
         "extent": 64, "format": "R8G8B8A8_UNORM",
         "diagnostic_switch": ("PS5VK_INLINE_UNIFORM_DIAGNOSTIC" if args.inline_uniform else

@@ -1738,10 +1738,10 @@ static void inline_uniform_pipeline_layouts(void)
     VkPipelineLayoutCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pSetLayouts = sets};
     VkPipelineLayout pl = VK_NULL_HANDLE;
-    /* Four fragment blocks plus a vertex block: 320 bytes, per stage <= 4. */
+    /* Five blocks across sets exceed maxDescriptorSetInlineUniformBlocks,
+     * even though bytes and each individual stage remain within limits. */
     sets[0] = frag4; sets[1] = vert1; pi.setLayoutCount = 2;
-    assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_SUCCESS);
-    vkDestroyPipelineLayout(&d, pl, NULL);
+    assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_ERROR_FEATURE_NOT_PRESENT && !pl);
     /* ALL counts toward the fragment stage: five fragment blocks. */
     sets[1] = all1; pl = VK_NULL_HANDLE;
     assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_ERROR_FEATURE_NOT_PRESENT && !pl);
@@ -1754,8 +1754,8 @@ static void inline_uniform_pipeline_layouts(void)
     sets[0] = sets[1] = sets[2] = sets[3] = big; pi.setLayoutCount = 4;
     assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_SUCCESS);
     vkDestroyPipelineLayout(&d, pl, NULL);
-    /* 3 x 256 vertex + 2 x 256 fragment: per-stage counts fit, 1280 bytes
-     * exceed the total. */
+    /* 3 x 256 vertex + 2 x 256 fragment exceed both the aggregate block
+     * count and total bytes despite fitting each per-stage count. */
     b[0].stageFlags = b[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     assert(inline_layout(&d, b, 2, &big2) == VK_SUCCESS);
     sets[3] = big2; pl = VK_NULL_HANDLE;

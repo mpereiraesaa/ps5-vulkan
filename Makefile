@@ -573,6 +573,7 @@ test-compiler: build/libpsbc.host.a test-shaders
 	mkdir -p build/tests
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cache_witness.comp -o build/test-shaders/cache_witness.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/inline_witness.comp -o build/test-shaders/inline_witness.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/inline_boundary.comp -o build/test-shaders/inline_boundary.spv
 	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=32 -DSIZE_Y=3 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_0.spv
 	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=64 -DSIZE_Y=2 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_1.spv
 	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=32 -DSIZE_Y=2 -DSIZE_Z=2 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_2.spv

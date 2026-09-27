@@ -246,6 +246,12 @@ static int run_witness(void)
     ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 "
         "mismatches=%u guards=%u digest=%08x submissions=1 fence=complete resources=retired",
         inline_result.mismatches, inline_result.guards, inline_result.digest);
+    result = inline_compute_witness_mode(device, queue, dxvk_inline_boundary_spirv,
+        sizeof(dxvk_inline_boundary_spirv), &submission_pending, &inline_result, VK_TRUE);
+    if (result != VK_SUCCESS) { failed = inline_result.step; goto cleanup; }
+    ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_BOUNDARY blocks=4 bytes=1024 routes=4 words=1024 "
+        "mismatches=%u guards=%u digest=%08x submissions=1 fence=complete resources=retired",
+        inline_result.mismatches, inline_result.guards, inline_result.digest);
 #endif
     PFN_vkCmdBeginRenderingKHR begin_rendering = PROC(device, vkCmdBeginRenderingKHR);
     PFN_vkCmdEndRenderingKHR end_rendering = PROC(device, vkCmdEndRenderingKHR);

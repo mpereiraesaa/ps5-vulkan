@@ -682,17 +682,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(VkDevice d,
         VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
         VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, VK_SHADER_STAGE_GEOMETRY_BIT,
         VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_COMPUTE_BIT};
-    uint32_t inline_bytes = 0, inline_per_stage[6] = {0};
+    uint32_t inline_bytes = 0, inline_blocks = 0, inline_per_stage[6] = {0};
     for (uint32_t j = 0; j < info->setLayoutCount; ++j) {
         const VkDescriptorSetLayout set = info->pSetLayouts[j];
         inline_bytes += set->inline_uniform.total_bytes;
         for (unsigned b = 0; b < PS5VK_MAX_BINDINGS; ++b) {
             if (!set->inline_uniform.bytes[b]) continue;
+            ++inline_blocks;
             for (unsigned s = 0; s < 6; ++s)
                 if (set->signature.binding[b].stages & inline_stages[s])
                     ++inline_per_stage[s];
         }
     }
+    /* VUID-VkPipelineLayoutCreateInfo-descriptorType-02216/02217:
+     * maxDescriptorSetInlineUniformBlocks counts all sets in the layout. */
+    if (inline_blocks > PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (inline_bytes > PS5VK_MAX_INLINE_UNIFORM_TOTAL_BYTES)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     for (unsigned s = 0; s < 6; ++s)
