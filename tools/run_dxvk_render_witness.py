@@ -109,7 +109,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             artifact.get("format") != "R8G8B8A8_UNORM" or
             artifact.get("diagnostic_switch") != (INLINE_SWITCH if inline_variant else CACHE_SWITCH if cache_variant else None) or
             (cache_variant and artifact.get("cache_execution_version") != 2) or
-            (inline_variant and artifact.get("inline_execution_version") != 3)):
+            (inline_variant and artifact.get("inline_execution_version") != 4)):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or
@@ -175,6 +175,14 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
                 text.index("DXVK_INLINE_WITNESS_COMPUTE") >= text.index("DXVK_INLINE_WITNESS_BOUNDARY") or
                 text.index("DXVK_INLINE_WITNESS_BOUNDARY") >= text.index("DXVK_RENDER_WITNESS_STEP")):
             raise ValueError("inline boundary result, ordering or retirement failed")
+        split = re.findall(r"DXVK_INLINE_WITNESS_SPLIT sets=(\d+) blocks=(\d+) bytes=(\d+) routes=(\d+) words=(\d+) "
+                              r"mismatches=(\d+) guards=(\d+) digest=([0-9a-f]{8}) "
+                              r"submissions=(\d+) fence=(\w+) resources=(\w+)", text)
+        if (text.count("DXVK_INLINE_WITNESS_SPLIT") != 1 or
+                split != [("4", "4", "1024", "4", "1024", "0", "0", expected_inline_digest(256), "1", "complete", "retired")] or
+                text.index("DXVK_INLINE_WITNESS_BOUNDARY") >= text.index("DXVK_INLINE_WITNESS_SPLIT") or
+                text.index("DXVK_INLINE_WITNESS_SPLIT") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("inline split-set result, ordering or retirement failed")
     elif "DXVK_INLINE_WITNESS_" in text:
         raise ValueError("inline log requires inline witness artifact")
     if "DXVK_RENDER_WITNESS_PENDING" in text:
@@ -182,7 +190,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     return {
         "profile": artifact["profile"],
         "strict_verified": True,
-        "total_submissions": 3 if inline_variant else 2 if cache_variant else 1,
+        "total_submissions": 4 if inline_variant else 2 if cache_variant else 1,
         "run_id": receipt["run_id"],
         "extent": EXTENT,
         "visible_markers": visible,

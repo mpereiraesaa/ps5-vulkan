@@ -157,22 +157,24 @@ class CacheVerify(unittest.TestCase):
 
 class InlineVerify(unittest.TestCase):
     artifact = dict(ARTIFACT, profile="dxvk-inline-public-sdk-witness",
-                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=3)
+                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=4)
     compute = ("DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 mismatches=0 guards=0 digest=" +
                expected_inline_digest() + " submissions=1 fence=complete resources=retired\n")
 
     boundary = ("DXVK_INLINE_WITNESS_BOUNDARY blocks=4 bytes=1024 routes=4 words=1024 mismatches=0 guards=0 digest=" +
                 expected_inline_digest(256) + " submissions=1 fence=complete resources=retired\n")
 
+    split = boundary.replace("WITNESS_BOUNDARY blocks=4", "WITNESS_SPLIT sets=4 blocks=4")
+
     def log(self, compute=None):
         return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP",
-            ((self.compute if compute is None else compute) + self.boundary).encode() + b"DXVK_RENDER_WITNESS_STEP")
+            ((self.compute if compute is None else compute) + self.boundary + self.split).encode() + b"DXVK_RENDER_WITNESS_STEP")
 
     def test_exact_inline_result(self):
         log = self.log()
         result = verify(log, receipt(log), self.artifact)
         self.assertTrue(result["strict_verified"])
-        self.assertEqual(result["total_submissions"], 3)
+        self.assertEqual(result["total_submissions"], 4)
 
     def test_inline_requires_each_result_and_ownership_field(self):
         variants = ["", self.compute * 2, self.compute + "DXVK_INLINE_WITNESS_COMPUTE malformed\n"]
@@ -202,11 +204,23 @@ class InlineVerify(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 verify(log,receipt(log),self.artifact)
 
+    def test_split_requires_full_result(self):
+        for bad in ("", self.split*2, self.split.replace("sets=4","sets=1"),
+                    self.split.replace("bytes=1024","bytes=256"),
+                    self.split.replace("mismatches=0","mismatches=1"),
+                    self.split.replace("guards=0","guards=1"),
+                    self.split.replace("complete","timeout"),
+                    self.split.replace("retired","pending")):
+            log=self.log().replace(self.split.encode(),bad.encode())
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                verify(log,receipt(log),self.artifact)
+
     def test_inline_cannot_cross_profiles_or_versions(self):
         for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),
                              (self.log(), dict(self.artifact, profile="dxvk-inline-compute-public-sdk-witness")),
                              (self.log(), dict(self.artifact, inline_execution_version=1)),
                              (self.log(), dict(self.artifact, inline_execution_version=2)),
+                             (self.log(), dict(self.artifact, inline_execution_version=3)),
                              (self.log(), dict(self.artifact, diagnostic_switch=None)),
                              (CacheVerify().log(), self.artifact), (self.log(), CacheVerify.artifact)):
             with self.subTest(artifact=artifact), self.assertRaises(ValueError):

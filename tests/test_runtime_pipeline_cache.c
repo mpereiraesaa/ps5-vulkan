@@ -342,18 +342,31 @@ static VkResult inline_prepare(VkDevice device, const struct ps5vk_submission *s
         assert(op->type==PS5VK_DISPATCH && op->groups[0]==4 && op->groups[1]==1 && op->groups[2]==1);
         assert(op->pipeline->program.code_words && op->pipeline==ops[1].pipeline);
         VkDescriptorSet set=op->sets[0];assert(set);
-        unsigned blocks=set->signature.inline_bytes[3]?4:3;
-        job->word_count=blocks==4?256:70;
-        assert(set->signature.inline_bytes[0]==(blocks==4?256:20) &&
-            set->signature.inline_bytes[1]==(blocks==4?256:4) && set->signature.inline_bytes[2]==256);
-        if(blocks==4) assert(set->signature.inline_bytes[3]==256);
+        unsigned parts=op->sets[1]?4:1;
+        unsigned blocks=parts==4?1:set->signature.inline_bytes[3]?4:3;
+        job->word_count=parts==4 || blocks==4?256:70;
+        assert(op->pipeline->program.descriptor_set_mask==(parts==4?15u:1u));
+        assert(op->pipeline->program.descriptor_count==parts*blocks+1);
+        for(unsigned part=0;part<parts;++part) for(unsigned binding=0;binding<blocks;++binding) {
+            unsigned matches=0;
+            for(unsigned n=0;n<op->pipeline->program.descriptor_count;++n) {
+                const struct ps5vk_program_descriptor *entry=&op->pipeline->program.descriptors[n];
+                matches+=entry->set==part && entry->binding==binding;
+            }
+            assert(matches==1); /* Real compiler retains every inline input. */
+        }
         unsigned word=0;
-        for(unsigned binding=0;binding<blocks;++binding) {
-            for(unsigned byte=0;byte<set->inline_uniform.bytes[binding];byte+=4) {
-                uint32_t value;
-                memcpy(&value,set->inline_data+set->inline_uniform.offset[binding]+byte,4);
-                assert(value==0x10203040u+round*1009u+word*37u);
-                job->input[round][word++]=value;
+        for(unsigned part=0;part<parts;++part) {
+            VkDescriptorSet input=op->sets[part];assert(input);
+            for(unsigned binding=0;binding<blocks;++binding) {
+                unsigned expected_bytes=job->word_count==256?256:binding==0?20:binding==1?4:256;
+                assert(input->signature.inline_bytes[binding]==expected_bytes);
+                for(unsigned byte=0;byte<input->inline_uniform.bytes[binding];byte+=4) {
+                    uint32_t value;
+                    memcpy(&value,input->inline_data+input->inline_uniform.offset[binding]+byte,4);
+                    assert(value==0x10203040u+round*1009u+word*37u);
+                    job->input[round][word++]=value;
+                }
             }
         }
         assert(word==job->word_count && set->buffers[blocks].offset==INLINE_OFFSET+round*INLINE_STRIDE &&
@@ -388,11 +401,11 @@ static void check_inline_compute_witness(VkDevice d)
     d->progress=(struct ps5vk_progress){NULL,ps5vk_queue_poll,witness_clock,witness_pause};
     VkQueue queue;vkGetDeviceQueue(d,0,0,&queue);
     unsigned pipelines=d->pipeline_objects,descriptors=d->descriptor_objects;
-    for(unsigned boundary=0;boundary<2;++boundary) {
-        if(boundary) { free(words);words=read_file("build/test-shaders/inline_boundary.spv",&bytes);assert(words); }
+    for(unsigned boundary=0;boundary<3;++boundary) {
+        if(boundary) { free(words);words=read_file(boundary==1?"build/test-shaders/inline_boundary.spv":"build/test-shaders/inline_split.spv",&bytes);assert(words); }
         for(inline_fault=0;inline_fault<4;++inline_fault) {
             inline_launches=0;VkBool32 pending=VK_TRUE;struct inline_compute_result observed;
-            VkResult r=boundary?inline_compute_witness_mode(d,queue,words,bytes,&pending,&observed,VK_TRUE):
+            VkResult r=boundary?inline_compute_witness_mode(d,queue,words,bytes,&pending,&observed,boundary):
                 inline_compute_witness(d,queue,words,bytes,&pending,&observed);
             if(r!=(inline_fault?VK_ERROR_UNKNOWN:VK_SUCCESS)) fprintf(stderr,"inline fault=%u result=%d step=%s\n",inline_fault,r,observed.step);
             assert(r==(inline_fault?VK_ERROR_UNKNOWN:VK_SUCCESS) && !pending && inline_launches==1);

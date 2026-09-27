@@ -18,9 +18,11 @@ static void inline_witness_poison(void *data, size_t bytes)
 
 static VkResult inline_compute_witness_mode(VkDevice device, VkQueue queue,
     const uint32_t *words, size_t bytes, VkBool32 *pending,
-    struct inline_compute_result *observed, VkBool32 boundary)
+    struct inline_compute_result *observed, unsigned mode)
 {
-    const unsigned block_count=boundary?4:3, word_count=boundary?256:INLINE_WORDS;
+    const VkBool32 boundary=mode!=0, split=mode==2;
+    const unsigned set_count=split?4:1;
+    const unsigned block_count=split?1:boundary?4:3, word_count=boundary?256:INLINE_WORDS;
     const unsigned payload_bytes=word_count*4;
     VkResult result = VK_SUCCESS;
     VkShaderModule module = VK_NULL_HANDLE;
@@ -45,16 +47,17 @@ static VkResult inline_compute_witness_mode(VkDevice device, VkQueue queue,
             {2,VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,256,VK_SHADER_STAGE_COMPUTE_BIT,NULL},
             {3,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL}};
         if(boundary) {
-            for(unsigned b=0;b<4;++b) bindings[b]=(VkDescriptorSetLayoutBinding){
+            for(unsigned b=0;b<block_count;++b) bindings[b]=(VkDescriptorSetLayoutBinding){
                 b,VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,256,VK_SHADER_STAGE_COMPUTE_BIT,NULL};
-            bindings[4]=(VkDescriptorSetLayoutBinding){4,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL};
+            bindings[block_count]=(VkDescriptorSetLayoutBinding){block_count,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,NULL};
         }
         VkDescriptorSetLayoutCreateInfo sl = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .bindingCount=i ? block_count : block_count+1,.pBindings=bindings};
         INLINE_TRY(vkCreateDescriptorSetLayout(device,&sl,NULL,&layouts[i]));
     }
+    VkDescriptorSetLayout bound_layouts[4]={layouts[0],layouts[1],layouts[1],layouts[1]};
     VkPipelineLayoutCreateInfo pl = {.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount=1,.pSetLayouts=&layouts[0]};
+        .setLayoutCount=set_count,.pSetLayouts=bound_layouts};
     INLINE_TRY(vkCreatePipelineLayout(device,&pl,NULL,&layout));
     VkShaderModuleCreateInfo sm = {.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize=bytes,.pCode=words};
@@ -84,51 +87,64 @@ static VkResult inline_compute_witness_mode(VkDevice device, VkQueue queue,
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,4}};
     VkDescriptorPoolInlineUniformBlockCreateInfo ip = {
         .sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO,
-        .maxInlineUniformBlockBindings=5*block_count};
+        .maxInlineUniformBlockBindings=5*block_count*set_count};
     VkDescriptorPoolCreateInfo dpi = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .pNext=&ip,.maxSets=5,.poolSizeCount=2,.pPoolSizes=sizes};
+        .pNext=&ip,.maxSets=5*set_count,.poolSizeCount=2,.pPoolSizes=sizes};
     INLINE_TRY(vkCreateDescriptorPool(device,&dpi,NULL,&descriptors));
-    VkDescriptorSetLayout allocation_layouts[5] = {layouts[0],layouts[0],layouts[0],layouts[0],layouts[1]};
-    VkDescriptorSet sets[5];
+    VkDescriptorSetLayout allocation_layouts[20];
+    for(unsigned round=0;round<5;++round) for(unsigned part=0;part<set_count;++part)
+        allocation_layouts[round*set_count+part]=(round==4 || part)?layouts[1]:layouts[0];
+    VkDescriptorSet sets[20];
     VkDescriptorSetAllocateInfo ds = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool=descriptors,.descriptorSetCount=5,.pSetLayouts=allocation_layouts};
+        .descriptorPool=descriptors,.descriptorSetCount=5*set_count,.pSetLayouts=allocation_layouts};
     INLINE_TRY(vkAllocateDescriptorSets(device,&ds,sets));
     for (unsigned round=0; round<INLINE_ROUNDS; ++round) {
         uint32_t payload[256]={0};
         for (unsigned j=0;j<word_count;++j) payload[j]=0x10203040u+round*1009u+j*37u;
-        VkWriteDescriptorSetInlineUniformBlock iw = {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK,
-            .dataSize=payload_bytes,.pData=payload};
-        VkWriteDescriptorSet w = {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.pNext=&iw,
-            .dstSet=sets[round],.descriptorCount=payload_bytes,.descriptorType=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK};
-        if (round==0) {
-            const uint32_t lengths[4]={boundary?256:20,boundary?256:4,256,256};unsigned offset=0;
-            for(unsigned binding=0;binding<block_count;++binding) {
-                w.dstBinding=binding;w.descriptorCount=iw.dataSize=lengths[binding];iw.pData=(unsigned char *)payload+offset;
-                vkUpdateDescriptorSets(device,1,&w,0,NULL);offset+=lengths[binding];
+        for(unsigned part=0;part<set_count;++part) {
+            const unsigned update_bytes=split?256:payload_bytes;
+            uint32_t *part_data=payload+(split?part*64:0);
+            VkDescriptorSet destination=sets[round*set_count+part], source=sets[4*set_count+part];
+            VkWriteDescriptorSetInlineUniformBlock iw = {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK,
+                .dataSize=update_bytes,.pData=part_data};
+            VkWriteDescriptorSet w = {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.pNext=&iw,
+                .dstSet=destination,.descriptorCount=update_bytes,.descriptorType=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK};
+            if (round==0) {
+                const uint32_t lengths[4]={boundary?256:20,boundary?256:4,256,256};unsigned offset=0;
+                for(unsigned binding=0;binding<block_count;++binding) {
+                    w.dstBinding=binding;w.descriptorCount=iw.dataSize=lengths[binding];iw.pData=(unsigned char *)part_data+offset;
+                    vkUpdateDescriptorSets(device,1,&w,0,NULL);offset+=lengths[binding];
+                }
+            } else if (round==1) {
+                if(split) {
+                    /* Partial writes in reverse order; rollover cannot cross sets. */
+                    w.dstArrayElement=128;w.descriptorCount=iw.dataSize=128;iw.pData=part_data+32;
+                    vkUpdateDescriptorSets(device,1,&w,0,NULL);
+                    w.dstArrayElement=0;iw.pData=part_data;
+                }
+                vkUpdateDescriptorSets(device,1,&w,0,NULL); /* rollover for a single set */
+            } else if (round==2) {
+                w.dstSet=source;vkUpdateDescriptorSets(device,1,&w,0,NULL); /* 4/20/256 */
+                VkCopyDescriptorSet copy = {.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET,
+                    .srcSet=source,.dstSet=destination,.descriptorCount=update_bytes};
+                vkUpdateDescriptorSets(device,0,NULL,1,&copy);
+                inline_witness_poison(part_data,update_bytes);vkUpdateDescriptorSets(device,1,&w,0,NULL);
+            } else {
+                unsigned char unaligned[sizeof(payload)+1];memcpy(unaligned+1,part_data,update_bytes);
+                VkDescriptorUpdateTemplateEntry entry = {.descriptorCount=update_bytes,
+                    .descriptorType=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,.offset=1,.stride=SIZE_MAX};
+                VkDescriptorUpdateTemplateCreateInfo ti = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO,
+                    .descriptorUpdateEntryCount=1,.pDescriptorUpdateEntries=&entry,
+                    .templateType=VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET,.descriptorSetLayout=bound_layouts[part]};
+                INLINE_TRY(vkCreateDescriptorUpdateTemplateKHR(device,&ti,NULL,&update));
+                vkUpdateDescriptorSetWithTemplateKHR(device,destination,update,unaligned);
+                inline_witness_poison(unaligned,sizeof(unaligned));
+                vkDestroyDescriptorUpdateTemplateKHR(device,update,NULL);update=VK_NULL_HANDLE;
             }
-        } else if (round==1) {
-            vkUpdateDescriptorSets(device,1,&w,0,NULL); /* rollover: 20/4/256 */
-        } else if (round==2) {
-            w.dstSet=sets[4];vkUpdateDescriptorSets(device,1,&w,0,NULL); /* 4/20/256 */
-            VkCopyDescriptorSet copy = {.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET,
-                .srcSet=sets[4],.dstSet=sets[round],.descriptorCount=payload_bytes};
-            vkUpdateDescriptorSets(device,0,NULL,1,&copy);
-            inline_witness_poison(payload,sizeof(payload));vkUpdateDescriptorSets(device,1,&w,0,NULL);
-        } else {
-            unsigned char unaligned[sizeof(payload)+1];memcpy(unaligned+1,payload,sizeof(payload));
-            VkDescriptorUpdateTemplateEntry entry = {.descriptorCount=payload_bytes,
-                .descriptorType=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,.offset=1,.stride=SIZE_MAX};
-            VkDescriptorUpdateTemplateCreateInfo ti = {.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO,
-                .descriptorUpdateEntryCount=1,.pDescriptorUpdateEntries=&entry,
-                .templateType=VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET,.descriptorSetLayout=layouts[0]};
-            INLINE_TRY(vkCreateDescriptorUpdateTemplateKHR(device,&ti,NULL,&update));
-            vkUpdateDescriptorSetWithTemplateKHR(device,sets[round],update,unaligned);
-            inline_witness_poison(unaligned,sizeof(unaligned));
-            vkDestroyDescriptorUpdateTemplateKHR(device,update,NULL);update=VK_NULL_HANDLE;
         }
         inline_witness_poison(payload,sizeof(payload));
         VkDescriptorBufferInfo info = {buffer,INLINE_OFFSET+round*INLINE_STRIDE,INLINE_RESULTS*4};
-        VkWriteDescriptorSet output = {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=sets[round],
+        VkWriteDescriptorSet output = {.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,.dstSet=sets[round*set_count],
             .dstBinding=block_count,.descriptorCount=1,.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,.pBufferInfo=&info};
         vkUpdateDescriptorSets(device,1,&output,0,NULL);
     }
@@ -147,7 +163,7 @@ static VkResult inline_compute_witness_mode(VkDevice device, VkQueue queue,
     vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_HOST_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&before,0,NULL,0,NULL);
     vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline);
     for(unsigned round=0;round<INLINE_ROUNDS;++round) {
-        vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,1,&sets[round],0,NULL);
+        vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,set_count,&sets[round*set_count],0,NULL);
         vkCmdDispatch(command,INLINE_RESULTS/64,1,1);
     }
     VkMemoryBarrier after = {.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER,.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT,
