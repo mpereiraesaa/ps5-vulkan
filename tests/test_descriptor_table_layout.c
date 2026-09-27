@@ -137,7 +137,7 @@ int main(void)
            ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)==4 &&
            ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)==8 &&
            ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)==4);
-    assert(!ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
+    assert(ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)==12 &&
            !ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT));
     memset(sets,0,sizeof(sets));
     for(unsigned s=0;s<2;++s) {

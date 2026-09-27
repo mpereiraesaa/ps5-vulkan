@@ -55,6 +55,7 @@ static inline uint32_t ps5vk_descriptor_record_bytes(VkDescriptorType type)
 static inline uint32_t ps5vk_compute_record_dwords(VkDescriptorType type)
 {
     switch (type) {
+    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:

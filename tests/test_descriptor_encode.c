@@ -416,10 +416,59 @@ int main(void)
         separate_table,20)!=VK_SUCCESS);
     assert(!memcmp(saved,separate_table,sizeof(saved)));
     typed_view.format=VK_FORMAT_R32_UINT;
-    /* A compiled type the compute path has no record for is refused. */
-    separate_program.descriptors[0].type=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    /* Compute combined records occupy all twelve words, before the SSBO. */
     separate.signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    assert(ps5vk_descriptor_encode(&device,&separate_program,0,&separate,dynamic,
-        separate_table,20)!=VK_SUCCESS);
+    separate.signature.type[1]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    separate.images[0]=(VkDescriptorImageInfo){&sampler,&sampled_view,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    separate.image_resources[0]=&sampled_image;
+    separate.buffers[1]=(VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)0x200004000,64,256};
+    struct ps5vk_compiled_program combined_program={.gfx=1013,.descriptor_count=2,
+        .descriptors={{0,0,0,0,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+                      {0,1,0,12,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
+    assert(ps5vk_texture_descriptor(&device,&sampled_view,&sampler,combined)==VK_SUCCESS);
+    assert(ps5vk_buffer_descriptor(&device,&separate.buffers[1],0,record)==VK_SUCCESS);
+    memset(separate_table,0xab,sizeof(separate_table));
+    assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+        separate_table,20)==VK_SUCCESS);
+    assert(!memcmp(separate_table,combined,sizeof(combined)));
+    assert(!memcmp(separate_table+12,record,sizeof(record)));
+    assert(separate_table[16]==0xabababab);
+    uint32_t combined_saved[20];
+    memcpy(combined_saved,separate_table,sizeof(combined_saved));
+    for(unsigned bad=0;bad<7;++bad) {
+        separate.images[0].imageLayout=bad==0 ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL :
+            VK_IMAGE_LAYOUT_GENERAL;
+        separate.image_resources[0]=bad==1 ? VK_NULL_HANDLE : &sampled_image;
+        separate.images[0].sampler=bad==2 ? VK_NULL_HANDLE : &sampler;
+        sampler.device=bad==3 ? VK_NULL_HANDLE : &device;
+        combined_program.descriptors[1].table_dword=bad==4 ? 8 : 12;
+        separate.images[0].imageView=bad==6 ? VK_NULL_HANDLE : &sampled_view;
+        assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+            separate_table,bad==5 ? 11 : 20)!=VK_SUCCESS);
+        assert(!memcmp(combined_saved,separate_table,sizeof(combined_saved)));
+    }
+    separate.images[0].imageView=&sampled_view;
+    assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+        separate_table,20)==VK_SUCCESS);
+    /* A null combined image retains its valid sampler under nullDescriptor. */
+    separate.images[0].imageView=VK_NULL_HANDLE;
+    separate.image_resources[0]=VK_NULL_HANDLE;
+    device.enabled_features_t09|=PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+        separate_table,20)==VK_SUCCESS);
+    for(unsigned i=0;i<8;++i) assert(separate_table[i]==0);
+    assert(!memcmp(separate_table+8,sampler.words,sizeof(sampler.words)));
+    assert(!memcmp(separate_table+12,record,sizeof(record)));
+    memcpy(combined_saved,separate_table,sizeof(combined_saved));
+    for(unsigned bad=0;bad<4;++bad) {
+        device.enabled_features_t09=bad==0 ? 0 : PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+        separate.images[0].sampler=bad==1 ? VK_NULL_HANDLE : &sampler;
+        sampler.device=bad==2 ? VK_NULL_HANDLE : &device;
+        separate.image_resources[0]=bad==3 ? &sampled_image : VK_NULL_HANDLE;
+        assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+            separate_table,20)!=VK_SUCCESS);
+        assert(!memcmp(combined_saved,separate_table,sizeof(combined_saved)));
+    }
     puts("Compiler-ordered raw descriptor table: pass (host only)");
 }

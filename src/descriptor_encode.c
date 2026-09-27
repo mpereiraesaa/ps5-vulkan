@@ -222,6 +222,27 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
             if (extent < p->table_dword + 4) extent = p->table_dword + 4;
             continue;
         }
+        if (p->type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+            /* Canonical combined record: eight image words, four sampler words. */
+            const VkDescriptorImageInfo *info = &set->images[index];
+            if (!info->imageView && !set->image_resources[index] &&
+                (device->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) {
+                if (!info->sampler || info->sampler->device != device) goto fail;
+                ps5vk_null_descriptor_words(scratch + p->table_dword, 8);
+                memcpy(scratch + p->table_dword + 8, info->sampler->words,
+                    sizeof(info->sampler->words));
+                if (extent < p->table_dword + 12) extent = p->table_dword + 12;
+                continue;
+            }
+            if (!info->imageView || set->image_resources[index] != info->imageView->image ||
+                (info->imageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                 info->imageLayout != VK_IMAGE_LAYOUT_GENERAL) ||
+                ps5vk_texture_descriptor(device, info->imageView, info->sampler,
+                    scratch + p->table_dword) != VK_SUCCESS)
+                goto fail;
+            if (extent < p->table_dword + 12) extent = p->table_dword + 12;
+            continue;
+        }
         if (p->type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) {
             /* A separate T#: the combined record's image half. */
             const VkDescriptorImageInfo *info = &set->images[index];
