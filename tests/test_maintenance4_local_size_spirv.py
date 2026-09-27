@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.maintenance4_local_size_spirv import instructions, local_size_id
+from tools.maintenance4_local_size_spirv import (instructions, local_size_id,
+    require_no_fixed_builtin_source)
 from tools.build_maintenance4_local_size_witness import ordinary_environment
 
 
@@ -41,12 +42,26 @@ class LocalSizeIdFixture(unittest.TestCase):
         self.assertTrue(any(op == 50 and args[1:] == (x_id, 64) for op, args in parsed))
         self.assertTrue(any(op == 43 and args[1:] == (one_id, 1) for op, args in parsed))
         self.assertFalse(any(op == 16 and args[1] == 17 for op, args in parsed))
+        self.assertFalse(any(op == 71 and len(args) == 3 and args[1:] == (11, 25)
+                             for op, args in parsed))
+        self.assertTrue(any(op == 71 and len(args) == 3 and args[1:] == (11, 25)
+                            for at, op, length in instructions(original)
+                            for args in (original[at+1:at+length],)))
 
     def test_malformed_source_rejected(self):
         for data in (b"", b"garbage", b"\x00" * 20,
                      struct.pack("<6I", 0x07230203, 0x00010000, 0, 2, 0, 0)):
             with self.subTest(data=data), self.assertRaises(ValueError):
                 local_size_id(data)
+
+    def test_fixed_builtin_read_is_not_silently_removed(self):
+        source = (ROOT / "experiments/compute/maintenance4_local_size.comp").read_text()
+        source = source.replace("gl_LocalInvocationID.x;",
+                                "gl_LocalInvocationID.x + gl_WorkGroupSize.x;")
+        with self.assertRaisesRegex(ValueError, "reads fixed WorkgroupSize"):
+            require_no_fixed_builtin_source(source)
+        require_no_fixed_builtin_source(
+            (ROOT / "experiments/compute/maintenance4_local_size.comp").read_text())
 
 
 if __name__ == "__main__":

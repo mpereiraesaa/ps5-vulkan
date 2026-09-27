@@ -591,6 +591,8 @@ test-compiler: build/libpsbc.host.a test-shaders
 	./build/tests/test_runtime_compiler
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_pipeline_cache.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_pipeline_cache
 	./build/tests/test_runtime_pipeline_cache
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/maintenance4_local_size.comp -o build/test-shaders/maintenance4_local_size_base.spv
+	$(PYTHON) tools/maintenance4_local_size_spirv.py --source experiments/compute/maintenance4_local_size.comp --input build/test-shaders/maintenance4_local_size_base.spv --output build/test-shaders/maintenance4_local_size_id.spv
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_local_size_id.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_local_size_id
 	./build/tests/test_local_size_id
 doctor:

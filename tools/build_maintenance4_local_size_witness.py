@@ -14,7 +14,7 @@ from tools.build_integer_dot_witness import build_payload, run
 from tools.build_sdk import get_ps5_toolchain
 from tools.build_upstream_cts import tessellation_build_profile
 from tools.lab import lab_root
-from tools.maintenance4_local_size_spirv import local_size_id
+from tools.maintenance4_local_size_spirv import local_size_id, require_no_fixed_builtin_source
 from tools.prepare_consumer_sync_shaders import emit_array
 from tools.verify_maintenance4_local_size_witness import fixture_contract
 
@@ -40,6 +40,8 @@ def main():
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=environment)
     build = ROOT / "build/maintenance4-local-size"
     build.mkdir(parents=True, exist_ok=True)
+    require_no_fixed_builtin_source(
+        (ROOT / "experiments/compute/maintenance4_local_size.comp").read_text())
     base = build / "base.spv"
     subprocess.run([str(glslang), "-V", "--target-env", "vulkan1.0",
         str(ROOT / "experiments/compute/maintenance4_local_size.comp"),

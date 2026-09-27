@@ -701,6 +701,25 @@ int main(void)
     device->enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
     device->enabled_features |= PS5VK_FEATURE_SHADER_INT16;
     device->platform_features |= PS5VK_FEATURE_SHADER_INT8_COMPUTE;
+    /* Compile the exact SDK witness module. GLSLang also emitted a fixed
+     * WorkgroupSize built-in; the fixture transformer must remove that
+     * decoration so a specialization to 32 actually changes launch metadata. */
+    size_t witness_bytes = 0;
+    uint32_t *witness = read_file("build/test-shaders/maintenance4_local_size_id.spv", &witness_bytes);
+    assert(witness);
+    VkPipeline witness_default = VK_NULL_HANDLE;
+    assert(build(device, layout, witness, witness_bytes, &witness_default) == VK_SUCCESS);
+    assert(witness_default && witness_default->program.local_size[0] == 64);
+    vkDestroyPipeline(device, witness_default, NULL);
+    uint32_t witness_x = 32;
+    VkSpecializationMapEntry witness_entry = {0, 0, sizeof(witness_x)};
+    VkSpecializationInfo witness_spec = {1, &witness_entry, sizeof(witness_x), &witness_x};
+    VkPipeline witness_specialized = VK_NULL_HANDLE;
+    assert(build_specialized(device, layout, witness, witness_bytes,
+        &witness_spec, &witness_specialized) == VK_SUCCESS);
+    assert(witness_specialized && witness_specialized->program.local_size[0] == 32);
+    vkDestroyPipeline(device, witness_specialized, NULL);
+    free(witness);
     for (unsigned bits = 8; bits <= 16; bits += 8)
     for (unsigned op = 113; op <= 114; ++op)
     for (unsigned lanes = 1; lanes <= 4; ++lanes)
