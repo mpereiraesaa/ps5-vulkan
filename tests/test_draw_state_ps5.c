@@ -118,6 +118,15 @@ int main(void)
     struct ps5vk_draw_state out;
     assert(ps5vk_native_draw_state(&p, &p.viewport, &p.scissor, 1, &raster, &color, 1, NULL, &area, 640, 480,  0, &out) == VK_SUCCESS);
     assert(out.cx_count == 109 && out.modifier == 5 && out.uc_count == 4);
+    /* Discard is emitted on a plain pre-raster pipeline without capture.
+     * The following ordinary draw clears it instead of inheriting the kill. */
+    assert(!(last_cx(&out,0x204)&(1u<<22)));
+    p.rasterizer_discard=VK_TRUE;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,NULL,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(last_cx(&out,0x204)&(1u<<22));
+    p.rasterizer_discard=VK_FALSE;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,NULL,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(!(last_cx(&out,0x204)&(1u<<22)));
     /* Primitive restart (DXVK262-T04): the reset index is written after the
      * raster block on every draw and stays clear for a pipeline that never
      * asked to cut, together with the user-config enable. */
@@ -316,6 +325,11 @@ int main(void)
      * without a source export. */
     pair.runtime_fragment.context[0].value=0;
     pair.runtime_fragment.context[1].value=0;
+    p.rasterizer_discard=VK_TRUE;
+    assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_SUCCESS);
+    assert(last_cx(&out,0x204)&(1u<<22));
+    assert(!last_cx(&out,0x1c5) && !last_cx(&out,0x08f));
+    p.rasterizer_discard=VK_FALSE;
     assert(ps5vk_native_draw_state(&p,&p.viewport,&p.scissor,1,&raster,&color,1,&depth,&area,640,480,0,&out)==VK_SUCCESS);
     assert(last_cx(&out,0x1d5)==0 && last_cx(&out,0x1d6)==0 && last_cx(&out,0x1d7)==0);
     pair.runtime_fragment.context[1].value=15;

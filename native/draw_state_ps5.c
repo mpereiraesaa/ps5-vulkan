@@ -527,9 +527,8 @@ VkResult ps5vk_native_draw_state(VkPipeline p, const VkViewport *viewport_state,
      * the viewport's ordered min/max depth, and DB_RENDER_OVERRIDE keeps the
      * viewport clamp enabled. Lateral clipping and the W semantics are
      * untouched. Negative-one-to-one depth is not supported by this profile.
-     * Rasterizer discard, admitted only for a transform feedback capture
-     * pipeline (DXVK262-T14), is DX_RASTERIZATION_KILL (bit 22), exactly as
-     * RADV programs it: the pre-raster program still runs and captures, and
+     * Rasterizer discard is DX_RASTERIZATION_KILL (bit 22), exactly as
+     * RADV programs it: the pre-raster program still runs (including capture), and
      * no primitive reaches the scan converter. */
     result.cx[result.cx_count++] = (ps5_agc_register){0x204, (1u << 19) | (1u << 24) |
         (raster->depth_clamp ? (1u << 26) | (1u << 27) : 0u) |

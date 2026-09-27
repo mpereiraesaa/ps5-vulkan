@@ -166,6 +166,12 @@ CORE_IMPLEMENTATIONS = {
                    "only with opt-in. Derivative hints preserve cache identity, validate "
                    "same-device/type base handles or earlier batch indices with "
                    "ALLOW_DERIVATIVES, and retain independent result ownership. "
+                   "Static rasterizer discard admits position-producing vertex-only pipelines, ignores "
+                   "post-raster state and links an internal empty pixel program; "
+                   "host compiler and emitted-state tests cover this route. "
+                   "Draw submission without any framebuffer attachment remains refused. "
+                   "Pinned graphics cache-control CTS cases request unreported list "
+                   "restart and are excluded; eight compute cases are prepared for measurement. "
                    "Host tests cover these contracts."),
         "gaps": ("SDK-linked delivery witness and native execution remain pending; "
                  "the shipping platform does not advertise this capability",),

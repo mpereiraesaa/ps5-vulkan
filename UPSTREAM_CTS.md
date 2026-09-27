@@ -99,8 +99,11 @@ were the same thing:
   acceptance. This includes 42 unmeasured `zero-initialize-workgroup-pending`
   cases and eight unmeasured `pipeline-cache-control-pending` compute cases for
   default-off measurement builds. The cache-control cases check creation results
-  and handles, including derivative bases, without executing GPU work; graphics
-  discard-only routes remain an implementation gap. Four repeated-pipeline cases remain
+  and handles, including derivative bases, without executing GPU work. The pinned
+  graphics factory enables primitive restart on TRIANGLE_LIST without checking
+  primitiveTopologyListRestart; that feature is unreported, so those cases are
+  excluded. Legal vertex-only rasterizer-discard inputs have host frontend,
+  compiler and emitted-state coverage; native draw/dispatch witnesses remain pending. Four repeated-pipeline cases remain
   separate precondition diagnostics: they require unreported HOST_CACHED memory,
   and the pinned factory swaps its repetition/parity arguments. Their results
   cannot establish repeated initialization. Earlier dated sections below record the smaller selections used

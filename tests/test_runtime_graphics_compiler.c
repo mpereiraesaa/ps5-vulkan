@@ -492,6 +492,35 @@ static PsbcRegisterWrite *context_register(PsbcShaderMetadata *m,unsigned offset
     return NULL;
 }
 
+/* The internal discarded pixel stage has no observable work. */
+static void check_rasterizer_discard_program(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/triangle.vert.spv"),
+        .fragment=ps5vk_discard_fragment(),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.rasterizer_discard=VK_TRUE};
+    assert(ps5vk_spirv_graphics_interface(&key));
+    struct ps5vk_compilation_cache *cache=ps5vk_compilation_cache_create(4,1024*1024);
+    assert(cache);
+    const void *cold=NULL,*warm=NULL;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&cold)==VK_SUCCESS && cold);
+    key.fail_on_compile_required=VK_TRUE;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&warm)==VK_SUCCESS && warm);
+    const struct ps5vk_runtime_graphics_program *program=cold;
+    PsbcShaderMetadata *m=(PsbcShaderMetadata *)&program->fragment.metadata;
+    const PsbcRegisterWrite *format=context_register(m,0x1c5),*mask=context_register(m,0x08f);
+    assert(format && !format->value && mask && !mask->value);
+    for(unsigned i=0;i<PS5VK_MAX_SETS;++i)assert(!program->arguments.fragment_descriptor_valid[i]);
+    ps5vk_runtime_graphics_cached_release(cache,warm);
+    ps5vk_runtime_graphics_cached_release(cache,cold);
+    key.color_write_mask[0]=15;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&warm)==VK_ERROR_FEATURE_NOT_PRESENT && !warm);
+    ps5vk_compilation_cache_destroy(cache);
+    free((void *)key.vertex.words);
+}
+
 /* A DEPTH-ONLY pipeline: no colour attachment, so the key carries an undefined
  * colour format, writes no channel, and the fragment stage exports nothing.
  * Everything else is the ordinary triangle pair. */
@@ -2864,6 +2893,7 @@ int main(void)
     check_view_index_builtin();
     check_clip_cull_distances();
     check_depth_only_target();
+    check_rasterizer_discard_program();
     check_dxvk_loose_position();
     check_depth_kill_forms();
     check_helper_derivative_forms();

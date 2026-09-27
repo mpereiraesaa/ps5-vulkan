@@ -46,6 +46,18 @@ class UpstreamSelectionTests(unittest.TestCase):
         self.assertFalse(self.gate._pipeline_cache_control_leaf_paths(text.replace("TEST_CASES[]", "TABLE[]")))
         self.assertNotIn("dEQP-VK.pipeline.creation_cache_control.compute_pipelines.invented", paths)
 
+    def test_cache_control_graphics_restart_precondition_is_not_bypassed(self):
+        source = ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp"
+        text = source.read_text()
+        assembly = text.split("static constexpr auto IA_STATE =", 1)[1].split("};", 1)[0]
+        self.assertIn("VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST", assembly)
+        self.assertIn("VK_TRUE", assembly)
+        support = text.split("void checkSupport(", 1)[1].split("float randomFloat()", 1)[0]
+        self.assertNotIn("primitiveTopologyListRestart", support)
+        manifest = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        self.assertFalse(any("creation_cache_control.graphics_pipelines" in c["path"]
+                             for c in manifest["cases"] + manifest["diagnostics"]))
+
     def test_zero_initialize_measurement_leaves_are_original_and_unpromoted(self):
         module = UPSTREAM / "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp"
         if not module.is_file():

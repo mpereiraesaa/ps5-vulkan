@@ -3,11 +3,12 @@
 #include "graphics_program.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 static unsigned created, released;
 static unsigned acquired, compiled_released, compile_fail, backend_fail;
 static unsigned expect_five_stages;
 static VkBool32 expect_maintenance4;
-static VkBool32 expect_no_compile, cached_triangle_only;
+static VkBool32 expect_no_compile, cached_triangle_only, expect_discard;
 static unsigned expect_blend_state;
 static unsigned expect_dual_blend_state;
 /* 1 = independentBlend enabled on the device, 2 = not enabled: the second
@@ -24,7 +25,14 @@ static VkResult backend(VkDevice d,const void *data,uint32_t primitive_type,void
 static void release(VkDevice d,void *data) { (void)d; ++released; free(data); }
 static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const void **out)
 {
-    assert(context==&acquired && key->vertex.word_count==10 && key->fragment.word_count==10);
+    assert(context==&acquired && key->vertex.word_count==10);
+    if(expect_discard) {
+        struct ps5vk_graphics_module_key empty=ps5vk_discard_fragment();
+        assert(key->rasterizer_discard && key->fragment.word_count==empty.word_count);
+        assert(!memcmp(key->fragment.words,empty.words,empty.word_count*4));
+        for(unsigned i=0;i<key->color_attachment_count;++i)
+            assert(!key->color_write_mask[i] && !key->blend_enable[i]);
+    } else assert(key->fragment.word_count==10);
     assert(key->maintenance4==expect_maintenance4);
     assert(key->fail_on_compile_required==expect_no_compile);
     if (expect_no_compile && (!cached_triangle_only || key->topology!=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) { *out=NULL; return VK_PIPELINE_COMPILE_REQUIRED; }
@@ -454,6 +462,39 @@ int main(void)
     assert(acquired==3);
     d.graphics_compiled_release=compiled_release;
     {
+        VkGraphicsPipelineCreateInfo discarded=info;
+        VkPipelineRasterizationStateCreateInfo discard={.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .rasterizerDiscardEnable=VK_TRUE,.depthClampEnable=VK_TRUE,.lineWidth=0};
+        discarded.stageCount=1;discarded.pRasterizationState=&discard;
+        discarded.pViewportState=NULL;discarded.pMultisampleState=NULL;
+        discarded.pColorBlendState=NULL;discarded.pDepthStencilState=NULL;
+        const VkDynamicState ignored[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR,VK_DYNAMIC_STATE_DEPTH_BIAS};
+        VkPipelineDynamicStateCreateInfo dyn={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount=3,.pDynamicStates=ignored};
+        discarded.pDynamicState=&dyn;
+        expect_discard=VK_TRUE;
+        VkPipeline discarded_pipeline;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&discarded,NULL,&discarded_pipeline)==VK_SUCCESS);
+        assert(discarded_pipeline->rasterizer_discard && !discarded_pipeline->xfb.buffers_mask);
+        assert(!discarded_pipeline->dynamic_viewport && !discarded_pipeline->dynamic_scissor &&
+               !discarded_pipeline->dynamic_depth_bias && !discarded_pipeline->color_write_mask[0]);
+        vkDestroyPipeline(&d,discarded_pipeline,NULL);
+        /* A supplied pixel stage and post-raster state are equally ignored. */
+        discarded.stageCount=2;discarded.pViewportState=&vp;
+        discarded.pMultisampleState=&m;discarded.pColorBlendState=&b;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&discarded,NULL,&discarded_pipeline)==VK_SUCCESS);
+        vkDestroyPipeline(&d,discarded_pipeline,NULL);
+        /* The pinned graphics cache-control factory asks for list restart.
+         * Discard does not make that pre-raster feature optional. */
+        VkPipelineInputAssemblyStateCreateInfo restart=ia;
+        restart.primitiveRestartEnable=VK_TRUE;
+        discarded.pInputAssemblyState=&restart;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&discarded,NULL,&discarded_pipeline)==VK_ERROR_FEATURE_NOT_PRESENT && !discarded_pipeline);
+        expect_discard=VK_FALSE;
+        discarded=info;discarded.stageCount=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&discarded,NULL,&discarded_pipeline)!=VK_SUCCESS && !discarded_pipeline);
+    }
+    {
         VkGraphicsPipelineCreateInfo batch[2]={info,info};
         batch[0].flags=VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
         batch[1].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT;
@@ -880,15 +921,18 @@ int main(void)
         capture_program.key.transform_feedback_buffers=0u;
         pipeline=NULL;
         assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)!=VK_SUCCESS && !pipeline);
-        /* Rasterizer discard: accepted with the capture, refused without it. */
+        /* The discarded fragment stage is canonical even with capture. */
         capture_program.key.transform_feedback_buffers=1u;
         capture_program.key.rasterizer_discard=VK_TRUE;
+        capture_program.key.fragment=ps5vk_discard_fragment();
+        capture_program.key.color_write_mask[0]=0;
         VkPipelineRasterizationStateCreateInfo discard=r;
         discard.rasterizerDiscardEnable=VK_TRUE;
         gs_info.pRasterizationState=&discard;
         assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)==VK_SUCCESS &&
                pipeline && pipeline->rasterizer_discard);
         vkDestroyPipeline(&d,pipeline,NULL);
+        /* A library containing only a geometry capture is not a VS-only library. */
         VkGraphicsPipelineCreateInfo plain_discard=info;
         plain_discard.pRasterizationState=&discard;
         pipeline=NULL;
