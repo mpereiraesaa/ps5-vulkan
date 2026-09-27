@@ -444,6 +444,10 @@ struct VkDevice_T {
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
     uint32_t enabled_features_t09;
+    /* Fixed-wave compute stage contracts; not publicly enabled until the
+     * platform capability and native validation route are provided. */
+    VkBool32 subgroup_size_control_enabled;
+    VkBool32 compute_full_subgroups_enabled;
     VkBool32 device_group_extension_enabled;
     /* VK_KHR_create_renderpass2 was enabled on this device. The KHR render
      * pass 2 entry points refuse, and the proc-address lookup hides them,

@@ -66,6 +66,50 @@ static VkResult counted_compile(void *context, const uint32_t *spirv, size_t wor
                                          specialization, features, program, code);
 }
 
+static void subgroup_stage_cache(VkDevice d, const VkComputePipelineCreateInfo *base)
+{
+    size_t bytes;uint32_t *words=read_file("build/test-shaders/cache_witness.spv",&bytes);assert(words);
+    VkShaderModuleCreateInfo sm={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=bytes,.pCode=words};
+    VkShaderModule module;assert(vkCreateShaderModule(d,&sm,NULL,&module)==VK_SUCCESS);
+    struct ps5vk_compilation_cache *saved=d->pipeline_cache;
+    d->pipeline_cache=ps5vk_compilation_cache_create(8,1024*1024);assert(d->pipeline_cache);
+    d->compiler.compile=counted_compile;compile_calls=0;
+    uint32_t saved_features=d->enabled_features_t09;
+    d->enabled_features_t09|=PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    d->subgroup_size_control_enabled=d->compute_full_subgroups_enabled=VK_TRUE;
+    VkPipelineShaderStageRequiredSubgroupSizeCreateInfo required={
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,.requiredSubgroupSize=32};
+    VkComputePipelineCreateInfo ci=*base;ci.stage.module=module;ci.stage.pNext=&required;
+    ci.stage.flags=VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT;
+    ci.flags=VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    VkPipeline p=NULL;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_PIPELINE_COMPILE_REQUIRED && !p && !compile_calls);
+    ci.flags=0;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_SUCCESS && p && compile_calls==1);
+    assert(p->program.wave_size==32 && p->program.local_size[0]==64);
+    vkDestroyPipeline(d,p,NULL);
+    ci.flags=VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    for(unsigned variant=0;variant<4;++variant) {
+        ci.stage.pNext=(variant&1)?NULL:&required;
+        ci.stage.flags=(variant&1)?VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT:0;
+        if(variant&2) ci.stage.flags|=VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT;
+        assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_SUCCESS && p && compile_calls==1);
+        assert(p->program.wave_size==32);vkDestroyPipeline(d,p,NULL);
+    }
+    ci.stage.pNext=&required;ci.stage.flags=VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT;
+    required.requiredSubgroupSize=64;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_ERROR_UNKNOWN && !p && compile_calls==1);
+    required.requiredSubgroupSize=32;d->subgroup_size_control_enabled=VK_FALSE;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_ERROR_FEATURE_NOT_PRESENT && !p && compile_calls==1);
+    d->subgroup_size_control_enabled=VK_TRUE;d->compute_full_subgroups_enabled=VK_FALSE;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_ERROR_FEATURE_NOT_PRESENT && !p && compile_calls==1);
+    d->subgroup_size_control_enabled=VK_FALSE;d->enabled_features_t09=saved_features;
+    ps5vk_compilation_cache_destroy(d->pipeline_cache);d->pipeline_cache=saved;
+    d->compiler.compile=ps5vk_compiler_adapter_compile;
+    vkDestroyShaderModule(d,module,NULL);free(words);
+    puts("Subgroup stage requests: real wave32 compiler/cache contract passed; no native execution");
+}
+
 static void cache_control(VkDevice d, const VkComputePipelineCreateInfo *base)
 {
     struct ps5vk_compilation_cache *saved = d->pipeline_cache;
@@ -422,6 +466,7 @@ int main(void)
     };
 
     cache_control(device, &cpci);
+    subgroup_stage_cache(device, &cpci);
 
     /* 1. Cold compile: pipeline 1 invokes compiler */
     VkPipeline pipeline1;

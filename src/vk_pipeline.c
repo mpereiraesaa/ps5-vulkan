@@ -598,9 +598,25 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
                          VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT | VK_PIPELINE_CREATE_DERIVATIVE_BIT |
                          VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
                          VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) ||
-        info->stage.pNext || info->stage.flags ||
+        (info->stage.flags & ~(VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT |
+                               VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT)) ||
         info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT)
         return VK_ERROR_UNKNOWN;
+    /* The compute compiler and dispatch ABI are fixed at wave32. A varying
+     * request may select that same size; it does not require multiple sizes.
+     * Validate before cache lookup, since none of these accepted requests
+     * changes the generated code or the existing wave32 dispatch. */
+    const VkBool32 varying = !!(info->stage.flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT);
+    const VkBool32 full = !!(info->stage.flags & VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT);
+    if ((varying && !d->subgroup_size_control_enabled) ||
+        (full && !d->compute_full_subgroups_enabled)) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (info->stage.pNext) {
+        const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *required = info->stage.pNext;
+        if (required->sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO ||
+            required->pNext || varying) return INVALID;
+        if (!d->subgroup_size_control_enabled) return VK_ERROR_FEATURE_NOT_PRESENT;
+        if (required->requiredSubgroupSize != 32) return INVALID;
+    }
     const VkBool32 no_compile = !!(info->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT);
     if ((info->flags & (VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
                         VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) &&
@@ -632,6 +648,11 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
         invocations *= dims[j];
     }
     if (invocations > 1024) return INVALID;
+
+    /* All three full-subgroup forms in the registry constrain X, not merely
+     * the product X*Y*Z. With wave32 and at most 1024 invocations the required
+     * size also bounds the workgroup to at most 32 subgroups. */
+    if (full && dims[0] % 32) return INVALID;
 
     const struct ps5vk_compiled_program *program = NULL;
     struct ps5vk_cache_entry *entry = NULL;

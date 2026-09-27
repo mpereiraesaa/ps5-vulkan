@@ -521,8 +521,66 @@ static void unadvertised_int16_gate(void)
     vkDestroyShaderModule(&device, module, NULL);
     assert(!device.pipeline_objects && !device.descriptor_objects);
 }
+static void subgroup_stage_contract(void)
+{
+    const uint32_t shapes[][3]={{64,1,1},{16,2,1},{1,32,1},{32,3,1},{32,32,1},{1024,1,1},{33,1,1}};
+    for(unsigned shape=0;shape<sizeof(shapes)/sizeof(shapes[0]);++shape) {
+        uint32_t words[16];memcpy(words,module_a,sizeof(words));
+        memcpy(words+13,shapes[shape],sizeof(shapes[shape]));
+        struct ps5vk_compiled_program program=fixture(words,code_a);
+        memcpy(program.local_size,shapes[shape],sizeof(program.local_size));
+        struct ps5vk_program_library library={&program,1};
+        struct VkDevice_T d={.compiler={&library,ps5vk_program_resolve}};
+        VkShaderModule m=shader(&d,words);VkPipelineLayout l=layout(&d);
+        VkComputePipelineCreateInfo ci=info(m,l);VkPipeline pipeline=NULL;
+        VkPipelineShaderStageRequiredSubgroupSizeCreateInfo required={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
+            .requiredSubgroupSize=32};
+        for(unsigned enable=0;enable<4;++enable) {
+            d.subgroup_size_control_enabled=!!(enable&1);
+            d.compute_full_subgroups_enabled=!!(enable&2);
+            for(unsigned flags=0;flags<4;++flags) for(unsigned explicit_size=0;explicit_size<2;++explicit_size) {
+                ci.stage.flags=(flags&1?VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT:0)|
+                    (flags&2?VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT:0);
+                ci.stage.pNext=explicit_size?&required:NULL;
+                VkBool32 feature_missing=((flags&1) && !(enable&1)) || ((flags&2) && !(enable&2));
+                VkBool32 malformed=explicit_size && (flags&1);
+                VkResult expected=feature_missing?VK_ERROR_FEATURE_NOT_PRESENT:
+                    malformed?VK_ERROR_UNKNOWN:
+                    (explicit_size && !(enable&1))?VK_ERROR_FEATURE_NOT_PRESENT:
+                    ((flags&2) && shapes[shape][0]%32)?VK_ERROR_UNKNOWN:VK_SUCCESS;
+                VkResult result=vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline);
+                assert(result==expected);
+                if(result==VK_SUCCESS) {
+                    assert(pipeline && pipeline->program.wave_size==32);
+                    vkDestroyPipeline(&d,pipeline,NULL);pipeline=NULL;
+                } else assert(!pipeline);
+            }
+        }
+        d.subgroup_size_control_enabled=d.compute_full_subgroups_enabled=VK_TRUE;
+        ci.stage.flags=0;ci.stage.pNext=&required;
+        const uint32_t invalid_sizes[]={0,1,16,31,33,64,UINT32_MAX};
+        for(unsigned n=0;n<sizeof(invalid_sizes)/sizeof(invalid_sizes[0]);++n) {
+            required.requiredSubgroupSize=invalid_sizes[n];
+            assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        }
+        required.requiredSubgroupSize=32;required.pNext=&required;
+        assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        required.pNext=NULL;required.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        required.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO;
+        ci.stage.flags=0x80000000u;
+        assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        ci.stage.flags=0;program.wave_size=64;
+        assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        vkDestroyShaderModule(&d,m,NULL);vkDestroyPipelineLayout(&d,l,NULL);
+        assert(!d.pipeline_objects && !d.descriptor_objects && !d.lifetime_errors);
+    }
+}
+
 int main(void)
 {
+    subgroup_stage_contract();
     full_set_table_offsets();
     lifecycle(); legacy_offline_abi(); dispatch_base_flag(); negative(); graphics_entries();
     t08_capability_gates(); uniform_block_layout_gate(); unadvertised_subgroup_gate();
