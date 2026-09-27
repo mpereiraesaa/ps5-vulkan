@@ -182,13 +182,15 @@ CORE_IMPLEMENTATIONS = {
                    "LocalSizeId with constants, direct specialization and bounded scalar "
                    "32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, "
                    "integer comparisons, boolean specialization and conditional selection, "
-                   "checked against the host compiler."),
+                   "checked against the host compiler. Whole-location producer vectors may "
+                   "be wider than consumer vectors when maintenance4 is enabled; the "
+                   "VS-to-FS path is checked with real compilation and cache opt-in guards."),
         "gaps": (
             "LocalSizeId compound OpSpecConstantOp expressions involving conversions "
             "or composite extraction remain refused "
             "(src/vk_pipeline.c local_size)",
-            "a producer output vector wider than the consumer's input is refused by the "
-            "graphics interface policy",
+            "widened interfaces through geometry and tessellation still need focused "
+            "compiler and native delivery coverage",
         ),
     },
 }

@@ -6,6 +6,7 @@
 static unsigned created, released;
 static unsigned acquired, compiled_released, compile_fail, backend_fail;
 static unsigned expect_five_stages;
+static VkBool32 expect_maintenance4;
 static unsigned expect_blend_state;
 static unsigned expect_dual_blend_state;
 /* 1 = independentBlend enabled on the device, 2 = not enabled: the second
@@ -23,6 +24,7 @@ static void release(VkDevice d,void *data) { (void)d; ++released; free(data); }
 static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const void **out)
 {
     assert(context==&acquired && key->vertex.word_count==10 && key->fragment.word_count==10);
+    assert(key->maintenance4==expect_maintenance4);
     if(expect_two_targets) {
         assert(key->color_attachment_count==2);
         assert(key->color_format[0]==VK_FORMAT_B8G8R8A8_UNORM &&
@@ -431,7 +433,11 @@ int main(void)
     d.graphics_library=NULL;d.graphics_compiler_context=&acquired;
     d.graphics_acquire=acquire;d.graphics_compiled_release=compiled_release;
     VkPipeline runtime;
+    d.enabled_features_t09|=PS5VK_T09_FEATURE_MAINTENANCE4;
+    expect_maintenance4=VK_TRUE;
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_SUCCESS);
+    d.enabled_features_t09&=~PS5VK_T09_FEATURE_MAINTENANCE4;
+    expect_maintenance4=VK_FALSE;
     assert(acquired==1 && compiled_released==1);
     vkDestroyPipeline(&d,runtime,NULL);
     compile_fail=1;

@@ -2770,8 +2770,87 @@ static void check_small_stack_graphics(const struct ps5vk_graphics_key *key)
     ps5vk_runtime_graphics_free(NULL,c.out);
 }
 
+static void check_maintenance4_wider_producer(void)
+{
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/geometry_components.vert.spv"),
+        .fragment=read_module("build/runtime-graphics/triangle.frag.spv"),
+        .topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .color_format={VK_FORMAT_B8G8R8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    /* vec4 at location zero feeds vec3; unconsumed VS locations are legal. */
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    const void *out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)!=VK_SUCCESS && !out);
+    key.maintenance4=VK_TRUE;
+    assert(ps5vk_spirv_graphics_interface(&key));
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    ps5vk_runtime_graphics_free(NULL,out);
+    struct ps5vk_compilation_cache *cache=ps5vk_compilation_cache_create(2,4u*1024u*1024u);
+    assert(cache);
+    const void *cold=NULL,*warm=NULL,*denied=NULL;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&cold)==VK_SUCCESS && cold);
+    key.maintenance4=VK_FALSE;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&denied)==VK_ERROR_FEATURE_NOT_PRESENT && !denied);
+    key.maintenance4=VK_TRUE;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&warm)==VK_SUCCESS && warm);
+    const struct ps5vk_runtime_graphics_program *cold_program=cold,*warm_program=warm;
+    assert(cold_program->vertex.machine_code==warm_program->vertex.machine_code &&
+           cold_program->fragment.machine_code==warm_program->fragment.machine_code);
+    struct ps5vk_cache_stats stats;
+    ps5vk_compilation_cache_get_stats(cache,&stats);
+    assert(stats.compiles==1 && stats.hits==1 && stats.misses==1);
+    ps5vk_runtime_graphics_cached_release(cache,warm);
+    ps5vk_runtime_graphics_cached_release(cache,cold);
+    ps5vk_compilation_cache_destroy(cache);
+
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    /* Also exercise 4->2 and 3->2 with a fragment shader that consumes both
+     * components in arithmetic, rather than an unused declaration. */
+    for(unsigned width=3;width<=4;++width) {
+        key.vertex=read_module(width==4?
+            "build/runtime-graphics/geometry_components.vert.spv":
+            "build/runtime-graphics/triangle.vert.spv");
+        key.fragment=read_module("build/runtime-graphics/input_attachment_pattern.frag.spv");
+        key.maintenance4=VK_FALSE;
+        assert(!ps5vk_spirv_graphics_interface(&key));
+        key.maintenance4=VK_TRUE;
+        assert(ps5vk_spirv_graphics_interface(&key));
+        out=NULL;
+        assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+        ps5vk_runtime_graphics_free(NULL,out);
+        free((void *)key.vertex.words);free((void *)key.fragment.words);
+    }
+    /* The reverse direction is never made valid by maintenance4. */
+    key.vertex=read_module("build/runtime-graphics/triangle.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/shared_sets.frag.spv");
+    assert(!ps5vk_spirv_graphics_interface(&key));
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+    /* A reflection-only negative changes the fragment's unsigned vector to
+     * signed, preserving its width and Flat decoration. maintenance4 must not
+     * erase numeric-class mismatches. */
+    key.vertex=read_module("build/runtime-graphics/flat.vert.spv");
+    key.fragment=read_module("build/runtime-graphics/flat.frag.spv");
+    assert(ps5vk_spirv_graphics_interface(&key));
+    uint32_t *words=(uint32_t *)key.fragment.words;
+    unsigned sint=0,uint=0,changed=0;
+    for(size_t at=5;at<key.fragment.word_count;at+=words[at]>>16)
+        if((words[at]&65535u)==21 && (words[at]>>16)==4 && words[at+2]==32) {
+            if(words[at+3])sint=words[at+1];else uint=words[at+1];
+        }
+    assert(sint && uint);
+    for(size_t at=5;at<key.fragment.word_count;at+=words[at]>>16)
+        if((words[at]&65535u)==23 && (words[at]>>16)==4 && words[at+2]==uint) {
+            words[at+2]=sint;++changed;
+        }
+    assert(changed && !ps5vk_spirv_graphics_interface(&key));
+    free((void *)key.vertex.words);free((void *)key.fragment.words);
+
+}
+
 int main(void)
 {
+    check_maintenance4_wider_producer();
     check_t08_compiler_options();
     check_flat_interfaces();
     check_descriptor_options(); check_separate_sampler_options();

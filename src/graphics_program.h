@@ -46,6 +46,8 @@ struct ps5vk_graphics_key {
      * the same either way, so library matching and the compile cache ignore
      * it and the adapter checks it on every acquisition. */
     uint32_t feature_mask;
+    /* Acceptance-only maintenance4 interface relaxation, checked before compile. */
+    VkBool32 maintenance4;
     VkPrimitiveTopology topology;
     /* Per-attachment colour state, attachment i in element i, bounded by the
      * colour-attachment contract. The count is the subpass's own. Recording
