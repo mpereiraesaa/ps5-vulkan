@@ -139,6 +139,85 @@ static const uint32_t *constant_definition(VkShaderModule module, uint32_t id)
     }
     return definition;
 }
+static unsigned constant_scalar_kind(VkShaderModule module, uint32_t type)
+{
+    unsigned count = 0, kind = 0;
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        unsigned op = w[0] & 0xffff, length = w[0] >> 16;
+        if (op == 21 && length == 4 && w[1] == type && w[2] == 32) {
+            ++count; kind = 1;
+        }
+        if (op == 20 && length == 2 && w[1] == type) {
+            ++count; kind = 2;
+        }
+    }
+    return count == 1 ? kind : 0;
+}
+/* Shared scalar/component rules use modular unsigned arithmetic and wider
+ * signed intermediates, avoiding undefined host overflow, division or shifts. */
+static int constant_operation(unsigned op, unsigned result_kind,
+                              uint32_t a, uint32_t b, uint32_t c,
+                              unsigned ak, unsigned bk, unsigned ck, uint32_t *value)
+{
+    int unary = op == 126 || op == 168 || op == 200;
+    int select = op == 169, logical = op >= 164 && op <= 168;
+    int comparison = op >= 170 && op <= 179;
+    if (select) {
+        if (ak != 2 || bk != result_kind || ck != result_kind) return 0;
+        *value = a ? b : c;
+        return 1;
+    }
+    unsigned operand_kind = logical ? 2u : 1u;
+    if (result_kind != (logical || comparison ? 2u : 1u) ||
+        ak != operand_kind || (!unary && bk != operand_kind)) return 0;
+    int64_t sa = a <= INT32_MAX ? (int64_t)a : (int64_t)a - 0x100000000LL;
+    int64_t sb = b <= INT32_MAX ? (int64_t)b : (int64_t)b - 0x100000000LL;
+    switch (op) {
+    case 126: *value = 0u - a; break;
+    case 128: *value = a + b; break;
+    case 130: *value = a - b; break;
+    case 132: *value = a * b; break;
+    case 134: if (!b) return 0; *value = a / b; break;
+    case 135: if (!b || (sa == INT32_MIN && sb == -1)) return 0;
+              *value = (uint32_t)(sa / sb); break;
+    case 137: if (!b) return 0; *value = a % b; break;
+    case 138: if (!b) return 0; *value = (uint32_t)(sa % sb); break;
+    case 139: {
+        if (!b) return 0;
+        int64_t r = sa % sb;
+        if (r && ((r < 0) != (sb < 0))) r += sb;
+        *value = (uint32_t)r; break;
+    }
+    case 164: *value = !!a == !!b; break;
+    case 165: *value = !!a != !!b; break;
+    case 166: *value = a || b; break;
+    case 167: *value = a && b; break;
+    case 168: *value = !a; break;
+    case 170: *value = a == b; break;
+    case 171: *value = a != b; break;
+    case 172: *value = a > b; break;
+    case 173: *value = sa > sb; break;
+    case 174: *value = a >= b; break;
+    case 175: *value = sa >= sb; break;
+    case 176: *value = a < b; break;
+    case 177: *value = sa < sb; break;
+    case 178: *value = a <= b; break;
+    case 179: *value = sa <= sb; break;
+    case 194: if (b >= 32) return 0; *value = a >> b; break;
+    case 195: if (b >= 32) return 0;
+              *value = a >> b;
+              if (b && (a & 0x80000000u)) *value |= UINT32_MAX << (32 - b);
+              break;
+    case 196: if (b >= 32) return 0; *value = a << b; break;
+    case 197: *value = a | b; break;
+    case 198: *value = a ^ b; break;
+    case 199: *value = a & b; break;
+    case 200: *value = ~a; break;
+    default: return 0;
+    }
+    return 1;
+}
 static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4],
                            unsigned *components, uint32_t *element_type,
                            const VkSpecializationInfo *specialization,
@@ -212,7 +291,36 @@ static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4
         values[definition[6]] = value;
         return 1;
     }
-    return 0;
+    /* Apply the same bounded scalar operation to every component. */
+    unsigned operation = definition[3];
+    unsigned result_kind = constant_scalar_kind(module, *element_type);
+    int unary = operation == 126 || operation == 168 || operation == 200;
+    int select = operation == 169;
+    if (!result_kind || length != (select ? 7u : unary ? 5u : 6u)) return 0;
+    uint32_t c[4] = {0}, ct = 0;
+    unsigned cn = 0, ak = 0, bk = 0, ck = 0;
+    if (!constant_vector(module, definition[4], a, &an, &at, specialization, depth + 1, budget)) {
+        /* SPIR-V 1.4 vector Select also permits a scalar boolean condition. */
+        if (!select || !constant_value(module, definition[4], &a[0], specialization,
+                                       depth + 1, budget, &ak) || ak != 2) return 0;
+        for (unsigned i = 1; i < *components; ++i) a[i] = a[0];
+        an = *components;
+    } else ak = constant_scalar_kind(module, at);
+    if (an != *components) return 0;
+    if (!unary) {
+        if (!constant_vector(module, definition[5], b, &bn, &bt, specialization,
+                             depth + 1, budget) || bn != *components) return 0;
+        bk = constant_scalar_kind(module, bt);
+    } else memset(b, 0, sizeof(b));
+    if (select) {
+        if (!constant_vector(module, definition[6], c, &cn, &ct, specialization,
+                             depth + 1, budget) || cn != *components) return 0;
+        ck = constant_scalar_kind(module, ct);
+    }
+    for (unsigned i = 0; i < *components; ++i)
+        if (!constant_operation(operation, result_kind, a[i], b[i], c[i], ak, bk, ck, &values[i]))
+            return 0;
+    return 1;
 }
 /* Resolve a scalar 32-bit integer or boolean, including a specialized workgroup
  * dimension. Keep this in agreement with the compiler's specialization input:
@@ -268,8 +376,6 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
         unsigned op = expression[3], length = expression[0] >> 16;
         int unary = op == 126 || op == 168 || op == 200;
         int select = op == 169;
-        int logical = op >= 164 && op <= 168;
-        int comparison = op >= 170 && op <= 179;
         uint32_t a, b = 0, c = 0;
         unsigned ak = 0, bk = 0, ck = 0;
         if (op == 81) { /* CompositeExtract from a vector. */
@@ -287,60 +393,7 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
             (!unary && !constant_value(module, expression[5], &b, specialization, depth + 1, budget, &bk)) ||
             (select && !constant_value(module, expression[6], &c, specialization, depth + 1, budget, &ck)))
             return 0;
-        if (select) {
-            if (ak != 2 || bk != *kind || ck != *kind) return 0;
-            *value = a ? b : c;
-            return 1;
-        }
-        unsigned operand_kind = logical ? 2u : 1u;
-        if (*kind != (logical || comparison ? 2u : 1u) ||
-            ak != operand_kind || (!unary && bk != operand_kind)) return 0;
-        int64_t sa = a <= INT32_MAX ? (int64_t)a : (int64_t)a - 0x100000000LL;
-        int64_t sb = b <= INT32_MAX ? (int64_t)b : (int64_t)b - 0x100000000LL;
-        switch (op) {
-        case 126: *value = 0u - a; break;
-        case 128: *value = a + b; break;
-        case 130: *value = a - b; break;
-        case 132: *value = a * b; break;
-        case 134: if (!b) return 0; *value = a / b; break;
-        case 135: if (!b || (sa == INT32_MIN && sb == -1)) return 0;
-                  *value = (uint32_t)(sa / sb); break;
-        case 137: if (!b) return 0; *value = a % b; break;
-        case 138: if (!b) return 0; *value = (uint32_t)(sa % sb); break;
-        case 139: {
-            if (!b) return 0;
-            int64_t r = sa % sb;
-            if (r && ((r < 0) != (sb < 0))) r += sb;
-            *value = (uint32_t)r; break;
-        }
-        case 164: *value = !!a == !!b; break;
-        case 165: *value = !!a != !!b; break;
-        case 166: *value = a || b; break;
-        case 167: *value = a && b; break;
-        case 168: *value = !a; break;
-        case 170: *value = a == b; break;
-        case 171: *value = a != b; break;
-        case 172: *value = a > b; break;
-        case 173: *value = sa > sb; break;
-        case 174: *value = a >= b; break;
-        case 175: *value = sa >= sb; break;
-        case 176: *value = a < b; break;
-        case 177: *value = sa < sb; break;
-        case 178: *value = a <= b; break;
-        case 179: *value = sa <= sb; break;
-        case 194: if (b >= 32) return 0; *value = a >> b; break;
-        case 195: if (b >= 32) return 0;
-                  *value = a >> b;
-                  if (b && (a & 0x80000000u)) *value |= UINT32_MAX << (32 - b);
-                  break;
-        case 196: if (b >= 32) return 0; *value = a << b; break;
-        case 197: *value = a | b; break;
-        case 198: *value = a ^ b; break;
-        case 199: *value = a & b; break;
-        case 200: *value = ~a; break;
-        default: return 0;
-        }
-        return 1;
+        return constant_operation(op, *kind, a, b, c, ak, bk, ck, value);
     }
     if (!is_spec || !decorated || !specialization) return 1;
     if (specialization->mapEntryCount > PS5VK_MAX_SPECIALIZATION_CONSTANTS ||

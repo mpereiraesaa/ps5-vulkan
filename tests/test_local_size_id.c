@@ -333,6 +333,82 @@ static uint32_t *null_form_dimension(const uint32_t *words,size_t count,uint32_t
     return out;
 }
 
+/* Compare integer vectors, select integer vectors, and extract a dimension. */
+static uint32_t *comparison_vector_dimension(const uint32_t *words, size_t count,
+    uint32_t x, uint32_t one, unsigned comparison, int scalar_condition, size_t *out_count)
+{
+    size_t functions = 5;
+    uint32_t integer = 0, boolean = 0, iv = 0, bv = 0, next = words[3];
+    for (; functions < count; functions += words[functions] >> 16) {
+        const uint32_t *w = words + functions;
+        if ((w[0] & 0xffff) == 50 && w[2] == x) integer = w[1];
+        if ((w[0] & 0xffff) == 20) boolean = w[1];
+        if ((w[0] & 0xffff) == 54) break;
+    }
+    assert(integer && functions < count);
+    for (size_t i = 5; i < functions; i += words[i] >> 16) {
+        const uint32_t *w = words + i;
+        if ((w[0] & 0xffff) == 23 && w[3] == 2) {
+            if (w[2] == integer) iv = w[1];
+            if (boolean && w[2] == boolean) bv = w[1];
+        }
+    }
+    uint32_t extra[96]; unsigned n = 0;
+#define WORD(v) do { assert(n < 96); extra[n++] = (v); } while (0)
+    if (!boolean) { boolean = next++; WORD(2u << 16 | 20u); WORD(boolean); }
+    if (!iv) { iv = next++; WORD(4u << 16 | 23u); WORD(iv); WORD(integer); WORD(2); }
+    if (!bv) { bv = next++; WORD(4u << 16 | 23u); WORD(bv); WORD(boolean); WORD(2); }
+    uint32_t thirty_two = constant_id(words, count, 32);
+    if (!thirty_two) { thirty_two = next++; WORD(4u << 16 | 43u); WORD(integer); WORD(thirty_two); WORD(32); }
+    uint32_t a = next++, b = next++, c = next++, cond = next++, selected = next++, result = next++;
+    WORD(5u << 16 | 51u); WORD(iv); WORD(a); WORD(x); WORD(one);
+    WORD(5u << 16 | 51u); WORD(iv); WORD(b); WORD(one); WORD(one);
+    WORD(5u << 16 | 51u); WORD(iv); WORD(c); WORD(thirty_two); WORD(one);
+    WORD(6u << 16 | 52u); WORD(bv); WORD(cond); WORD(comparison); WORD(a); WORD(b);
+    if (scalar_condition) {
+        uint32_t scalar = next++;
+        WORD(6u << 16 | 52u); WORD(boolean); WORD(scalar); WORD(81); WORD(cond); WORD(0);
+        cond = scalar;
+    }
+    WORD(7u << 16 | 52u); WORD(iv); WORD(selected); WORD(169); WORD(cond); WORD(c); WORD(b);
+    WORD(6u << 16 | 52u); WORD(integer); WORD(result); WORD(81); WORD(selected); WORD(0);
+#undef WORD
+    *out_count = count + n;
+    uint32_t *out = malloc(*out_count * sizeof(*out)); assert(out);
+    memcpy(out, words, functions * 4); memcpy(out + functions, extra, n * 4);
+    memcpy(out + functions + n, words + functions, (count - functions) * 4);
+    out[3] = next;
+    if (scalar_condition) out[1] = 0x00010400u;
+    for (size_t i = 5; i < functions;) {
+        unsigned length = out[i] >> 16;
+        if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = result;
+        if ((out[i] & 0xffff) == 71 && length == 4 && out[i + 2] == 11 && out[i + 3] == 25)
+            for (unsigned j = 0; j < length; ++j) out[i + j] = 1u << 16;
+        i += length;
+    }
+    if (scalar_condition) {
+        /* SPIR-V 1.4 requires all used global variables in the entry interface. */
+        uint32_t globals[16]; unsigned global_count = 0;
+        size_t entry = 0;
+        for (size_t i = 5; i < *out_count; i += out[i] >> 16) {
+            unsigned op = out[i] & 0xffff;
+            if (op == 15) entry = i;
+            if (op == 54) break;
+            if (op == 59 && out[i + 3] != 1) {
+                assert(global_count < 16); globals[global_count++] = out[i + 2];
+            }
+        }
+        assert(entry && global_count);
+        size_t end = entry + (out[entry] >> 16);
+        out = realloc(out, (*out_count + global_count) * sizeof(*out)); assert(out);
+        memmove(out + end + global_count, out + end, (*out_count - end) * sizeof(*out));
+        memcpy(out + end, globals, global_count * sizeof(*out));
+        out[entry] += global_count << 16;
+        *out_count += global_count;
+    }
+    return out;
+}
+
 int main(void)
 {
     size_t bytes = 0;
@@ -387,6 +463,134 @@ int main(void)
     /* Set the feature directly to isolate shader admission from device
      * negotiation. The compiled workgroup/code equal the literal form. */
     device->enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
+    /* Every lane uses the scalar operation rules; specialization must reach
+     * vector operands before the launch dimensions are resolved. */
+    const struct { unsigned op; uint32_t normal, specialized; } vector_ops[] = {
+        {128,65,33}, {130,63,31}, {132,64,32}, {134,64,32}, {135,64,32},
+        {194,32,16}, {195,32,16}, {196,128,64}, {197,65,33}, {198,65,33},
+    };
+    for (unsigned op_index = 0; op_index < sizeof(vector_ops)/sizeof(vector_ops[0]); ++op_index) {
+        uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+        uint32_t *expr = vector_dimension(seed, count + 4, id64, id1, 2, 0);
+        size_t operation = 0;
+        for (size_t i = 5; i < count + 38;) {
+            unsigned n = expr[i] >> 16;
+            if ((expr[i] & 0xffff) == 52 && expr[i + 3] == 79) {
+                operation = i;
+                expr[i] = 6u << 16 | 52u; expr[i + 3] = vector_ops[op_index].op;
+                for (unsigned k = 6; k < n; ++k) expr[i + k] = 1u << 16;
+            }
+            i += n;
+        }
+        assert(operation);
+        /* Shift operands at lane 2 would otherwise contain 64 or 32, which
+         * are undefined even though the launch extracts lane zero. */
+        if (vector_ops[op_index].op >= 194 && vector_ops[op_index].op <= 196) {
+            for (size_t i = 5; i < count + 38; i += expr[i] >> 16)
+                if ((expr[i] & 0xffff) == 51 && expr[i] >> 16 == 7)
+                    expr[i + 5] = id1;
+        }
+        for (unsigned specialized = 0; specialized < 2; ++specialized) {
+            uint32_t value = 32;
+            VkSpecializationMapEntry entry = {7, 0, 4};
+            VkSpecializationInfo info = {1, &entry, 4, &value};
+            const VkSpecializationInfo *map = specialized ? &info : NULL;
+            uint32_t expected = specialized ? vector_ops[op_index].specialized : vector_ops[op_index].normal;
+            VkPipeline candidate = NULL;
+            assert(build_specialized(device, layout, expr, (count + 38) * 4, map, &candidate) == VK_SUCCESS);
+            assert(candidate && candidate->program.local_size[0] == expected);
+            vkDestroyPipeline(device, candidate, NULL);
+        }
+        /* A cyclic vector operand must stop at the shared recursion bound. */
+        uint32_t original = expr[operation + 4];
+        expr[operation + 4] = expr[operation + 2];
+        VkPipeline invalid = NULL;
+        assert(build(device, layout, expr, (count + 38) * 4, &invalid) != VK_SUCCESS && !invalid);
+        expr[operation + 4] = original;
+        free(expr); free(seed);
+    }
+
+    const unsigned vector_extra_ops[] = {126, 137, 138, 139, 199, 200};
+    for (unsigned op_index = 0; op_index < 6; ++op_index) {
+        unsigned op = vector_extra_ops[op_index];
+        int unary = op == 126 || op == 200;
+        uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+        uint32_t *expr = vector_dimension(seed, count + 4, id64, id1, 2, 0);
+        for (size_t i = 5; i < count + 38;) {
+            unsigned n = expr[i] >> 16;
+            if ((expr[i] & 0xffff) == 52 && expr[i + 3] == 79) {
+                unsigned length = unary ? 5 : 6;
+                expr[i] = length << 16 | 52u; expr[i + 3] = op;
+                for (unsigned j = length; j < n; ++j) expr[i + j] = 1u << 16;
+            }
+            i += n;
+        }
+        /* Undo unary operations, or add one to a zero-valued remainder/AND,
+         * so the resulting local dimension remains valid. */
+        uint32_t *wrapped = expression_dimension(expr, count + 38, expr[3] - 1, id1, unary ? op : 128);
+        for (unsigned input = 0; input < 2; ++input) {
+            uint32_t value = input ? 32 : 64;
+            VkSpecializationMapEntry entry = {7, 0, 4};
+            VkSpecializationInfo info = {1, &entry, 4, &value};
+            VkPipeline selected = NULL;
+            assert(build_specialized(device, layout, wrapped, (count + 44) * 4, &info, &selected) == VK_SUCCESS);
+            assert(selected && selected->program.local_size[0] == (unary ? value : 1));
+            vkDestroyPipeline(device, selected, NULL);
+        }
+        free(wrapped); free(expr); free(seed);
+    }
+    /* Undefined arithmetic in a lane that is not extracted still invalidates
+     * the vector expression, without sending malformed input to the compiler. */
+    const unsigned vector_invalid_ops[] = {134, 135, 137, 138, 139, 194, 195, 196};
+    uint32_t zero_id = constant_id(literal, count, 0); assert(zero_id);
+    for (unsigned op_index = 0; op_index < 8; ++op_index) {
+        unsigned op = vector_invalid_ops[op_index];
+        uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+        uint32_t *expr = vector_dimension(seed, count + 4, id64, id1, 2, 0);
+        for (size_t i = 5; i < count + 38;) {
+            unsigned n = expr[i] >> 16;
+            if ((expr[i] & 0xffff) == 52 && expr[i + 3] == 79) {
+                expr[i] = 6u << 16 | 52u; expr[i + 3] = op;
+                for (unsigned j = 6; j < n; ++j) expr[i + j] = 1u << 16;
+            }
+            if (op < 194 && (expr[i] & 0xffff) == 51 && n == 7) expr[i + 4] = zero_id;
+            i += n;
+        }
+        VkPipeline invalid = NULL;
+        assert(build(device, layout, expr, (count + 38) * 4, &invalid) != VK_SUCCESS && !invalid);
+        free(expr); free(seed);
+    }
+    for (unsigned comparison = 170; comparison <= 179; ++comparison) {
+        for (unsigned scalar = 0; scalar < 2; ++scalar) {
+            uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+            size_t expression_count;
+            uint32_t *expr = comparison_vector_dimension(seed, count + 4, id64, id1,
+                comparison, scalar, &expression_count);
+            const uint32_t inputs[] = {0, 1, 32, UINT32_MAX};
+            for (unsigned input = 0; input < 4; ++input) {
+                uint32_t value = inputs[input];
+                int64_t signed_value = value <= INT32_MAX ? value : (int64_t)value - 0x100000000LL;
+                const unsigned conditions[] = {value == 1, value != 1, value > 1, signed_value > 1,
+                    value >= 1, signed_value >= 1, value < 1, signed_value < 1, value <= 1, signed_value <= 1};
+                VkSpecializationMapEntry entry = {7, 0, 4};
+                VkSpecializationInfo info = {1, &entry, 4, &value};
+                VkPipeline selected = NULL;
+                assert(build_specialized(device, layout, expr, expression_count * 4, &info, &selected) == VK_SUCCESS);
+                assert(selected && selected->program.local_size[0] == (conditions[comparison - 170] ? 32 : 1));
+                vkDestroyPipeline(device, selected, NULL);
+            }
+            /* Vector operations cannot consume a scalar integer operand. */
+            for (size_t i = 5; i < expression_count; i += expr[i] >> 16) {
+                if ((expr[i] & 0xffff) == 52 && expr[i + 3] == comparison) {
+                    uint32_t operand = expr[i + 4]; expr[i + 4] = id1;
+                    VkPipeline invalid = NULL;
+                    assert(build(device, layout, expr, expression_count * 4, &invalid) != VK_SUCCESS && !invalid);
+                    expr[i + 4] = operand;
+                }
+            }
+            free(expr); free(seed);
+        }
+    }
     /* Null integer/bool scalars and vectors may participate in a nonzero
      * LocalSizeId expression. The old frontend refused these while the real
      * compiler independently resolved every form to 64x1x1. */
@@ -594,6 +798,32 @@ int main(void)
             }
             free(vector);
         }
+    }
+    const unsigned boolean_vector_ops[] = {164, 165, 166, 167, 168};
+    for (unsigned op_index = 0; op_index < 5; ++op_index) {
+        unsigned op = boolean_vector_ops[op_index];
+        uint32_t *vector = boolean_vector_dimension(boolean_spec, count + 33,
+            specialized[3] + 2, specialized[3] + 3, 2, 0);
+        for (size_t i = 5; i < count + 74;) {
+            unsigned n = vector[i] >> 16;
+            if ((vector[i] & 0xffff) == 52 && vector[i + 3] == 79) {
+                unsigned length = op == 168 ? 5 : 6;
+                vector[i] = length << 16 | 52u; vector[i + 3] = op;
+                for (unsigned j = length; j < n; ++j) vector[i + j] = 1u << 16;
+            }
+            i += n;
+        }
+        for (unsigned input = 0; input < 2; ++input) {
+            truth = input ? 2 : VK_FALSE;
+            /* Second vector lane zero is false; first is specialized. */
+            unsigned expected = op == 164 || op == 168 ? !input : op == 167 ? 0 : input;
+            VkPipeline selected = NULL;
+            assert(build_specialized(device, layout, vector, (count + 74) * 4,
+                                     &truth_info, &selected) == VK_SUCCESS);
+            assert(selected && selected->program.local_size[0] == (expected ? 32 : 1));
+            vkDestroyPipeline(device, selected, NULL);
+        }
+        free(vector);
     }
     /* A select condition must be boolean, and a workgroup dimension must
      * remain integer even though its expression may consume booleans. */
