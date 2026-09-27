@@ -31,8 +31,11 @@ axis is the current native probe (device API 1.3.0, 33 device extensions,
 Before the Vulkan 1.3 integration the ledger read 41/62 on a Vulkan 1.0
 probe; that probe is archived, not relabelled. Geometry, tessellation,
 draw parameters and `maxBufferSize` now carry admitted native receipts.
-`maintenance4` is queried true but stays blocked on its two refused shapes
-(below) and on a direct witness of its memory-requirement queries.
+`maintenance4` is queried true but stays blocked on LocalSizeId integer-width
+conversions and on native evidence for its memory-query, specialization and
+relaxed graphics-interface routes. Host tests cover scalar/vector expressions,
+nested aggregate extraction and insertion, and wider producer vectors; the
+33-case original CTS measurement selection is prepared for native execution.
 `apiVersion` stays blocked: the pinned profile requires 1.3.204 including the
 patch level; the device reports 1.3.0, which DXVK's own device filter accepts.
 
@@ -158,9 +161,10 @@ identified separately from changes to rendering or feature negotiation.
    failing Vulkan call and requested shape. Complete it even if outside the
    old tranche labels; add a fast host regression and one bounded native
    witness. A known outstanding shape is stream output without a fragment
-   stage. Maintenance4 still rejects compound LocalSizeId specialization
-   expressions and wider producer/narrower consumer varying vectors. These
-   are explicit profile limits, not reasons to restore the old 1.0 gate.
+   stage. Maintenance4 still rejects LocalSizeId integer-width conversions.
+   Its scalar/vector and aggregate expressions and relaxed producer/consumer
+   vector matching have host coverage; native execution remains pending.
+   These are explicit profile limits, not reasons to restore the old 1.0 gate.
 3. **Connect the rendered workload to presentation.** The offscreen D3D11
    pixel oracle and the native swapchain witnesses are separate results.
    Combine them into acquire/draw/present/readback/teardown with the actual

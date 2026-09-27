@@ -75,9 +75,11 @@ nineteen-case witness in [the geometry promotion](#geometry-promotion-2026-09-17
 [the T04 validation](#merged-t04-tessellation-validation-2026-09-20)),
 `shaderDrawParameters` (its existing witness, now with an implementation
 review) and `maxBufferSize` ([the 1 GiB buffer witness](#dxvk-1-gib-buffer-witness-2026-09-25)).
-`maintenance4` stays blocked: compound `LocalSizeId` specialization
-expressions and wider producer output vectors are refused, and no witness
-executes its creation-description memory-requirement queries directly.
+`maintenance4` stays blocked. Subsequent offline work covers scalar/vector
+and nested aggregate `LocalSizeId` expressions and wider producer vectors
+in host tests; integer-width conversions remain refused. No admitted native
+receipt yet validates those routes or executes its creation-description
+memory-requirement queries directly.
 `apiVersion` stays blocked: the profile requires 1.3.204 including the patch
 level, and the device reports 1.3.0. DXVK's own 1.3.0 device filter passes.
 The other 15 blockers are queried false or zero: two Vulkan 1.2 subgroup

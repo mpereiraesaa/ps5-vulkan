@@ -222,6 +222,7 @@ CORE_IMPLEMENTATIONS = {
             ("native/platform_ps5.c", "PS5VK_T09_FEATURE_MAINTENANCE4"),
             ("src/vk_memory.c", "vkGetDeviceBufferMemoryRequirementsKHR"),
             ("src/vk_pipeline.c", "LocalSizeId (OpExecutionModeId 331, mode 38)"),
+            ("tests/test_local_size_id.c", "aggregate_vector_dimension"),
             ("tests/test_maintenance4_interfaces.py", "def test_stage_boundaries"),
             ("tests/maintenance4_interface_inspect.c", "ps5vk_runtime_graphics_compile"),
         ),
@@ -232,14 +233,15 @@ CORE_IMPLEMENTATIONS = {
                    "32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, "
                    "integer comparisons, boolean specialization and conditional selection, "
                    "plus vector construction, insertion, shuffle and scalar extraction, "
-                   "checked against the host compiler. Whole-location producer vectors may "
+                   "nested array/structure extraction and insertion, null aggregates, "
+                   "and mixed aggregates with floating-point members, checked against "
+                   "the host compiler. Whole-location producer vectors may "
                    "be wider than consumer vectors when maintenance4 is enabled; the "
                    "VS-to-FS path has cache opt-in guards. Permanent real-compiler tests "
                    "cover 147 float/int/uint interface cases across VS/TCS/TES/GS/FS "
                    "and per-patch boundaries, with no native delivery claim."),
         "gaps": (
-            "LocalSizeId compound OpSpecConstantOp expressions involving conversions "
-            "or nested aggregate extraction remain refused "
+            "LocalSizeId OpSpecConstantOp integer-width conversions remain refused "
             "(src/vk_pipeline.c local_size)",
         ),
     },

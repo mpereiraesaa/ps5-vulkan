@@ -342,10 +342,11 @@ archived probe, fails the check. The current probe observed device API 1.3.0,
 33 device extensions and 46/62 requested values; the Vulkan 1.0 probes are
 kept under `historical_capability_probes`.
 
-Of the 46 rows the query meets, 45 are ready. `maintenance4` is not: compound
-`LocalSizeId` specialization expressions and wider producer output vectors
-are still refused, and no witness executes its creation-description
-memory-requirement queries directly. The T04 `geometryShader` and
+Of the 46 rows the query meets, 45 are ready. `maintenance4` is not:
+`LocalSizeId` integer-width conversions remain refused. Host tests cover
+scalar/vector and nested aggregate expressions and wider producer output
+vectors, but native execution and a direct witness of its creation-description
+memory-requirement queries remain pending. The T04 `geometryShader` and
 `tessellationShader` rows now carry their admitted native receipts, and
 `maxBufferSize` carries the 1 GiB buffer witness. The 16 query blockers are
 `apiVersion` (1.3.0 reported, 1.3.204 required including the patch level;
