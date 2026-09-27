@@ -55,6 +55,8 @@
 #ifndef PS5VK_INLINE_GRAPHICS_STAGE
 #define PS5VK_INLINE_GRAPHICS_STAGE 0
 #endif
+/* Preprocessor conditions cannot evaluate Vulkan's enum identifiers. */
+_Static_assert(VK_SHADER_STAGE_GEOMETRY_BIT == 8, "geometry stage selector");
 #endif
 
 enum { EXTENT = 64, STAGING = 64 * 1024 };
@@ -146,6 +148,9 @@ static int run_witness(void)
     VkBuffer staging = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
     VkShaderModule vertex = VK_NULL_HANDLE, fragment = VK_NULL_HANDLE;
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+    VkShaderModule geometry = VK_NULL_HANDLE;
+#endif
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkBool32 submission_pending = VK_FALSE;
@@ -207,6 +212,10 @@ static int run_witness(void)
         "DXVK_RENDER_WITNESS_START extent=%u dynamicRendering=%u extendedDynamicState=%u",
         EXTENT, (unsigned)dynamic_rendering.dynamicRendering, (unsigned)eds.extendedDynamicState);
     REQUIRE(dynamic_rendering.dynamicRendering && eds.extendedDynamicState, "features reported");
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+    REQUIRE(features2.features.geometryShader, "geometry shader reported");
+    VkPhysicalDeviceFeatures enabled_geometry = {.geometryShader=VK_TRUE};
+#endif
 
     float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -225,6 +234,9 @@ static int run_witness(void)
 #endif
     };
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+        .pEnabledFeatures = &enabled_geometry,
+#endif
         .pNext = &dynamic_rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
         .enabledExtensionCount = sizeof(device_extensions) / sizeof(device_extensions[0]),
         .ppEnabledExtensionNames = device_extensions};
@@ -306,30 +318,41 @@ static int run_witness(void)
         .memory = staging_memory, .size = VK_WHOLE_SIZE};
     TRY(vkFlushMappedMemoryRanges(device, 1, &range));
 
-    VkShaderModuleCreateInfo module_info[2] = {
+    VkShaderModuleCreateInfo module_info[3] = {
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
          .codeSize = sizeof(dxvk_render_witness_vert_spirv), .pCode = dxvk_render_witness_vert_spirv},
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
          .codeSize = sizeof(dxvk_render_witness_frag_spirv), .pCode = dxvk_render_witness_frag_spirv}};
     TRY(vkCreateShaderModule(device, &module_info[0], NULL, &vertex));
     TRY(vkCreateShaderModule(device, &module_info[1], NULL, &fragment));
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+    module_info[2]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(dxvk_render_witness_geom_spirv),.pCode=dxvk_render_witness_geom_spirv};
+    TRY(vkCreateShaderModule(device,&module_info[2],NULL,&geometry));
+#endif
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
 #ifdef PS5VK_INLINE_UNIFORM_WITNESS
     TRY(inline_graphics_descriptors(device, &inline_layout, &inline_pool, &inline_set, PS5VK_INLINE_GRAPHICS_STAGE));
     ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_GRAPHICS stage=%s blocks=%u bytes=%u",
         PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_VERTEX_BIT?"vertex":
-        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_FRAGMENT_BIT?"fragment":"small",
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_FRAGMENT_BIT?"fragment":
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_GEOMETRY_BIT?"geometry":"small",
         PS5VK_INLINE_GRAPHICS_STAGE?4u:2u,PS5VK_INLINE_GRAPHICS_STAGE?1024u:24u);
     layout_info.setLayoutCount = 1;
     layout_info.pSetLayouts = &inline_layout;
 #endif
     TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
     /* DXVK's monolithic pipeline shape (dxvk_graphics.cpp:1388-1437). */
-    VkPipelineShaderStageCreateInfo stages[2] = {
+    VkPipelineShaderStageCreateInfo stages[3] = {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[0],
          .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vertex, .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[1],
          .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fragment, .pName = "main"}};
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+    stages[2]=stages[1];
+    stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext=&module_info[2],.stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=geometry,.pName="main"};
+#endif
     VkPipelineVertexInputStateCreateInfo vertex_input = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     VkPipelineInputAssemblyStateCreateInfo assembly = {
@@ -364,7 +387,12 @@ static int run_witness(void)
         .colorAttachmentCount = 1, .pColorAttachmentFormats = &color_format};
     VkGraphicsPipelineCreateInfo pipeline_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .pNext = &rendering_info,
-        .stageCount = 2, .pStages = stages, .pVertexInputState = &vertex_input,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+        .stageCount = 3,
+#else
+        .stageCount = 2,
+#endif
+        .pStages = stages, .pVertexInputState = &vertex_input,
         .pInputAssemblyState = &assembly, .pViewportState = &viewport_state,
         .pRasterizationState = &raster, .pMultisampleState = &multisample,
         .pDepthStencilState = &depth_state, .pColorBlendState = &blend,
@@ -636,6 +664,9 @@ cleanup:
 #endif
         if (vertex) vkDestroyShaderModule(device, vertex, NULL);
         if (fragment) vkDestroyShaderModule(device, fragment, NULL);
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+        if (geometry) vkDestroyShaderModule(device, geometry, NULL);
+#endif
         if (staging) vkDestroyBuffer(device, staging, NULL);
         if (staging_memory) vkFreeMemory(device, staging_memory, NULL);
         if (view) vkDestroyImageView(device, view, NULL);

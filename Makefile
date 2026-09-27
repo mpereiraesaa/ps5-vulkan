@@ -608,6 +608,7 @@ graphics-stage-shaders:
 	$(GLSLANG) -V experiments/graphics/dxvk_render_witness.vert -o build/runtime-graphics/dxvk_render_witness.vert.spv
 	$(GLSLANG) -V experiments/graphics/dxvk_inline_witness.frag -o build/runtime-graphics/dxvk_inline_witness.frag.spv
 	$(GLSLANG) -V experiments/graphics/dxvk_inline_boundary.frag -o build/runtime-graphics/dxvk_inline_boundary.frag.spv
+	$(GLSLANG) -V -S geom experiments/graphics/dxvk_inline_boundary.geom -o build/runtime-graphics/dxvk_inline_boundary.geom.spv
 	$(GLSLANG) -V experiments/graphics/dxvk_inline_boundary.vert -o build/runtime-graphics/dxvk_inline_boundary.vert.spv
 	$(GLSLANG) -V experiments/graphics/dxvk_render_witness.frag -o build/runtime-graphics/dxvk_render_witness.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv

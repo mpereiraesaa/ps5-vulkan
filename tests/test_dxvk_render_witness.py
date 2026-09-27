@@ -157,7 +157,7 @@ class CacheVerify(unittest.TestCase):
 
 class InlineVerify(unittest.TestCase):
     artifact = dict(ARTIFACT, profile="dxvk-inline-public-sdk-witness",
-                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=5, inline_graphics_stage="small")
+                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=6, inline_graphics_stage="small")
     compute = ("DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 mismatches=0 guards=0 digest=" +
                expected_inline_digest() + " submissions=1 fence=complete resources=retired\n")
 
@@ -217,7 +217,7 @@ class InlineVerify(unittest.TestCase):
                 verify(log,receipt(log),self.artifact)
 
     def test_graphics_boundary_stage_and_capacity(self):
-        for stage in ("vertex", "fragment"):
+        for stage in ("vertex", "fragment", "geometry"):
             marker=f"DXVK_INLINE_WITNESS_GRAPHICS stage={stage} blocks=4 bytes=1024\n"
             log=self.log().replace(self.graphics.encode(),marker.encode())
             artifact=dict(self.artifact,inline_graphics_stage=stage)
@@ -244,6 +244,7 @@ class InlineVerify(unittest.TestCase):
                              (self.log(), dict(self.artifact, inline_execution_version=2)),
                              (self.log(), dict(self.artifact, inline_execution_version=3)),
                              (self.log(), dict(self.artifact, inline_execution_version=4)),
+                             (self.log(), dict(self.artifact, inline_execution_version=5)),
                              (self.log(), dict(self.artifact, inline_graphics_stage=None)),
                              (self.log(), dict(self.artifact, diagnostic_switch=None)),
                              (CacheVerify().log(), self.artifact), (self.log(), CacheVerify.artifact)):

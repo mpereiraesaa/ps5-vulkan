@@ -12,7 +12,8 @@ static VkResult inline_graphics_descriptors(VkDevice device,
         {0,VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,20,VK_SHADER_STAGE_FRAGMENT_BIT,NULL},
         {1,VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,4,VK_SHADER_STAGE_FRAGMENT_BIT,NULL}};
     if(boundary_stage) {
-        if(boundary_stage!=VK_SHADER_STAGE_VERTEX_BIT && boundary_stage!=VK_SHADER_STAGE_FRAGMENT_BIT)
+        if(boundary_stage!=VK_SHADER_STAGE_VERTEX_BIT && boundary_stage!=VK_SHADER_STAGE_FRAGMENT_BIT &&
+           boundary_stage!=VK_SHADER_STAGE_GEOMETRY_BIT)
             return VK_ERROR_FEATURE_NOT_PRESENT;
         for(unsigned b=0;b<4;++b) bindings[b]=(VkDescriptorSetLayoutBinding){
             b,VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,256,boundary_stage,NULL};

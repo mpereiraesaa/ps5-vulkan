@@ -78,6 +78,7 @@ enum { EXTENT = 64, STAGING = 64 * 1024, FULL_OFFSET = 4096, SUB_OFFSET = 24576 
        SUB_X = 40, SUB_Y = 24, SUB_W = 24, SUB_H = 16, SUB_ROW = 32 };
 static const uint32_t vs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 0, 1, 0x6e69616d, 0};
 static const uint32_t fs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 4, 1, 0x6e69616d, 0};
+static const uint32_t gs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 3, 1, 0x6e69616d, 0};
 
 static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
 {
@@ -114,7 +115,16 @@ static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
         VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_EXTENSION_NAME,
         VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME};
     if (inline_variant) device_extensions[8]=VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME;
+    if(inline_variant==4) {
+        /* The host fixture opts into the already implemented geometry route. */
+        physical->platform.supported_features|=PS5VK_FEATURE_GEOMETRY_SHADER;
+        VkPhysicalDeviceFeatures2 supported={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        vkGetPhysicalDeviceFeatures2(physical,&supported);
+        assert(supported.features.geometryShader);
+    }
+    VkPhysicalDeviceFeatures geometry_features={.geometryShader=VK_TRUE};
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pEnabledFeatures=inline_variant==4?&geometry_features:NULL,
         .pNext = &dynamic_rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
         .enabledExtensionCount = (cache_variant || inline_variant) ? 9 : 8, .ppEnabledExtensionNames = device_extensions};
     VkDevice device = VK_NULL_HANDLE;
@@ -156,11 +166,13 @@ static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
     assert(vkAllocateMemory(device, &allocation, NULL, &staging_memory) == VK_SUCCESS);
     assert(vkBindBufferMemory(device, staging, staging_memory, 0) == VK_SUCCESS);
 
-    VkShaderModuleCreateInfo module_info[2] = {
+    VkShaderModuleCreateInfo module_info[3] = {
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = sizeof(vs), .pCode = vs},
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = sizeof(fs), .pCode = fs}};
-    VkShaderModule modules[2];
-    for (unsigned n = 0; n < 2; ++n)
+    module_info[2]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(gs),.pCode=gs};
+    VkShaderModule modules[3];
+    for (unsigned n = 0; n < (inline_variant==4?3u:2u); ++n)
         assert(vkCreateShaderModule(device, &module_info[n], NULL, &modules[n]) == VK_SUCCESS);
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     VkDescriptorSetLayout inline_layout=VK_NULL_HANDLE;
@@ -168,7 +180,9 @@ static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
     VkDescriptorSet inline_set=VK_NULL_HANDLE;
     if(inline_variant) {
         assert(inline_graphics_descriptors(device,&inline_layout,&inline_pool,&inline_set,
-            inline_variant==2?VK_SHADER_STAGE_VERTEX_BIT:inline_variant==3?VK_SHADER_STAGE_FRAGMENT_BIT:0)==VK_SUCCESS);
+            inline_variant==2?VK_SHADER_STAGE_VERTEX_BIT:
+                inline_variant==3?VK_SHADER_STAGE_FRAGMENT_BIT:
+                inline_variant==4?VK_SHADER_STAGE_GEOMETRY_BIT:0)==VK_SUCCESS);
         if(inline_variant==1) {
             const uint32_t expected[]={4,4,64,255,0x13579bdfu,0x2468ace0u};
             assert(inline_set->inline_uniform.bytes[0]==20 && inline_set->inline_uniform.bytes[1]==4);
@@ -176,7 +190,7 @@ static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
         } else {
             assert(inline_set->inline_uniform.blocks==4 && inline_set->inline_uniform.total_bytes==1024);
             for(unsigned b=0;b<4;++b) {
-                assert(inline_set->signature.binding[b].stages==(inline_variant==2?VK_SHADER_STAGE_VERTEX_BIT:VK_SHADER_STAGE_FRAGMENT_BIT));
+                assert(inline_set->signature.binding[b].stages==(inline_variant==2?VK_SHADER_STAGE_VERTEX_BIT:inline_variant==3?VK_SHADER_STAGE_FRAGMENT_BIT:VK_SHADER_STAGE_GEOMETRY_BIT));
                 assert(inline_set->inline_uniform.bytes[b]==256);
             }
             for(unsigned i=0;i<256;++i) {
@@ -188,11 +202,16 @@ static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
     }
     VkPipelineLayout layout = VK_NULL_HANDLE;
     assert(vkCreatePipelineLayout(device, &layout_info, NULL, &layout) == VK_SUCCESS);
-    VkPipelineShaderStageCreateInfo stages[2] = {
+    VkPipelineShaderStageCreateInfo stages[3] = {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[0],
          .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = modules[0], .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[1],
          .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = modules[1], .pName = "main"}};
+    if(inline_variant==4) {
+        stages[2]=stages[1];
+        stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext=&module_info[2],.stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=modules[2],.pName="main"};
+    }
     VkPipelineVertexInputStateCreateInfo vertex_input = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     VkPipelineInputAssemblyStateCreateInfo assembly = {
@@ -226,7 +245,7 @@ static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
         .colorAttachmentCount = 1, .pColorAttachmentFormats = &color_format};
     VkGraphicsPipelineCreateInfo pipeline_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .pNext = &rendering_info,
-        .stageCount = 2, .pStages = stages, .pVertexInputState = &vertex_input,
+        .stageCount = inline_variant==4?3u:2u, .pStages = stages, .pVertexInputState = &vertex_input,
         .pInputAssemblyState = &assembly, .pViewportState = &viewport_state,
         .pRasterizationState = &raster, .pMultisampleState = &multisample,
         .pDepthStencilState = &depth_state, .pColorBlendState = &blend,
@@ -506,7 +525,7 @@ static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
     vkDestroyPipelineLayout(device, layout, NULL);
     if(inline_pool) vkDestroyDescriptorPool(device,inline_pool,NULL);
     if(inline_layout) vkDestroyDescriptorSetLayout(device,inline_layout,NULL);
-    for (unsigned n = 0; n < 2; ++n) vkDestroyShaderModule(device, modules[n], NULL);
+    for (unsigned n = 0; n < (inline_variant==4?3u:2u); ++n) vkDestroyShaderModule(device, modules[n], NULL);
     vkDestroyBuffer(device, staging, NULL);
     vkFreeMemory(device, staging_memory, NULL);
     vkDestroyImageView(device, view, NULL);
@@ -524,5 +543,6 @@ int main(void)
     run_trace(VK_FALSE,VK_TRUE);
     run_trace(VK_FALSE,2);
     run_trace(VK_FALSE,3);
+    run_trace(VK_FALSE,4);
     return 0;
 }
