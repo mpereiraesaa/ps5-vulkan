@@ -344,16 +344,21 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
  * maintenance4, LocalSizeId (OpExecutionModeId 331, mode 38) whose three
  * operands are scalar 32-bit constants or specialization expressions, including
  * scalar extraction from integer/boolean vectors.
- * Exactly one execution mode names the entry. Unsupported expression types
- * remain rejected rather than guessed from their defaults. */
+ * A BuiltIn WorkgroupSize constant takes precedence over the execution mode,
+ * including its specialization, and is also legal without an execution mode.
+ * Unsupported expression types remain rejected rather than guessed. */
 static int local_size(VkShaderModule module, const char *name, uint32_t dims[3],
                       VkBool32 local_size_id, const VkSpecializationInfo *specialization)
 {
     uint32_t id;
     if (!ps5vk_shader_entry(module, VK_SHADER_STAGE_COMPUTE_BIT, name, &id)) return 0;
-    unsigned found = 0;
+    unsigned found = 0, builtins = 0;
+    uint32_t workgroup_id = 0;
     for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
         const uint32_t *w = module->words + i;
+        if ((w[0] & 0xffff) == 71 && (w[0] >> 16) == 4 && w[2] == 11 && w[3] == 25) {
+            workgroup_id = w[1]; ++builtins;
+        }
         if ((w[0] & 0xffff) == 16 && w[0] >> 16 == 6 && w[1] == id && w[2] == 17) {
             memcpy(dims, w + 3, 3 * sizeof(*dims)); ++found;
         } else if ((w[0] & 0xffff) == 331 && w[0] >> 16 == 6 && w[1] == id && w[2] == 38) {
@@ -366,6 +371,21 @@ static int local_size(VkShaderModule module, const char *name, uint32_t dims[3],
             }
             ++found;
         }
+    }
+    if (found > 1 || builtins > 1) return 0;
+    if (builtins) {
+        uint32_t values[4], element_type = 0;
+        unsigned components = 0, budget = 4096, integer_types = 0;
+        if (!constant_vector(module, workgroup_id, values, &components, &element_type,
+                             specialization, 0, &budget) || components != 3) return 0;
+        for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+            const uint32_t *w = module->words + i;
+            if ((w[0] & 0xffff) == 21 && (w[0] >> 16) == 4 &&
+                w[1] == element_type && w[2] == 32) ++integer_types;
+        }
+        if (integer_types != 1) return 0;
+        memcpy(dims, values, 3 * sizeof(*dims));
+        return 1;
     }
     return found == 1;
 }

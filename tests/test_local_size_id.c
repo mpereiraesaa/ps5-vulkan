@@ -376,6 +376,39 @@ int main(void)
     assert(build_specialized(device, layout, specialized, bytes + 16, &specialization,
                              &warm32) == VK_SUCCESS);
     assert(warm32->program.local_size[0] == 32);
+    /* SPIR-V 1.0 glslang uses BuiltIn WorkgroupSize instead of LocalSizeId.
+     * Its specialized dimensions override the literal execution mode and do
+     * not require maintenance4. This is the route used by original CTS. */
+    uint32_t *legacy = specialize_dimension(literal, count, id64, 7);
+    device->enabled_features_t09 &= ~PS5VK_T09_FEATURE_MAINTENANCE4;
+    for (unsigned without_mode = 0; without_mode < 2; ++without_mode) {
+        for (unsigned repeat = 0; repeat < 3; ++repeat) {
+            VkPipeline selected;
+            x = repeat == 1 ? 16 : 32;
+            assert(build_specialized(device, layout, legacy, bytes + 16, &specialization,
+                                     &selected) == VK_SUCCESS);
+            assert(selected->program.local_size[0] == x && selected->program.local_size[1] == 1 &&
+                   selected->program.local_size[2] == 1);
+            vkDestroyPipeline(device, selected, NULL);
+        }
+        for (size_t i = 5; i < count + 4;) {
+            unsigned length = legacy[i] >> 16;
+            if ((legacy[i] & 0xffff) == 16 && length == 6 && legacy[i + 2] == 17)
+                for (unsigned j = 0; j < length; ++j) legacy[i + j] = 1u << 16;
+            i += length;
+        }
+    }
+    x = 0;
+    assert(build_specialized(device, layout, legacy, bytes + 16, &specialization,
+                             &refused) != VK_SUCCESS && !refused);
+    for (size_t i = 5; i < count + 4; i += legacy[i] >> 16)
+        if ((legacy[i] & 0xffff) == 71 && (legacy[i] >> 16) == 4 && legacy[i + 2] == 11 && legacy[i + 3] == 25)
+            legacy[i + 1] = id64; /* Scalar BuiltIn is malformed. */
+    x = 32;
+    assert(build_specialized(device, layout, legacy, bytes + 16, &specialization,
+                             &refused) != VK_SUCCESS && !refused);
+    free(legacy);
+    device->enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
     const unsigned specialized_lane[3][4] = {{1, 0, 1, 0}, {0, 0, 1, 0}, {1, 0, 0, 1}};
     for (unsigned source = 0; source < 3; ++source) {
         for (unsigned lane = 0; lane < 4; ++lane) {

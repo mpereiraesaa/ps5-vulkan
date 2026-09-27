@@ -1060,6 +1060,44 @@ def _fill_update_generated_leaf_names(function_text: str) -> set[str]:
 
 
 @_memoized
+def _zero_initialize_leaf_paths(text: str) -> set[str]:
+    """Recognize the pinned zero-initialize factories without accepting arbitrary
+    numeric or synthesized leaf names. Source shape drift fails closed."""
+    prefix = "dEQP-VK.compute.zero_initialize_workgroup_memory."
+    paths = set()
+    def body(start, end):
+        if start not in text or end not in text:
+            return ""
+        return text.split(start, 1)[1].split(end, 1)[0]
+    types = body("void AddTypeTests(", "struct CompositeCaseDef")
+    if "cases[i].typeName.c_str()" in types:
+        paths.update("types." + name for name in re.findall(r'\{"([a-zA-Z0-9_]+)",\s*\d+,', types))
+    composites = body("void AddCompositeTests(", "enum Dim")
+    if "de::toString(i), cases[i]" in composites:
+        count = len(re.findall(r"\n        \{\n            \d+,", composites))
+        paths.update(f"composites.{i}" for i in range(count))
+    maxmem = body("void AddMaxWorkgroupMemoryTests(", "struct TypeCaseDef")
+    sizes = re.search(r"workgroups = \{([0-9, ]+)\}", maxmem)
+    if sizes and "de::toString(numWG)" in maxmem:
+        paths.update("max_workgroup_memory." + n for n in re.findall(r"\d+", sizes[1]))
+    specialized = body("void AddSpecializeWorkgroupTests(", "class RepeatedPipelineInstance")
+    bounds = [re.search(r"uint32_t " + axis + r" = 1; " + axis + r" <= (\d+);", specialized)
+              for axis in "xyz"]
+    if all(bounds) and 'de::toString(x) + "_" + de::toString(y) + "_" + de::toString(z)' in specialized:
+        limits = [int(b[1]) for b in bounds]
+        if all(0 < n <= 16 for n in limits):
+            paths.update(f"specialize_workgroup.{x}_{y}_{z}" for x in range(1, limits[0] + 1)
+                         for y in range(1, limits[1] + 1) for z in range(1, limits[2] + 1))
+    repeated = body("void AddRepeatedPipelineTests(", "#ifndef CTS_USES_VULKANSC")
+    values = [re.search(name + r"\s*= \{([0-9, ]+)\}", repeated) for name in ("xSizes", "odds", "repeats")]
+    if all(values) and '(odd == 1 ? "_odd" : "_even") + "_repeat_"' in repeated:
+        xs, odds, reps = [[int(n) for n in re.findall(r"\d+", v[1])] for v in values]
+        paths.update(f"repeat_pipeline.x_{x}_{'odd' if odd == 1 else 'even'}_repeat_{r}"
+                     for x in xs for odd in odds for r in reps)
+    return {prefix + path for path in paths}
+
+
+@_memoized
 def _dynamic_state_compute_generated_segments(text: str) -> set[str]:
     """Derive brief state group names from the pinned compute factory.
 
@@ -1997,6 +2035,13 @@ def main() -> int:
                     text, integration_text, _read_source(BDA_BUILD_SOURCE))):
                 failures.append(
                     f"{path}: not produced by the pinned focused BDA factory {source_ref}")
+            continue
+
+        if source_path.name == "vktComputeZeroInitializeWorkgroupMemoryTests.cpp":
+            if (path not in _zero_initialize_leaf_paths(text) or
+                    "vkt::compute::createZeroInitializeWorkgroupMemoryTests(" not in integration_text or
+                    "vktComputeZeroInitializeWorkgroupMemoryTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by the registered zero-initialize factory")
             continue
 
         # Intermediate groups may come from the integration (package_ps5.cpp) or

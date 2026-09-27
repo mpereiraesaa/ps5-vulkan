@@ -9486,6 +9486,466 @@
       "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
       "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles.",
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:1898"
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.bool",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.bvec2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.bvec3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.bvec4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.uint32_t",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.uvec2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.uvec3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.uvec4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.int32_t",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.ivec2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.ivec3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.ivec4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.float32_t",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32vec2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32vec3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32vec4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat2x2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat2x3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat2x4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat3x2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat3x3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat3x4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat4x2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat4x3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat4x4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.composites.0",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.composites.1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.composites.2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.16",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.64",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.128",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.1_1_1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.8_1_1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.1_8_1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.1_1_8",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.8_8_1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.8_1_8",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.1_8_8",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.8_8_8",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_64_even_repeat_2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-repeat-precondition",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_64_odd_repeat_2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-repeat-precondition",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_4_even_repeat_16",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-repeat-precondition",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_4_odd_repeat_16",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-repeat-precondition",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
     }
   ]
 }

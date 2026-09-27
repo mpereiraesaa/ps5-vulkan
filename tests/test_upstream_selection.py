@@ -32,6 +32,30 @@ def load_gate():
 
 
 class UpstreamSelectionTests(unittest.TestCase):
+    def test_zero_initialize_measurement_leaves_are_original_and_unpromoted(self):
+        module = UPSTREAM / "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp"
+        if not module.is_file():
+            self.skipTest("pinned CTS checkout unavailable")
+        text = module.read_text()
+        paths = self.gate._zero_initialize_leaf_paths(text)
+        pending = [c for c in self.current_manifest["diagnostics"]
+                   if c["category"] == "zero-initialize-workgroup-pending"]
+        self.assertEqual(42, len(pending))
+        self.assertTrue({c["path"] for c in pending} <= paths)
+        self.assertFalse({c["path"] for c in pending} & {c["path"] for c in self.current_manifest["cases"]})
+        self.assertNotIn("dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.9_1_1", paths)
+        self.assertNotIn("dEQP-VK.compute.zero_initialize_workgroup_memory.composites.999", paths)
+        self.assertIn('context.requireDeviceFunctionality("VK_KHR_zero_initialize_workgroup_memory")', text)
+        self.assertIn("maxComputeWorkGroupInvocations", text)
+        excluded = [c for c in self.current_manifest["diagnostics"]
+                    if c["category"] == "zero-initialize-repeat-precondition"]
+        self.assertEqual(4, len(excluded))
+        self.assertTrue(all(c["expected_status"] == "NotSupported" for c in excluded))
+        self.assertIn("MemoryRequirement::HostVisible | MemoryRequirement::Cached", text)
+        self.assertRegex(text, r"uint32_t xSize, uint32_t repeat,\s+uint32_t odd")
+        self.assertIn("x, odd, repeat, computePipelineConstructionType", text)
+        self.assertIn("for (uint32_t r = 0; r < m_repeat; ++r)", text)
+
     @classmethod
     def setUpClass(cls):
         cls.gate = load_gate()
@@ -96,10 +120,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # to acceptance. T07 adds 322 original BC, gather, precise-query and
         # cube-array cases. T09 adds 50 original timeline-semaphore,
         # renderpass2 write-mask and D32_SFLOAT_S8_UINT stencil/depth leaves
-        # (combined and separate-layouts); the 66 remaining diagnostics record
-        # refusals and gaps. `leaves` counts every
+        # (combined and separate-layouts); the 112 diagnostics record
+        # refusals, gaps and unmeasured zero-initialization cases. `leaves` counts every
         # attachment_write_mask leaf the pinned factory generates.
-        self.assertEqual((879, 66, 48),
+        self.assertEqual((879, 112, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]

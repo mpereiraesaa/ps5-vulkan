@@ -50,6 +50,7 @@ def tessellation_build_profile(environment):
             "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC",
             "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
             "PS5VK_SHADER_INT16_DIAGNOSTIC",
+            "PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC",
         )
     }
     return {
@@ -1050,6 +1051,7 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationOperation.cpp",
         cts_root / "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeTestsUtil.cpp",
         # Original subgroup Broadcast and arithmetic bodies, support gates and GPU oracles.

@@ -95,8 +95,12 @@ were the same thing:
   and selection SHA-256
   `81f656f1b0559f212bcc7b802c572d59c23919272f9109aa37f8774e78b849c4`;
   see [the T07 promotion evidence](VALIDATION.md#t07-public-upstream-cts-promotion-2026-09-24).
-  The manifest also carries 66 diagnostic paths, which remain outside strict
-  acceptance. Earlier dated sections below record the smaller selections used
+  The manifest also carries 112 diagnostic paths, which remain outside strict
+  acceptance. This includes 42 unmeasured `zero-initialize-workgroup-pending`
+  cases for a default-off measurement build. Four repeated-pipeline cases remain
+  separate precondition diagnostics: they require unreported HOST_CACHED memory,
+  and the pinned factory swaps its repetition/parity arguments. Their results
+  cannot establish repeated initialization. Earlier dated sections below record the smaller selections used
   at each promotion and preserve their historical counts.
 * **Executed**: what a given report actually contains, which the strict verifier
   checks case by case.

@@ -197,7 +197,8 @@ CORE_IMPLEMENTATIONS = {
             ("tests/maintenance4_interface_inspect.c", "ps5vk_runtime_graphics_compile"),
         ),
         "detail": ("Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; "
-                   "creation-description memory requirements, maxBufferSize and "
+                   "creation-description memory requirements, maxBufferSize, legacy "
+                   "BuiltIn WorkgroupSize precedence and specialization, and "
                    "LocalSizeId with constants, direct specialization and bounded scalar "
                    "32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, "
                    "integer comparisons, boolean specialization and conditional selection, "
@@ -554,6 +555,7 @@ def implemented_device_extensions() -> set[str]:
 
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
+        "PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC",
 
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 

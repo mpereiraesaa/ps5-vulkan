@@ -406,6 +406,11 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * The original message-passing CTS factory requires core Vulkan 1.1, so
      * the KHR route has a separate bounded native witness. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+#if defined(PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC) && PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC
+    /* Default-off original CTS measurement; host compilation is not evidence
+     * for native initialization or synchronization. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY;
+#endif
 #if defined(PS5VK_SHADER_INT16_DIAGNOSTIC) && PS5VK_SHADER_INT16_DIAGNOSTIC
     /* Measure the core Int16 route with original CTS before considering the
      * shader feature for the ordinary profile. Subgroup bits stay separate. */
