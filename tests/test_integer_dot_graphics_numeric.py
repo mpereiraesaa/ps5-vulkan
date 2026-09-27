@@ -29,6 +29,9 @@ class IntegerDotImageData(unittest.TestCase):
         for case in cases():
             records, image = image_fixture(case)
             self.assertEqual((32768, 512), (len(records), len(image)))
+            rgba_records,rgba=image_fixture(case,bgra=False)
+            self.assertEqual(records,rgba_records)
+            self.assertEqual(b"".join(struct.pack("<I",reference(case,row)) for row in samples(case)),rgba)
             for i, row in enumerate(samples(case)):
                 raw = records[256*i:256*(i+1)]
                 used = set()

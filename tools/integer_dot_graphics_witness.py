@@ -3,7 +3,7 @@
 
 Each of 128 instances draws a six-vertex quad into one pixel of a 16x8 image.
 The index and result use flat uint interfaces. Final byte extraction occurs
-before conversion to normalized RGBA; readback expects physical BGRA8 bytes.
+before conversion to normalized RGBA; fixtures support RGBA8 or BGRA8 byte order.
 These are owned test fixtures, not runtime shader rewriting.
 """
 from tools.integer_dot_vectors import buffers
@@ -18,13 +18,18 @@ GRAPHS = {
 WIDTH, HEIGHT, RECORD_STRIDE, RECORD_COUNT = 16, 8, 256, 128
 
 
-def image_fixture(case):
-    """Return readonly SSBO records and a tightly packed BGRA8 expected image.
+def image_fixture(case, *, bgra=True):
+    """Return readonly SSBO records and a tightly packed byte-channel image.
+
+    bgra=False selects the implemented RGBA8 attachment readback route.
+    The BGRA8 default retains the earlier compiler-only fixture contract.
 
     Each record begins with lhs/rhs vec4 slots and accumulator.x. Unused lanes
     and alignment padding are poisoned. Descriptor range covers all records;
     the shader uses 16 vec4 slots per instance, matching 256-byte record stride.
     """
+    if type(bgra) is not bool:
+        raise ValueError("bgra must be boolean")
     lhs, rhs, acc, expected = buffers(case)
     records = bytearray(b'\xa5' * (RECORD_COUNT * RECORD_STRIDE))
     lane_bytes = 4 if case.packed_types is not None else case.components * 4
@@ -36,7 +41,7 @@ def image_fixture(case):
     image = bytearray()
     for i in range(RECORD_COUNT):
         rgba = expected[i*4:i*4+4]
-        image.extend((rgba[2], rgba[1], rgba[0], rgba[3]))
+        image.extend((rgba[2], rgba[1], rgba[0], rgba[3]) if bgra else rgba)
     return bytes(records), bytes(image)
 
 

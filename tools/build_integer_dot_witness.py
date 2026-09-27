@@ -50,16 +50,24 @@ def fixture_header(case):
 
 
 def build_case(case, sdk, clang_wrapper, lab, sdk_env):
+    return build_payload(ROOT / 'build/integer-dot-witness' / case.name,
+        ROOT / 'examples/integer_dot_witness/main.c',
+        ROOT / 'examples/dxvk_render_witness/integer_dot_compute.h',
+        'integer_dot_fixture.h', fixture_header(case), fixture_contract(case.name),
+        sdk, clang_wrapper, lab, sdk_env, 'PS5 Vulkan Integer Dot Witness')
+
+
+def build_payload(build, source, helper, header_name, header_text, contract,
+                  sdk, clang_wrapper, lab, sdk_env, title):
+    """Shared SDK compile/link/package route for owned integer-dot witnesses."""
     foundation = lab / 'third_party/ps5-native-app-boilerplate'
     builder = foundation / 'build/host/ps5-native-tool'
     logger = lab / 'projects/logging_server/client'
-    build = ROOT / 'build/integer-dot-witness' / case.name
     dist = build / 'dist/PPSA99994'
     for directory in (build, dist / 'sce_sys', dist / 'sce_module'):
         directory.mkdir(parents=True, exist_ok=True)
-    (build / 'integer_dot_fixture.h').write_text(fixture_header(case))
+    (build / header_name).write_text(header_text)
     staged = ROOT / "dist-sdk"
-    source = ROOT / "examples/integer_dot_witness/main.c"
     obj = build / "main.o"
     dep = build / "main.d"
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
@@ -103,20 +111,20 @@ def build_case(case, sdk, clang_wrapper, lab, sdk_env):
     param = json.loads((lab / "projects/ps5-agc-gears/sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
                  contentId="UP9000-PPSA99994_00-PS5VKDOT00000001")
-    param["localizedParameters"]["en-US"]["titleName"] = (
-        "PS5 Vulkan Integer Dot Witness")
+    param["localizedParameters"]["en-US"]["titleName"] = title
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
 
-    artifact = fixture_contract(case.name)
+    artifact = dict(contract)
     artifact.update(
         eboot_sha256=hashlib.sha256(eboot.read_bytes()).hexdigest(),
         source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
-        helper_sha256=hashlib.sha256((ROOT / 'examples/dxvk_render_witness/integer_dot_compute.h').read_bytes()).hexdigest(),
+        helper_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(),
         sdk_sha256=hashlib.sha256((staged / 'lib/libps5vk.a').read_bytes()).hexdigest(),
+        header_sha256=hashlib.sha256(header_text.encode()).hexdigest(),
         build_profile=tessellation_build_profile(sdk_env), native_executed=False)
     artifact_path = dist.parent / 'artifact.json'
     artifact_path.write_text(json.dumps(artifact, indent=2) + '\n')
