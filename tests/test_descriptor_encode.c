@@ -24,8 +24,81 @@ VkResult ps5vk_image_span(VkDevice d, VkImage image, void **address,
     *bytes = image->requirements.size;
     return VK_SUCCESS;
 }
+static void inline_payload_snapshots(void)
+{
+    struct VkDevice_T device = {.inline_uniform_block_enabled = VK_TRUE};
+    struct VkDescriptorPool_T pool = {.device = &device};
+    struct VkDescriptorSet_T set = {.pool = &pool};
+    struct ps5vk_descriptor_storage storage = {0};
+    ps5vk_descriptor_set_use_storage(&set, &storage);
+    set.signature.count = 3;
+    for (unsigned b = 0, prefix = 0; b < PS5VK_MAX_BINDINGS; ++b) {
+        set.signature.binding[b].first = prefix;
+        if (b == 0 || b == 2 || b == 4) {
+            set.signature.binding[b].count = 1;
+            set.signature.binding[b].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+            set.signature.type[b] = b == 0 ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER :
+                VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+            set.defined[prefix++] = VK_TRUE;
+        }
+    }
+    set.buffers[0] = (VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)0x100004000, 0, 256};
+    set.signature.inline_bytes[2] = set.inline_uniform.bytes[2] = 20;
+    set.signature.inline_bytes[4] = set.inline_uniform.bytes[4] = 4;
+    set.inline_uniform.offset[4] = 20;
+    set.inline_uniform.total_bytes = 24; set.inline_uniform.blocks = 2;
+    for (unsigned i = 0; i < 24; ++i) set.inline_data[i] = (uint8_t)(i * 7 + 3);
+    struct ps5vk_compiled_program program = {.gfx = 1013, .descriptor_count = 3,
+        .descriptors = {{0, 0, 0, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+            {0, 2, 0, 4, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK},
+            {0, 4, 0, 16, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK}}};
+    uint32_t table[32], saved[32];
+    memset(table, 0xab, sizeof(table));
+    assert(ps5vk_compute_table_dwords(&program, 0, &set.signature) == 24);
+    assert(ps5vk_descriptor_encode(&device, &program, 0, &set, NULL, table, 32) == VK_SUCCESS);
+    uint64_t first = table[4] | ((uint64_t)table[5] << 32);
+    uint64_t second = table[16] | ((uint64_t)table[17] << 32);
+    assert(first == (uintptr_t)(table + 8) && second == (uintptr_t)(table + 20));
+    assert(table[6] == 20 && table[7] == 0x31016fac && table[18] == 4 && table[19] == 0x31016fac);
+    assert(!memcmp(table + 8, set.inline_data, 20) && !memcmp(table + 20, set.inline_data + 20, 4));
+    assert(!table[13] && !table[14] && !table[15] && !table[21] && !table[22] && !table[23]);
+    for (unsigned i = 24; i < 32; ++i) assert(table[i] == 0xabababab);
+    memcpy(saved, table, sizeof(saved));
+    memset(set.inline_data, 0xee, sizeof(set.inline_data));
+    assert(!memcmp(table, saved, sizeof(table))); /* Snapshot owns its bytes. */
+#define REFUSE() do { assert(ps5vk_descriptor_encode(&device, &program, 0, &set, NULL, table, 32) != VK_SUCCESS); \
+    assert(!memcmp(table, saved, sizeof(table))); } while (0)
+    device.inline_uniform_block_enabled = VK_FALSE; REFUSE(); device.inline_uniform_block_enabled = VK_TRUE;
+    set.defined[1] = VK_FALSE; REFUSE(); set.defined[1] = VK_TRUE;
+    set.inline_uniform.bytes[2] = 16; REFUSE(); set.inline_uniform.bytes[2] = 20;
+    set.inline_uniform.offset[2] = 4; REFUSE(); set.inline_uniform.offset[2] = 0;
+    set.inline_uniform.total_bytes = 19; REFUSE(); set.inline_uniform.total_bytes = 24;
+    const uint32_t bad_sizes[] = {0, 6, 260};
+    for (unsigned i = 0; i < 3; ++i) {
+        set.signature.inline_bytes[2] = bad_sizes[i]; REFUSE();
+        assert(!ps5vk_compute_table_dwords(&program, 0, &set.signature));
+    }
+    set.signature.inline_bytes[2] = 20;
+    program.descriptors[1].element = 1; REFUSE(); program.descriptors[1].element = 0;
+    program.descriptors[1].table_dword = 8; REFUSE(); program.descriptors[1].table_dword = 4;
+    program.descriptors[0].table_dword = 12; REFUSE(); program.descriptors[0].table_dword = 0;
+    assert(ps5vk_descriptor_encode(&device, &program, 0, &set, NULL, table, 23) != VK_SUCCESS);
+    assert(!memcmp(table, saved, sizeof(table)));
+    /* Maximum block size, with the inline record last among USED bindings. */
+    program.descriptor_count = 2;
+    set.signature.inline_bytes[2] = set.inline_uniform.bytes[2] = 256;
+    set.inline_uniform.offset[4] = 256; set.inline_uniform.total_bytes = 260;
+    uint32_t maximum[80]; memset(maximum, 0xab, sizeof(maximum));
+    assert(ps5vk_compute_table_dwords(&program, 0, &set.signature) == 72);
+    assert(ps5vk_descriptor_encode(&device, &program, 0, &set, NULL, maximum, 80) == VK_SUCCESS);
+    assert(maximum[6] == 256 && !memcmp(maximum + 8, set.inline_data, 256));
+    for (unsigned i = 72; i < 80; ++i) assert(maximum[i] == 0xabababab);
+#undef REFUSE
+}
+
 int main(void)
 {
+    inline_payload_snapshots();
     struct VkDevice_T device = {0};
     struct VkDescriptorPool_T pool = {.device = &device};
     struct VkDescriptorSet_T set={.pool = &pool};

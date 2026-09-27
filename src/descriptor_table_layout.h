@@ -25,8 +25,9 @@ struct ps5vk_descriptor_table_layout {
     uint32_t binding_count, descriptor_count;
 };
 
-/* The largest set table: every descriptor a 48-byte combined record. */
-enum { PS5VK_MAX_TABLE_DWORDS = PS5VK_MAX_DESCRIPTORS * 12 };
+/* Conservative bound: all records at 48 bytes plus the maximum inline payload. */
+enum { PS5VK_MAX_TABLE_DWORDS = PS5VK_MAX_DESCRIPTORS * 12 +
+    PS5VK_MAX_INLINE_UNIFORM_SET_BYTES / 4 };
 static inline uint32_t ps5vk_descriptor_record_bytes(VkDescriptorType type)
 {
     switch (type) {
@@ -37,6 +38,7 @@ static inline uint32_t ps5vk_descriptor_record_bytes(VkDescriptorType type)
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
     case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: return 32;
     /* Four-DWORD records: buffer and texel-buffer V#s and a separate S#. */
+    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
@@ -53,6 +55,7 @@ static inline uint32_t ps5vk_descriptor_record_bytes(VkDescriptorType type)
 static inline uint32_t ps5vk_compute_record_dwords(VkDescriptorType type)
 {
     switch (type) {
+    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
@@ -67,6 +70,21 @@ static inline uint32_t ps5vk_compute_record_dwords(VkDescriptorType type)
     }
 }
 
+/* An inline block has one four-DWORD UBO record followed by a 16-byte
+ * aligned snapshot. Compiler offsets and submission storage use this same
+ * span; descriptorCount bytes must never be mistaken for an array length. */
+static inline uint32_t ps5vk_descriptor_span_dwords(const struct ps5vk_set_signature *sig,
+    uint32_t binding, VkDescriptorType type)
+{
+    if (!sig || binding >= PS5VK_MAX_BINDINGS) return 0;
+    if (type != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
+        return ps5vk_compute_record_dwords(type);
+    const uint32_t bytes = sig->inline_bytes[binding];
+    if (sig->type[binding] != type || sig->binding[binding].count != 1 ||
+        !bytes || bytes % 4 || bytes > PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES) return 0;
+    return 4 + ((bytes + 15u) & ~15u) / 4;
+}
+
 /* Failure leaves the output untouched. Every input signature must have the
  * same canonical prefix indices as vkCreateDescriptorSetLayout. */
 static inline VkResult ps5vk_descriptor_table_layout_build(uint32_t set_count,
@@ -79,7 +97,7 @@ static inline VkResult ps5vk_descriptor_table_layout_build(uint32_t set_count,
         VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
         VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
     for (uint32_t s = 0; s < set_count; ++s) {
-        uint32_t prefix = 0, offset = 0;
+        uint32_t prefix = 0, offset = 0, inline_blocks = 0, inline_bytes = 0;
         if (sets[s].count > PS5VK_MAX_DESCRIPTORS) return VK_ERROR_FEATURE_NOT_PRESENT;
         for (uint32_t b = 0; b < PS5VK_MAX_BINDINGS; ++b) {
             const struct ps5vk_binding *binding = &sets[s].binding[b];
@@ -87,7 +105,7 @@ static inline VkResult ps5vk_descriptor_table_layout_build(uint32_t set_count,
                 binding->count > PS5VK_MAX_DESCRIPTORS - prefix) return VK_ERROR_UNKNOWN;
             result.binding[s][b].byte_offset = offset;
             if (!binding->count) {
-                if (binding->stages || sets[s].type[b]) return VK_ERROR_UNKNOWN;
+                if (binding->stages || sets[s].type[b] || sets[s].inline_bytes[b]) return VK_ERROR_UNKNOWN;
                 continue;
             }
             /* Visibility does not instantiate a shader stage. ALL is a
@@ -99,6 +117,14 @@ static inline VkResult ps5vk_descriptor_table_layout_build(uint32_t set_count,
             if (binding->count > (UINT32_MAX - offset) / stride) return VK_ERROR_UNKNOWN;
             result.binding[s][b].byte_stride = stride;
             offset += stride * binding->count;
+            if (sets[s].type[b] == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+                const uint32_t span = ps5vk_descriptor_span_dwords(&sets[s], b, sets[s].type[b]);
+                if (!span || ++inline_blocks > PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET)
+                    return VK_ERROR_UNKNOWN;
+                inline_bytes += sets[s].inline_bytes[b];
+                if (inline_bytes > PS5VK_MAX_INLINE_UNIFORM_SET_BYTES) return VK_ERROR_UNKNOWN;
+                offset += (span - 4u) * 4u;
+            } else if (sets[s].inline_bytes[b]) return VK_ERROR_UNKNOWN;
             prefix += binding->count;
             ++result.binding_count;
         }

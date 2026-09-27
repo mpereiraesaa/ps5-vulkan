@@ -1378,10 +1378,11 @@ static void inline_uniform_layouts(void)
     assert(l->inline_uniform.bytes[3] == 16 && l->inline_uniform.offset[3] == 0);
     assert(l->inline_uniform.bytes[5] == 256 && l->inline_uniform.offset[5] == 16);
     assert(l->inline_uniform.bytes[0] == 0);
-    /* Every consumer refuses the type explicitly: no table record exists. */
+    /* Reserve the UBO records plus owned payloads; compiler negotiation is separate. */
     struct ps5vk_descriptor_table_layout table;
-    assert(ps5vk_descriptor_table_layout_build(1, &l->signature, &table) ==
-           VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(ps5vk_descriptor_table_layout_build(1, &l->signature, &table) == VK_SUCCESS);
+    assert(table.binding[0][3].byte_offset == 32 && table.binding[0][3].byte_stride == 16 &&
+        table.binding[0][5].byte_offset == 64 && table.set_bytes[0] == 336);
     vkDestroyDescriptorSetLayout(&d, l, NULL);
     /* Zero-byte block: an empty binding that takes no slot or storage. */
     b[0].descriptorCount = 0;

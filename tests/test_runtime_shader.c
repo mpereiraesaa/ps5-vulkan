@@ -1,4 +1,5 @@
 #include "runtime_shader.h"
+#include "descriptor_table_layout.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -49,8 +50,8 @@ int main(void)
     REJECT(draw_id_user_data_dword,1);
 #undef REJECT
     /* One set holds maxPerSetDescriptors (1024) records at any stride, up to
-     * the widest (combined, 48-byte) table; one more record, or a table that
-     * ends past it, is refused. */
+     * the widest (combined, 48-byte) table plus reserved inline payload space;
+     * one more record, or a table beyond that capacity, is refused. */
     {
         PsbcShaderMetadata saved=*m;
         m->descriptor_binding_count=1;
@@ -64,7 +65,9 @@ int main(void)
         m->descriptor_bindings[0]=(PsbcDescriptorBinding){.set=0,.binding=0,
             .type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER,.array_size=1024,.offset=0,.stride=48};
         assert(!ps5vk_runtime_shader_build(&arena,&c));
-        m->descriptor_bindings[0].offset=16;
+        m->descriptor_bindings[0].offset=PS5VK_MAX_TABLE_DWORDS*4-1024*48;
+        assert(!ps5vk_runtime_shader_build(&arena,&c));
+        m->descriptor_bindings[0].offset+=16;
         assert(ps5vk_runtime_shader_build(&arena,&c));
         m->descriptor_binding_count=2;
         m->descriptor_bindings[0]=(PsbcDescriptorBinding){.set=0,.binding=0,

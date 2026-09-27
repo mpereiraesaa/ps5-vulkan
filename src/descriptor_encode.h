@@ -24,22 +24,31 @@ VkResult ps5vk_buffer_descriptor(VkDevice device,
  * PS5VK_FORMAT_CAP_STORAGE_TEXEL_BUFFER). Failure leaves out untouched. */
 VkResult ps5vk_texel_buffer_descriptor(VkDevice device, VkBufferView view,
     uint32_t capability, uint32_t out[4]);
+/* Encode an inline record and snapshot into scratch, but point the record
+ * at the final GPU-visible table. The caller owns that table until completion.
+ * Both buffers must have capacity_dwords words. No GPU operation is performed. */
+VkResult ps5vk_inline_uniform_descriptor(VkDevice device, VkDescriptorSet set,
+    uint32_t binding, uint32_t table_dword, uint32_t *table, uint32_t *scratch,
+    size_t capacity_dwords);
 /* GFX1013 raw storage-buffer table for the audited compiler ABI. No uploads or
  * GPU work. Failure leaves the caller's table untouched. */
 VkResult ps5vk_descriptor_encode(VkDevice device,
     const struct ps5vk_compiled_program *program, uint32_t set_index, VkDescriptorSet set,
     const VkDeviceSize dynamic_offsets[PS5VK_MAX_DYNAMIC_DESCRIPTORS],
     uint32_t *table, size_t capacity_dwords);
-/* Table dwords the compiled program addresses in `set_index` (its records'
- * furthest extent), zero when it reads nothing there. */
+/* Table dwords for used records and their inline snapshots in `set_index`,
+ * zero when no binding is used there or its storage shape is invalid. */
 static inline size_t ps5vk_compute_table_dwords(const struct ps5vk_compiled_program *program,
-                                               uint32_t set_index)
+                                               uint32_t set_index, const struct ps5vk_set_signature *signature)
 {
     size_t dwords = 0;
     for (uint32_t i = 0; program && i < program->descriptor_count; ++i) {
         const struct ps5vk_program_descriptor *p = &program->descriptors[i];
-        const size_t end = (size_t)p->table_dword + ps5vk_compute_record_dwords(p->type);
-        if (p->set == set_index && end > dwords) dwords = end;
+        if (p->set != set_index) continue;
+        const uint32_t span = ps5vk_descriptor_span_dwords(signature, p->binding, p->type);
+        if (!span || p->table_dword > PS5VK_MAX_TABLE_DWORDS - span) return 0;
+        const size_t end = (size_t)p->table_dword + span;
+        if (end > dwords) dwords = end;
     }
     return (dwords + 3u) & ~(size_t)3u;
 }

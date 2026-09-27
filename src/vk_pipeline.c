@@ -568,9 +568,10 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
     for (uint32_t j = 0; j < p->descriptor_count; ++j) {
         const struct ps5vk_program_descriptor *b = &p->descriptors[j];
         /* Zero for every type the compute path cannot encode. */
-        const uint32_t dwords = ps5vk_compute_record_dwords(b->type);
-        if (b->set >= layout->set_count || !(p->descriptor_set_mask & (1u << b->set)) ||
-            b->binding >= PS5VK_MAX_BINDINGS || b->table_dword % 4 || !dwords ||
+        if (b->set >= layout->set_count || b->binding >= PS5VK_MAX_BINDINGS) return 0;
+        const uint32_t dwords = ps5vk_descriptor_span_dwords(&layout->sets[b->set], b->binding, b->type);
+        if (!(p->descriptor_set_mask & (1u << b->set)) ||
+            b->table_dword % 4 || !dwords ||
             b->table_dword > PS5VK_MAX_TABLE_DWORDS - dwords) return 0;
         const struct ps5vk_binding *binding = &layout->sets[b->set].binding[b->binding];
         if (layout->sets[b->set].type[b->binding] != b->type ||
@@ -579,7 +580,8 @@ static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule 
             if (p->descriptors[k].set == b->set &&
                 ((p->descriptors[k].table_dword < b->table_dword + dwords &&
                   b->table_dword < p->descriptors[k].table_dword +
-                    ps5vk_compute_record_dwords(p->descriptors[k].type)) ||
+                    ps5vk_descriptor_span_dwords(&layout->sets[b->set], p->descriptors[k].binding,
+                        p->descriptors[k].type)) ||
                  (p->descriptors[k].binding == b->binding && p->descriptors[k].element == b->element))) return 0;
     }
     return 1;

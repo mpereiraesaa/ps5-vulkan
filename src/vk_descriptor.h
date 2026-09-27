@@ -15,8 +15,8 @@ enum { PS5VK_MAX_PUSH_CONSTANT_BYTES = 256, PS5VK_MAX_PUSH_CONSTANT_DWORDS = 64 
  * equals or exceeds the core minimum (256 bytes, 4 blocks, 256 bytes total).
  * Update-after-bind layouts are refused, so the two update-after-bind limits
  * equal the plain ones. The descriptor model does not make the feature
- * consumable: no shader path encodes an inline block yet, and every
- * consumer refuses the descriptor type explicitly. */
+ * consumable: table snapshots exist, but compiler routes and public feature
+ * negotiation remain disabled pending implementation and native evidence. */
 enum {
     PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES = 256,
     PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET = 4,
