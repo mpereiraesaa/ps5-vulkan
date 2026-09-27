@@ -109,8 +109,9 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             artifact.get("format") != "R8G8B8A8_UNORM" or
             artifact.get("diagnostic_switch") != (INLINE_SWITCH if inline_variant else CACHE_SWITCH if cache_variant else None) or
             (cache_variant and artifact.get("cache_execution_version") != 2) or
-            (inline_variant and (artifact.get("inline_execution_version") != 6 or
-                                 artifact.get("inline_graphics_stage") not in ("small", "vertex", "fragment", "geometry")))):
+            (inline_variant and (artifact.get("inline_execution_version") != 7 or
+                                 artifact.get("inline_graphics_stage") not in ("small", "vertex", "fragment", "geometry",
+                                                                                "tess_control", "tess_evaluation")))):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or

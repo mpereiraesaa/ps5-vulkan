@@ -57,6 +57,8 @@
 #endif
 /* Preprocessor conditions cannot evaluate Vulkan's enum identifiers. */
 _Static_assert(VK_SHADER_STAGE_GEOMETRY_BIT == 8, "geometry stage selector");
+_Static_assert(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT == 2, "control stage selector");
+_Static_assert(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT == 4, "evaluation stage selector");
 #endif
 
 enum { EXTENT = 64, STAGING = 64 * 1024 };
@@ -151,6 +153,9 @@ static int run_witness(void)
 #if PS5VK_INLINE_GRAPHICS_STAGE == 8
     VkShaderModule geometry = VK_NULL_HANDLE;
 #endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    VkShaderModule tess_control = VK_NULL_HANDLE, tess_evaluation = VK_NULL_HANDLE;
+#endif
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkBool32 submission_pending = VK_FALSE;
@@ -212,9 +217,15 @@ static int run_witness(void)
         "DXVK_RENDER_WITNESS_START extent=%u dynamicRendering=%u extendedDynamicState=%u",
         EXTENT, (unsigned)dynamic_rendering.dynamicRendering, (unsigned)eds.extendedDynamicState);
     REQUIRE(dynamic_rendering.dynamicRendering && eds.extendedDynamicState, "features reported");
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8 || PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    VkPhysicalDeviceFeatures enabled_stages = {0};
 #if PS5VK_INLINE_GRAPHICS_STAGE == 8
     REQUIRE(features2.features.geometryShader, "geometry shader reported");
-    VkPhysicalDeviceFeatures enabled_geometry = {.geometryShader=VK_TRUE};
+    enabled_stages.geometryShader=VK_TRUE;
+#else
+    REQUIRE(features2.features.tessellationShader, "tessellation shader reported");
+    enabled_stages.tessellationShader=VK_TRUE;
+#endif
 #endif
 
     float priority = 1.0f;
@@ -234,8 +245,8 @@ static int run_witness(void)
 #endif
     };
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-#if PS5VK_INLINE_GRAPHICS_STAGE == 8
-        .pEnabledFeatures = &enabled_geometry,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8 || PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        .pEnabledFeatures = &enabled_stages,
 #endif
         .pNext = &dynamic_rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
         .enabledExtensionCount = sizeof(device_extensions) / sizeof(device_extensions[0]),
@@ -318,7 +329,7 @@ static int run_witness(void)
         .memory = staging_memory, .size = VK_WHOLE_SIZE};
     TRY(vkFlushMappedMemoryRanges(device, 1, &range));
 
-    VkShaderModuleCreateInfo module_info[3] = {
+    VkShaderModuleCreateInfo module_info[4] = {
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
          .codeSize = sizeof(dxvk_render_witness_vert_spirv), .pCode = dxvk_render_witness_vert_spirv},
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -330,20 +341,30 @@ static int run_witness(void)
         .codeSize=sizeof(dxvk_render_witness_geom_spirv),.pCode=dxvk_render_witness_geom_spirv};
     TRY(vkCreateShaderModule(device,&module_info[2],NULL,&geometry));
 #endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    module_info[2]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(dxvk_render_witness_tesc_spirv),.pCode=dxvk_render_witness_tesc_spirv};
+    module_info[3]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(dxvk_render_witness_tese_spirv),.pCode=dxvk_render_witness_tese_spirv};
+    TRY(vkCreateShaderModule(device,&module_info[2],NULL,&tess_control));
+    TRY(vkCreateShaderModule(device,&module_info[3],NULL,&tess_evaluation));
+#endif
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
 #ifdef PS5VK_INLINE_UNIFORM_WITNESS
     TRY(inline_graphics_descriptors(device, &inline_layout, &inline_pool, &inline_set, PS5VK_INLINE_GRAPHICS_STAGE));
     ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_GRAPHICS stage=%s blocks=%u bytes=%u",
         PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_VERTEX_BIT?"vertex":
         PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_FRAGMENT_BIT?"fragment":
-        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_GEOMETRY_BIT?"geometry":"small",
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_GEOMETRY_BIT?"geometry":
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT?"tess_control":
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT?"tess_evaluation":"small",
         PS5VK_INLINE_GRAPHICS_STAGE?4u:2u,PS5VK_INLINE_GRAPHICS_STAGE?1024u:24u);
     layout_info.setLayoutCount = 1;
     layout_info.pSetLayouts = &inline_layout;
 #endif
     TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
     /* DXVK's monolithic pipeline shape (dxvk_graphics.cpp:1388-1437). */
-    VkPipelineShaderStageCreateInfo stages[3] = {
+    VkPipelineShaderStageCreateInfo stages[4] = {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[0],
          .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vertex, .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[1],
@@ -353,11 +374,25 @@ static int run_witness(void)
     stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .pNext=&module_info[2],.stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=geometry,.pName="main"};
 #endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    stages[3]=stages[1];
+    stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext=&module_info[2],.stage=VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,.module=tess_control,.pName="main"};
+    stages[2]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext=&module_info[3],.stage=VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,.module=tess_evaluation,.pName="main"};
+#endif
     VkPipelineVertexInputStateCreateInfo vertex_input = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     VkPipelineInputAssemblyStateCreateInfo assembly = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        .topology =
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+            VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
+    VkPipelineTessellationStateCreateInfo tessellation={
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,.patchControlPoints=3};
+#else
+            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+#endif
     VkPipelineViewportStateCreateInfo viewport_state = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
     VkPipelineRasterizationStateCreateInfo raster = {
@@ -389,10 +424,15 @@ static int run_witness(void)
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .pNext = &rendering_info,
 #if PS5VK_INLINE_GRAPHICS_STAGE == 8
         .stageCount = 3,
+#elif PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        .stageCount = 4,
 #else
         .stageCount = 2,
 #endif
         .pStages = stages, .pVertexInputState = &vertex_input,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        .pTessellationState=&tessellation,
+#endif
         .pInputAssemblyState = &assembly, .pViewportState = &viewport_state,
         .pRasterizationState = &raster, .pMultisampleState = &multisample,
         .pDepthStencilState = &depth_state, .pColorBlendState = &blend,
@@ -666,6 +706,10 @@ cleanup:
         if (fragment) vkDestroyShaderModule(device, fragment, NULL);
 #if PS5VK_INLINE_GRAPHICS_STAGE == 8
         if (geometry) vkDestroyShaderModule(device, geometry, NULL);
+#endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        if (tess_control) vkDestroyShaderModule(device, tess_control, NULL);
+        if (tess_evaluation) vkDestroyShaderModule(device, tess_evaluation, NULL);
 #endif
         if (staging) vkDestroyBuffer(device, staging, NULL);
         if (staging_memory) vkFreeMemory(device, staging_memory, NULL);

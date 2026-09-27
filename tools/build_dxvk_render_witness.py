@@ -29,7 +29,7 @@ def run(*command: str, env: dict | None = None) -> None:
     subprocess.run(command, cwd=ROOT, env=env, check=True)
 
 
-def checked_spirv(payload: bytes, geometry: bool = False) -> None:
+def checked_spirv(payload: bytes, stage: str = "other") -> None:
     """Accept only the stage's required Vulkan-1.0 SPIR-V capability."""
     if len(payload) % 4:
         raise ValueError("SPIR-V length is not word aligned")
@@ -45,7 +45,7 @@ def checked_spirv(payload: bytes, geometry: bool = False) -> None:
         if opcode == 17 and size == 2:  # OpCapability
             capabilities.add(words[index + 1])
         index += size
-    if capabilities != ({2} if geometry else {1}):
+    if capabilities != ({2} if stage == "geom" else {3} if stage in ("tesc", "tese") else {1}):
         raise ValueError("unexpected witness SPIR-V capabilities")
 
 
@@ -56,7 +56,8 @@ def main() -> None:
                         help="build the diagnostic compute/graphics cache execution variant")
     variants.add_argument("--inline-uniform", action="store_true",
                           help="build the diagnostic inline compute and graphics execution variant")
-    parser.add_argument("--inline-graphics-boundary", choices=("vertex", "fragment", "geometry"),
+    parser.add_argument("--inline-graphics-boundary", choices=("vertex", "fragment", "geometry",
+                                                        "tess-control", "tess-evaluation"),
                         help="exercise four256-byte blocks in the selected graphics stage")
     args = parser.parse_args()
     if args.inline_graphics_boundary and not args.inline_uniform:
@@ -93,8 +94,14 @@ def main() -> None:
         shaders["dxvk_inline_split_spirv"] = ROOT / "experiments/compute/inline_split.comp"
     if args.inline_graphics_boundary:
         shaders["dxvk_render_witness_frag_spirv"] = ROOT / "experiments/graphics/dxvk_render_witness.frag"
-        stage = {"vertex":"vert", "fragment":"frag", "geometry":"geom"}[args.inline_graphics_boundary]
-        shaders["dxvk_render_witness_" + stage + "_spirv"] = ROOT / ("experiments/graphics/dxvk_inline_boundary." + stage)
+        if args.inline_graphics_boundary in ("tess-control", "tess-evaluation"):
+            for stage in ("tesc", "tese"):
+                variant = "dxvk_inline_boundary" if args.inline_graphics_boundary == (
+                    "tess-control" if stage == "tesc" else "tess-evaluation") else "dxvk_tess_passthrough"
+                shaders["dxvk_render_witness_" + stage + "_spirv"] = ROOT / f"experiments/graphics/{variant}.{stage}"
+        else:
+            stage = {"vertex":"vert", "fragment":"frag", "geometry":"geom"}[args.inline_graphics_boundary]
+            shaders["dxvk_render_witness_" + stage + "_spirv"] = ROOT / ("experiments/graphics/dxvk_inline_boundary." + stage)
     arrays = []
     shader_hashes = {}
     for name, shader_source in shaders.items():
@@ -102,7 +109,7 @@ def main() -> None:
         run(glslang, "-V", "--target-env", "vulkan1.0", str(shader_source),
             "-o", str(target))
         payload = target.read_bytes()
-        checked_spirv(payload, geometry=name=="dxvk_render_witness_geom_spirv")
+        checked_spirv(payload, stage=name.removeprefix("dxvk_render_witness_").removesuffix("_spirv"))
         arrays.append(emit_array(name, payload))
         shader_hashes[name] = hashlib.sha256(payload).hexdigest()
     (build / "dxvk_render_witness_shaders.h").write_text(
@@ -125,7 +132,8 @@ def main() -> None:
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         *(["-DPS5VK_CACHE_CONTROL_WITNESS=1"] if args.cache_control else []),
         *(["-DPS5VK_INLINE_UNIFORM_WITNESS=1"] if args.inline_uniform else []),
-        *(["-DPS5VK_INLINE_GRAPHICS_STAGE=" + {"vertex":"1","fragment":"16","geometry":"8"}[args.inline_graphics_boundary]]
+        *(["-DPS5VK_INLINE_GRAPHICS_STAGE=" + {"vertex":"1","fragment":"16","geometry":"8",
+             "tess-control":"2","tess-evaluation":"4"}[args.inline_graphics_boundary]]
           if args.inline_graphics_boundary else []),
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
@@ -177,8 +185,8 @@ def main() -> None:
     artifact = {
         "profile": ("dxvk-inline-public-sdk-witness" if args.inline_uniform else
                     "dxvk-cache-public-sdk-witness" if args.cache_control else "dxvk-render-public-sdk-witness"),
-        "inline_execution_version": 6 if args.inline_uniform else None,
-        "inline_graphics_stage": (args.inline_graphics_boundary or "small") if args.inline_uniform else None,
+        "inline_execution_version": 7 if args.inline_uniform else None,
+        "inline_graphics_stage": ((args.inline_graphics_boundary or "small").replace("-", "_")) if args.inline_uniform else None,
         "cache_execution_version": 2 if args.cache_control else None,
         "extent": 64, "format": "R8G8B8A8_UNORM",
         "diagnostic_switch": ("PS5VK_INLINE_UNIFORM_DIAGNOSTIC" if args.inline_uniform else

@@ -3001,6 +3001,43 @@ static void check_inline_boundary_geometry_compilation(void)
     ps5vk_runtime_graphics_free(NULL,out);
     free((void *)key.vertex.words);free((void *)key.fragment.words);free((void *)key.geometry.words);
 }
+static void check_inline_boundary_tess_compilation(VkBool32 control)
+{
+    struct ps5vk_set_signature sets[1]={0};sets[0].count=4;
+    for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) sets[0].binding[b].first=b<4?b:4;
+    const VkShaderStageFlags stage_flag=control?VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+    for(unsigned b=0;b<4;++b) {
+        sets[0].binding[b].count=1;sets[0].binding[b].stages=stage_flag;
+        sets[0].type[b]=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+        sets[0].inline_bytes[b]=256;
+    }
+    struct ps5vk_graphics_key key={
+        .vertex=read_module("build/runtime-graphics/dxvk_render_witness.vert.spv"),
+        .tess_control=read_module(control?"build/runtime-graphics/dxvk_inline_boundary.tesc.spv":
+            "build/runtime-graphics/dxvk_tess_passthrough.tesc.spv"),
+        .tess_eval=read_module(control?"build/runtime-graphics/dxvk_tess_passthrough.tese.spv":
+            "build/runtime-graphics/dxvk_inline_boundary.tese.spv"),
+        .fragment=read_module("build/runtime-graphics/dxvk_render_witness.frag.spv"),
+        .patch_control_points=3,.topology=VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
+        .feature_mask=PS5VK_FEATURE_TESSELLATION_SHADER,
+        .descriptor_set_count=1,.descriptor_sets=sets,
+        .color_format={VK_FORMAT_R8G8B8A8_UNORM},.color_attachment_count=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.color_write_mask={15}};
+    assert(ps5vk_spirv_graphics_interface(&key) && ps5vk_runtime_graphics_supported(&key));
+    const void *out=NULL;assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    const struct ps5vk_runtime_graphics_program *p=out;
+    const PsbcShaderOutput *stage=control?&p->hull:&p->domain;
+    assert(stage->machine_code_size && stage->metadata.descriptor_used_binding_mask[0]==15);
+    for(unsigned b=0;b<4;++b) {
+        assert(stage->metadata.descriptor_bindings[b].type==PSBC_DESCRIPTOR_UNIFORM_BUFFER);
+        assert(stage->metadata.descriptor_bindings[b].array_size==1);
+        assert(stage->metadata.descriptor_bindings[b].offset==b*272u);
+    }
+    ps5vk_runtime_graphics_free(NULL,out);
+    free((void *)key.vertex.words);free((void *)key.tess_control.words);
+    free((void *)key.tess_eval.words);free((void *)key.fragment.words);
+}
 
 int main(void)
 {
@@ -3008,6 +3045,8 @@ int main(void)
     check_inline_boundary_compilation(VK_FALSE);
     check_inline_boundary_compilation(VK_TRUE);
     check_inline_boundary_geometry_compilation();
+    check_inline_boundary_tess_compilation(VK_TRUE);
+    check_inline_boundary_tess_compilation(VK_FALSE);
     check_maintenance4_wider_producer();
     check_t08_compiler_options();
     check_flat_interfaces();
