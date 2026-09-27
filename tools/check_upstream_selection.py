@@ -18,12 +18,16 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.maintenance4_cts import local_size_paths, multiple_shader_paths
+
 MANIFEST = ROOT / "cts/upstream/manifest.json"
 UPSTREAM = ROOT / "third_party/vk-gl-cts"
 # The integration supplies the package and its leading groups; upstream supplies
 # everything below them.
 INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
 VOLATILE_ATOMIC_WRAPPER = ROOT / "cts/upstream/volatile_atomic_focus.cpp"
+LOCAL_SIZE_WRAPPER = VOLATILE_ATOMIC_WRAPPER
 BDA_BUILD_SOURCE = ROOT / "tools/build_upstream_cts.py"
 # The capabilities a selection is allowed to rely on come from the device's own
 # sources, not from the selection itself.
@@ -2109,6 +2113,29 @@ def main() -> int:
                     "vkt::pipeline::createCacheControlTests(" not in integration_text or
                     "vktPipelineCreationCacheControlTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
                 failures.append(f"{path}: not produced by the registered cache-control factory")
+            continue
+
+        if (case.get("category") == "maintenance4-local-size" or
+                path.startswith("dEQP-VK.spirv_assembly.instruction.compute.localsize_id.") or
+                source_path.name == "vktSpvAsmMultipleShadersTests.cpp"):
+            build_text = _read_source(BDA_BUILD_SOURCE)
+            if source_path.name == "vktSpvAsmInstructionTests.cpp":
+                wrapper = _read_source(LOCAL_SIZE_WRAPPER) if LOCAL_SIZE_WRAPPER.is_file() else ""
+                valid = (path in local_size_paths(text) and
+                    'vkt::SpirVAssembly::createFocusedLocalSizeIdGroup(' in integration_text and
+                    'ROOT / "cts/upstream/volatile_atomic_focus.cpp"' in build_text and
+                    '#include "vktSpvAsmInstructionTests.cpp"' in wrapper and
+                    'return createLocalSizeGroup(testCtx, true);' in wrapper)
+            elif source_path.name == "vktSpvAsmMultipleShadersTests.cpp":
+                valid = (path in multiple_shader_paths(text) and
+                    'vkt::SpirVAssembly::createMultipleShaderExtendedGroup(' in integration_text and
+                    'vktSpvAsmMultipleShadersTests.cpp' in build_text)
+            else:
+                valid = False
+            if not valid:
+                failures.append(f"{path}: not produced by a registered maintenance4 factory")
+            if not {"VK_KHR_maintenance4", "maintenance4"} <= set(case.get("features_required", [])):
+                failures.append(f"{path}: missing maintenance4 feature requirements")
             continue
 
         if source_path.name == "vktSpvAsmIntegerDotProductTests.cpp":

@@ -34,6 +34,7 @@
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktSpvAsmIndexingTests.hpp"
 #include "vktSpvAsmIntegerDotProductTests.hpp"
+#include "vktSpvAsmMultipleShadersTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
 #include "vktDrawShaderDrawParametersTests.hpp"
@@ -68,6 +69,7 @@ namespace vkt
 namespace SpirVAssembly
 {
 tcu::TestCaseGroup *createFocusedVolatileAtomicComputeGroup(tcu::TestContext &testCtx);
+tcu::TestCaseGroup *createFocusedLocalSizeIdGroup(tcu::TestContext &testCtx);
 }
 }
 
@@ -468,6 +470,8 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createWorkgroupMemoryComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocusedLocalSizeIdGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createMultipleShaderExtendedGroup(m_testCtx));
         // Original Vulkan 1.0 Int16 indexing leaves give the dormant core
         // shaderInt16 route an applicable CTS oracle once it is measured.
         computeGroup->addChild(vkt::SpirVAssembly::createIndexingComputeGroup(m_testCtx));

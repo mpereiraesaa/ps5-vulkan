@@ -1241,6 +1241,7 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIndexingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp",
         ROOT / "cts/upstream/volatile_atomic_focus.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmMultipleShadersTests.cpp",
     ]
     for src in test_cpp:
         obj = obj_dir / "modules" / (src.stem + ".o")
