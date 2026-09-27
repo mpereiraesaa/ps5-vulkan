@@ -3306,11 +3306,13 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:maintenance4",
       "implementation": {
-        "detail": "Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; creation-description memory requirements, maxBufferSize and LocalSizeId with constants, direct specialization and bounded scalar 32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, integer comparisons, boolean specialization and conditional selection, checked against the host compiler. Whole-location producer vectors may be wider than consumer vectors when maintenance4 is enabled; the VS-to-FS path is checked with real compilation and cache opt-in guards. Not implemented yet: LocalSizeId compound OpSpecConstantOp expressions involving conversions or composite extraction remain refused (src/vk_pipeline.c local_size); widened interfaces through geometry and tessellation still need focused compiler and native delivery coverage.",
+        "detail": "Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; creation-description memory requirements, maxBufferSize and LocalSizeId with constants, direct specialization and bounded scalar 32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, integer comparisons, boolean specialization and conditional selection, checked against the host compiler. Whole-location producer vectors may be wider than consumer vectors when maintenance4 is enabled; the VS-to-FS path has cache opt-in guards. Permanent real-compiler tests cover 147 float/int/uint interface cases across VS/TCS/TES/GS/FS and per-patch boundaries, with no native delivery claim. Not implemented yet: LocalSizeId compound OpSpecConstantOp expressions involving conversions or composite extraction remain refused (src/vk_pipeline.c local_size).",
         "refs": [
           "native/platform_ps5.c",
           "src/vk_memory.c",
-          "src/vk_pipeline.c"
+          "src/vk_pipeline.c",
+          "tests/maintenance4_interface_inspect.c",
+          "tests/test_maintenance4_interfaces.py"
         ],
         "state": "missing"
       },

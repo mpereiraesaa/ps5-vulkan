@@ -176,6 +176,8 @@ CORE_IMPLEMENTATIONS = {
             ("native/platform_ps5.c", "PS5VK_T09_FEATURE_MAINTENANCE4"),
             ("src/vk_memory.c", "vkGetDeviceBufferMemoryRequirementsKHR"),
             ("src/vk_pipeline.c", "LocalSizeId (OpExecutionModeId 331, mode 38)"),
+            ("tests/test_maintenance4_interfaces.py", "def test_stage_boundaries"),
+            ("tests/maintenance4_interface_inspect.c", "ps5vk_runtime_graphics_compile"),
         ),
         "detail": ("Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; "
                    "creation-description memory requirements, maxBufferSize and "
@@ -184,13 +186,13 @@ CORE_IMPLEMENTATIONS = {
                    "integer comparisons, boolean specialization and conditional selection, "
                    "checked against the host compiler. Whole-location producer vectors may "
                    "be wider than consumer vectors when maintenance4 is enabled; the "
-                   "VS-to-FS path is checked with real compilation and cache opt-in guards."),
+                   "VS-to-FS path has cache opt-in guards. Permanent real-compiler tests "
+                   "cover 147 float/int/uint interface cases across VS/TCS/TES/GS/FS "
+                   "and per-patch boundaries, with no native delivery claim."),
         "gaps": (
             "LocalSizeId compound OpSpecConstantOp expressions involving conversions "
             "or composite extraction remain refused "
             "(src/vk_pipeline.c local_size)",
-            "widened interfaces through geometry and tessellation still need focused "
-            "compiler and native delivery coverage",
         ),
     },
 }

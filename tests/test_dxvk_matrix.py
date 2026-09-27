@@ -757,10 +757,9 @@ class CurrentProbeTests(unittest.TestCase):
                       m4["implementation"]["detail"])
         self.assertIn("conversions or composite extraction remain refused",
                       m4["implementation"]["detail"])
-        self.assertIn("VS-to-FS path is checked with real compilation",
+        self.assertIn("147 float/int/uint interface cases across VS/TCS/TES/GS/FS",
                       m4["implementation"]["detail"])
-        self.assertIn("geometry and tessellation still need focused",
-                      m4["implementation"]["detail"])
+        self.assertIn("no native delivery claim", m4["implementation"]["detail"])
 
     def test_core_implementation_needs_every_citation_and_the_query(self):
         identifier = "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters"
