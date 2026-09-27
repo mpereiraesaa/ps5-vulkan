@@ -302,6 +302,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
                 signature.count == PS5VK_MAX_DESCRIPTORS)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             inline_uniform.bytes[b->binding] = b->descriptorCount;
+            signature.inline_bytes[b->binding] = b->descriptorCount;
             ++inline_uniform.blocks;
             signature.binding[b->binding].count = 1;
             signature.type[b->binding] = b->descriptorType;

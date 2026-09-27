@@ -1788,6 +1788,60 @@ static void imageless_second_color_multiview_layers(void)
     vkDestroyFramebuffer(&d, fb, NULL);
     assert(!d.graphics_objects);
 }
+/* Inline descriptorCount measures bytes, even though one block occupies one
+ * descriptor-table slot. Different sizes must not become compatible layouts. */
+static void inline_size_compatibility(void)
+{
+    struct VkDevice_T d = {.inline_uniform_block_enabled = VK_TRUE, .graphics_enabled = VK_TRUE};
+    VkDescriptorSetLayout layouts[3];
+    VkPipelineLayout pipelines[3];
+    for (unsigned i = 0; i < 3; ++i) {
+        VkDescriptorSetLayoutBinding binding = {.binding = 2,
+            .descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
+            .descriptorCount = i == 1 ? 32 : 16, .stageFlags = VK_SHADER_STAGE_ALL};
+        VkDescriptorSetLayoutCreateInfo sl = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = 1, .pBindings = &binding};
+        assert(vkCreateDescriptorSetLayout(&d, &sl, NULL, &layouts[i]) == VK_SUCCESS);
+        VkPipelineLayoutCreateInfo pl = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .setLayoutCount = 1, .pSetLayouts = &layouts[i]};
+        assert(vkCreatePipelineLayout(&d, &pl, NULL, &pipelines[i]) == VK_SUCCESS);
+    }
+    VkDescriptorPoolInlineUniformBlockCreateInfo blocks = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO,
+        .maxInlineUniformBlockBindings = 2};
+    VkDescriptorPoolSize size = {VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 48};
+    VkDescriptorPoolCreateInfo dpi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = &blocks, .maxSets = 2, .poolSizeCount = 1, .pPoolSizes = &size};
+    VkDescriptorPool descriptors;
+    assert(vkCreateDescriptorPool(&d, &dpi, NULL, &descriptors) == VK_SUCCESS);
+    VkDescriptorSetAllocateInfo allocate = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptors, .descriptorSetCount = 2, .pSetLayouts = layouts};
+    VkDescriptorSet sets[2];
+    assert(vkAllocateDescriptorSets(&d, &allocate, sets) == VK_SUCCESS);
+    VkCommandPool p = pool(&d, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    VkCommandBuffer c = command(&d, p);
+    const VkPipelineBindPoint points[] = {VK_PIPELINE_BIND_POINT_COMPUTE, VK_PIPELINE_BIND_POINT_GRAPHICS};
+    for (unsigned point = 0; point < 2; ++point) {
+        for (unsigned layout_index = 0; layout_index < 3; ++layout_index) {
+            for (unsigned set = 0; set < 2; ++set) {
+                assert(vkBeginCommandBuffer(c, &begin_info) == VK_SUCCESS);
+                vkCmdBindDescriptorSets(c, points[point], pipelines[layout_index], 0, 1,
+                    &sets[set], 0, NULL);
+                VkBool32 same_size = (layout_index == 1) == (set == 1);
+                assert(c->state == (same_size ? PS5VK_RECORDING : PS5VK_INVALID));
+                if (same_size) assert(vkEndCommandBuffer(c) == VK_SUCCESS);
+            }
+        }
+    }
+    vkDestroyCommandPool(&d, p, NULL);
+    vkDestroyDescriptorPool(&d, descriptors, NULL);
+    for (unsigned i = 0; i < 3; ++i) {
+        vkDestroyPipelineLayout(&d, pipelines[i], NULL);
+        vkDestroyDescriptorSetLayout(&d, layouts[i], NULL);
+    }
+    assert(!d.command_pools && !d.descriptor_objects);
+}
+
 int main(void)
 
-{ operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); render_pass2_recording(); dispatch_base_recording(); imageless_framebuffer_recording(); imageless_second_color_multiview_layers(); puts("Command recording/ownership: pass (host only, no submit)"); }
+{ inline_size_compatibility(); operation_reservation_contract(); states(); stage_access_scopes(); recording_and_invalidation(); multi_set_recording(); graphics_recording(); subpass_transitions(); dynamic_descriptor_recording(); vertex_binding_lifetime(); index_binding_lifetime(); image_barriers(); push_constant_recording(); core_dynamic_state_recording(); render_pass2_recording(); dispatch_base_recording(); imageless_framebuffer_recording(); imageless_second_color_multiview_layers(); puts("Command recording/ownership: pass (host only, no submit)"); }

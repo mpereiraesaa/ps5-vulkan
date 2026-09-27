@@ -40,6 +40,7 @@ struct ps5vk_cache_key {
             uint32_t first;
             uint32_t stages;
             uint32_t type;
+            uint32_t inline_bytes;
         } bindings[PS5VK_MAX_BINDINGS];
     } sets[PS5VK_MAX_SETS];
     uint32_t push_constant_size;

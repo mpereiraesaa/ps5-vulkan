@@ -1595,6 +1595,9 @@ static void inline_uniform_pipeline_layouts(void)
             .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT};
     VkDescriptorSetLayout frag4, vert1, all1;
     assert(inline_layout(&d, b, 4, &frag4) == VK_SUCCESS);
+    for (unsigned j = 0; j < 4; ++j)
+        assert(frag4->signature.inline_bytes[j] == 64 &&
+            frag4->signature.binding[j].count == 1);
     b[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     assert(inline_layout(&d, b, 1, &vert1) == VK_SUCCESS);
     b[0].stageFlags = VK_SHADER_STAGE_ALL;

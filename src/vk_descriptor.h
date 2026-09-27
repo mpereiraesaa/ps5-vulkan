@@ -43,6 +43,9 @@ struct ps5vk_set_signature {
     struct ps5vk_binding binding[PS5VK_MAX_BINDINGS];
     VkDescriptorType type[PS5VK_MAX_BINDINGS];
     uint32_t count;
+    /* Inline blocks consume one table slot, but descriptorCount is their byte
+     * length. Preserve it for layout compatibility, compiler bounds and keys. */
+    uint32_t inline_bytes[PS5VK_MAX_BINDINGS];
 };
 /* An inline uniform block occupies ONE descriptor slot of the signature (the
  * slot a future buffer record would address) and bytes[] of the set's own
