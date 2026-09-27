@@ -201,8 +201,127 @@ static void zero_initialize_workgroup(void)
     free(initialized); free(plain);
 }
 
+/* Compile a real UBO shader as inline storage, with other resources after its
+ * payload in the same table. Preserve the original module's executable code;
+ * only remap descriptor decorations to exercise the canonical mixed layout. */
+static void inline_uniform_compile(void)
+{
+    size_t bytes;
+    uint32_t *spv = read_file("build/test-shaders/resource_abi.spv", &bytes);
+    assert(spv);
+    const size_t words = bytes / 4;
+    uint32_t *sets = malloc(spv[3] * sizeof(*sets));
+    uint32_t *bindings = malloc(spv[3] * sizeof(*bindings));
+    assert(sets && bindings);
+    for (uint32_t i = 0; i < spv[3]; ++i) sets[i] = bindings[i] = UINT32_MAX;
+    for (size_t at = 5; at < words; at += spv[at] >> 16)
+        if ((spv[at] & 0xffffu) == 71u && (spv[at] >> 16) == 4) {
+            if (spv[at + 2] == 34u) sets[spv[at + 1]] = spv[at + 3];
+            if (spv[at + 2] == 33u) bindings[spv[at + 1]] = spv[at + 3];
+        }
+    uint32_t inline_id = 0;
+    for (size_t at = 5; at < words; at += spv[at] >> 16)
+        if ((spv[at] & 0xffffu) == 71u && (spv[at] >> 16) == 4) {
+            const uint32_t id = spv[at + 1];
+            if (sets[id] == UINT32_MAX || bindings[id] == UINT32_MAX) continue;
+            if (sets[id] == 1) inline_id = id;
+            if (spv[at + 2] == 34u) spv[at + 3] = 0;
+            if (spv[at + 2] == 33u)
+                spv[at + 3] = sets[id] == 1 ? 0 : sets[id] == 0 ? bindings[id] + 1 : 3;
+        }
+    free(sets); free(bindings); assert(inline_id);
+    struct VkPipelineLayout_T layout = {.set_count = 1, .push_constant_size = 4};
+    layout.push_constant_stages[0] = VK_SHADER_STAGE_COMPUTE_BIT;
+    const VkDescriptorType types[] = {VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER};
+    for (unsigned b = 0; b < 4; ++b) {
+        layout.sets[0].binding[b] = (struct ps5vk_binding){1, b, VK_SHADER_STAGE_COMPUTE_BIT};
+        layout.sets[0].type[b] = types[b];
+    }
+    for (unsigned b = 4; b < PS5VK_MAX_BINDINGS; ++b) layout.sets[0].binding[b].first = 4;
+    layout.sets[0].count = 4; layout.sets[0].inline_bytes[0] = 20;
+    struct ps5vk_compiled_program program; uint32_t *code = NULL;
+    assert(ps5vk_spirv_descriptor_types_match(spv, words, 1, layout.sets));
+    assert(ps5vk_runtime_compile_compute(spv, words, "main", &layout, NULL,
+        &program, &code) == VK_SUCCESS && code && program.code_words);
+    const unsigned offsets[] = {0, 12, 16, 20};
+    assert(program.descriptor_count == 4 && program.descriptor_set_mask == 1);
+    for (unsigned b = 0; b < 4; ++b)
+        assert(program.descriptors[b].binding == b && program.descriptors[b].type == types[b] &&
+            !program.descriptors[b].element && program.descriptors[b].table_dword == offsets[b]);
+    /* Removing the inline payload moves later descriptors in the actual
+     * emitted machine code, not only in our returned descriptor metadata. */
+    layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layout.sets[0].inline_bytes[0] = 0;
+    struct ps5vk_compiled_program ordinary; uint32_t *ordinary_code = NULL;
+    assert(ps5vk_runtime_compile_compute(spv, words, "main", &layout, NULL,
+        &ordinary, &ordinary_code) == VK_SUCCESS && ordinary_code);
+    assert(program.code_words != ordinary.code_words ||
+        memcmp(code, ordinary_code, program.code_words * 4));
+    free(ordinary_code); free(code); code = NULL;
+    layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+    layout.sets[0].inline_bytes[0] = 20;
+    /* Locate the inline variable, pointer and Block decoration for negative
+     * mutations. The adapter must refuse before passing them to PSBC. */
+    size_t variable = 0, pointer = 0, decoration = 0;
+    for (size_t at = 5; at < words; at += spv[at] >> 16)
+        if ((spv[at] & 0xffffu) == 59u && spv[at + 2] == inline_id) variable = at;
+    assert(variable);
+    for (size_t at = 5; at < words; at += spv[at] >> 16)
+        if ((spv[at] & 0xffffu) == 32u && spv[at + 1] == spv[variable + 1]) pointer = at;
+    assert(pointer);
+    for (size_t at = 5; at < words; at += spv[at] >> 16)
+        if ((spv[at] & 0xffffu) == 71u && (spv[at] >> 16) == 3 &&
+            spv[at + 1] == spv[pointer + 3] && spv[at + 2] == 2u) decoration = at;
+    assert(decoration);
+#define REFUSE_WORD(index, value) do { uint32_t saved = spv[index]; spv[index] = value; \
+    assert(!ps5vk_spirv_descriptor_types_match(spv, words, 1, layout.sets)); \
+    assert(ps5vk_runtime_compile_compute(spv, words, "main", &layout, NULL, &program, &code) \
+        == VK_ERROR_FEATURE_NOT_PRESENT && !code); spv[index] = saved; } while (0)
+    REFUSE_WORD(variable + 3, 12u); /* StorageBuffer variable */
+    REFUSE_WORD(pointer + 2, 12u);  /* StorageBuffer pointer */
+    REFUSE_WORD(decoration + 2, 3u); /* legacy BufferBlock */
+    REFUSE_WORD(decoration + 2, 0u); /* no Block decoration */
+    REFUSE_WORD(pointer + 3, spv[3]); /* invalid pointee */
+    REFUSE_WORD(variable + 1, spv[3]); /* invalid pointer */
+#undef REFUSE_WORD
+    free(spv);
+
+    /* Arrays inside a uniform block remain legal; arrays OF blocks do not. */
+    spv = read_file("build/test-shaders/robust_access_wrap.spv", &bytes); assert(spv);
+    memset(&layout, 0, sizeof(layout)); layout.set_count = 1;
+    for (unsigned b = 0; b < 3; ++b) {
+        layout.sets[0].binding[b] = (struct ps5vk_binding){1, b, VK_SHADER_STAGE_COMPUTE_BIT};
+        layout.sets[0].type[b] = b == 2 ? VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK :
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    }
+    layout.sets[0].inline_bytes[2] = 256;
+    assert(ps5vk_spirv_descriptor_types_match(spv, bytes / 4, 1, layout.sets));
+    uint32_t array = 0;
+    for (size_t at = 5; at < bytes / 4; at += spv[at] >> 16)
+        if ((spv[at] & 0xffffu) == 28u) array = spv[at + 1];
+    assert(array);
+    unsigned checked = 0;
+    for (size_t at = 5; at < bytes / 4; at += spv[at] >> 16)
+        if ((spv[at] & 0xffffu) == 32u && spv[at + 2] == 2u) {
+            uint32_t saved = spv[at + 3];
+            int structure = 0;
+            for (size_t t = 5; t < bytes / 4; t += spv[t] >> 16)
+                if ((spv[t] & 0xffffu) == 71u && (spv[t] >> 16) == 3 &&
+                    spv[t + 1] == saved && spv[t + 2] == 2u) structure = 1;
+            if (!structure) continue; /* exclude member pointers and BufferBlock */
+            spv[at + 3] = array;
+            assert(!ps5vk_spirv_descriptor_types_match(spv, bytes / 4, 1, layout.sets));
+            spv[at + 3] = saved; ++checked;
+        }
+    assert(checked == 1);
+    free(spv);
+}
+
 int main(void)
 {
+    inline_uniform_compile();
     full_set_compile();
     /* 1. Load minimal.comp SPIR-V */
     size_t spv1_bytes = 0;

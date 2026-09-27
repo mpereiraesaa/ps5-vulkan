@@ -23,7 +23,9 @@
  *   OpTypeImage SubpassData               -> INPUT_ATTACHMENT
  *   OpTypeImage other, Sampled 1 / 2      -> SAMPLED_IMAGE / STORAGE_IMAGE
  * Block-typed Uniform/StorageBuffer variables are buffers and are left to the
- * existing buffer checks. Returns 0 on malformed input or any mismatch. */
+ * existing buffer checks. Inline blocks must be direct Uniform Block structs,
+ * never storage buffers or arrays of descriptor blocks. Returns 0 on malformed
+ * input or any mismatch. */
 static inline int ps5vk_spirv_opaque_descriptor_type(const uint32_t *words, uint32_t bound,
     const uint32_t *type_at, uint32_t id, VkDescriptorType *out)
 {
@@ -64,7 +66,7 @@ static inline int ps5vk_spirv_descriptor_types_scan(const uint32_t *words, size_
     for (size_t at = 5; at < count;) {
         const uint32_t n = words[at] >> 16, op = words[at] & 0xffffu;
         if (!n || n > count - at) return 0;
-        if ((op >= 25u && op <= 29u) || op == 32u) {
+        if ((op >= 25u && op <= 30u) || op == 32u) {
             if (n < 2 || words[at + 1] >= bound) return 0;
             type_at[words[at + 1]] = (uint32_t)at;
         }
@@ -87,10 +89,30 @@ static inline int ps5vk_spirv_descriptor_types_scan(const uint32_t *words, size_
                 d += dn;
             }
             if (set < set_count && binding < PS5VK_MAX_BINDINGS &&
-                sets[set].binding[binding].count && pointer < bound &&
-                type_at[pointer]) {
+                sets[set].binding[binding].count) {
+                if (pointer >= bound || !type_at[pointer]) return 0;
                 const uint32_t *p = words + type_at[pointer];
                 if ((p[0] & 0xffffu) != 32u || (p[0] >> 16) < 4) return 0;
+                if (sets[set].type[binding] == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+                    if (words[at + 3] != 2u || p[2] != 2u || p[3] >= bound ||
+                        !type_at[p[3]] ||
+                        (words[type_at[p[3]]] & 0xffffu) != 30u) return 0;
+                    int block = 0;
+                    for (size_t d = 5; d < count;) {
+                        const uint32_t dn = words[d] >> 16, dop = words[d] & 0xffffu;
+                        if (dop == 71u && dn >= 3 && words[d + 1] == p[3]) {
+                            if (words[d + 2] == 3u) return 0; /* BufferBlock */
+                            if (words[d + 2] == 2u) {
+                                if (dn != 3) return 0;
+                                block = 1;
+                            }
+                        }
+                        d += dn;
+                    }
+                    if (!block) return 0;
+                    at += n;
+                    continue;
+                }
                 VkDescriptorType type;
                 const int opaque = ps5vk_spirv_opaque_descriptor_type(words, bound,
                     type_at, p[3], &type);
