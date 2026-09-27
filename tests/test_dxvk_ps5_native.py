@@ -22,6 +22,8 @@ SOURCE = ROOT / "examples/dxvk_native"
 ORACLE_PROGRAM = r"""
 #include "oracle.h"
 #include "sha256.h"
+#include "telemetry.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +52,10 @@ static void report(const char *name, int verdict, const dxvk_oracle_result *r)
 
 int main(void)
 {
+    assert(!dxvk_log_is_refusal("err", "DXGI: Failed to parse display metadata + colorimetry info, using blank."));
+    assert(dxvk_log_is_refusal("err", "DXGI: Present failed"));
+    assert(dxvk_log_is_refusal("warn", "Skipping Vulkan 1.0 adapter"));
+    assert(dxvk_log_is_refusal("info", "Required Vulkan extension X not supported"));
     for (uint32_t y = 0; y < DXVK_ORACLE_HEIGHT; ++y)
         for (uint32_t x = 0; x < DXVK_ORACLE_WIDTH; ++x)
             printf("P %u %u %08x\n", x, y, dxvk_oracle_expected(x, y));
@@ -66,6 +72,19 @@ int main(void)
     report("one_pixel", dxvk_oracle_check(image, 256, &r), &r);
     report("short_pitch", dxvk_oracle_check(image, 252, &r), &r);
     report("null", dxvk_oracle_check(NULL, 256, &r), &r);
+
+    for (unsigned frame = 1; frame <= 2; ++frame) {
+        for (uint32_t y = 0; y < 64; ++y)
+            for (uint32_t x = 0; x < 64; ++x) {
+                uint32_t pixel = dxvk_oracle_expected_frame(x, y, frame);
+                memcpy(image + 320 * y + 4 * x, &pixel, 4);
+            }
+        char label[32];
+        snprintf(label, sizeof(label), "frame_%u", frame);
+        report(label, dxvk_oracle_check_frame(image, 320, frame, &r), &r);
+        snprintf(label, sizeof(label), "stale_%u", frame);
+        report(label, dxvk_oracle_check_frame(image, 320, frame - 1, &r), &r);
+    }
 
     char hex[65];
     dxvk_sha256 sha;
@@ -160,6 +179,13 @@ class OracleProgram(unittest.TestCase):
         self.assertEqual(self.cases["short_pitch"]["verdict"], "-1")
         self.assertEqual(self.cases["null"]["verdict"], "-1")
         self.assertEqual(self.cases["null"]["checked"], "0")
+
+    def test_frame_markers_reject_stale_readback(self):
+        for frame, checksum in ((1, "8052d0c5"), (2, "c0bc44c5")):
+            self.assertEqual(self.cases[f"frame_{frame}"]["verdict"], "0")
+            self.assertEqual(self.cases[f"frame_{frame}"]["checksum"], checksum)
+            self.assertEqual(self.cases[f"stale_{frame}"]["verdict"], "1")
+            self.assertEqual(self.cases[f"stale_{frame}"]["mismatches"], "1024")
 
     def test_sha256_matches_hashlib(self):
         digests = {line.split()[1]: line.split()[2] for line in self.output
@@ -500,6 +526,68 @@ class ReceiptParser(unittest.TestCase):
         self.assertEqual(receipt["outcome"], "crash")
         self.assertFalse(receipt["log_finalized"])
         self.assertEqual(receipt["identity_mismatches"], ["eboot_sha256: run=00 artifact=ee"])
+
+
+class PresentationReceipt(unittest.TestCase):
+    @staticmethod
+    def records():
+        records = [("MARK", "DXVK_NATIVE_STAGE stage=dxgi.swapchain state=ok"),
+                   ("MARK", "DXVK_NATIVE_STAGE stage=dxgi.backbuffer state=ok")]
+        for frame, checksum in enumerate(("6e17a4c5", "8052d0c5", "c0bc44c5")):
+            records.append(("MARK", f"DXVK_PRESENT_FRAME index={frame} checked=4096 mismatches=0 "
+                            f"checksum={checksum} expected_checksum={checksum} present_hr=0x00000000"))
+            records.append(("MARK", "DXVK_NATIVE_STAGE stage=dxgi.present state=ok"))
+        records.append(("MARK", "DXVK_PRESENT_RESULT frames=3 swapchain_refs=0 device_refs=0 context_refs=0"))
+        return records
+
+    def test_three_distinct_frames_and_retirement(self):
+        log = ps5log(self.records())
+        self.assertTrue(runner.presentation_evidence(log)["passed"])
+        self.assertTrue(runner.parse_log(log)["presentation"]["passed"])
+
+    def test_refused_stale_missing_duplicate_and_leaked_results(self):
+        log = ps5log(self.records())
+        for bad in (log.replace("present_hr=0x00000000", "present_hr=0x087a0001"),
+                    log.replace("8052d0c5", "6e17a4c5"),
+                    log.replace("index=2", "index=1"),
+                    log.replace("checked=4096", "checked=0"),
+                    log.replace("mismatches=0", "mismatches=1"),
+                    log.replace("swapchain_refs=0", "swapchain_refs=1"),
+                    log.replace("context_refs=0", "context_refs=1"),
+                    log.replace("stage=dxgi.present state=ok", "stage=dxgi.present state=begin"),
+                    ps5log(self.records()[:-1]), ps5log(self.records() + self.records()), ""):
+            with self.subTest(log=bad[:80]):
+                self.assertFalse(runner.presentation_evidence(bad)["passed"])
+
+    def test_presentation_acceptance_binds_workload_and_lifecycle(self):
+        artifact = dict(ARTIFACT, workload="present", sdk_switches=[], integration=None,
+                        sdk_rebuilt=True, ps5vk_dirty=False)
+        records = [
+            (IDENTITY[0], IDENTITY[1] + " compat_layer=0 integration=none sdk_switches=none workload=present"),
+            ("INFO", "DXVK_VK_PROPERTIES apiVersion=1.3.0 deviceName=test"),
+            *self.records(),
+            ("MARK", "DXVK_NATIVE_STAGE stage=shutdown state=ok device_refs=0 context_refs=0"),
+            ("INFO", "DXVK_VK_TRACE calls=200 refusals=0 missing_entry_points=0"),
+            ("MARK", "DXVK_NATIVE_RESULT outcome=rendered create_hr=0x00000000 feature_level=0xb000 device_refs=0 context_refs=0"),
+        ]
+        summary = runner.parse_log(ps5log(records))
+        self.assertTrue(runner.vulkan13_acceptance(summary, artifact, True, True)["passed"])
+        self.assertFalse(runner.vulkan13_acceptance(summary, artifact, True, False)["passed"])
+        self.assertFalse(runner.vulkan13_acceptance(summary, dict(artifact, workload="offscreen"), True, True)["passed"])
+        self.assertFalse(runner.vulkan13_acceptance(dict(summary, presentation={}), artifact, True, True)["passed"])
+
+    def test_only_exact_edid_fallback_is_nonfatal_and_remains_visible(self):
+        fallback = "DXGI: Failed to parse display metadata + colorimetry info, using blank."
+        self.assertFalse(runner.is_refusal_line("err", fallback))
+        self.assertTrue(runner.is_refusal_line("err", "DXGI: Present failed"))
+        summary = runner.parse_log(ps5log([("ERR", "DXVK_LOG level=err stage=dxgi.present text=" + fallback)]))
+        self.assertEqual(summary["dxvk_log"]["errors"][0]["text"], fallback)
+        self.assertIsNone(summary["first_refusal_candidate"])
+
+    def test_build_identity_distinguishes_presentation(self):
+        header = build.identity_header("unmodified", "a", "b", False, "c", "d", presentation=True)
+        self.assertIn("#define DXVK_NATIVE_PRESENTATION 1", header)
+        self.assertIn("#define DXVK_NATIVE_DIAGNOSTIC 0", header)
 
 
 if __name__ == "__main__":

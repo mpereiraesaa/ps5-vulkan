@@ -177,6 +177,52 @@ PRs serially from current `main`; prefer roughly 3–6 files when a slice can
 be split honestly. Keep partial support private or default-off until its
 public query and native behavior agree.
 
+## Offline presentation candidate (2026-09-27)
+
+The native builder accepts `--present` for a separate `unmodified-present`
+artifact. It uses the original pinned DXVK libraries and the ordinary SDK,
+creates a two-buffer 1920x1080 DXGI flip-discard swapchain, renders three
+frames and calls `Present(1, 0)` for each. The top-left 64x64 region is copied
+to staging **before** each Present and checked against the shader oracle.
+The clear marker changes on every frame; stale readback, missing or duplicate
+frames, a non-S_OK Present (including occlusion), and surviving swapchain,
+device or context references fail the presentation verifier.
+
+The host DXVK run on 2026-09-27 returned S_OK for all three frames, with zero
+mismatches over 4096 pixels per frame and checksums `6e17a4c5`, `8052d0c5`
+and `c0bc44c5`. Swapchain, device and context final reference counts were zero.
+The host executable SHA-256 was
+`a36abd1891d95a1d025fb6d2c0e68873e30669c7367a841ce00e35285b1f1048`;
+the generated host receipt also identifies the linked DXVK libraries.
+
+This is preparation for a native test, not evidence of PS5 presentation or
+external scanout. The 64x64 readback does not validate every display pixel or
+DXVK's final presentation blit. The historical offscreen artifact and its
+checksum remain a separate workload. Missing EDID retains its original DXVK
+error log, but the exact documented SDR-default fallback is not classified as
+a rendering refusal; other errors remain refusal candidates.
+
+With the pinned DXVK checkout and its SDL2 native Meson build available:
+
+```sh
+python3 tools/build_dxvk_ps5_native.py --host-only --present
+python3 tools/build_dxvk_ps5_native.py --variant unmodified --present
+```
+
+`--host-only` does not build or run a PS5 payload. It writes the host executable,
+stdout/stderr and `receipt.json` under `build/dxvk-ps5-native/host-present`.
+The native command only builds; its artifact and package are under
+`build/dxvk-ps5-native/unmodified-present`. Neither command deploys anything.
+Use `--dxvk-dir` and `--build-dir` to select an existing local pinned build.
+The untracked dependency checkout and compiler archives must match their pins.
+
+The native run tool has `--require-presentation`, which requires the matching
+presentation artifact, strict Vulkan 1.3 acceptance, all three frame oracles,
+successful Present calls and clean title closure. Native acceptance still needs
+a clean source build, artifact identity, firmware record and bounded relaunch
+on hardware. No native acceptance or profile-matrix promotion is claimed by
+this candidate.
+
 ## What remains in the old profile inventory
 
 The 17 current blockers are useful leads, not the ordered execution queue.
