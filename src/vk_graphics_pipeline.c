@@ -354,8 +354,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         }
         /* A shape the profile refuses for that topology (primitive restart on
          * a list or a fan) leaves it undrawable; running out of memory fails
-         * the whole pipeline. */
-        if(rc==VK_ERROR_OUT_OF_HOST_MEMORY || rc==VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+         * the whole pipeline, as does a required variant that cannot be
+         * acquired without compilation. */
+        if(rc==VK_ERROR_OUT_OF_HOST_MEMORY || rc==VK_ERROR_OUT_OF_DEVICE_MEMORY ||
+           rc==VK_PIPELINE_COMPILE_REQUIRED) {
             vkDestroyPipeline(d,*out,allocator);
             *out=VK_NULL_HANDLE;
             return rc;
@@ -384,7 +386,8 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * three through five add the optional tessellation control/evaluation pair
      * and geometry after evaluation. Nothing else is accepted, so a
      * mesh or task stage still fails here. */
-    if ((in->pNext && in->renderPass) || in->flags || in->subpass >= render_pass->subpass_count ||
+    if ((in->pNext && in->renderPass) || (in->flags & ~(VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
+                         VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) || in->subpass >= render_pass->subpass_count ||
         (in->stageCount < 2 || in->stageCount > 5) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return refuse(2);
@@ -655,6 +658,8 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          (depth->depthCompareOp < VK_COMPARE_OP_NEVER ||
           depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))))
         return refuse(16);
+    if (in->flags && !(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_graphics_key key={
         .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
         .fragment={.words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName},
@@ -670,6 +675,7 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         .patch_control_points=tcs?in->pTessellationState->patchControlPoints:0,
         .feature_mask=d->enabled_features,
         .maintenance4=!!(d->enabled_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE4),
+        .fail_on_compile_required=!!(in->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT),
         .transform_feedback_buffers=capture.buffers_mask,
         .rasterizer_discard=r->rasterizerDiscardEnable?VK_TRUE:VK_FALSE,
         .topology=ia->topology,
@@ -764,7 +770,8 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         }
     } else {
         rc=ps5vk_graphics_resolve(d->graphics_library,&key,&program);
-        if(rc!=VK_SUCCESS)return rc;
+        if(rc!=VK_SUCCESS)return key.fail_on_compile_required &&
+            rc==VK_ERROR_FEATURE_NOT_PRESENT?VK_PIPELINE_COMPILE_REQUIRED:rc;
         data=program->backend_data;
     }
     VkAllocationCallbacks saved={0}; VkBool32 custom=VK_FALSE;
@@ -907,7 +914,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineC
     VkResult rc=VK_SUCCESS;
     for (uint32_t i=0;i<count;++i) {
         VkResult current=create(d,&infos[i],allocator,&out[i]);
-        if (rc == VK_SUCCESS && current != VK_SUCCESS) rc=current;
+        if (current != VK_SUCCESS && (rc == VK_SUCCESS ||
+            (rc == VK_PIPELINE_COMPILE_REQUIRED && current < 0))) rc=current;
+        if (current != VK_SUCCESS && (infos[i].flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT) &&
+            (d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL)) break;
     }
     return rc;
 }

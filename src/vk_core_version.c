@@ -37,6 +37,7 @@ struct extension_features {
     VkPhysicalDeviceShaderTerminateInvocationFeatures terminate;
     VkPhysicalDeviceMaintenance4Features maintenance4;
     VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures zero_initialize;
+    VkPhysicalDevicePipelineCreationCacheControlFeatures cache_control;
     VkPhysicalDeviceSynchronization2Features synchronization2;
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering;
     VkPhysicalDeviceFeatures2 core;
@@ -62,6 +63,7 @@ static void query_extension_features(VkPhysicalDevice p, struct extension_featur
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES, &f->terminate},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES, &f->maintenance4},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES, &f->zero_initialize},
+        {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES, &f->cache_control},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES, &f->synchronization2},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, &f->dynamic_rendering},
     };
@@ -140,6 +142,7 @@ static void fill_vulkan13_features(VkPhysicalDevice p, VkPhysicalDeviceVulkan13F
     out->shaderTerminateInvocation = f.terminate.shaderTerminateInvocation;
     out->maintenance4 = f.maintenance4.maintenance4;
     out->shaderZeroInitializeWorkgroupMemory = f.zero_initialize.shaderZeroInitializeWorkgroupMemory;
+    out->pipelineCreationCacheControl = f.cache_control.pipelineCreationCacheControl;
     out->synchronization2 = f.synchronization2.synchronization2;
     out->dynamicRendering = f.dynamic_rendering.dynamicRendering;
 }
@@ -452,6 +455,7 @@ static const struct core_enable core_enables[] = {
     V13(shaderTerminateInvocation, 0, PS5VK_T09_FEATURE_SHADER_TERMINATE_INVOCATION),
     V13(maintenance4, 0, PS5VK_T09_FEATURE_MAINTENANCE4),
     V13(shaderZeroInitializeWorkgroupMemory, 0, PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY),
+    V13(pipelineCreationCacheControl, 0, PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL),
     V13(synchronization2, 0, PS5VK_T09_FEATURE_SYNCHRONIZATION2),
     V13(dynamicRendering, 0, PS5VK_T09_FEATURE_DYNAMIC_RENDERING),
 };

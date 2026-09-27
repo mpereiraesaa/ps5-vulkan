@@ -48,6 +48,8 @@ struct ps5vk_graphics_key {
     uint32_t feature_mask;
     /* Acceptance-only maintenance4 interface relaxation, checked before compile. */
     VkBool32 maintenance4;
+    /* Acquisition policy only, excluded from shader/cache identity. */
+    VkBool32 fail_on_compile_required;
     VkPrimitiveTopology topology;
     /* Per-attachment colour state, attachment i in element i, bounded by the
      * colour-attachment contract. The count is the subpass's own. Recording

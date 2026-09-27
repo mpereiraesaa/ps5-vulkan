@@ -2943,13 +2943,21 @@ int main(void)
     struct ps5vk_compilation_cache *cache=ps5vk_compilation_cache_create(4,1024*1024);
     assert(cache);
     const void *cold,*warm;
+    key.fail_on_compile_required=VK_TRUE;
+    assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&cold)==VK_PIPELINE_COMPILE_REQUIRED && !cold);
+    struct ps5vk_cache_stats before_compile;
+    ps5vk_compilation_cache_get_stats(cache,&before_compile);
+    assert(!before_compile.compiles && !before_compile.current_entries);
+    key.fail_on_compile_required=VK_FALSE;
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&cold)==VK_SUCCESS);
+    key.fail_on_compile_required=VK_TRUE;
     assert(ps5vk_runtime_graphics_cached_acquire(cache,&key,&warm)==VK_SUCCESS);
     p=cold;
     assert(p->vertex.machine_code==((const struct ps5vk_runtime_graphics_program *)warm)->vertex.machine_code);
     struct ps5vk_cache_stats stats;
     ps5vk_compilation_cache_get_stats(cache,&stats);
-    assert(stats.compiles==1 && stats.hits==1 && stats.misses==1 && stats.current_entries==1);
+    assert(stats.compiles==1 && stats.hits==1 && stats.misses==2 && stats.current_entries==1);
+    key.fail_on_compile_required=VK_FALSE;
     ps5vk_runtime_graphics_cached_release(cache,warm);
     /* Each module independently participates in identity. Generator words can
      * differ without invalidating this owned SPIR-V or changing its semantics. */

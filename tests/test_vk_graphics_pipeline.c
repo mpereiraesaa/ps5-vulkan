@@ -7,6 +7,7 @@ static unsigned created, released;
 static unsigned acquired, compiled_released, compile_fail, backend_fail;
 static unsigned expect_five_stages;
 static VkBool32 expect_maintenance4;
+static VkBool32 expect_no_compile, cached_triangle_only;
 static unsigned expect_blend_state;
 static unsigned expect_dual_blend_state;
 /* 1 = independentBlend enabled on the device, 2 = not enabled: the second
@@ -25,6 +26,8 @@ static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const
 {
     assert(context==&acquired && key->vertex.word_count==10 && key->fragment.word_count==10);
     assert(key->maintenance4==expect_maintenance4);
+    assert(key->fail_on_compile_required==expect_no_compile);
+    if (expect_no_compile && (!cached_triangle_only || key->topology!=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) { *out=NULL; return VK_PIPELINE_COMPILE_REQUIRED; }
     if(expect_two_targets) {
         assert(key->color_attachment_count==2);
         assert(key->color_format[0]==VK_FORMAT_B8G8R8A8_UNORM &&
@@ -450,6 +453,37 @@ int main(void)
     assert(vkCreateGraphicsPipelines(&d,0,1,&info,NULL,&runtime)==VK_ERROR_FEATURE_NOT_PRESENT && !runtime);
     assert(acquired==3);
     d.graphics_compiled_release=compiled_release;
+    {
+        VkGraphicsPipelineCreateInfo batch[3]={info,info,info};
+        VkPipeline outputs[3];
+        batch[0].flags=VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        assert(vkCreateGraphicsPipelines(&d,0,1,batch,NULL,outputs)==VK_ERROR_FEATURE_NOT_PRESENT && !outputs[0]);
+        d.enabled_features_t09|=PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+        expect_no_compile=VK_TRUE;
+        batch[0].flags|=VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT;
+        assert(vkCreateGraphicsPipelines(&d,0,3,batch,NULL,outputs)==VK_PIPELINE_COMPILE_REQUIRED);
+        assert(!outputs[0] && !outputs[1] && !outputs[2]);
+        batch[0].flags=VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        batch[1]=batch[0];batch[2]=batch[0];
+        assert(vkCreateGraphicsPipelines(&d,0,3,batch,NULL,outputs)==VK_PIPELINE_COMPILE_REQUIRED);
+        assert(!outputs[0] && !outputs[1] && !outputs[2]);
+        batch[2].layout=NULL;
+        assert(vkCreateGraphicsPipelines(&d,0,3,batch,NULL,outputs)<0);
+        /* A warm primary does not hide a cold dynamic-topology variant. */
+        cached_triangle_only=VK_TRUE;
+        d.extended_dynamic_state_enabled=VK_TRUE;
+        VkDynamicState topology=VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT;
+        VkPipelineDynamicStateCreateInfo state={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount=1,.pDynamicStates=&topology};
+        batch[0].pDynamicState=&state;
+        unsigned built=created,freed=released,leases=compiled_released;
+        assert(vkCreateGraphicsPipelines(&d,0,1,batch,NULL,outputs)==VK_PIPELINE_COMPILE_REQUIRED && !outputs[0]);
+        assert(created==built+1 && released==freed+1 && compiled_released==leases+1);
+        d.extended_dynamic_state_enabled=VK_FALSE;
+        cached_triangle_only=VK_FALSE;
+        expect_no_compile=VK_FALSE;
+        d.enabled_features_t09&=~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    }
     {
         unsigned a=acquired,built=created,freed=released,leases=compiled_released;
         d.graphics_used_sets=used_sets;

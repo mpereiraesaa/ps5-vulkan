@@ -147,6 +147,26 @@ DIAGNOSTIC_IMPLEMENTATIONS = {
 # `gaps` names required semantics the driver does not implement yet; a row with
 # a gap stays missing however its query reads.
 CORE_IMPLEMENTATIONS = {
+    "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl": {
+        "citations": (
+            ("src/vk_device.c", "PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL"),
+            ("src/vk_core_version.c", "V13(pipelineCreationCacheControl"),
+            ("src/vk_pipeline.c", "VK_PIPELINE_COMPILE_REQUIRED"),
+            ("src/vk_graphics_pipeline.c", "fail_on_compile_required"),
+            ("native/runtime_graphics_cache.c", "fail_on_compile_required"),
+            ("tests/test_runtime_pipeline_cache.c", "static void cache_control"),
+            ("tests/test_vk_core_version.c", "cache_control_negotiation"),
+        ),
+        "detail": ("EXT and Vulkan 1.3 query/opt-in contracts gate pipeline cache-control "
+                   "flags. Compute and graphics cold misses refuse compilation; warm "
+                   "entries retain cache identity. Batch creation supports early return, "
+                   "null uncreated outputs and ownership of successful siblings. Dynamic "
+                   "topology creation rolls back a warm primary when a variant needs "
+                   "compilation. Externally synchronized cache creation is accepted "
+                   "only with opt-in. Host tests cover these contracts."),
+        "gaps": ("SDK-linked delivery witness and native execution remain pending; "
+                 "the shipping platform does not advertise this capability",),
+    },
     "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
         "citations": (
             ("native/platform_ps5.c", "PS5VK_FEATURE_SHADER_DRAW_PARAMETERS"),
@@ -617,6 +637,8 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_DEDICATED_ALLOCATION"},
         "VK_KHR_BIND_MEMORY_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_BIND_MEMORY2"},
         "VK_KHR_MAINTENANCE_4_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE4"},
+        "VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL"},
         "VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY"},
         "VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME": {

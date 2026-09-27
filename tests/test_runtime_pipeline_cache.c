@@ -56,6 +56,52 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
     return VK_SUCCESS;
 }
 
+static unsigned compile_calls;
+static VkResult counted_compile(void *context, const uint32_t *spirv, size_t words,
+    const char *entry, VkPipelineLayout layout, const VkSpecializationInfo *specialization,
+    uint32_t features, struct ps5vk_compiled_program *program, uint32_t **code)
+{
+    ++compile_calls;
+    return ps5vk_compiler_adapter_compile(context, spirv, words, entry, layout,
+                                         specialization, features, program, code);
+}
+
+static void cache_control(VkDevice d, const VkComputePipelineCreateInfo *base)
+{
+    struct ps5vk_compilation_cache *saved = d->pipeline_cache;
+    d->pipeline_cache = ps5vk_compilation_cache_create(8, 1024 * 1024);
+    assert(d->pipeline_cache);
+    d->compiler.compile = counted_compile;
+    VkComputePipelineCreateInfo infos[3] = {*base, *base, *base};
+    VkPipeline out[3];
+    infos[0].flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 1, infos, NULL, out) == VK_ERROR_FEATURE_NOT_PRESENT && !out[0]);
+    d->enabled_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 1, infos, NULL, out) == VK_PIPELINE_COMPILE_REQUIRED && !out[0]);
+    assert(!compile_calls);
+    infos[0].flags |= VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT;
+    memset(out, 0xff, sizeof(out));
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 3, infos, NULL, out) == VK_PIPELINE_COMPILE_REQUIRED);
+    assert(!out[0] && !out[1] && !out[2] && !compile_calls);
+    infos[0].flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    infos[2].flags = infos[0].flags;
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 3, infos, NULL, out) == VK_PIPELINE_COMPILE_REQUIRED);
+    assert(!out[0] && out[1] && out[2] && compile_calls == 1);
+    vkDestroyPipeline(d, out[1], NULL); vkDestroyPipeline(d, out[2], NULL);
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 1, infos, NULL, out) == VK_SUCCESS && out[0]);
+    assert(compile_calls == 1);
+    vkDestroyPipeline(d, out[0], NULL);
+    infos[1].flags = VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT;
+    infos[1].stage.module = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 3, infos, NULL, out) < 0);
+    assert(out[0] && !out[1] && !out[2] && compile_calls == 1);
+    vkDestroyPipeline(d, out[0], NULL);
+    ps5vk_compilation_cache_destroy(d->pipeline_cache);
+    d->pipeline_cache = saved;
+    d->compiler.compile = ps5vk_compiler_adapter_compile;
+    d->enabled_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+}
+
 int main(void)
 {
     size_t spv_bytes = 0;
@@ -122,6 +168,8 @@ int main(void)
             .pName = "main"
         }
     };
+
+    cache_control(device, &cpci);
 
     /* 1. Cold compile: pipeline 1 invokes compiler */
     VkPipeline pipeline1;

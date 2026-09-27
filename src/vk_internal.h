@@ -254,6 +254,8 @@ enum ps5vk_t09_feature_bits {
     /* Workgroup OpConstantNull initialization. Kept unreported until a
      * native witness proves the compiler stores and synchronization. */
     PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY = 1u << 29,
+    /* Cache-only pipeline creation and early return; unreported until validated. */
+    PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL = 1u << 30,
     /* A second, HOST_COHERENT memory type whose coherence the driver keeps at
      * map/unmap and submission boundaries (src/physical_device_profile.h).
      * Only the diagnostic witness build sets it until native proof. */

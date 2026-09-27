@@ -255,6 +255,7 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     /* The experimental second legacy-domain image is intentionally not part
      * of the normal cache payload. Keep this diagnostic ownership explicit. */
     if(ps5vk_graphics_has_tessellation(key)) {
+        if(key->fail_on_compile_required)return VK_PIPELINE_COMPILE_REQUIRED;
         const void *compiled=NULL;
         VkResult rc=ps5vk_runtime_graphics_compile(NULL,key,&compiled);
         if(rc!=VK_SUCCESS)return rc;
@@ -275,6 +276,7 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     if(!words)return VK_ERROR_OUT_OF_HOST_MEMORY;
     struct ps5vk_cache_entry *entry=ps5vk_compilation_cache_lookup(cache,&identity,words);
     if(!entry) {
+        if(key->fail_on_compile_required){free(words);return VK_PIPELINE_COMPILE_REQUIRED;}
         const void *compiled=NULL;
         VkResult rc=ps5vk_runtime_graphics_compile(NULL,key,&compiled);
         if(rc!=VK_SUCCESS){free(words);return rc;}

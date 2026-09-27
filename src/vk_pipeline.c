@@ -592,10 +592,17 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
         info->layout->device != d || info->stage.sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO ||
         !info->stage.module || info->stage.module->device != d || !info->stage.pName) return INVALID;
     if (info->pNext ||
-        (info->flags & ~VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR) ||
+        (info->flags & ~(VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR |
+                         VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
+                         VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) ||
         info->stage.pNext || info->stage.flags ||
         info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT)
         return VK_ERROR_UNKNOWN;
+    const VkBool32 no_compile = !!(info->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT);
+    if ((info->flags & (VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
+                        VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) &&
+        !(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if ((info->flags & VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR) &&
         !d->device_group_extension_enabled)
         return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -638,7 +645,7 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
             entry = ps5vk_compilation_cache_lookup(d->pipeline_cache, &key, info->stage.module->words);
             if (entry) {
                 program = &entry->program;
-            } else if (d->runtime_compiler_enabled && d->compiler.compile) {
+            } else if (!no_compile && d->runtime_compiler_enabled && d->compiler.compile) {
                 VkResult cr = d->compiler.compile(d->compiler.context,
                     info->stage.module->words, info->stage.module->word_count,
                     info->stage.pName, info->layout, info->stage.pSpecializationInfo,
@@ -666,6 +673,7 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
     if (!program && d->compiler.resolve) {
         if (info->stage.pSpecializationInfo &&
             info->stage.pSpecializationInfo->mapEntryCount) {
+            if (no_compile) return VK_PIPELINE_COMPILE_REQUIRED;
             if (compiled_code) free(compiled_code);
             return VK_ERROR_FEATURE_NOT_PRESENT;
         }
@@ -673,13 +681,14 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
             info->stage.module->word_count, info->stage.pName, &program);
         if (result != VK_SUCCESS) {
             if (compiled_code) free(compiled_code);
-            return result == VK_ERROR_FEATURE_NOT_PRESENT ? VK_ERROR_UNKNOWN : result;
+            return result == VK_ERROR_FEATURE_NOT_PRESENT ?
+                (no_compile ? VK_PIPELINE_COMPILE_REQUIRED : VK_ERROR_UNKNOWN) : result;
         }
     }
 
     if (!program) {
         if (compiled_code) free(compiled_code);
-        return VK_ERROR_UNKNOWN;
+        return no_compile ? VK_PIPELINE_COMPILE_REQUIRED : VK_ERROR_UNKNOWN;
     }
     COMPUTE_MARK("PS5VK_COMPUTE_PIPELINE phase=validate cached=%d", entry != NULL);
     if (!program_valid(program, info->stage.module, info->layout, info->stage.pName, dims)) {
@@ -739,7 +748,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(VkDevice d, VkPipelineCa
     VkResult result = VK_SUCCESS;
     for (uint32_t j = 0; j < count; ++j) {
         VkResult r = create_pipeline(d, &infos[j], a, &out[j]);
-        if (r != VK_SUCCESS && result == VK_SUCCESS) result = r;
+        if (r != VK_SUCCESS && (result == VK_SUCCESS ||
+            (result == VK_PIPELINE_COMPILE_REQUIRED && r < 0))) result = r;
+        if (r != VK_SUCCESS && (infos[j].flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT) &&
+            (d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL)) break;
     }
     /* As Vulkan permits, successful siblings remain caller-owned on failure. */
     return result;
