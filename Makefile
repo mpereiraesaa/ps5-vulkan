@@ -573,6 +573,12 @@ test-compiler: build/libpsbc.host.a test-shaders
 	mkdir -p build/tests
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cache_witness.comp -o build/test-shaders/cache_witness.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/inline_witness.comp -o build/test-shaders/inline_witness.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=32 -DSIZE_Y=3 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_0.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=64 -DSIZE_Y=2 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_1.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=32 -DSIZE_Y=2 -DSIZE_Z=2 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_2.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=1024 -DSIZE_Y=1 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_3.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=33 -DSIZE_Y=1 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_4.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=1 -DSIZE_Y=1 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_5.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cts_ssbo_local_barrier.comp -o build/test-shaders/cts_ssbo_local_barrier.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/zero_initialize_workgroup.comp -o build/test-shaders/zero_initialize_workgroup.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp -DZERO_INITIALIZE=1 experiments/compute/zero_initialize_workgroup.comp -o build/test-shaders/zero_initialize_workgroup_null.spv

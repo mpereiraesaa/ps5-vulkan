@@ -45,10 +45,10 @@ static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend;
 VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
-                                 .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT};
+                                 .max_allocation = 131072, .queue_flags = VK_QUEUE_COMPUTE_BIT};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU",
-        .heap_size = 65536,
+        .heap_size = 131072,
         .allocation_granularity = 1,
         .buffer_image_granularity = 1,
     };
@@ -398,6 +398,85 @@ static void check_inline_compute_witness(VkDevice d)
     puts("SDK inline compute witness: pass (real compiler, synthetic queue, four update routes, three oracle faults; no GPU)");
 }
 
+#include "../examples/dxvk_render_witness/subgroup_compute.h"
+struct subgroup_job { uint64_t serial; unsigned char *data; uint32_t total; };
+static unsigned subgroup_fault, subgroup_launches;
+static VkResult subgroup_prepare(VkDevice device,const struct ps5vk_submission *s,void **out)
+{
+    assert(s->count==1 && s->buffers[0]->operation_count==3);
+    const struct ps5vk_operation *ops=s->buffers[0]->operations;
+    assert(ops[0].type==PS5VK_BARRIER && ops[2].type==PS5VK_BARRIER);
+    assert(ops[0].src_stage==VK_PIPELINE_STAGE_HOST_BIT && ops[0].dst_stage==VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    assert(ops[0].src_access==VK_ACCESS_HOST_WRITE_BIT && ops[0].dst_access==VK_ACCESS_SHADER_WRITE_BIT);
+    assert(ops[2].src_stage==VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT && ops[2].dst_stage==VK_PIPELINE_STAGE_HOST_BIT);
+    assert(ops[2].src_access==VK_ACCESS_SHADER_WRITE_BIT && ops[2].dst_access==VK_ACCESS_HOST_READ_BIT);
+    const struct ps5vk_operation *op=&ops[1];
+    assert(op->type==PS5VK_DISPATCH && op->groups[0]==2 && op->groups[1]==1 && op->groups[2]==1);
+    assert(op->pipeline->program.code_words && op->pipeline->program.wave_size==32);
+    const uint32_t *dim=op->pipeline->program.local_size;
+    struct subgroup_job *job=calloc(1,sizeof(*job));assert(job);
+    job->serial=s->serial;job->total=dim[0]*dim[1]*dim[2];
+    VkDescriptorSet set=op->sets[0];assert(set && set->buffers[0].offset==256 && set->buffers[0].range==job->total*64);
+    void *address;VkDeviceSize size;
+    assert(ps5vk_buffer_span(device,set->buffers[0].buffer,0,VK_WHOLE_SIZE,&address,&size)==VK_SUCCESS);
+    assert(size>=job->total*64+512);job->data=address;*out=job;return VK_SUCCESS;
+}
+static VkResult subgroup_launch(VkDevice d,void *data)
+{
+    (void)d;struct subgroup_job *job=data;++subgroup_launches;
+    /* Derive each synthetic wave separately; do not call the witness oracle. */
+    for(unsigned wg=0;wg<2;++wg) for(unsigned start=0;start<job->total;start+=32) {
+        unsigned active=job->total-start;if(active>32)active=32;
+        uint32_t mask=0;for(unsigned lane=0;lane<active;++lane)mask|=UINT32_C(1)<<lane;
+        for(unsigned lane=0;lane<active;++lane) {
+            uint32_t values[8]={32,lane,start/32,(job->total+31)/32,active,mask,1,start+lane};
+            if(subgroup_fault==1)values[4]--;
+            if(subgroup_fault==2)values[5]^=1;
+            if(subgroup_fault==3)values[6]=2;
+            if(subgroup_fault==4)values[1]^=1;
+            if(subgroup_fault!=6)memcpy(job->data+256+(wg*job->total+start+lane)*32,values,32);
+        }
+    }
+    if(subgroup_fault==5)job->data[255]^=1;
+    return VK_SUCCESS;
+}
+static VkResult subgroup_poll(VkDevice d,void *data,uint64_t *serial)
+{(void)d;*serial=((struct subgroup_job*)data)->serial;return VK_SUCCESS;}
+static void check_subgroup_compute_witness(VkDevice d)
+{
+    struct ps5vk_queue_backend saved=d->submit_backend;struct ps5vk_progress progress=d->progress;
+    uint32_t platform_saved=d->physical->platform.supported_features_t09;
+    d->physical->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    d->subgroup_size_control_enabled=d->compute_full_subgroups_enabled=VK_TRUE;
+    d->submit_backend=(struct ps5vk_queue_backend){subgroup_prepare,subgroup_launch,subgroup_poll,witness_release};
+    d->progress=(struct ps5vk_progress){NULL,ps5vk_queue_poll,witness_clock,witness_pause};
+    VkQueue queue;vkGetDeviceQueue(d,0,0,&queue);
+    const uint32_t shapes[][3]={{32,3,1},{64,2,1},{32,2,2},{1024,1,1},{33,1,1},{1,1,1}};
+    unsigned pipelines=d->pipeline_objects,descriptors=d->descriptor_objects;
+    for(unsigned shape=0;shape<6;++shape) {
+        char path[160];snprintf(path,sizeof(path),"build/test-shaders/subgroup_full_%u.spv",shape);
+        size_t bytes;uint32_t *words=read_file(path,&bytes);assert(words);
+        struct subgroup_compute_case config={{shapes[shape][0],shapes[shape][1],shapes[shape][2]},
+            shape<4?VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT:0,shape%2};
+        if(shape==0 || shape==2)config.flags|=VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT;
+        unsigned total=shapes[shape][0]*shapes[shape][1]*shapes[shape][2];
+        for(subgroup_fault=0;subgroup_fault<7;++subgroup_fault) {
+            subgroup_launches=0;VkBool32 pending=VK_TRUE;struct subgroup_compute_result observed;
+            VkResult r=subgroup_compute_witness(d,queue,words,bytes,&config,&pending,&observed);
+            if(r!=(subgroup_fault?VK_ERROR_UNKNOWN:VK_SUCCESS))fprintf(stderr,"subgroup shape=%u fault=%u result=%d step=%s\n",shape,subgroup_fault,r,observed.step);
+            assert(r==(subgroup_fault?VK_ERROR_UNKNOWN:VK_SUCCESS) && !pending && subgroup_launches==1);
+            assert(observed.outputs==total*16 && observed.guards==(subgroup_fault==5));
+            assert(observed.mismatches==(subgroup_fault==6?total*16:subgroup_fault && subgroup_fault<5?total*2:0));
+            assert(d->pipeline_objects==pipelines && d->descriptor_objects==descriptors && !d->buffers && !d->memories && !d->command_pools && !d->fences && !d->lifetime_errors);
+        }
+        free(words);
+    }
+    d->physical->platform.supported_features_t09=platform_saved;
+    d->subgroup_size_control_enabled=d->compute_full_subgroups_enabled=VK_FALSE;
+    d->submit_backend=saved;d->progress=progress;
+    puts("SDK subgroup helper: six shapes, six fault classes, real compiler and synthetic queue passed; no GPU evidence");
+}
+
 int main(void)
 {
     size_t spv_bytes = 0;
@@ -630,6 +709,7 @@ int main(void)
 
     check_compute_execution_witness(device);
     check_inline_compute_witness(device);
+    check_subgroup_compute_witness(device);
 
     /* Teardown */
     vkDestroyPipeline(device, pipeline3, NULL);
