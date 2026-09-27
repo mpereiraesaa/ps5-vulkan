@@ -448,6 +448,21 @@ static int constant_tree_valid(VkShaderModule module, uint32_t id, uint32_t expe
     }
     const uint32_t *type = constant_type(module, expected);
     if (!type) return 0;
+    /* Quantized float members are checked structurally here; the compiler
+     * evaluates them. They cannot themselves become integer launch sizes. */
+    if ((definition[0] & 0xffff) == 52 && definition[0] >> 16 == 5 && definition[3] == 116) {
+        const uint32_t *element = type;
+        if ((type[0] & 0xffff) == 23) {
+            if (type[0] >> 16 != 4 || type[3] < 2 || type[3] > 4) return 0;
+            element = constant_type(module, type[2]);
+        }
+        if (!element || (element[0] & 0xffff) != 22 || element[0] >> 16 != 3 || element[2] != 32) return 0;
+        for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+            const uint32_t *w = module->words + i;
+            if ((w[0] & 0xffff) == 71 && w[0] >> 16 >= 3 && w[1] == id && w[2] == 1) return 0;
+        }
+        return constant_tree_valid(module, definition[4], expected, specialization, depth + 1, budget);
+    }
     if ((type[0] & 0xffff) == 21 || (type[0] & 0xffff) == 22)
         return constant_unused_literal(module, definition, type, specialization);
     if ((type[0] & 0xffff) == 23 && type[0] >> 16 == 4 && constant_scalar_kind(module, type[2])) {

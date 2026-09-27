@@ -722,7 +722,8 @@ int main(void)
             free(expr); free(seed);
         }
     }
-    for (unsigned specialized_float = 0; specialized_float < 4; ++specialized_float) {
+    for (unsigned quantize_mode = 0; quantize_mode < 2; ++quantize_mode)
+    for (unsigned specialized_float = 0; specialized_float < (quantize_mode ? 6u : 4u); ++specialized_float) {
         uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
         size_t expression_count;
         uint32_t *expr = aggregate_dimension(seed, count + 4, id64, id1, 0, &expression_count);
@@ -743,6 +744,19 @@ int main(void)
         expr = realloc(expr, (expression_count + added) * 4); assert(expr);
         memmove(expr + type_at + added, expr + type_at, (expression_count - type_at) * 4);
         memcpy(expr + type_at, declarations, added * 4); expr[3] += vector_field ? 4 : 2; expression_count += added;
+        if (quantize_mode) {
+            uint32_t quantized = expr[3]++;
+            unsigned quantized_vector = specialized_float >= 4;
+            size_t quantize_at = type_at + (quantized_vector ? added : 7);
+            expr = realloc(expr, (expression_count + 5) * 4); assert(expr);
+            memmove(expr + quantize_at + 5, expr + quantize_at, (expression_count - quantize_at) * 4);
+            uint32_t quantize[] = {5u << 16 | 52u, quantized_vector ? vector_type : float_type, quantized, 116, quantized_vector ? vector_value : float_value};
+            memcpy(expr + quantize_at, quantize, sizeof(quantize)); expression_count += 5;
+            for (size_t i = 5; i < expression_count; i += expr[i] >> 16)
+                if ((expr[i] & 0xffff) == 51)
+                    for (unsigned child = 3; child < expr[i] >> 16; ++child)
+                        if (expr[i + child] == (quantized_vector ? vector_value : float_value)) expr[i + child] = quantized;
+        }
         if (specialized_float & 1) {
             uint32_t *with_spec = specialize_dimension(expr, expression_count, float_value, 9);
             free(expr); expr = with_spec; expression_count += 4;
@@ -752,10 +766,39 @@ int main(void)
             VkSpecializationMapEntry entries[] = {{7, 0, 4}, {9, 4, 4}};
             VkSpecializationInfo info = {2, entries, sizeof(data), data};
             const VkSpecializationInfo *map = specialized ? &info : NULL;
+            struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+            VkResult compiler = ps5vk_runtime_compile_compute(expr, expression_count, "main", layout, map, &program, &code);
+            assert(compiler == VK_SUCCESS && code && program.local_size[0] == (specialized ? 32u : 64u)); free(code);
             VkPipeline candidate = NULL;
             VkResult front = build_specialized(device, layout, expr, expression_count * 4, map, &candidate);
             assert(front == VK_SUCCESS && candidate && candidate->program.local_size[0] == (specialized ? 32u : 64u));
             vkDestroyPipeline(device, candidate, NULL);
+        }
+        for (size_t i = 5; i < expression_count; i += expr[i] >> 16) {
+            if ((expr[i] & 0xffff) != 52 || expr[i + 3] != 116) continue;
+            uint32_t old = expr[i + 4];
+            const uint32_t bad_operands[] = {id1, expr[i + 2], expr[3]};
+            for (unsigned bad = 0; bad < 3; ++bad) {
+                expr[i + 4] = bad_operands[bad];
+                VkPipeline invalid = NULL;
+                assert(build(device, layout, expr, expression_count * 4, &invalid) != VK_SUCCESS && !invalid);
+            }
+            expr[i + 4] = old;
+            uint32_t instruction = expr[i];
+            expr[i] = 4u << 16 | 52u; expr[i + 4] = 1u << 16;
+            VkPipeline invalid = NULL;
+            assert(build(device, layout, expr, expression_count * 4, &invalid) != VK_SUCCESS && !invalid);
+            expr[i] = instruction; expr[i + 4] = old;
+            size_t types = 5;
+            while (types < expression_count && (expr[types] & 0xffff) != 19) types += expr[types] >> 16;
+            assert(types < expression_count);
+            uint32_t *decorated = malloc((expression_count + 4) * 4); assert(decorated);
+            memcpy(decorated, expr, types * 4);
+            uint32_t decoration[] = {4u << 16 | 71u, expr[i + 2], 1, 23};
+            memcpy(decorated + types, decoration, sizeof(decoration));
+            memcpy(decorated + types + 4, expr + types, (expression_count - types) * 4);
+            assert(build(device, layout, decorated, (expression_count + 4) * 4, &invalid) != VK_SUCCESS && !invalid);
+            free(decorated);
         }
         free(expr); free(seed);
     }
