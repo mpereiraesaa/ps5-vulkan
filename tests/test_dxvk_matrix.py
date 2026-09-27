@@ -762,7 +762,7 @@ class CurrentProbeTests(unittest.TestCase):
                 self.assertEqual(artifact, row["native"]["artifact_sha256"])
                 self.assertEqual("satisfied", row["verdict"])
         m4 = rows["feature:VkPhysicalDeviceVulkan13Features:maintenance4"]
-        self.assertEqual(("satisfied", "missing", "reported-not-executed", "blocker"),
+        self.assertEqual(("satisfied", "implemented", "reported-not-executed", "blocker"),
                          (m4["api"]["state"], m4["implementation"]["state"],
                           m4["native"]["state"], m4["verdict"]))
         self.assertIn("32-bit integer arithmetic/bitwise OpSpecConstantOp",
@@ -773,7 +773,7 @@ class CurrentProbeTests(unittest.TestCase):
                       m4["implementation"]["detail"])
         self.assertIn("nested array/structure extraction and insertion, null aggregates",
                       m4["implementation"]["detail"])
-        self.assertIn("integer-width conversions remain refused",
+        self.assertIn("integer-width conversions with truncation and sign extension",
                       m4["implementation"]["detail"])
         self.assertIn("147 float/int/uint interface cases across VS/TCS/TES/GS/FS",
                       m4["implementation"]["detail"])

@@ -149,13 +149,48 @@ static const uint32_t *constant_definition(VkShaderModule module, uint32_t id)
     }
     return definition;
 }
+/* Launch dimensions are 32-bit, but their specialization expression may
+ * narrow through enabled 8/16-bit arithmetic before widening again. */
+static unsigned constant_integer_width(VkShaderModule module, uint32_t type)
+{
+    unsigned count = 0, width = 0;
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        if ((w[0] & 0xffff) == 21 && w[0] >> 16 == 4 && w[1] == type) {
+            ++count;
+            if ((w[2] == 8 || w[2] == 16 || w[2] == 32) && w[3] <= 1) width = w[2];
+        }
+    }
+    return count == 1 ? width : 0;
+}
+static uint32_t constant_mask(unsigned width)
+{
+    return width == 32 ? UINT32_MAX : (UINT32_C(1) << width) - 1;
+}
+static int constant_convert(VkShaderModule module, unsigned op, uint32_t destination,
+                            uint32_t source, uint32_t value, uint32_t *out)
+{
+    unsigned dw = constant_integer_width(module, destination);
+    unsigned sw = constant_integer_width(module, source);
+    if (!dw || !sw || dw == sw) return 0;
+    if (op == 113) {
+        for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+            const uint32_t *w = module->words + i;
+            if ((w[0] & 0xffff) == 21 && w[0] >> 16 == 4 && w[1] == destination && w[3]) return 0;
+        }
+    } else if (op != 114) return 0;
+    value &= constant_mask(sw);
+    if (op == 114 && (value & (UINT32_C(1) << (sw - 1)))) value |= ~constant_mask(sw);
+    *out = value & constant_mask(dw);
+    return 1;
+}
 static unsigned constant_scalar_kind(VkShaderModule module, uint32_t type)
 {
     unsigned count = 0, kind = 0;
     for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
         const uint32_t *w = module->words + i;
         unsigned op = w[0] & 0xffff, length = w[0] >> 16;
-        if (op == 21 && length == 4 && w[1] == type && w[2] == 32) {
+        if (op == 21 && length == 4 && w[1] == type && constant_integer_width(module, type)) {
             ++count; kind = 1;
         }
         if (op == 20 && length == 2 && w[1] == type) {
@@ -168,8 +203,9 @@ static unsigned constant_scalar_kind(VkShaderModule module, uint32_t type)
  * signed intermediates, avoiding undefined host overflow, division or shifts. */
 static int constant_operation(unsigned op, unsigned result_kind,
                               uint32_t a, uint32_t b, uint32_t c,
-                              unsigned ak, unsigned bk, unsigned ck, uint32_t *value)
+                              unsigned ak, unsigned bk, unsigned ck, unsigned width, uint32_t *value)
 {
+    if (width != 8 && width != 16 && width != 32) return 0;
     int unary = op == 126 || op == 168 || op == 200;
     int select = op == 169, logical = op >= 164 && op <= 168;
     int comparison = op >= 170 && op <= 179;
@@ -181,15 +217,16 @@ static int constant_operation(unsigned op, unsigned result_kind,
     unsigned operand_kind = logical ? 2u : 1u;
     if (result_kind != (logical || comparison ? 2u : 1u) ||
         ak != operand_kind || (!unary && bk != operand_kind)) return 0;
-    int64_t sa = a <= INT32_MAX ? (int64_t)a : (int64_t)a - 0x100000000LL;
-    int64_t sb = b <= INT32_MAX ? (int64_t)b : (int64_t)b - 0x100000000LL;
+    uint32_t sign = UINT32_C(1) << (width - 1);
+    int64_t sa = a < sign ? (int64_t)a : (int64_t)a - (INT64_C(1) << width);
+    int64_t sb = b < sign ? (int64_t)b : (int64_t)b - (INT64_C(1) << width);
     switch (op) {
     case 126: *value = 0u - a; break;
     case 128: *value = a + b; break;
     case 130: *value = a - b; break;
     case 132: *value = a * b; break;
     case 134: if (!b) return 0; *value = a / b; break;
-    case 135: if (!b || (sa == INT32_MIN && sb == -1)) return 0;
+    case 135: if (!b || (a == sign && sb == -1)) return 0;
               *value = (uint32_t)(sa / sb); break;
     case 137: if (!b) return 0; *value = a % b; break;
     case 138: if (!b) return 0; *value = (uint32_t)(sa % sb); break;
@@ -214,18 +251,19 @@ static int constant_operation(unsigned op, unsigned result_kind,
     case 177: *value = sa < sb; break;
     case 178: *value = a <= b; break;
     case 179: *value = sa <= sb; break;
-    case 194: if (b >= 32) return 0; *value = a >> b; break;
-    case 195: if (b >= 32) return 0;
+    case 194: if (b >= width) return 0; *value = a >> b; break;
+    case 195: if (b >= width) return 0;
               *value = a >> b;
-              if (b && (a & 0x80000000u)) *value |= UINT32_MAX << (32 - b);
+              if (b && (a & sign)) *value |= UINT32_MAX << (width - b);
               break;
-    case 196: if (b >= 32) return 0; *value = a << b; break;
+    case 196: if (b >= width) return 0; *value = a << b; break;
     case 197: *value = a | b; break;
     case 198: *value = a ^ b; break;
     case 199: *value = a & b; break;
     case 200: *value = ~a; break;
     default: return 0;
     }
+    if (result_kind == 1) *value &= constant_mask(width);
     return 1;
 }
 static int constant_extract(VkShaderModule module, uint32_t id,
@@ -309,6 +347,13 @@ static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4
         values[definition[6]] = value;
         return 1;
     }
+    if (definition[3] == 113 || definition[3] == 114) {
+        if (length != 5 || !constant_vector(module, definition[4], a, &an, &at,
+                specialization, depth + 1, budget) || an != *components) return 0;
+        for (unsigned i = 0; i < an; ++i)
+            if (!constant_convert(module, definition[3], *element_type, at, a[i], &values[i])) return 0;
+        return 1;
+    }
     /* Apply the same bounded scalar operation to every component. */
     unsigned operation = definition[3];
     unsigned result_kind = constant_scalar_kind(module, *element_type);
@@ -335,8 +380,13 @@ static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4
                              depth + 1, budget) || cn != *components) return 0;
         ck = constant_scalar_kind(module, ct);
     }
+    unsigned width = result_kind == 1 ? constant_integer_width(module, *element_type) :
+        ak == 1 ? constant_integer_width(module, at) : 32;
+    if ((ak == 1 && constant_integer_width(module, at) != width) ||
+        (bk == 1 && (operation < 194 || operation > 196) && constant_integer_width(module, bt) != width) ||
+        (ck == 1 && constant_integer_width(module, ct) != width)) return 0;
     for (unsigned i = 0; i < *components; ++i)
-        if (!constant_operation(operation, result_kind, a[i], b[i], c[i], ak, bk, ck, &values[i]))
+        if (!constant_operation(operation, result_kind, a[i], b[i], c[i], ak, bk, ck, width, &values[i]))
             return 0;
     return 1;
 }
@@ -593,7 +643,7 @@ static int constant_extract(VkShaderModule module, uint32_t id,
         expected, values, components, specialization, depth + 1, budget);
 }
 
-/* Resolve a scalar 32-bit integer or boolean, including a specialized workgroup
+/* Resolve a scalar 8/16/32-bit integer or boolean, including a specialized workgroup
  * dimension. Keep this in agreement with the compiler's specialization input:
  * defaults apply only when the application did not supply that SpecId. */
 static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
@@ -631,7 +681,7 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
     *kind = 0;
     for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
         const uint32_t *w = module->words + i;
-        if ((w[0] & 0xffff) == 21 && w[0] >> 16 == 4 && w[1] == type && w[2] == 32) {
+        if ((w[0] & 0xffff) == 21 && w[0] >> 16 == 4 && w[1] == type && constant_integer_width(module, type)) {
             ++scalar; *kind = 1;
         }
         if ((w[0] & 0xffff) == 20 && w[0] >> 16 == 2 && w[1] == type) {
@@ -639,6 +689,8 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
         }
     }
     if (scalar != 1 || (literal_kind && literal_kind != *kind)) return 0;
+    unsigned width = *kind == 1 ? constant_integer_width(module, type) : 32;
+    if (*kind == 1 && !expression) *value &= constant_mask(width);
     if (expression) {
         /* Scalar integer and boolean specialization expressions. Use unsigned arithmetic
          * for modular SPIR-V results and wider signed intermediates so host
@@ -654,12 +706,25 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
             return !decorated && length >= 6 && constant_extract(module, expression[4],
                 expression + 5, length - 5, type, value, &components, specialization, depth + 1, budget) && components == 1;
         }
+        if (op == 113 || op == 114) {
+            const uint32_t *source = constant_definition(module, expression[4]);
+            return !decorated && length == 5 && source &&
+                constant_value(module, expression[4], &a, specialization, depth + 1, budget, &ak) && ak == 1 &&
+                constant_convert(module, op, type, source[1], a, value);
+        }
         if (decorated || length != (select ? 7u : unary ? 5u : 6u) ||
             !constant_value(module, expression[4], &a, specialization, depth + 1, budget, &ak) ||
             (!unary && !constant_value(module, expression[5], &b, specialization, depth + 1, budget, &bk)) ||
             (select && !constant_value(module, expression[6], &c, specialization, depth + 1, budget, &ck)))
             return 0;
-        return constant_operation(op, *kind, a, b, c, ak, bk, ck, value);
+        const uint32_t *ad = constant_definition(module, expression[4]);
+        const uint32_t *bd = unary ? NULL : constant_definition(module, expression[5]);
+        const uint32_t *cd = select ? constant_definition(module, expression[6]) : NULL;
+        if (*kind == 2 && ak == 1) width = ad ? constant_integer_width(module, ad[1]) : 0;
+        if (!width || (ak == 1 && (!ad || constant_integer_width(module, ad[1]) != width)) ||
+            (bk == 1 && (op < 194 || op > 196) && (!bd || constant_integer_width(module, bd[1]) != width)) ||
+            (ck == 1 && (!cd || constant_integer_width(module, cd[1]) != width))) return 0;
+        return constant_operation(op, *kind, a, b, c, ak, bk, ck, width, value);
     }
     if (!is_spec || !decorated || !specialization) return 1;
     if (specialization->mapEntryCount > PS5VK_MAX_SPECIALIZATION_CONSTANTS ||
@@ -668,10 +733,11 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
     for (uint32_t i = 0; i < specialization->mapEntryCount; ++i) {
         const VkSpecializationMapEntry *entry = &specialization->pMapEntries[i];
         if (entry->constantID != spec_id) continue;
-        if (++matches > 1 || entry->size != sizeof(*value) || !specialization->pData ||
+        if (++matches > 1 || entry->size != width / 8 || !specialization->pData ||
             entry->offset > specialization->dataSize ||
             entry->size > specialization->dataSize - entry->offset) return 0;
-        memcpy(value, (const uint8_t *)specialization->pData + entry->offset, sizeof(*value));
+        *value = 0;
+        memcpy(value, (const uint8_t *)specialization->pData + entry->offset, entry->size);
     }
     if (*kind == 2) *value = !!*value;
     return 1;
@@ -702,7 +768,9 @@ static int local_size(VkShaderModule module, const char *name, uint32_t dims[3],
             unsigned budget = 4096;
             for (unsigned n = 0; n < 3; ++n) {
                 unsigned kind;
-                if (!constant_value(module, w[3 + n], &dims[n], specialization, 0, &budget, &kind) ||
+                const uint32_t *dimension = constant_definition(module, w[3 + n]);
+                if (!dimension || constant_integer_width(module, dimension[1]) != 32 ||
+                    !constant_value(module, w[3 + n], &dims[n], specialization, 0, &budget, &kind) ||
                     kind != 1) return 0;
             }
             ++found;

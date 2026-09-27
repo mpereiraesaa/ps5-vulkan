@@ -77,7 +77,7 @@ nineteen-case witness in [the geometry promotion](#geometry-promotion-2026-09-17
 review) and `maxBufferSize` ([the 1 GiB buffer witness](#dxvk-1-gib-buffer-witness-2026-09-25)).
 `maintenance4` stays blocked. Subsequent offline work covers scalar/vector
 and nested aggregate `LocalSizeId` expressions and wider producer vectors
-in host tests; integer-width conversions remain refused. No admitted native
+in host tests, including 8/16/32-bit integer-width conversions. No admitted native
 receipt yet validates those routes or executes its creation-description
 memory-requirement queries directly.
 `apiVersion` stays blocked: the profile requires 1.3.204 including the patch

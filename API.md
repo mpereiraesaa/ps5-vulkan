@@ -845,7 +845,9 @@ minimum). With `maintenance4` enabled, compute pipelines accept
 `LocalSizeId` with 32-bit integer constants and specialization expressions,
 including arithmetic, comparisons, boolean selection, vector operations and
 nested array/structure extraction and insertion. Specialization uses the supplied
-map or declared defaults. Integer-width conversions remain unsupported.
+map or declared defaults. Expressions may convert between enabled 8/16/32-bit
+integer types, with truncation and sign extension; the final dimensions must
+still be 32-bit integers. This does not enable an unreported arithmetic feature.
 The old maintenance4 SDK diagnostic switch has been retired. With the feature
 enabled, whole-location producer vectors may be wider than consumer vectors;
 host compiler tests cover float/int/uint interfaces and per-patch boundaries.

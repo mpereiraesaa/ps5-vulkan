@@ -343,8 +343,8 @@ archived probe, fails the check. The current probe observed device API 1.3.0,
 kept under `historical_capability_probes`.
 
 Of the 46 rows the query meets, 45 are ready. `maintenance4` is not:
-`LocalSizeId` integer-width conversions remain refused. Host tests cover
-scalar/vector and nested aggregate expressions and wider producer output
+host tests cover `LocalSizeId` scalar/vector and nested aggregate expressions,
+8/16/32-bit integer-width conversions and wider producer output
 vectors, but native execution and a direct witness of its creation-description
 memory-requirement queries remain pending. The T04 `geometryShader` and
 `tessellationShader` rows now carry their admitted native receipts, and

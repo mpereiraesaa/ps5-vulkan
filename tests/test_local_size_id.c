@@ -499,6 +499,152 @@ static uint32_t *aggregate_vector_dimension(const uint32_t *words, size_t count,
     return out;
 }
 
+/* Round-trip a specialized 32-bit integer through Int8/Int16, either as a scalar
+ * or every lane of a vector. The sign probe turns the high bit into a bounded
+ * workgroup size, distinguishing sign extension from zero extension.
+ * Forms: 0 direct, 1 sign probe, 2 narrow addition with wraparound,
+ * 3 aggregate extraction, 4 cross-width chain, 5 cross-width sign probe. */
+static uint32_t *converted_dimension(const uint32_t *words, size_t count,
+    uint32_t input, uint32_t one, unsigned op, unsigned lanes, unsigned bits, int conversion_form,
+    size_t *out_count)
+{
+    size_t functions = 5; uint32_t integer = 0;
+    for (; functions < count; functions += words[functions] >> 16) {
+        if ((words[functions] & 0xffff) == 50 && words[functions + 2] == input)
+            integer = words[functions + 1];
+        if ((words[functions] & 0xffff) == 54) break;
+    }
+    assert(integer && functions < count && lanes >= 1 && lanes <= 4);
+    uint32_t extra[96], next = words[3]; unsigned n = 0;
+#define WORD(v) do { assert(n < 96); extra[n++] = (v); } while (0)
+    uint32_t short_type = next++, narrow_type = short_type, wide_type = integer;
+    WORD(4u << 16 | 21u); WORD(short_type); WORD(bits); WORD(0);
+    if (lanes > 1) {
+        narrow_type = next++; wide_type = 0;
+        WORD(4u << 16 | 23u); WORD(narrow_type); WORD(short_type); WORD(lanes);
+        for (size_t at = 5; at < functions; at += words[at] >> 16)
+            if ((words[at] & 0xffff) == 23 && words[at + 2] == integer && words[at + 3] == lanes)
+                wide_type = words[at + 1];
+        if (!wide_type) {
+            wide_type = next++;
+            WORD(4u << 16 | 23u); WORD(wide_type); WORD(integer); WORD(lanes);
+        }
+        uint32_t vector = next++;
+        WORD((3u + lanes) << 16 | 51u); WORD(wide_type); WORD(vector);
+        for (unsigned lane = 0; lane < lanes; ++lane) WORD(input);
+        input = vector;
+    }
+    uint32_t narrow = next++, wide = next++;
+    WORD(5u << 16 | 52u); WORD(narrow_type); WORD(narrow); WORD(op); WORD(input);
+    if (conversion_form == 2) {
+        uint32_t two = next++, adjusted = next++;
+        WORD(4u << 16 | 43u); WORD(short_type); WORD(two); WORD(2);
+        if (lanes > 1) {
+            uint32_t vector = next++;
+            WORD((3u + lanes) << 16 | 51u); WORD(narrow_type); WORD(vector);
+            for (unsigned lane = 0; lane < lanes; ++lane) WORD(two);
+            two = vector;
+        }
+        WORD(6u << 16 | 52u); WORD(narrow_type); WORD(adjusted); WORD(128); WORD(narrow); WORD(two);
+        narrow = adjusted;
+    }
+    if (conversion_form == 3) {
+        uint32_t structure = next++, aggregate = next++, extracted = next++;
+        WORD(3u << 16 | 30u); WORD(structure); WORD(narrow_type);
+        WORD(4u << 16 | 51u); WORD(structure); WORD(aggregate); WORD(narrow);
+        WORD(6u << 16 | 52u); WORD(narrow_type); WORD(extracted); WORD(81); WORD(aggregate); WORD(0);
+        narrow = extracted;
+    }
+    if (conversion_form >= 4) {
+        uint32_t other_scalar = next++, other_type = other_scalar, converted = next++;
+        WORD(4u << 16 | 21u); WORD(other_scalar); WORD(bits == 8 ? 16 : 8); WORD(0);
+        if (lanes > 1) {
+            other_type = next++;
+            WORD(4u << 16 | 23u); WORD(other_type); WORD(other_scalar); WORD(lanes);
+        }
+        WORD(5u << 16 | 52u); WORD(other_type); WORD(converted); WORD(op); WORD(narrow);
+        narrow = converted;
+    }
+    WORD(5u << 16 | 52u); WORD(wide_type); WORD(wide); WORD(op); WORD(narrow);
+    uint32_t result = wide;
+    if (lanes > 1) {
+        result = next++;
+        WORD(6u << 16 | 52u); WORD(integer); WORD(result); WORD(81); WORD(wide); WORD(lanes - 1);
+    }
+    if (conversion_form == 1 || conversion_form == 5) {
+        uint32_t shift = next++, high = next++, bounded = next++;
+        WORD(4u << 16 | 43u); WORD(integer); WORD(shift); WORD(31);
+        WORD(6u << 16 | 52u); WORD(integer); WORD(high); WORD(194); WORD(result); WORD(shift);
+        WORD(6u << 16 | 52u); WORD(integer); WORD(bounded); WORD(128); WORD(high); WORD(one);
+        result = bounded;
+    }
+#undef WORD
+    *out_count = count + n + 2;
+    uint32_t *out = malloc(*out_count * 4); assert(out);
+    memcpy(out, words, 20); out[1] = 0x00010400u; out[3] = next;
+    out[5] = 2u << 16 | 17u; out[6] = bits == 16 ? 22 : 39; /* Int16 or Int8 */
+    memcpy(out + 7, words + 5, (functions - 5) * 4);
+    memcpy(out + functions + 2, extra, n * 4);
+    memcpy(out + functions + 2 + n, words + functions, (count - functions) * 4);
+    for (size_t i = 7; i < functions + 2;) {
+        unsigned length = out[i] >> 16;
+        if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = result;
+        if ((out[i] & 0xffff) == 71 && length == 4 && out[i + 2] == 11 && out[i + 3] == 25)
+            for (unsigned j = 0; j < length; ++j) out[i + j] = 1u << 16;
+        i += length;
+    }
+    /* The seed uses only SSBO Uniform pointers with BufferBlock. Their
+     * SPIR-V 1.4 form is StorageBuffer plus Block. */
+    for (size_t i = 7; i < functions + 2; i += out[i] >> 16) {
+        unsigned opcode = out[i] & 0xffff;
+        if (opcode == 71 && out[i] >> 16 == 3 && out[i + 2] == 3) out[i + 2] = 2;
+        if (opcode == 32 && out[i + 2] == 2) out[i + 2] = 12;
+        if (opcode == 59 && out[i + 3] == 2) out[i + 3] = 12;
+    }
+    /* SPIR-V 1.4 includes descriptor globals in the entry-point interface. */
+    uint32_t globals[64]; unsigned global_count = 0; size_t entry_at = 0;
+    for (size_t i = 5; i < *out_count; i += out[i] >> 16) {
+        unsigned opcode = out[i] & 0xffff;
+        if (opcode == 54) break;
+        if (opcode == 15) entry_at = i;
+        if (opcode == 59) { assert(global_count < 64); globals[global_count++] = out[i + 2]; }
+    }
+    assert(entry_at);
+    unsigned entry_length = out[entry_at] >> 16;
+    size_t name_words = (strlen((char *)(out + entry_at + 3)) + 4) / 4;
+    uint32_t missing[64]; unsigned missing_count = 0;
+    for (unsigned g = 0; g < global_count; ++g) {
+        int present = 0;
+        for (size_t i = 3 + name_words; i < entry_length; ++i)
+            if (out[entry_at + i] == globals[g]) present = 1;
+        if (!present) missing[missing_count++] = globals[g];
+    }
+    out = realloc(out, (*out_count + missing_count) * 4); assert(out);
+    size_t after_entry = entry_at + entry_length;
+    memmove(out + after_entry + missing_count, out + after_entry, (*out_count - after_entry) * 4);
+    memcpy(out + after_entry, missing, missing_count * 4);
+    out[entry_at] = (entry_length + missing_count) << 16 | 15u;
+    *out_count += missing_count;
+    /* Earlier fixture helpers use Nop padding. It is not valid in the
+     * declaration section, so compact it out of these standalone modules. */
+    size_t compact = 5;
+    for (size_t at = 5; at < *out_count;) {
+        unsigned length = out[at] >> 16;
+        if ((out[at] & 0xffff) != 0) {
+            memmove(out + compact, out + at, length * 4); compact += length;
+        }
+        at += length;
+    }
+    *out_count = compact;
+    if (conversion_form >= 4) {
+        out = realloc(out, (*out_count + 2) * 4); assert(out);
+        memmove(out + 7, out + 5, (*out_count - 5) * 4);
+        out[5] = 2u << 16 | 17u; out[6] = bits == 8 ? 22 : 39;
+        *out_count += 2;
+    }
+    return out;
+}
+
 int main(void)
 {
     size_t bytes = 0;
@@ -553,6 +699,97 @@ int main(void)
     /* Set the feature directly to isolate shader admission from device
      * negotiation. The compiled workgroup/code equal the literal form. */
     device->enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
+    device->enabled_features |= PS5VK_FEATURE_SHADER_INT16;
+    device->platform_features |= PS5VK_FEATURE_SHADER_INT8_COMPUTE;
+    for (unsigned bits = 8; bits <= 16; bits += 8)
+    for (unsigned op = 113; op <= 114; ++op)
+    for (unsigned lanes = 1; lanes <= 4; ++lanes)
+    for (unsigned conversion_form = 0; conversion_form < 6; ++conversion_form) {
+        uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+        size_t converted_count;
+        uint32_t *converted = converted_dimension(seed, count + 4, id64, id1,
+            op, lanes, bits, conversion_form, &converted_count);
+        for (unsigned specialized = 0; specialized < 2; ++specialized) {
+            uint32_t value = conversion_form == 1 || conversion_form == 2 || conversion_form == 5 ? (1u << bits) - 1 : (1u << bits) + 3;
+            uint32_t expected = conversion_form == 2 ? (specialized ? 1 : 66) :
+                (conversion_form == 1 || conversion_form == 5) ? (specialized && op == 114 ? 2 : 1) : (specialized ? 3 : 64);
+            VkSpecializationMapEntry entry = {7, 0, 4};
+            VkSpecializationInfo info = {1, &entry, 4, &value};
+            const VkSpecializationInfo *map = specialized ? &info : NULL;
+            struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+            assert(ps5vk_runtime_compile_compute_features(converted, converted_count,
+                "main", layout, map, PS5VK_FEATURE_SHADER_INT16 | PS5VK_FEATURE_SHADER_INT8_COMPUTE, &program, &code) == VK_SUCCESS);
+            assert(code && program.local_size[0] == expected); free(code);
+            VkPipeline candidate = NULL;
+            VkResult result = build_specialized(device, layout, converted, converted_count * 4, map, &candidate);
+            if (result != VK_SUCCESS) fprintf(stderr, "conversion op=%u lanes=%u form=%u spec=%u result=%d\n",
+                op, lanes, conversion_form, specialized, result);
+            assert(result == VK_SUCCESS && candidate && candidate->program.local_size[0] == expected);
+            vkDestroyPipeline(device, candidate, NULL);
+        }
+        VkPipeline refused = NULL;
+        size_t short_type_at = 0, first_conversion = 0;
+        for (size_t at = 5; at < converted_count; at += converted[at] >> 16) {
+            if ((converted[at] & 0xffff) == 21 && converted[at + 2] == bits) short_type_at = at;
+            if (!first_conversion && (converted[at] & 0xffff) == 52 && converted[at + 3] == op)
+                first_conversion = at;
+        }
+        assert(short_type_at && first_conversion);
+        /* A conversion must change width and must consume a valid noncyclic
+         * integer definition. These fail before reaching the compiler. */
+        converted[short_type_at + 2] = 32;
+        assert(build(device, layout, converted, converted_count * 4, &refused) != VK_SUCCESS && !refused);
+        converted[short_type_at + 2] = bits;
+        uint32_t operand = converted[first_conversion + 4];
+        const uint32_t invalid_operands[] = {0, converted[3], converted[first_conversion + 2]};
+        for (unsigned invalid = 0; invalid < 3; ++invalid) {
+            converted[first_conversion + 4] = invalid_operands[invalid];
+            assert(build(device, layout, converted, converted_count * 4, &refused) != VK_SUCCESS && !refused);
+        }
+        converted[first_conversion + 4] = operand;
+        if (op == 113) {
+            converted[short_type_at + 3] = 1; /* UConvert requires an unsigned destination. */
+            assert(build(device, layout, converted, converted_count * 4, &refused) != VK_SUCCESS && !refused);
+            converted[short_type_at + 3] = 0;
+        }
+        if (lanes == 1) {
+            for (size_t at = 5; at < converted_count; at += converted[at] >> 16) {
+                if ((converted[at] & 0xffff) == 331 && converted[at + 2] == 38) {
+                    uint32_t old = converted[at + 3];
+                    converted[at + 3] = converted[first_conversion + 2];
+                    assert(build(device, layout, converted, converted_count * 4, &refused) != VK_SUCCESS && !refused);
+                    converted[at + 3] = old;
+                }
+            }
+            /* Specialization storage follows the narrowed scalar's byte size. */
+            converted[first_conversion] = 4u << 16 | 43u;
+            converted[first_conversion + 3] = 3;
+            memmove(converted + first_conversion + 4, converted + first_conversion + 5,
+                (converted_count - first_conversion - 5) * 4);
+            --converted_count;
+            uint32_t *narrow_spec = specialize_dimension(converted, converted_count,
+                converted[first_conversion + 2], 8);
+            uint16_t value = conversion_form == 1 || conversion_form == 2 || conversion_form == 5 ? (1u << bits) - 1 : 5;
+            VkSpecializationMapEntry entry = {8, 0, bits / 8};
+            VkSpecializationInfo info = {1, &entry, bits / 8, &value};
+            struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+            uint32_t expected = conversion_form == 2 ? 1 : (conversion_form == 1 || conversion_form == 5) ? (op == 114 ? 2 : 1) : 5;
+            assert(ps5vk_runtime_compile_compute_features(narrow_spec, converted_count + 4,
+                "main", layout, &info, PS5VK_FEATURE_SHADER_INT16 | PS5VK_FEATURE_SHADER_INT8_COMPUTE, &program, &code) == VK_SUCCESS);
+            assert(code && program.local_size[0] == expected); free(code);
+            VkPipeline candidate = NULL;
+            assert(build_specialized(device, layout, narrow_spec, (converted_count + 4) * 4,
+                &info, &candidate) == VK_SUCCESS && candidate && candidate->program.local_size[0] == expected);
+            vkDestroyPipeline(device, candidate, NULL);
+            entry.size = 4;
+            assert(build_specialized(device, layout, narrow_spec, (converted_count + 4) * 4,
+                &info, &refused) != VK_SUCCESS && !refused);
+            free(narrow_spec);
+        }
+        free(converted); free(seed);
+    }
+    device->enabled_features &= ~PS5VK_FEATURE_SHADER_INT16;
+    device->platform_features &= ~PS5VK_FEATURE_SHADER_INT8_COMPUTE;
     for (unsigned form = 0; form < 3; ++form) {
         uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
         size_t expression_count;

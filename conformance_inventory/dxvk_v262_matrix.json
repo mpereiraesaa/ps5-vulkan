@@ -3306,7 +3306,7 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:maintenance4",
       "implementation": {
-        "detail": "Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; creation-description memory requirements, maxBufferSize, legacy BuiltIn WorkgroupSize precedence and specialization, and LocalSizeId with constants, direct specialization and bounded scalar 32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, integer comparisons, boolean specialization and conditional selection, plus vector construction, insertion, shuffle and scalar extraction, nested array/structure extraction and insertion, null aggregates, and mixed aggregates with floating-point members, checked against the host compiler. Whole-location producer vectors may be wider than consumer vectors when maintenance4 is enabled; the VS-to-FS path has cache opt-in guards. Permanent real-compiler tests cover 147 float/int/uint interface cases across VS/TCS/TES/GS/FS and per-patch boundaries, with no native delivery claim. Not implemented yet: LocalSizeId OpSpecConstantOp integer-width conversions remain refused (src/vk_pipeline.c local_size).",
+        "detail": "Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; creation-description memory requirements, maxBufferSize, legacy BuiltIn WorkgroupSize precedence and specialization, and LocalSizeId with constants, direct specialization and bounded scalar 32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, integer comparisons, boolean specialization and conditional selection, plus vector construction, insertion, shuffle and scalar extraction, nested array/structure extraction and insertion, null aggregates, 8/16/32-bit integer-width conversions with truncation and sign extension, and mixed aggregates with floating-point members, checked against the host compiler. Whole-location producer vectors may be wider than consumer vectors when maintenance4 is enabled; the VS-to-FS path has cache opt-in guards. Permanent real-compiler tests cover 147 float/int/uint interface cases across VS/TCS/TES/GS/FS and per-patch boundaries, with no native delivery claim.",
         "refs": [
           "native/platform_ps5.c",
           "src/vk_memory.c",
@@ -3315,7 +3315,7 @@
           "tests/test_local_size_id.c",
           "tests/test_maintenance4_interfaces.py"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "maintenance4",
@@ -4283,8 +4283,8 @@
         "pass": 30
       },
       "implementation": {
-        "blocker": 17,
-        "satisfied": 45
+        "blocker": 16,
+        "satisfied": 46
       },
       "native": {
         "blocker": 17,
