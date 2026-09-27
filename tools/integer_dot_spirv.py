@@ -155,3 +155,101 @@ def module(case: Case):
 def binary(case: Case):
     words = module(case)
     return struct.pack(f"<{len(words)}I", *words)
+
+
+def integerize_dot_add(words, case: Case):
+    """Replace one float dot-plus-add in an owned test template.
+
+This is fixture generation, not runtime shader rewriting. Bitcasts retain
+buffer bits; the final integer result is converted back to the template's
+float output, leaving its stage interfaces and pipeline context unchanged.
+"""
+    if case.mode == "float" or len(words) < 5 or words[0] != 0x07230203:
+        raise ValueError("requires an integer case and a SPIR-V template")
+    instructions, index = [], 5
+    while index < len(words):
+        size = words[index] >> 16
+        if not size or index + size > len(words):
+            raise ValueError("malformed template instruction")
+        instructions.append(list(words[index:index + size]))
+        index += size
+    dots = [x for x in instructions if x[0] & 65535 == 148]
+    if len(dots) != 1 or len(dots[0]) != 5:
+        raise ValueError("template requires exactly one float dot")
+    original = dots[0]
+    adds = [x for x in instructions if x[0] & 65535 == 129 and original[2] in x[3:]]
+    if len(adds) != 1 or len(adds[0]) != 5 or adds[0][1] != original[1]:
+        raise ValueError("template requires one dot-plus-add")
+    add = adds[0]
+    if not any(x == instruction(22, original[1], 32) for x in instructions):
+        raise ValueError("template requires 32-bit floating point")
+    vectors = {x[1]: x[2:] for x in instructions if x[0] & 65535 == 23}
+    values = {x[2]: x[1] for x in instructions
+              if x[0] & 65535 in (55, 57, 61, 79, 81, 83)}
+    for operand in original[3:]:
+        if vectors.get(values.get(operand)) != [original[1], case.components]:
+            raise ValueError("template dot operands do not match the requested vector shape")
+    accumulator = next((v for v in add[3:] if v != original[2]), None)
+    if accumulator is None:
+        raise ValueError("template accumulator must be independent of dot")
+    bound, new_types = words[3], []
+    cache = {(x[0] & 65535, *x[2:]): x[1] for x in instructions if x[0] & 65535 in (21, 23)}
+
+    def new_id():
+        nonlocal bound
+        value = bound
+        bound += 1
+        return value
+
+    def typ(opcode, *args):
+        key = (opcode, *args)
+        if key not in cache:
+            cache[key] = new_id()
+            new_types.extend(instruction(opcode, cache[key], *args))
+        return cache[key]
+
+    uint, sint = typ(21, 32, 0), typ(21, 32, 1)
+    result_type = uint if case.mode == "u" else sint
+    if case.packed_types is None:
+        operand_types = [typ(23, result_type, case.components),
+                         typ(23, uint if case.mode == "su" else result_type, case.components)]
+    else:
+        operand_types = [sint if sign else uint for sign in case.packed_types]
+    replacement, operands = [], []
+    for source, operand_type in zip(original[3:], operand_types):
+        if case.packed_types is not None:
+            value = new_id()
+            replacement += instruction(81, original[1], value, source, 0)
+            source = value
+        value = new_id()
+        replacement += instruction(124, operand_type, value, source)
+        operands.append(value)
+    if case.saturating:
+        value = new_id()
+        replacement += instruction(124, result_type, value, accumulator)
+        operands.append(value)
+    if case.packed_types is not None:
+        operands.append(0)
+    value = new_id()
+    replacement += instruction({"s": 4450, "u": 4451, "su": 4452}[case.mode] + 3 * case.saturating,
+                               result_type, value, *operands)
+    replacement += instruction(112 if case.mode == "u" else 111, add[1], add[2], value)
+    out = list(words[:5])
+    out[3] = bound
+    capabilities = instruction(17, 6019) + instruction(17, 6018 if case.packed_types is not None else 6016)
+    extension = instruction(10, *string_words("SPV_KHR_integer_dot_product"))
+    added_capabilities = added_types = False
+    for current in instructions:
+        opcode = current[0] & 65535
+        if opcode != 17 and not added_capabilities:
+            out += capabilities + extension
+            added_capabilities = True
+        if opcode == 54 and not added_types:
+            out += new_types
+            added_types = True
+        if current is original:
+            continue
+        out += replacement if current is add else current
+    if not added_types:
+        raise ValueError("template requires a function")
+    return out
