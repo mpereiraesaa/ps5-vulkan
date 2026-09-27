@@ -13,10 +13,26 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from run_t08_subgroup_broadcast_witness import expected_digest, verify
 from build_upstream_cts import tessellation_build_profile
-from build_t08_subgroup_broadcast_witness import checked_spirv
+from build_t08_subgroup_broadcast_witness import checked_spirv, diagnostic_environment
+
+
+def profile(operation):
+    return tessellation_build_profile({
+        "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation == "broadcast" else "0",
+        "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in ("iadd", "iadd_int8") else "0",
+        "PS5VK_SHADER_INT8_DIAGNOSTIC": "1" if operation == "iadd_int8" else "0"})
 
 
 class SubgroupWitnessTests(unittest.TestCase):
+    def test_builder_removes_unrelated_diagnostic_switches(self):
+        environment = diagnostic_environment({"PS5VK_INLINE_UNIFORM_DIAGNOSTIC": "1",
+            "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1", "TASK_SENTINEL": "kept"},
+            Path("/tmp/sdk"), "broadcast")
+        self.assertNotIn("PS5VK_INLINE_UNIFORM_DIAGNOSTIC", environment)
+        self.assertEqual(environment["PS5VK_SUBGROUP_IADD_DIAGNOSTIC"], "0")
+        self.assertEqual(environment["PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC"], "1")
+        self.assertEqual(environment["TASK_SENTINEL"], "kept")
+
     @unittest.skipUnless(shutil.which("glslangValidator"), "glslangValidator unavailable")
     def test_broadcast_witness_uses_spirv15_and_runtime_source_id(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -88,7 +104,7 @@ class SubgroupWitnessTests(unittest.TestCase):
 
     def setUp(self):
         self.log = (
-            b"T08_SUBGROUP_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.0\n"
+            b"T08_SUBGROUP_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.3 public=off\n"
             + ("T08_SUBGROUP_RESULT outputs=128 mismatches=0 guards=0 "
                f"digest={expected_digest():08x} fence=complete\n").encode()
             + b"T08_SUBGROUP_RETIRED resources=clean\n"
@@ -101,8 +117,11 @@ class SubgroupWitnessTests(unittest.TestCase):
         self.artifact = {
             "profile": "t08-subgroup-broadcast-diagnostic-witness",
             "outputs": 128, "subgroups": 4, "source_lanes": [7, 19, 31, 1],
-            "public_profile": "vulkan-1.0-subgroup-disabled",
-            "eboot_sha256": "synthetic-host",
+            "operation": "broadcast",
+            "public_profile": "vulkan-1.3-compute-basic-only",
+            "build_profile": profile("broadcast"),
+            "eboot_sha256": "a" * 64, "shader_sha256": "b" * 64,
+            "source_sha256": "c" * 64, "sdk_sha256": "d" * 64,
         }
 
     def test_exact_result(self):
@@ -126,7 +145,7 @@ class SubgroupWitnessTests(unittest.TestCase):
     def test_iadd_exact_readback_contract(self):
         digest = expected_digest("iadd")
         log = (
-            b"T08_SUBGROUP_IADD_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.0\n"
+            b"T08_SUBGROUP_IADD_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.3 public=off\n"
             + ("T08_SUBGROUP_IADD_RESULT outputs=128 mismatches=0 guards=0 "
                f"digest={digest:08x} fence=complete\n").encode()
             + b"T08_SUBGROUP_IADD_RETIRED resources=clean\n"
@@ -134,7 +153,7 @@ class SubgroupWitnessTests(unittest.TestCase):
         receipt = dict(self.receipt, sha256=hashlib.sha256(log).hexdigest())
         artifact = dict(self.artifact,
                         profile="t08-subgroup-iadd-diagnostic-witness",
-                        operation="iadd")
+                        operation="iadd", build_profile=profile("iadd"))
         result = verify(log, receipt, artifact)
         self.assertEqual(result["operation"], "iadd")
         self.assertEqual(result["digest"], f"{digest:08x}")
@@ -142,7 +161,7 @@ class SubgroupWitnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "subgroup data"):
             verify(wrong, dict(receipt, sha256=hashlib.sha256(wrong).hexdigest()),
                    artifact)
-        with self.assertRaisesRegex(ValueError, "subgroup data"):
+        with self.assertRaisesRegex(ValueError, "unexpected subgroup witness artifact"):
             verify(log, receipt, dict(artifact,
                                      profile="t08-subgroup-broadcast-diagnostic-witness",
                                      operation="broadcast"))
@@ -151,7 +170,7 @@ class SubgroupWitnessTests(unittest.TestCase):
         digest = expected_digest("iadd_int8")
         self.assertNotEqual(digest, expected_digest("iadd"))
         log = (
-            b"T08_SUBGROUP_IADD_INT8_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.0\n"
+            b"T08_SUBGROUP_IADD_INT8_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.3 public=off\n"
             + ("T08_SUBGROUP_IADD_INT8_RESULT outputs=128 mismatches=0 guards=0 "
                f"digest={digest:08x} fence=complete\n").encode()
             + b"T08_SUBGROUP_IADD_INT8_RETIRED resources=clean\n"
@@ -159,7 +178,7 @@ class SubgroupWitnessTests(unittest.TestCase):
         receipt = dict(self.receipt, sha256=hashlib.sha256(log).hexdigest())
         artifact = dict(self.artifact,
                         profile="t08-subgroup-iadd_int8-diagnostic-witness",
-                        operation="iadd_int8")
+                        operation="iadd_int8", build_profile=profile("iadd_int8"))
         self.assertEqual(verify(log, receipt, artifact)["digest"], f"{digest:08x}")
         wrong = log.replace(f"digest={digest:08x}".encode(),
                             f"digest={expected_digest('iadd'):08x}".encode())

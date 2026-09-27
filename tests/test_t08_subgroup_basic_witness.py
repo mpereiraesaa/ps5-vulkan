@@ -11,6 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
+from build_upstream_cts import tessellation_build_profile  # noqa: E402
 
 
 def load(name):
@@ -36,14 +37,17 @@ class SubgroupBasicWitness(unittest.TestCase):
         self.assertEqual(1, words[(64 + 32) * 7 + 2])  # workgroup 1, second subgroup
 
     def verify_log(self, result_line):
-        log = ("T08_SUBGROUP_BASIC_START groups=2 local=16x4 subgroups=4 fields=7 api=1.0\n"
+        log = ("T08_SUBGROUP_BASIC_START groups=2 local=16x4 subgroups=4 fields=7 api=1.3 public=off\n"
                + result_line + "T08_SUBGROUP_BASIC_RETIRED resources=clean\n").encode()
         receipt = {"protocol": "ps5log/1", "title": "PPSA99994", "app": "ps5vk",
                    "transport": "tcp", "clean": True, "bye": True, "gaps": 0,
                    "sha256": hashlib.sha256(log).hexdigest(), "run_id": "r"}
         artifact = {"profile": "t08-subgroup-basic-diagnostic-witness", "groups": 2,
-                    "fields": 7, "public_profile": "vulkan-1.0-subgroup-disabled",
-                    "eboot_sha256": "e"}
+                    "fields": 7, "operation": "basic",
+                    "public_profile": "vulkan-1.3-compute-basic-only",
+                    "build_profile": tessellation_build_profile({}),
+                    "eboot_sha256": "a" * 64, "shader_sha256": "b" * 64,
+                    "source_sha256": "c" * 64, "sdk_sha256": "d" * 64}
         return run.verify(log, receipt, artifact)
 
     def test_strict_verification(self):

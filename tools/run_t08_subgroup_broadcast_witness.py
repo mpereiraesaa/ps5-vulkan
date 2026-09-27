@@ -11,6 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from run_consumer import close_and_confirm, control, running, wait_for_log  # noqa: E402
+from build_upstream_cts import tessellation_build_profile  # noqa: E402
 
 
 SOURCE_LANES = [7, 19, 31, 1]
@@ -34,14 +35,21 @@ def expected_digest(operation: str = "broadcast") -> int:
 
 
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
-    operation = artifact.get("operation", "broadcast")
+    operation = artifact.get("operation")
+    expected_profile = tessellation_build_profile({
+        "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation == "broadcast" else "0",
+        "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in ("iadd", "iadd_int8") else "0",
+        "PS5VK_SHADER_INT8_DIAGNOSTIC": "1" if operation == "iadd_int8" else "0"})
     if (operation not in ("broadcast", "iadd", "iadd_int8") or
             artifact.get("profile") !=
             f"t08-subgroup-{operation}-diagnostic-witness" or
             artifact.get("outputs") != 128 or
             artifact.get("subgroups") != 4 or
             artifact.get("source_lanes") != SOURCE_LANES or
-            artifact.get("public_profile") != "vulkan-1.0-subgroup-disabled"):
+            artifact.get("public_profile") != "vulkan-1.3-compute-basic-only" or
+            artifact.get("build_profile") != expected_profile or
+            any(not re.fullmatch(r"[0-9a-f]{64}", str(artifact.get(key, "")))
+                for key in ("eboot_sha256", "shader_sha256", "source_sha256", "sdk_sha256"))):
         raise ValueError("unexpected subgroup witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or
             receipt.get("title") != "PPSA99994" or
@@ -49,19 +57,20 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             receipt.get("transport") != "tcp" or
             not receipt.get("clean") or not receipt.get("bye") or
             receipt.get("gaps") or
-            receipt.get("sha256") != hashlib.sha256(log).hexdigest()):
+            receipt.get("sha256") != hashlib.sha256(log).hexdigest() or
+            not receipt.get("run_id")):
         raise ValueError("incomplete or corrupt witness receipt")
     text = log.decode("utf-8", errors="replace")
     mark = {"broadcast": "T08_SUBGROUP",
             "iadd": "T08_SUBGROUP_IADD",
             "iadd_int8": "T08_SUBGROUP_IADD_INT8"}[operation]
     starts = re.findall(mark + r"_START subgroups=(\d+) outputs=(\d+) "
-                        r"ids=([\d,]+) api=([\d.]+)", text)
+                        r"ids=([\d,]+) api=([\d.]+) public=(\w+)", text)
     results = re.findall(mark + r"_RESULT outputs=(\d+) "
                          r"mismatches=(\d+) guards=(\d+) "
                          r"digest=([0-9a-f]{8}) fence=(\w+)", text)
     retired = re.findall(mark + r"_RETIRED resources=(\w+)", text)
-    if (starts != [("4", "128", "7,19,31,1", "1.0")] or
+    if (starts != [("4", "128", "7,19,31,1", "1.3", "off")] or
             results != [("128", "0", "0", f"{expected_digest(operation):08x}",
                          "complete")] or
             retired != ["clean"] or
@@ -73,6 +82,8 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
         raise ValueError("subgroup data, guard, fence or cleanup failed")
     return {
         "strict_verified": True,
+        "verification_scope": "log_contents_only",
+        "deployment_identity_verified": False,
         "run_id": receipt["run_id"],
         "outputs": 128,
         "operation": operation,

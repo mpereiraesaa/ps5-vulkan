@@ -62,8 +62,13 @@ static int witness(void)
     uint32_t mismatches = 0, guards = 0;
     uint32_t digest = UINT32_C(2166136261);
 
+    VkApplicationInfo app_info = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .apiVersion = VK_API_VERSION_1_3,
+    };
     VkInstanceCreateInfo instance_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &app_info,
     };
     TRY(vkCreateInstance(&instance_info, NULL, &instance));
     uint32_t physical_count = 1;
@@ -72,8 +77,19 @@ static int witness(void)
     REQUIRE(physical_count == 1 && physical, "one physical device");
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physical, &properties);
-    REQUIRE(properties.apiVersion == VK_API_VERSION_1_0,
-            "diagnostic API remains 1.0");
+    REQUIRE(properties.apiVersion == VK_API_VERSION_1_3,
+            "diagnostic API must match current 1.3 report");
+    VkPhysicalDeviceVulkan12Features subgroup_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+    };
+    VkPhysicalDeviceFeatures2 features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &subgroup_features,
+    };
+    vkGetPhysicalDeviceFeatures2(physical, &features);
+    REQUIRE(!subgroup_features.shaderSubgroupExtendedTypes &&
+            !subgroup_features.subgroupBroadcastDynamicId,
+            "diagnostic subgroup features remain unadvertised");
     float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -87,7 +103,7 @@ static int witness(void)
     vkGetDeviceQueue(device, 0, 0, &queue);
     REQUIRE(queue, "queue exists");
     ps5log_printf(PS5LOG_MARK,
-        WITNESS_START " subgroups=4 outputs=128 ids=7,19,31,1 api=1.0");
+        WITNESS_START " subgroups=4 outputs=128 ids=7,19,31,1 api=1.3 public=off");
 
     VkShaderModuleCreateInfo shader_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,

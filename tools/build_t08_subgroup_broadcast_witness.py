@@ -16,10 +16,22 @@ sys.path.insert(0, str(ROOT / "tools"))
 from build_sdk import get_ps5_toolchain  # noqa: E402
 from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
+from build_upstream_cts import tessellation_build_profile  # noqa: E402
 
 
 def run(*command: str, env: dict | None = None) -> None:
     subprocess.run(command, cwd=ROOT, env=env, check=True)
+
+
+def diagnostic_environment(source: dict, sdk: Path, operation: str) -> dict:
+    environment = dict(source)
+    for name in tessellation_build_profile({})["switches"]:
+        environment.pop(name, None)
+    environment.update(PS5_PAYLOAD_SDK=str(sdk),
+        PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC="1" if operation == "broadcast" else "0",
+        PS5VK_SUBGROUP_IADD_DIAGNOSTIC="1" if operation in ("iadd", "iadd_int8") else "0",
+        PS5VK_SHADER_INT8_DIAGNOSTIC="1" if operation == "iadd_int8" else "0")
+    return environment
 
 
 def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
@@ -132,13 +144,7 @@ def main() -> None:
         "#include <stdint.h>\n" + emit_array(f"t08_subgroup_{operation}_spirv", shader),
         encoding="utf-8")
 
-    sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk),
-                   PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC=(
-                       "1" if operation == "broadcast" else "0"),
-                   PS5VK_SUBGROUP_IADD_DIAGNOSTIC=(
-                       "1" if operation in ("iadd", "iadd_int8") else "0"),
-                   PS5VK_SHADER_INT8_DIAGNOSTIC=(
-                       "1" if operation == "iadd_int8" else "0"))
+    sdk_env = diagnostic_environment(os.environ, sdk, operation)
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/t08_subgroup_broadcast_witness/main.c"
@@ -204,10 +210,12 @@ def main() -> None:
         "operation": operation,
         "outputs": 128, "subgroups": 4,
         "source_lanes": [7, 19, 31, 1],
-        "public_profile": "vulkan-1.0-subgroup-disabled",
+        "public_profile": "vulkan-1.3-compute-basic-only",
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": hashlib.sha256(shader).hexdigest(),
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "sdk_sha256": hashlib.sha256((staged / "lib/libps5vk.a").read_bytes()).hexdigest(),
+        "build_profile": tessellation_build_profile(sdk_env),
     }
     artifact_path = dist.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")
