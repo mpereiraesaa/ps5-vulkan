@@ -116,6 +116,16 @@ class TestReportingMatrix(unittest.TestCase):
             capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_inline_limit_diagnostics_do_not_claim_vulkan10_limit_coverage(self):
+        data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
+        specialized = {
+            "dEQP-VK.info.vulkan1p2_limits_validation.ext_inline_uniform_block",
+            "dEQP-VK.info.vulkan1p3_limits_validation.max_inline_uniform_total_size",
+        }
+        self.assertTrue(specialized <= set(data["applicable_cts_selection"]["diagnostics"]))
+        for row in data["limits"]:
+            self.assertFalse(specialized & set(row["applicable_cts"]["cases"]))
+
     def test_int8_compute_probe_is_not_public_shader_int8(self):
         data = json.loads((ROOT / "conformance_inventory/reporting_matrix.json").read_text())
         rows = [row for row in data["shader_capabilities"]

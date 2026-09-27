@@ -10026,6 +10026,26 @@
         "pipelineCreationCacheControl"
       ],
       "rationale": "UNMEASURED: original derivative compute pipeline creation oracle, using the default-off cache-control measurement build. Host contracts cover base handles, earlier batch indices, cache identity and independent result ownership. Does not execute GPU work or establish native acceptance."
+    },
+    {
+      "path": "dEQP-VK.info.vulkan1p2_limits_validation.ext_inline_uniform_block",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:7697",
+      "category": "inline-uniform-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "inlineUniformBlock"
+      ],
+      "rationale": "UNMEASURED: Original Vulkan 1.2 extension limits validator checks the reported inline uniform block bounds. Requires the default-off inline uniform diagnostic build; this is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.info.vulkan1p3_limits_validation.max_inline_uniform_total_size",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:7733",
+      "category": "inline-uniform-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "inlineUniformBlock"
+      ],
+      "rationale": "UNMEASURED: Original Vulkan 1.3 limits validator checks maxInlineUniformTotalSize. Requires the default-off inline uniform diagnostic build; this is not acceptance or native evidence."
     }
   ]
 }

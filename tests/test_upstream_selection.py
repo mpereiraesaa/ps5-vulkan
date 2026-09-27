@@ -146,10 +146,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # to acceptance. T07 adds 322 original BC, gather, precise-query and
         # cube-array cases. T09 adds 50 original timeline-semaphore,
         # renderpass2 write-mask and D32_SFLOAT_S8_UINT stencil/depth leaves
-        # (combined and separate-layouts); the 120 diagnostics record
+        # (combined and separate-layouts); the 122 diagnostics record
         # refusals, gaps and unmeasured zero-initialization cases. `leaves` counts every
         # attachment_write_mask leaf the pinned factory generates.
-        self.assertEqual((879, 120, 48),
+        self.assertEqual((879, 122, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]

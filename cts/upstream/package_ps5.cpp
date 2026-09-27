@@ -153,12 +153,12 @@ void FocusedVkTestPackage::init(void)
     // cases.txt remains the execution filter.
     addChild(vkt::createRenderPass2Tests(m_testCtx, "renderpass2"));
 
-    // info group: original upstream enumeration and physical-device query
-    // bodies. cases.txt remains the execution filter; registering these
-    // factories does not replace their result oracles.
+    // info group: original upstream enumeration, physical-device queries and
+    // limit-validation bodies. The latter include inline uniform block limits;
+    // cases.txt remains the execution filter for all of them.
     {
         de::MovePtr<tcu::TestCaseGroup> infoGroup(
-            new tcu::TestCaseGroup(m_testCtx, "info"));
+            vkt::api::createFeatureInfoTests(m_testCtx));
         vkt::api::createFeatureInfoInstanceTests(infoGroup.get());
         vkt::api::createFeatureInfoDeviceTests(infoGroup.get());
         addChild(infoGroup.release());
