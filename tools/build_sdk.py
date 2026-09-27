@@ -274,6 +274,11 @@ def main():
             raise SystemExit("PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC must be 0 or 1")
         if zero_initialize_diagnostic == "1":
             native_cflags.append("-DPS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC=1")
+        pipeline_cache_control_diagnostic = os.environ.get("PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC", "0")
+        if pipeline_cache_control_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC must be 0 or 1")
+        if pipeline_cache_control_diagnostic == "1":
+            native_cflags.append("-DPS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC=1")
         shader_int16_diagnostic = os.environ.get("PS5VK_SHADER_INT16_DIAGNOSTIC", "0")
         if shader_int16_diagnostic not in ("0", "1"):
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")

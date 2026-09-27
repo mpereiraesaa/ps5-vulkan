@@ -993,7 +993,13 @@
       "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_64_even_repeat_2",
       "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_64_odd_repeat_2",
       "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_4_even_repeat_16",
-      "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_4_odd_repeat_16"
+      "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_4_odd_repeat_16",
+      "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.single_pipeline_no_compile",
+      "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.batch_pipelines_early_return",
+      "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_explicit_caching",
+      "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_no_caching",
+      "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_explicit_cache",
+      "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_no_cache"
     ],
     "manifest": "cts/upstream/manifest.json",
     "note": "Only original upstream cases whose prerequisites the reported profile satisfies belong here; anything else stays a diagnostic."

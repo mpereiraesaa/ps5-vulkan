@@ -1060,6 +1060,24 @@ def _fill_update_generated_leaf_names(function_text: str) -> set[str]:
 
 
 @_memoized
+def _pipeline_cache_control_leaf_paths(text: str) -> set[str]:
+    """Derive registered cache-control leaves from the pinned TestParams table."""
+    table = re.search(r"static constexpr TestParams TEST_CASES\[\] = \{(.*?)\n\};", text, re.S)
+    if not table:
+        return set()
+    names = dict(re.findall(r'static constexpr TestParams\s+(\w+)\s*=\s*\{\s*"([^"\n]+)"', text))
+    identifiers = re.findall(r"^\s*([A-Z][A-Z_0-9]+),\s*$", table.group(1), re.M)
+    leaves = set()
+    for group in ("graphics_pipelines", "compute_pipelines"):
+        if f'group.getTestContext(), "{group}"' not in text:
+            return set()
+        for identifier in identifiers:
+            if identifier in names:
+                leaves.add(f"dEQP-VK.pipeline.creation_cache_control.{group}.{names[identifier]}")
+    return leaves
+
+
+@_memoized
 def _zero_initialize_leaf_paths(text: str) -> set[str]:
     """Recognize the pinned zero-initialize factories without accepting arbitrary
     numeric or synthesized leaf names. Source shape drift fails closed."""
@@ -2035,6 +2053,13 @@ def main() -> int:
                     text, integration_text, _read_source(BDA_BUILD_SOURCE))):
                 failures.append(
                     f"{path}: not produced by the pinned focused BDA factory {source_ref}")
+            continue
+
+        if source_path.name == "vktPipelineCreationCacheControlTests.cpp":
+            if (path not in _pipeline_cache_control_leaf_paths(text) or
+                    "vkt::pipeline::createCacheControlTests(" not in integration_text or
+                    "vktPipelineCreationCacheControlTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by the registered cache-control factory")
             continue
 
         if source_path.name == "vktComputeZeroInitializeWorkgroupMemoryTests.cpp":

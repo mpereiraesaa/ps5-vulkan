@@ -21,6 +21,7 @@
 #include "vktComputeIndirectComputeDispatchTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
 #include "vktPipelineCacheTests.hpp"
+#include "vktPipelineCreationCacheControlTests.hpp"
 #include "vktPipelineBlendTests.hpp"
 #include "vktPipelineMultisampleTests.hpp"
 
@@ -394,6 +395,7 @@ void FocusedVkTestPackage::init(void)
     // execution filter.
     {
         de::MovePtr<tcu::TestCaseGroup> pipelineGroup(new tcu::TestCaseGroup(m_testCtx, "pipeline"));
+        pipelineGroup->addChild(vkt::pipeline::createCacheControlTests(m_testCtx));
         pipelineGroup->addChild(vkt::pipeline::createPushConstantTests(
             m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
         // pipeline.cache: the upstream factory registers its whole family; the

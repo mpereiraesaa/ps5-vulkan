@@ -9946,6 +9946,66 @@
         "shaderZeroInitializeWorkgroupMemory"
       ],
       "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.single_pipeline_no_compile",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.batch_pipelines_early_return",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_explicit_caching",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_no_caching",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_explicit_cache",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_no_cache",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard and derivative-pipeline cases need separate implementation."
     }
   ]
 }
