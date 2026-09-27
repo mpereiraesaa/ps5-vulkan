@@ -45,15 +45,22 @@ static int witness(void)
         .pEnabledFeatures=&core,.enabledExtensionCount=texel?1:0,.ppEnabledExtensionNames=texel?&extension:NULL};
     TRY(vkCreateDevice(physical,&dci,NULL,&device));
     VkQueue queue=VK_NULL_HANDLE;vkGetDeviceQueue(device,0,0,&queue);REQUIRE(queue);
-    ps5log_printf(PS5LOG_MARK,"ROBUST_IMAGE_START case=%s count=%u write=%u",RI_CASE_NAME,
+    ps5log_printf(PS5LOG_MARK,"ROBUST_IMAGE_START contract=1 case=%s count=%u write=%u",RI_CASE_NAME,
         robust_fixture.count,robust_fixture.write);
     struct robust_image_result observed;
     result=robust_image_compute(device,queue,robust_image_spirv,sizeof(robust_image_spirv),
         &robust_fixture,&pending,&observed);
     step=observed.step;
-    if(!pending && observed.outputs)
+    if(!pending && observed.outputs) {
+        for(uint32_t i=0;i<observed.outputs;++i)
+            ps5log_printf(PS5LOG_MARK,"ROBUST_IMAGE_SAMPLE index=%u value=%08x,%08x,%08x,%08x",i,
+                observed.values[i][0],observed.values[i][1],observed.values[i][2],observed.values[i][3]);
+        const char *mode=texel?"mapped-texel":robust_fixture.type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE?"image-copy":"fetch-only";
+        ps5log_printf(PS5LOG_MARK,"ROBUST_IMAGE_RESOURCE mode=%s bytes=%u digest=%08x",mode,
+            observed.resource_bytes,observed.resource_digest);
         ps5log_printf(PS5LOG_MARK,"ROBUST_IMAGE_RESULT outputs=%u mismatches=%u image_changes=%u input_changes=%u guards=%u digest=%08x fence=complete",
             observed.outputs,observed.mismatches,observed.image_changes,observed.input_changes,observed.guards,observed.digest);
+    }
 cleanup:
     if(result!=VK_SUCCESS)
         ps5log_printf(PS5LOG_ERR,"ROBUST_IMAGE_FAILURE result=%d step=%s",(int)result,step?step:"unknown");

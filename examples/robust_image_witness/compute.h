@@ -18,6 +18,7 @@ struct robust_image_data {
 };
 struct robust_image_result {
     uint32_t outputs, mismatches, image_changes, input_changes, guards, digest;
+    uint32_t values[RI_MAX_COORDINATES][4], resource_bytes, resource_digest;
     const char *step;
 };
 
@@ -34,6 +35,7 @@ static void robust_image_check(const struct robust_image_data *data,
     const VkBool32 sampled=data->type==VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     for(unsigned i=0;i<data->count;++i) for(unsigned c=0;c<4;++c) {
         uint32_t actual;memcpy(&actual,mapped[1]+RI_GUARD+16*i+4*c,4);
+        out->values[i][c]=actual;
         VkBool32 match=actual==data->expected[i][c];
         if(c==3 && data->alpha_either[i]) match=actual<=1;
         out->mismatches+=!match;
@@ -51,8 +53,12 @@ static void robust_image_check(const struct robust_image_data *data,
     if(!texel) for(unsigned i=0;i<data->image_bytes;++i)
         out->input_changes+=mapped[2][RI_GUARD+i]!=data->image[i];
     const unsigned char *observed=sampled?NULL:mapped[texel?2:3]+RI_GUARD;
-    if(!sampled)for(unsigned i=0;i<data->image_bytes;++i)
+    out->resource_bytes=sampled?0:data->image_bytes;
+    out->resource_digest=sampled?0:UINT32_C(2166136261);
+    for(unsigned i=0;i<out->resource_bytes;++i) {
         out->image_changes+=observed[i]!=data->image_after[i];
+        out->resource_digest=(out->resource_digest^observed[i])*UINT32_C(16777619);
+    }
 }
 
 static VkResult robust_image_compute(VkDevice device,VkQueue queue,

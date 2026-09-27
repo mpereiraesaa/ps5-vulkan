@@ -10,6 +10,7 @@ import unittest
 from tools.robust_image_witness import cases, shader
 from tools.build_robust_image_witness import fixture_header, diagnostic_environment
 from tools.build_upstream_cts import tessellation_build_profile
+from tools.verify_robust_image_witness import resource_contract
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,10 +41,13 @@ int main(void) {
  memcpy(mapped[0]+256,d->coordinates,sizes[0]);memcpy(mapped[1]+256,d->expected,sizes[1]);
  memcpy(mapped[2]+256,texel?d->image_after:d->image,sizes[2]);memcpy(mapped[3]+256,d->image_after,sizes[3]);
  struct robust_image_result out={0};robust_image_check(d,mapped,&out);
+ assert(out.resource_digest==EXPECTED_RESOURCE_DIGEST && out.resource_bytes==EXPECTED_RESOURCE_BYTES);
+ assert(!memcmp(out.values,d->expected,16*d->count));
  assert(out.outputs==d->count && !out.mismatches && !out.image_changes && !out.input_changes && !out.guards);
  for(unsigned i=0;i<d->count;++i)for(unsigned component=0;component<4;++component)for(unsigned bit=0;bit<32;++bit){
   uint32_t *value=(uint32_t*)(mapped[1]+256)+4*i+component;
   *value^=1u<<bit;robust_image_check(d,mapped,&out);
+  assert(out.values[i][component]==*value);
   assert(out.mismatches==(component==3 && bit==0 && d->alpha_either[i]?0u:1u));
   assert(!out.image_changes && !out.input_changes && !out.guards);*value^=1u<<bit;
  }
@@ -68,7 +72,9 @@ int main(void) {
             directory=Path(tmp);c=directory/'check.c';exe=directory/'check';c.write_text(source)
             for case in cases():
                 with self.subTest(case=case.name):
-                    (directory/'fixture.h').write_text(fixture_header(case,b'\x03\x02\x23\x07'))
+                    (directory/'fixture.h').write_text(fixture_header(case,b'\x03\x02\x23\x07')+
+                        '#define EXPECTED_RESOURCE_DIGEST 0x'+resource_contract(case)['digest']+'u\n'+
+                        '#define EXPECTED_RESOURCE_BYTES '+str(resource_contract(case)['bytes'])+'u\n')
                     result=subprocess.run(['cc','-std=c11','-O1','-g','-Wall','-Wextra','-Werror',
                         '-fsanitize=address,undefined','-fno-sanitize-recover=all',
                         '-ffunction-sections','-fdata-sections','-Wl,--gc-sections',

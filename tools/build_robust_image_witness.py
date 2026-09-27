@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Build one SDK-linked image robustness measurement executable per fixture, offline."""
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -10,6 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'tools')]
+from tools.verify_robust_image_witness import fixture_contract
 from tools.robust_image_witness import cases, coordinates, coordinate_data, image_data, expected_read, shader
 from tools.build_integer_dot_witness import build_payload, run
 from tools.build_sdk import get_ps5_toolchain
@@ -80,8 +82,8 @@ def main():
         build_payload(directory,ROOT/'examples/robust_image_witness/main.c',
             ROOT/'examples/robust_image_witness/compute.h','robust_image_fixture.h',
             fixture_header(case,binary.read_bytes()),
-            {'case':case.name,'requirement':case.requirement,'coordinates':coordinates(case),
-             'native_executed':False,'scope':'integer coordinates at valid mip zero; numerical measurement only'},
+            {**fixture_contract(case.name),
+             'shader_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(), 'native_executed':False},
             sdk,wrapper,lab_root(),environment,'PS5 Vulkan Image Robustness Witness')
 
 
