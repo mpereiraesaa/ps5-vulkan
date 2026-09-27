@@ -366,6 +366,7 @@ struct ps5vk_queue_backend {
 enum ps5vk_v13_feature_bits {
     PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL = 1u << 0,
     PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS = 1u << 1,
+    PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT = 1u << 2,
 };
 
 /* Link-selected platform implementation. Production must query/configure its

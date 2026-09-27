@@ -4,6 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,19 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_integer_dot_api_is_not_shipping_without_platform_bit(self):
+        extension = "VK_KHR_shader_integer_dot_product"
+        self.assertNotIn(extension, matrix.implemented_device_extensions())
+        read_text = Path.read_text
+        def enabled_source(path, *args, **kwargs):
+            source = read_text(path, *args, **kwargs)
+            if path == matrix.ROOT / "native/platform_ps5.c":
+                source += "\nplatform->supported_features_v13 |= PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;\n"
+            return source
+        # Positive control proves the inventory follows the platform gate.
+        with mock.patch.object(Path, "read_text", enabled_source):
+            self.assertIn(extension, matrix.implemented_device_extensions())
+
     def test_sampler_mirror_clamp_shipping_khr_route_and_native_axes(self):
         document = matrix.generate()
         row = next(item for item in document["requirements"]

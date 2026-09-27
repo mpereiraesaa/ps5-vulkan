@@ -79,6 +79,16 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
                         (broadcast != ballot) ||
                         (iadd != arithmetic));
 }
+static int declares_integer_dot(const uint32_t *words, size_t count)
+{
+    for (size_t at = 5; at < count; at += words[at] >> 16) {
+        const uint32_t opcode = words[at] & 0xffffu;
+        if (opcode == 17u && (words[at] >> 16) == 2u &&
+            words[at + 1] >= 6016u && words[at + 1] <= 6019u) return 1;
+        if (opcode >= 4450u && opcode <= 4455u) return 1;
+    }
+    return 0;
+}
 static int declares_int16_capability(const uint32_t *words, size_t count)
 {
     for (size_t at = 5; at < count; at += words[at] >> 16)
@@ -782,6 +792,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
      * either pipeline frontend can accept it. */
     if (!(d->enabled_features & PS5VK_FEATURE_SHADER_INT16) &&
         declares_int16_capability(info->pCode, info->codeSize / 4))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Applies before either pipeline frontend or any cache can see a module. */
+    if (!(d->enabled_features_v13 & PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT) &&
+        declares_integer_dot(info->pCode, info->codeSize / 4))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!ps5vk_spirv_validate_ubo_layout(info->pCode, info->codeSize / 4,
             !!(d->enabled_features & PS5VK_FEATURE_UNIFORM_BUFFER_STANDARD_LAYOUT)))

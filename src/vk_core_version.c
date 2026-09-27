@@ -41,6 +41,7 @@ struct extension_features {
     VkPhysicalDevicePipelineCreationCacheControlFeatures cache_control;
     VkPhysicalDeviceInlineUniformBlockFeatures inline_uniform;
     VkPhysicalDeviceSubgroupSizeControlFeatures subgroup_size;
+    VkPhysicalDeviceShaderIntegerDotProductFeatures integer_dot;
     VkPhysicalDeviceSynchronization2Features synchronization2;
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering;
     VkPhysicalDeviceFeatures2 core;
@@ -69,6 +70,7 @@ static void query_extension_features(VkPhysicalDevice p, struct extension_featur
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES, &f->cache_control},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES, &f->inline_uniform},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES, &f->subgroup_size},
+        {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES, &f->integer_dot},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES, &f->synchronization2},
         {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, &f->dynamic_rendering},
     };
@@ -151,6 +153,7 @@ static void fill_vulkan13_features(VkPhysicalDevice p, VkPhysicalDeviceVulkan13F
     out->inlineUniformBlock = f.inline_uniform.inlineUniformBlock;
     out->subgroupSizeControl = f.subgroup_size.subgroupSizeControl;
     out->computeFullSubgroups = f.subgroup_size.computeFullSubgroups;
+    out->shaderIntegerDotProduct = f.integer_dot.shaderIntegerDotProduct;
     out->synchronization2 = f.synchronization2.synchronization2;
     out->dynamicRendering = f.dynamic_rendering.dynamicRendering;
 }
@@ -455,6 +458,8 @@ struct core_enable {
 /* The same enabled bits the per-extension structures set. A reported member
  * without an entry enables no gate of its own. */
 static const struct core_enable core_enables[] = {
+    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        offsetof(VkPhysicalDeviceVulkan13Features, shaderIntegerDotProduct), 0, 0, PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT},
     {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
         offsetof(VkPhysicalDeviceVulkan13Features, subgroupSizeControl), 0, 0, PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL},
     {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,

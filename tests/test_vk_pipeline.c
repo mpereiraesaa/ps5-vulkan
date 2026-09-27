@@ -578,8 +578,41 @@ static void subgroup_stage_contract(void)
     }
 }
 
+static void integer_dot_module_gate(void)
+{
+    /* Structural admission fixtures for all six shader execution models;
+     * executable integer-dot compiler fixtures are a separate contract. */
+    for (uint32_t model = 0; model <= 5; ++model) {
+        for (unsigned variant = 0; variant < 10; ++variant) {
+            uint32_t words[24] = {0};
+            memcpy(words, module_a, sizeof(module_a)); words[6] = model;
+            const unsigned n = variant < 4 ? 2 : (variant < 7 ? 5 : 6);
+            words[16] = (n << 16) | (variant < 4 ? 17u : 4450u + variant - 4);
+            words[17] = variant < 4 ? 6016u + variant : 1;
+            VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .codeSize = (16 + n) * sizeof(uint32_t), .pCode = words};
+            struct VkPhysicalDevice_T physical = {0};
+            physical.platform.supported_features_v13 = PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;
+            struct VkDevice_T d = {.physical = &physical};
+            VkShaderModule module = VK_NULL_HANDLE;
+            assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_ERROR_FEATURE_NOT_PRESENT && !module);
+            d.enabled_features_v13 = PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL | PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS;
+            assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_ERROR_FEATURE_NOT_PRESENT && !module);
+            d.enabled_features_v13 |= PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;
+            assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_SUCCESS && module);
+            vkDestroyShaderModule(&d, module, NULL); assert(!d.pipeline_objects);
+            /* OpDot (floating point) remains independent of the integer opt-in. */
+            d.enabled_features_v13 = 0; words[16] = (5u << 16) | 148u;
+            info.codeSize = 21 * sizeof(uint32_t);
+            assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_SUCCESS && module);
+            vkDestroyShaderModule(&d, module, NULL); assert(!d.pipeline_objects);
+        }
+    }
+}
+
 int main(void)
 {
+    integer_dot_module_gate();
     subgroup_stage_contract();
     full_set_table_offsets();
     lifecycle(); legacy_offline_abi(); dispatch_base_flag(); negative(); graphics_entries();
