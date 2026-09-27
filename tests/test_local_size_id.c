@@ -409,6 +409,96 @@ static uint32_t *comparison_vector_dimension(const uint32_t *words, size_t count
     return out;
 }
 
+static uint32_t *aggregate_dimension(const uint32_t *words, size_t count,
+    uint32_t x, uint32_t one, unsigned form, size_t *out_count)
+{
+    size_t functions = 5; uint32_t integer = 0, next = words[3];
+    for (; functions < count; functions += words[functions] >> 16) {
+        const uint32_t *w = words + functions;
+        if ((w[0] & 0xffff) == 50 && w[2] == x) integer = w[1];
+        if ((w[0] & 0xffff) == 54) break;
+    }
+    assert(integer && functions < count);
+    uint32_t extra[64]; unsigned n = 0;
+#define WORD(v) do { assert(n < 64); extra[n++] = (v); } while (0)
+    uint32_t type = next++, aggregate = next++, result = next++;
+    if (form == 0) {
+        WORD(4u << 16 | 30u); WORD(type); WORD(integer); WORD(integer);
+        WORD(5u << 16 | 51u); WORD(type); WORD(aggregate); WORD(x); WORD(one);
+    } else {
+        WORD(4u << 16 | 28u); WORD(type); WORD(integer); WORD(one);
+        WORD(4u << 16 | 51u); WORD(type); WORD(aggregate); WORD(x);
+        if (form == 2) {
+            uint32_t structure = next++, wrapped = next++;
+            WORD(3u << 16 | 30u); WORD(structure); WORD(type);
+            WORD(4u << 16 | 51u); WORD(structure); WORD(wrapped); WORD(aggregate);
+            aggregate = wrapped;
+        }
+    }
+    WORD((form == 2 ? 7u : 6u) << 16 | 52u); WORD(integer); WORD(result); WORD(81); WORD(aggregate); WORD(0);
+    if (form == 2) WORD(0);
+#undef WORD
+    *out_count = count + n;
+    uint32_t *out = malloc(*out_count * 4); assert(out);
+    memcpy(out, words, functions * 4); memcpy(out + functions, extra, n * 4);
+    memcpy(out + functions + n, words + functions, (count - functions) * 4); out[3] = next;
+    for (size_t i = 5; i < functions;) {
+        unsigned length = out[i] >> 16;
+        if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = result;
+        if ((out[i] & 0xffff) == 71 && length == 4 && out[i + 2] == 11 && out[i + 3] == 25)
+            for (unsigned j = 0; j < length; ++j) out[i + j] = 1u << 16;
+        i += length;
+    }
+    return out;
+}
+
+static uint32_t *aggregate_vector_dimension(const uint32_t *words, size_t count,
+    uint32_t x, uint32_t one, unsigned form, unsigned mode, size_t *out_count)
+{
+    size_t functions = 5; uint32_t integer = 0, vector = 0, next = words[3];
+    for (; functions < count; functions += words[functions] >> 16) {
+        const uint32_t *w = words + functions;
+        if ((w[0] & 0xffff) == 50 && w[2] == x) integer = w[1];
+        if ((w[0] & 0xffff) == 54) break;
+    }
+    assert(integer && functions < count);
+    for (size_t i = 5; i < functions; i += words[i] >> 16)
+        if ((words[i] & 0xffff) == 23 && words[i + 2] == integer && words[i + 3] == 2) vector = words[i + 1];
+    uint32_t extra[96]; unsigned n = 0;
+#define WORD(v) do { assert(n < 96); extra[n++] = (v); } while (0)
+    if (!vector) { vector = next++; WORD(4u << 16 | 23u); WORD(vector); WORD(integer); WORD(2); }
+    uint32_t type = next++, a = next++, b = next++, aggregate = next++;
+    WORD((form ? 4u : 3u) << 16 | (form ? 28u : 30u)); WORD(type); WORD(vector); if (form) WORD(one);
+    WORD(5u << 16 | 51u); WORD(vector); WORD(a); WORD(x); WORD(one);
+    WORD(5u << 16 | 51u); WORD(vector); WORD(b); WORD(one); WORD(x);
+    if (mode == 1) { WORD(3u << 16 | 46u); WORD(type); WORD(aggregate); }
+    else { WORD(4u << 16 | 51u); WORD(type); WORD(aggregate); WORD(a); }
+    if (mode >= 2) {
+        uint32_t inserted = next++;
+        WORD((mode == 2 ? 7u : 8u) << 16 | 52u); WORD(type); WORD(inserted); WORD(82);
+        WORD(mode == 2 ? b : one); WORD(aggregate); WORD(0);
+        if (mode > 2) WORD(mode == 4 ? 1 : 0);
+        aggregate = inserted;
+    }
+    uint32_t extracted_vector = next++, scalar = next++, result = next++;
+    WORD(6u << 16 | 52u); WORD(vector); WORD(extracted_vector); WORD(81); WORD(aggregate); WORD(0);
+    WORD(6u << 16 | 52u); WORD(integer); WORD(scalar); WORD(81); WORD(extracted_vector); WORD(0);
+    WORD(6u << 16 | 52u); WORD(integer); WORD(result); WORD(128); WORD(scalar); WORD(one);
+#undef WORD
+    *out_count = count + n;
+    uint32_t *out = malloc(*out_count * 4); assert(out);
+    memcpy(out, words, functions * 4); memcpy(out + functions, extra, n * 4);
+    memcpy(out + functions + n, words + functions, (count - functions) * 4); out[3] = next;
+    for (size_t i = 5; i < functions;) {
+        unsigned length = out[i] >> 16;
+        if ((out[i] & 0xffff) == 331 && out[i + 2] == 38) out[i + 3] = result;
+        if ((out[i] & 0xffff) == 71 && length == 4 && out[i + 2] == 11 && out[i + 3] == 25)
+            for (unsigned j = 0; j < length; ++j) out[i + j] = 1u << 16;
+        i += length;
+    }
+    return out;
+}
+
 int main(void)
 {
     size_t bytes = 0;
@@ -463,6 +553,287 @@ int main(void)
     /* Set the feature directly to isolate shader admission from device
      * negotiation. The compiled workgroup/code equal the literal form. */
     device->enabled_features_t09 |= PS5VK_T09_FEATURE_MAINTENANCE4;
+    for (unsigned form = 0; form < 3; ++form) {
+        uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+        size_t expression_count;
+        uint32_t *expr = aggregate_dimension(seed, count + 4, id64, id1, form, &expression_count);
+        for (unsigned specialized = 0; specialized < 2; ++specialized) {
+            uint32_t value = 32;
+            VkSpecializationMapEntry entry = {7, 0, 4};
+            VkSpecializationInfo info = {1, &entry, 4, &value};
+            const VkSpecializationInfo *map = specialized ? &info : NULL;
+            struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+            VkResult compiler = ps5vk_runtime_compile_compute(expr, expression_count, "main", layout, map, &program, &code);
+            assert(compiler == VK_SUCCESS && code && program.local_size[0] == (specialized ? 32 : 64)); free(code);
+            VkPipeline candidate = NULL;
+            VkResult front = build_specialized(device, layout, expr, expression_count * 4, map, &candidate);
+            assert(front == VK_SUCCESS && candidate && candidate->program.local_size[0] == (specialized ? 32u : 64u)); vkDestroyPipeline(device, candidate, NULL);
+        }
+        for (size_t i = 5; i < expression_count; i += expr[i] >> 16) {
+            if ((expr[i] & 0xffff) == 52 && expr[i + 3] == 81) {
+                unsigned length = expr[i] >> 16;
+                for (unsigned index = 5; index < length; ++index) {
+                    uint32_t old = expr[i + index]; expr[i + index] = UINT32_MAX;
+                    VkPipeline invalid = NULL;
+                    assert(build(device, layout, expr, expression_count * 4, &invalid) != VK_SUCCESS && !invalid);
+                    expr[i + index] = old;
+                }
+            }
+            /* The unselected second structure member must be well formed. */
+            if (form == 0 && (expr[i] & 0xffff) == 51 && expr[i] >> 16 == 5) {
+                uint32_t old = expr[i + 4]; expr[i + 4] = expr[3];
+                VkPipeline invalid = NULL;
+                assert(build(device, layout, expr, expression_count * 4, &invalid) != VK_SUCCESS && !invalid);
+                expr[i + 4] = old;
+            }
+            if ((expr[i] & 0xffff) == 28) {
+                uint32_t old = expr[i + 3]; expr[i + 3] = id64;
+                VkPipeline invalid = NULL;
+                assert(build(device, layout, expr, expression_count * 4, &invalid) != VK_SUCCESS && !invalid);
+                expr[i + 3] = old;
+            }
+        }
+        free(expr); free(seed);
+    }
+    for (unsigned form = 0; form < 3; ++form) {
+        uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+        size_t expression_count;
+        uint32_t *expr = aggregate_dimension(seed, count + 4, id64, id1, form, &expression_count);
+        uint32_t aggregate = 0, extracted = 0;
+        for (size_t i = 5; i < expression_count; i += expr[i] >> 16)
+            if ((expr[i] & 0xffff) == 52 && expr[i + 3] == 81) {
+                aggregate = expr[i + 4]; extracted = expr[i + 2];
+            }
+        assert(aggregate && extracted);
+        for (size_t i = 5; i < expression_count;) {
+            unsigned length = expr[i] >> 16;
+            if ((expr[i] & 0xffff) == 51 && expr[i + 2] == aggregate) {
+                expr[i] = 3u << 16 | 46u;
+                for (unsigned j = 3; j < length; ++j) expr[i + j] = 1u << 16;
+            }
+            i += length;
+        }
+        uint32_t *wrapped = expression_dimension(expr, expression_count, extracted, id64, 128);
+        for (unsigned specialized = 0; specialized < 2; ++specialized) {
+            uint32_t value = 32;
+            VkSpecializationMapEntry entry = {7, 0, 4};
+            VkSpecializationInfo info = {1, &entry, 4, &value};
+            const VkSpecializationInfo *map = specialized ? &info : NULL;
+            struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+            assert(ps5vk_runtime_compile_compute(wrapped, expression_count + 6, "main", layout, map, &program, &code) == VK_SUCCESS);
+            assert(code && program.local_size[0] == (specialized ? 32 : 64)); free(code);
+            VkPipeline candidate = NULL;
+            VkResult front = build_specialized(device, layout, wrapped, (expression_count + 6) * 4, map, &candidate);
+            assert(front == VK_SUCCESS && candidate && candidate->program.local_size[0] == (specialized ? 32u : 64u));
+            vkDestroyPipeline(device, candidate, NULL);
+        }
+        free(wrapped); free(expr); free(seed);
+    }
+    for (unsigned form = 0; form < 3; ++form) {
+        for (unsigned untouched = 0; untouched < (form == 0 ? 2u : 1u); ++untouched) {
+            uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+            size_t expression_count;
+            uint32_t *expr = aggregate_dimension(seed, count + 4, id64, id1, form, &expression_count);
+            size_t extract_at = 0; uint32_t root = 0, root_type = 0;
+            for (size_t i = 5; i < expression_count; i += expr[i] >> 16)
+                if ((expr[i] & 0xffff) == 52 && expr[i + 3] == 81) { extract_at = i; root = expr[i + 4]; }
+            for (size_t i = 5; i < expression_count; i += expr[i] >> 16)
+                if ((expr[i] & 0xffff) == 51 && expr[i + 2] == root) root_type = expr[i + 1];
+            assert(extract_at && root && root_type);
+            unsigned length = form == 2 ? 8 : 7;
+            uint32_t inserted = expr[3];
+            uint32_t op[] = {length << 16 | 52u, root_type, inserted, 82, id1, root, untouched, 0};
+            expr = realloc(expr, (expression_count + length) * 4); assert(expr);
+            memmove(expr + extract_at + length, expr + extract_at, (expression_count - extract_at) * 4);
+            memcpy(expr + extract_at, op, length * 4);
+            expr[extract_at + length + 4] = inserted; expr[3]++;
+            expression_count += length;
+            for (unsigned specialized = 0; specialized < 2; ++specialized) {
+                uint32_t value = 32, expected = untouched ? (specialized ? 32 : 64) : 1;
+                VkSpecializationMapEntry entry = {7, 0, 4};
+                VkSpecializationInfo info = {1, &entry, 4, &value};
+                const VkSpecializationInfo *map = specialized ? &info : NULL;
+                struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+                assert(ps5vk_runtime_compile_compute(expr, expression_count, "main", layout, map, &program, &code) == VK_SUCCESS);
+                assert(code && program.local_size[0] == expected); free(code);
+                VkPipeline candidate = NULL;
+                VkResult front = build_specialized(device, layout, expr, expression_count * 4, map, &candidate);
+                assert(front == VK_SUCCESS && candidate && candidate->program.local_size[0] == expected);
+                vkDestroyPipeline(device, candidate, NULL);
+            }
+            free(expr); free(seed);
+        }
+    }
+    for (unsigned form = 0; form < 2; ++form) {
+        for (unsigned mode = 0; mode < 5; ++mode) {
+            uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+            size_t expression_count;
+            uint32_t *expr = aggregate_vector_dimension(seed, count + 4, id64, id1, form, mode, &expression_count);
+            for (unsigned specialized = 0; specialized < 2; ++specialized) {
+                uint32_t value = 32, expected = mode == 1 ? 1 : (mode == 2 || mode == 3) ? 2 : (specialized ? 33 : 65);
+                VkSpecializationMapEntry entry = {7, 0, 4};
+                VkSpecializationInfo info = {1, &entry, 4, &value};
+                const VkSpecializationInfo *map = specialized ? &info : NULL;
+                struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+                assert(ps5vk_runtime_compile_compute(expr, expression_count, "main", layout, map, &program, &code) == VK_SUCCESS);
+                assert(code && program.local_size[0] == expected); free(code);
+                VkPipeline candidate = NULL;
+                VkResult front = build_specialized(device, layout, expr, expression_count * 4, map, &candidate);
+                assert(front == VK_SUCCESS && candidate && candidate->program.local_size[0] == expected);
+                vkDestroyPipeline(device, candidate, NULL);
+            }
+            for (size_t i = 5; i < expression_count; i += expr[i] >> 16) {
+                unsigned op = expr[i] & 0xffff, length = expr[i] >> 16;
+                if (op == 52 && (expr[i + 3] == 81 || expr[i + 3] == 82)) {
+                    unsigned first_index = expr[i + 3] == 81 ? 5 : 6;
+                    for (unsigned index = first_index; index < length; ++index) {
+                        uint32_t old = expr[i + index]; expr[i + index] = UINT32_MAX;
+                        VkPipeline invalid = NULL;
+                        assert(build(device, layout, expr, expression_count * 4, &invalid) != VK_SUCCESS && !invalid);
+                        expr[i + index] = old;
+                    }
+                    unsigned operand = expr[i + 3] == 81 ? 4 : 5;
+                    uint32_t old = expr[i + operand]; expr[i + operand] = expr[i + 2];
+                    VkPipeline invalid = NULL;
+                    assert(build(device, layout, expr, expression_count * 4, &invalid) != VK_SUCCESS && !invalid);
+                    expr[i + operand] = old;
+                }
+                if (op == 46 || op == 51 || (op == 52 && expr[i + 3] == 82)) {
+                    /* Exercise the consumed aggregate, not standalone constants
+                     * that are unreachable from the launch expression. */
+                    unsigned aggregate_type = 0;
+                    for (size_t t = 5; t < expression_count; t += expr[t] >> 16)
+                        if (((expr[t] & 0xffff) == 28 || (expr[t] & 0xffff) == 30) && expr[t + 1] == expr[i + 1])
+                            aggregate_type = 1;
+                    if (!aggregate_type) continue;
+                    size_t types = 5;
+                    while (types < expression_count && (expr[types] & 0xffff) != 19) types += expr[types] >> 16;
+                    assert(types < expression_count);
+                    uint32_t *decorated = malloc((expression_count + 4) * 4); assert(decorated);
+                    memcpy(decorated, expr, types * 4);
+                    uint32_t decoration[] = {4u << 16 | 71u, expr[i + 2], 1, 23};
+                    memcpy(decorated + types, decoration, sizeof(decoration));
+                    memcpy(decorated + types + 4, expr + types, (expression_count - types) * 4);
+                    VkPipeline invalid = NULL;
+                    assert(build(device, layout, decorated, (expression_count + 4) * 4, &invalid) != VK_SUCCESS && !invalid);
+                    free(decorated);
+                }
+            }
+            free(expr); free(seed);
+        }
+    }
+    for (unsigned specialized_float = 0; specialized_float < 4; ++specialized_float) {
+        uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+        size_t expression_count;
+        uint32_t *expr = aggregate_dimension(seed, count + 4, id64, id1, 0, &expression_count);
+        size_t type_at = 0; uint32_t aggregate_type = 0, float_type = expr[3], float_value = expr[3] + 1;
+        for (size_t i = 5; i < expression_count; i += expr[i] >> 16)
+            if ((expr[i] & 0xffff) == 30 && expr[i] >> 16 == 4) { type_at = i; aggregate_type = expr[i + 1]; }
+        assert(type_at && aggregate_type);
+        unsigned vector_field = specialized_float >= 2;
+        uint32_t vector_type = expr[3] + 2, vector_value = expr[3] + 3;
+        expr[type_at + 3] = vector_field ? vector_type : float_type;
+        for (size_t i = 5; i < expression_count; i += expr[i] >> 16)
+            if ((expr[i] & 0xffff) == 51 && expr[i + 1] == aggregate_type) expr[i + 4] = vector_field ? vector_value : float_value;
+        uint32_t declarations[] = {3u << 16 | 22u, float_type, 32,
+            4u << 16 | 43u, float_type, float_value, 0x3f800000u,
+            4u << 16 | 23u, vector_type, float_type, 2,
+            5u << 16 | 51u, vector_type, vector_value, float_value, float_value};
+        unsigned added = vector_field ? 16 : 7;
+        expr = realloc(expr, (expression_count + added) * 4); assert(expr);
+        memmove(expr + type_at + added, expr + type_at, (expression_count - type_at) * 4);
+        memcpy(expr + type_at, declarations, added * 4); expr[3] += vector_field ? 4 : 2; expression_count += added;
+        if (specialized_float & 1) {
+            uint32_t *with_spec = specialize_dimension(expr, expression_count, float_value, 9);
+            free(expr); expr = with_spec; expression_count += 4;
+        }
+        for (unsigned specialized = 0; specialized < 2; ++specialized) {
+            uint32_t data[] = {32, 0x40000000u};
+            VkSpecializationMapEntry entries[] = {{7, 0, 4}, {9, 4, 4}};
+            VkSpecializationInfo info = {2, entries, sizeof(data), data};
+            const VkSpecializationInfo *map = specialized ? &info : NULL;
+            VkPipeline candidate = NULL;
+            VkResult front = build_specialized(device, layout, expr, expression_count * 4, map, &candidate);
+            assert(front == VK_SUCCESS && candidate && candidate->program.local_size[0] == (specialized ? 32u : 64u));
+            vkDestroyPipeline(device, candidate, NULL);
+        }
+        free(expr); free(seed);
+    }
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        uint32_t *seed = specialize_dimension(by_id, count, id64, 7);
+        size_t expression_count;
+        uint32_t *expr = aggregate_dimension(seed, count + 4, id64, id1, 2, &expression_count);
+        size_t extract_at = 0; uint32_t root = 0, array_type = 0, root_type = 0, scalar = 0;
+        for (size_t i = 5; i < expression_count; i += expr[i] >> 16) {
+            if ((expr[i] & 0xffff) == 28) array_type = expr[i + 1];
+            if ((expr[i] & 0xffff) == 52 && expr[i + 3] == 81) {
+                extract_at = i; root = expr[i + 4]; scalar = expr[i + 2];
+            }
+        }
+        for (size_t i = 5; i < expression_count;) {
+            unsigned length = expr[i] >> 16;
+            if ((expr[i] & 0xffff) == 51 && expr[i + 2] == root) {
+                root_type = expr[i + 1];
+                if (mode == 3) {
+                    expr[i] = 3u << 16 | 46u;
+                    for (unsigned j = 3; j < length; ++j) expr[i + j] = 1u << 16;
+                }
+            }
+            i += length;
+        }
+        assert(extract_at && root && array_type && root_type && scalar);
+        uint32_t instructions[24], next = expr[3]; unsigned n = 0;
+#define WORD(v) do { assert(n < 24); instructions[n++] = (v); } while (0)
+        if (mode == 2) {
+            uint32_t inserted = next++;
+            WORD(8u << 16 | 52u); WORD(root_type); WORD(inserted); WORD(82); WORD(id1); WORD(root); WORD(0); WORD(0);
+            root = inserted;
+        }
+        uint32_t intermediate = next++;
+        WORD(6u << 16 | 52u); WORD(array_type); WORD(intermediate); WORD(81); WORD(root); WORD(0);
+        if (mode == 1) {
+            uint32_t inserted = next++;
+            WORD(7u << 16 | 52u); WORD(array_type); WORD(inserted); WORD(82); WORD(id1); WORD(intermediate); WORD(0);
+            intermediate = inserted;
+        }
+#undef WORD
+        expr = realloc(expr, (expression_count + n) * 4); assert(expr);
+        memmove(expr + extract_at + n, expr + extract_at, (expression_count - extract_at) * 4);
+        memcpy(expr + extract_at, instructions, n * 4);
+        expr[extract_at + n] = 6u << 16 | 52u;
+        expr[extract_at + n + 4] = intermediate; expr[extract_at + n + 6] = 1u << 16;
+        expr[3] = next; expression_count += n;
+        uint32_t *wrapped = expression_dimension(expr, expression_count, scalar, id1, 128);
+        for (unsigned specialized = 0; specialized < 2; ++specialized) {
+            uint32_t value = 32, expected = mode == 0 ? (specialized ? 33 : 65) : mode == 3 ? 1 : 2;
+            VkSpecializationMapEntry entry = {7, 0, 4};
+            VkSpecializationInfo info = {1, &entry, 4, &value};
+            const VkSpecializationInfo *map = specialized ? &info : NULL;
+            struct ps5vk_compiled_program program = {0}; uint32_t *code = NULL;
+            assert(ps5vk_runtime_compile_compute(wrapped, expression_count + 6, "main", layout, map, &program, &code) == VK_SUCCESS);
+            assert(code && program.local_size[0] == expected); free(code);
+            VkPipeline candidate = NULL;
+            VkResult front = build_specialized(device, layout, wrapped, (expression_count + 6) * 4, map, &candidate);
+            assert(front == VK_SUCCESS && candidate && candidate->program.local_size[0] == expected);
+            vkDestroyPipeline(device, candidate, NULL);
+        }
+        for (size_t i = 5; i < expression_count + 6; i += wrapped[i] >> 16) {
+            if ((wrapped[i] & 0xffff) != 52 || (wrapped[i + 3] != 81 && wrapped[i + 3] != 82)) continue;
+            unsigned first = wrapped[i + 3] == 81 ? 5 : 6, length = wrapped[i] >> 16;
+            for (unsigned index = first; index < length; ++index) {
+                uint32_t old = wrapped[i + index]; wrapped[i + index] = UINT32_MAX;
+                VkPipeline invalid = NULL;
+                assert(build(device, layout, wrapped, (expression_count + 6) * 4, &invalid) != VK_SUCCESS && !invalid);
+                wrapped[i + index] = old;
+            }
+            unsigned operand = wrapped[i + 3] == 81 ? 4 : 5;
+            uint32_t old = wrapped[i + operand]; wrapped[i + operand] = wrapped[i + 2];
+            VkPipeline invalid = NULL;
+            assert(build(device, layout, wrapped, (expression_count + 6) * 4, &invalid) != VK_SUCCESS && !invalid);
+            wrapped[i + operand] = old;
+        }
+        free(wrapped); free(expr); free(seed);
+    }
     /* Every lane uses the scalar operation rules; specialization must reach
      * vector operands before the launch dimensions are resolved. */
     const struct { unsigned op; uint32_t normal, specialized; } vector_ops[] = {
@@ -902,7 +1273,7 @@ int main(void)
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     free(literal); free(by_id); free(spec);
-    puts("LocalSizeId: scalar and vector specialization expressions under maintenance4 "
+    puts("LocalSizeId: scalar, vector and aggregate specialization expressions under maintenance4 "
          "(host compiler, no GPU evidence)");
     return 0;
 }

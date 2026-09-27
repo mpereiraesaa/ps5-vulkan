@@ -218,6 +218,9 @@ static int constant_operation(unsigned op, unsigned result_kind,
     }
     return 1;
 }
+static int constant_extract(VkShaderModule module, uint32_t id,
+    const uint32_t *indices, unsigned index_count, uint32_t expected, uint32_t *values, unsigned *components,
+    const VkSpecializationInfo *specialization, unsigned depth, unsigned *budget);
 static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4],
                            unsigned *components, uint32_t *element_type,
                            const VkSpecializationInfo *specialization,
@@ -264,6 +267,11 @@ static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4
         return 1;
     }
     if (op != 52 || length < 5) return 0;
+    if (definition[3] == 81) {
+        unsigned extracted;
+        return length >= 6 && constant_extract(module, definition[4], definition + 5, length - 5,
+            definition[1], values, &extracted, specialization, depth + 1, budget) && extracted == *components;
+    }
     uint32_t a[4], b[4], at = 0, bt = 0;
     unsigned an = 0, bn = 0;
     if (definition[3] == 79) { /* VectorShuffle: lane selectors are literals. */
@@ -322,6 +330,244 @@ static int constant_vector(VkShaderModule module, uint32_t id, uint32_t values[4
             return 0;
     return 1;
 }
+/* Aggregate expressions retain their declared types through extraction and
+ * insertion. Validate every consumed member before selecting a scalar/vector,
+ * using the same depth/visit budget as ordinary specialization operations. */
+static const uint32_t *constant_type(VkShaderModule module, uint32_t id)
+{
+    const uint32_t *type = NULL;
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        unsigned op = w[0] & 0xffff, length = w[0] >> 16;
+        if (op >= 19 && op <= 33 && length >= 2 && w[1] == id) {
+            if (type) return NULL;
+            type = w;
+        }
+    }
+    return type;
+}
+static int constant_members(VkShaderModule module, const uint32_t *type,
+    uint32_t *count, const VkSpecializationInfo *specialization, unsigned depth, unsigned *budget)
+{
+    if (!type) return 0;
+    unsigned op = type[0] & 0xffff, length = type[0] >> 16;
+    if (op == 23 && length == 4 && type[3] >= 2 && type[3] <= 4) { *count = type[3]; return 1; }
+    if (op == 30 && length >= 2) { *count = length - 2; return 1; }
+    if (op == 28 && length == 4) {
+        unsigned kind;
+        return constant_value(module, type[3], count, specialization, depth + 1, budget, &kind) &&
+               kind == 1 && *count > 0 && *count <= 4096;
+    }
+    return 0;
+}
+static int constant_null_type_valid(VkShaderModule module, uint32_t type_id,
+    const VkSpecializationInfo *specialization, unsigned depth, unsigned *budget)
+{
+    if (depth >= 64 || !*budget) return 0;
+    --*budget;
+    const uint32_t *type = constant_type(module, type_id);
+    if (!type) return 0;
+    unsigned op = type[0] & 0xffff, length = type[0] >> 16;
+    if (op == 20) return length == 2;
+    if (op == 21) return length == 4 && (type[2] == 8 || type[2] == 16 || type[2] == 32 || type[2] == 64);
+    if (op == 22) return length == 3 && (type[2] == 16 || type[2] == 32 || type[2] == 64);
+    if (op == 23) return length == 4 && type[3] >= 2 && type[3] <= 4 &&
+        constant_null_type_valid(module, type[2], specialization, depth + 1, budget);
+    uint32_t members;
+    if (!constant_members(module, type, &members, specialization, depth + 1, budget)) return 0;
+    for (uint32_t i = 0; i < members; ++i) {
+        uint32_t child = op == 30 ? type[2 + i] : type[2];
+        if (!constant_null_type_valid(module, child, specialization, depth + 1, budget)) return 0;
+    }
+    return 1;
+}
+static int constant_path_type(VkShaderModule module, uint32_t type_id,
+    const uint32_t *indices, unsigned index_count, uint32_t *selected,
+    const VkSpecializationInfo *specialization, unsigned depth, unsigned *budget)
+{
+    if (depth >= 64 || !*budget) return 0;
+    --*budget;
+    if (!index_count) { *selected = type_id; return constant_type(module, type_id) != NULL; }
+    const uint32_t *type = constant_type(module, type_id);
+    if (!type) return 0;
+    unsigned op = type[0] & 0xffff;
+    uint32_t members;
+    if (op == 23 && type[0] >> 16 == 4) members = type[3];
+    else if (!constant_members(module, type, &members, specialization, depth + 1, budget)) return 0;
+    if (indices[0] >= members) return 0;
+    uint32_t child = op == 30 ? type[2 + indices[0]] : type[2];
+    return constant_path_type(module, child, indices + 1, index_count - 1, selected,
+        specialization, depth + 1, budget);
+}
+
+/* A mixed aggregate may contain numeric leaves not used as launch dimensions.
+ * Validate their literal shape and specialization storage without narrowing them. */
+static int constant_unused_literal(VkShaderModule module, const uint32_t *definition,
+    const uint32_t *type, const VkSpecializationInfo *specialization)
+{
+    unsigned type_op = type[0] & 0xffff, type_length = type[0] >> 16;
+    if (!((type_op == 21 && type_length == 4) || (type_op == 22 && type_length == 3))) return 0;
+    uint32_t width = type[2];
+    if (width != 8 && width != 16 && width != 32 && width != 64) return 0;
+    if (type_op == 22 && width == 8) return 0;
+    unsigned op = definition[0] & 0xffff, length = definition[0] >> 16;
+    if (op == 46 ? length != 3 : ((op != 43 && op != 50) || length != 3 + (width + 31) / 32)) return 0;
+    unsigned decorated = 0; uint32_t spec_id = 0;
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        if ((w[0] & 0xffff) == 71 && w[0] >> 16 >= 3 && w[1] == definition[2] && w[2] == 1) {
+            if (w[0] >> 16 != 4 || op != 50 || ++decorated > 1) return 0;
+            spec_id = w[3];
+        }
+    }
+    if (!decorated || !specialization) return 1;
+    if (specialization->mapEntryCount > PS5VK_MAX_SPECIALIZATION_CONSTANTS ||
+        (specialization->mapEntryCount && !specialization->pMapEntries)) return 0;
+    unsigned matches = 0;
+    for (uint32_t i = 0; i < specialization->mapEntryCount; ++i) {
+        const VkSpecializationMapEntry *entry = specialization->pMapEntries + i;
+        if (entry->constantID != spec_id) continue;
+        if (++matches > 1 || entry->size != width / 8 || !specialization->pData ||
+            entry->offset > specialization->dataSize || entry->size > specialization->dataSize - entry->offset)
+            return 0;
+    }
+    return 1;
+}
+
+static int constant_tree_valid(VkShaderModule module, uint32_t id, uint32_t expected,
+    const VkSpecializationInfo *specialization, unsigned depth, unsigned *budget)
+{
+    if (depth >= 64 || !*budget) return 0;
+    --*budget;
+    const uint32_t *definition = constant_definition(module, id);
+    if (!definition || definition[1] != expected) return 0;
+    unsigned kind = constant_scalar_kind(module, expected);
+    if (kind) {
+        uint32_t value;
+        return constant_value(module, id, &value, specialization, depth + 1, budget, &kind);
+    }
+    const uint32_t *type = constant_type(module, expected);
+    if (!type) return 0;
+    if ((type[0] & 0xffff) == 21 || (type[0] & 0xffff) == 22)
+        return constant_unused_literal(module, definition, type, specialization);
+    if ((type[0] & 0xffff) == 23 && type[0] >> 16 == 4 && constant_scalar_kind(module, type[2])) {
+        uint32_t values[4], element; unsigned components;
+        return constant_vector(module, id, values, &components, &element, specialization, depth + 1, budget);
+    }
+    uint32_t members;
+    if (!constant_members(module, type, &members, specialization, depth + 1, budget)) return 0;
+    unsigned op = definition[0] & 0xffff, length = definition[0] >> 16;
+    int insert = op == 52 && length >= 7 && definition[3] == 82;
+    int extract = op == 52 && length >= 6 && definition[3] == 81;
+    if (!insert && !extract && op != 46 && ((op != 44 && op != 51) || length != 3 + members)) return 0;
+    for (size_t i = 5; i < module->word_count; i += module->words[i] >> 16) {
+        const uint32_t *w = module->words + i;
+        if ((w[0] & 0xffff) == 71 && w[0] >> 16 >= 3 && w[1] == id && w[2] == 1) return 0;
+    }
+    if (extract) {
+        const uint32_t *source = constant_definition(module, definition[4]);
+        uint32_t selected;
+        return source && constant_path_type(module, source[1], definition + 5, length - 5, &selected,
+                   specialization, depth + 1, budget) && selected == expected &&
+               constant_tree_valid(module, definition[4], source[1], specialization, depth + 1, budget);
+    }
+    if (insert) {
+        uint32_t selected;
+        return constant_path_type(module, expected, definition + 6, length - 6, &selected,
+                   specialization, depth + 1, budget) &&
+               constant_tree_valid(module, definition[5], expected, specialization, depth + 1, budget) &&
+               constant_tree_valid(module, definition[4], selected, specialization, depth + 1, budget);
+    }
+    if (op == 46) return length == 3 &&
+        constant_null_type_valid(module, expected, specialization, depth + 1, budget);
+    for (uint32_t i = 0; i < members; ++i) {
+        uint32_t child_type = (type[0] & 0xffff) == 30 ? type[2 + i] : type[2];
+        if (!constant_tree_valid(module, definition[3 + i], child_type, specialization, depth + 1, budget)) return 0;
+    }
+    return 1;
+}
+static int constant_extract(VkShaderModule module, uint32_t id,
+    const uint32_t *indices, unsigned index_count, uint32_t expected, uint32_t *values, unsigned *components,
+    const VkSpecializationInfo *specialization, unsigned depth, unsigned *budget)
+{
+    if (depth >= 64 || !*budget) return 0;
+    --*budget;
+    const uint32_t *definition = constant_definition(module, id);
+    if (!definition) return 0;
+    if (!index_count) {
+        if (definition[1] != expected) return 0;
+        unsigned kind = constant_scalar_kind(module, expected);
+        if (kind) {
+            *components = 1;
+            return constant_value(module, id, values, specialization, depth + 1, budget, &kind);
+        }
+        uint32_t element;
+        return constant_vector(module, id, values, components, &element, specialization, depth + 1, budget);
+    }
+    const uint32_t *type = constant_type(module, definition[1]);
+    if (!type) return 0;
+    if ((definition[0] & 0xffff) == 52 && (definition[0] >> 16) >= 6 && definition[3] == 81) {
+        unsigned prefix = (definition[0] >> 16) - 5;
+        uint32_t path[64];
+        if (prefix > 64 || index_count > 64 - prefix ||
+            !constant_tree_valid(module, id, definition[1], specialization, depth + 1, budget)) return 0;
+        memcpy(path, definition + 5, prefix * sizeof(*path));
+        memcpy(path + prefix, indices, index_count * sizeof(*path));
+        return constant_extract(module, definition[4], path, prefix + index_count, expected,
+            values, components, specialization, depth + 1, budget);
+    }
+    if ((type[0] & 0xffff) == 23) {
+        uint32_t lanes[4], element; unsigned count;
+        if (index_count != 1 || !constant_vector(module, id, lanes, &count, &element,
+            specialization, depth + 1, budget) || element != expected || indices[0] >= count) return 0;
+        values[0] = lanes[indices[0]]; *components = 1; return 1;
+    }
+    if ((definition[0] & 0xffff) == 46) {
+        uint32_t selected;
+        if (!constant_tree_valid(module, id, definition[1], specialization, depth + 1, budget) ||
+            !constant_path_type(module, definition[1], indices, index_count, &selected,
+                specialization, depth + 1, budget) || selected != expected) return 0;
+        const uint32_t *selected_type = constant_type(module, selected);
+        if (constant_scalar_kind(module, selected)) *components = 1;
+        else if (selected_type && (selected_type[0] & 0xffff) == 23 && selected_type[0] >> 16 == 4 &&
+                 selected_type[3] >= 2 && selected_type[3] <= 4 && constant_scalar_kind(module, selected_type[2]))
+            *components = selected_type[3];
+        else return 0;
+        memset(values, 0, *components * sizeof(*values)); return 1;
+    }
+    uint32_t members;
+    if (!constant_members(module, type, &members, specialization, depth + 1, budget) ||
+        indices[0] >= members ||
+        !constant_tree_valid(module, id, definition[1], specialization, depth + 1, budget)) return 0;
+    if ((definition[0] & 0xffff) == 52 && definition[3] == 82) {
+        unsigned inserted_indices = (definition[0] >> 16) - 6;
+        unsigned common = index_count < inserted_indices ? index_count : inserted_indices;
+        int matching = 1;
+        for (unsigned i = 0; i < common; ++i)
+            if (indices[i] != definition[6 + i]) matching = 0;
+        if (!matching) return constant_extract(module, definition[5], indices, index_count,
+            expected, values, components, specialization, depth + 1, budget);
+        if (index_count < inserted_indices) {
+            /* Extracting a whole vector after insertion into one of its lanes. */
+            const uint32_t *selected_type = constant_type(module, expected);
+            if (inserted_indices != index_count + 1 || !selected_type ||
+                (selected_type[0] & 0xffff) != 23 || selected_type[0] >> 16 != 4 ||
+                !constant_extract(module, definition[5], indices, index_count, expected,
+                    values, components, specialization, depth + 1, budget)) return 0;
+            uint32_t lane = definition[6 + index_count], value;
+            unsigned kind;
+            const uint32_t *object = constant_definition(module, definition[4]);
+            if (lane >= *components || !object || object[1] != selected_type[2] ||
+                !constant_value(module, definition[4], &value, specialization, depth + 1, budget, &kind)) return 0;
+            values[lane] = value; return 1;
+        }
+        return constant_extract(module, definition[4], indices + inserted_indices,
+            index_count - inserted_indices, expected, values, components, specialization, depth + 1, budget);
+    }
+    return constant_extract(module, definition[3 + indices[0]], indices + 1, index_count - 1,
+        expected, values, components, specialization, depth + 1, budget);
+}
+
 /* Resolve a scalar 32-bit integer or boolean, including a specialized workgroup
  * dimension. Keep this in agreement with the compiler's specialization input:
  * defaults apply only when the application did not supply that SpecId. */
@@ -378,15 +624,10 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
         int select = op == 169;
         uint32_t a, b = 0, c = 0;
         unsigned ak = 0, bk = 0, ck = 0;
-        if (op == 81) { /* CompositeExtract from a vector. */
-            uint32_t lanes[4], element_type = 0;
-            unsigned components = 0;
-            if (decorated || length != 6 ||
-                !constant_vector(module, expression[4], lanes, &components, &element_type,
-                                 specialization, depth + 1, budget) ||
-                element_type != type || expression[5] >= components) return 0;
-            *value = lanes[expression[5]];
-            return 1;
+        if (op == 81) {
+            unsigned components;
+            return !decorated && length >= 6 && constant_extract(module, expression[4],
+                expression + 5, length - 5, type, value, &components, specialization, depth + 1, budget) && components == 1;
         }
         if (decorated || length != (select ? 7u : unary ? 5u : 6u) ||
             !constant_value(module, expression[4], &a, specialization, depth + 1, budget, &ak) ||
@@ -413,7 +654,7 @@ static int constant_value(VkShaderModule module, uint32_t id, uint32_t *value,
 /* LocalSize (OpExecutionMode, mode 17) or, when the device enabled
  * maintenance4, LocalSizeId (OpExecutionModeId 331, mode 38) whose three
  * operands are scalar 32-bit constants or specialization expressions, including
- * scalar extraction from integer/boolean vectors.
+ * scalar/vector extraction from typed constant aggregates.
  * A BuiltIn WorkgroupSize constant takes precedence over the execution mode,
  * including its specialization, and is also legal without an execution mode.
  * Unsupported expression types remain rejected rather than guessed. */
