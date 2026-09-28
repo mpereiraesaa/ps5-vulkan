@@ -135,8 +135,23 @@ previous payload.
   `829d96aa92f01362110c110573d13a3d62055dda7aa292f8a6ef7674a31dcd96`.
 
 The host recorder now accepts those two measured return-to-sampling
-transitions for the bounded tiled backbuffer role. A new hardware artifact is
-needed before attributing any presentation or pixel result to this source.
+transitions for the bounded tiled backbuffer role. The fifth clean artifact,
+ps5vk `ee73854d`, confirmed all four recorded transitions passed, but the
+native upload prelude refused the transfer-destination to shader-read barrier
+when the work was submitted. The backend reported `VK_ERROR_DEVICE_LOST`; the
+first-frame readback had 4,096/4,096 mismatches, and shutdown raised signal 6.
+The runner marked a suspected GPU hang, though the log identifies a software
+prepare refusal before submission, so a physical GPU hang is not established.
+The previous payload was restored and the console was idle afterward. No
+presentation frame or pixel oracle passed.
+
+- Fifth candidate eboot SHA-256: `7bae7e8ca7025b1c452c9791e9c4e6dfa4c919004149d5193bce5cbec081b05a`.
+- Run: `20260928T182507101Z_PPSA99994_ps5vk_0x3f86e1983579`; log SHA-256:
+  `6f578f34f14b24b79abdb558b4b9a89ca430ffa3fde224f4e6c5213a87f33c2a`.
+
+A host regression now reproduces all four measured barriers at the native
+upload prelude, which shares a bounded predicate with the recorder. Hardware
+validation of that source slice is pending.
 
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 

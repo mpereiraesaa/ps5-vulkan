@@ -462,8 +462,12 @@ refused the following shader-read to transfer-source transition. That exact
 barrier has a host recorder test and is accepted by the next source slice;
 the fourth native artifact confirmed it passed. That run then refused two
 return-to-sampling barriers on the same DXVK backbuffer. The host recorder
-accepts their exact measured forms in the next slice; hardware presentation
-and the pixel oracle remain to be retested.
+accepts their exact measured forms in the next slice. The fifth clean artifact
+recorded all four transitions but refused transfer-destination to shader-read
+at the native upload prelude, so the first-frame pixel oracle failed and no
+frame passed. A host regression reproduces the prelude refusal; recorder and
+prelude now share one bounded barrier predicate. Hardware confirmation remains
+pending.
 
 With the pinned DXVK checkout and its SDL2 native Meson build available:
 

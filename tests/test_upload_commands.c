@@ -640,4 +640,52 @@ int main(void)
         assert(ps5vk_upload_commands(&device,&import,1,NULL,&present_layouts,&at,
             present_words+64,flush)!=VK_SUCCESS && at==present_words);
     }
+    {
+        /* Native DXVK 2.6.2: the recorder accepted these transitions on its
+         * rendered/sampled/transfer RGBA8 backbuffer. Each submission's
+         * upload prelude must accept the same bounded transaction. */
+        struct VkImage_T backbuffer={0};
+        backbuffer.info=(VkImageCreateInfo){.imageType=VK_IMAGE_TYPE_2D,
+            .format=VK_FORMAT_R8G8B8A8_UNORM,.extent={256,256,1},.mipLevels=1,
+            .arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+        const VkAccessFlags next=VK_ACCESS_SHADER_READ_BIT |
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+            VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+        const VkPipelineStageFlags stages=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+        struct ps5vk_operation transitions[4]={
+            {.type=PS5VK_IMAGE_BARRIER,.src_stage=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+             .dst_stage=stages,.image_barrier={.image=&backbuffer,
+                 .oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                 .newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 .srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,.dstAccessMask=next}},
+            {.type=PS5VK_IMAGE_BARRIER,.src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+             .dst_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,.image_barrier={.image=&backbuffer,
+                 .oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 .newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 .dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT}},
+            {.type=PS5VK_IMAGE_BARRIER,.src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+             .dst_stage=stages,.image_barrier={.image=&backbuffer,
+                 .oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 .newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 .srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.dstAccessMask=next}},
+            {.type=PS5VK_IMAGE_BARRIER,.src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+             .dst_stage=stages | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                 VK_PIPELINE_STAGE_HOST_BIT,.image_barrier={.image=&backbuffer,
+                 .oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 .newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 .dstAccessMask=next}}};
+        for(unsigned i=0;i<4;++i) {
+            uint32_t barrier_words[64]={0},*at=barrier_words;
+            struct ps5vk_layout_state state={0};
+            backbuffer.layout=transitions[i].image_barrier.oldLayout;
+            assert(ps5vk_upload_commands(&device,&transitions[i],1,NULL,&state,&at,
+                barrier_words+64,flush)==VK_SUCCESS);
+            assert(at-barrier_words==PS5VK_GRAPHICS_ACQUIRE_WORDS && state.count==1);
+            assert(ps5vk_layout_require(&state,&backbuffer,
+                transitions[i].image_barrier.newLayout)==VK_SUCCESS);
+        }
+    }
 }

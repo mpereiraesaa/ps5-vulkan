@@ -1556,46 +1556,7 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
         b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT &&
         src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
         dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    if(ps5vk_tiled_2d_sampled_color_image(image) &&
-       b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-       b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-       b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
-       b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_SHADER_READ_BIT |
-           VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-           VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT) &&
-       src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
-       dst_stage==(VkPipelineStageFlags)(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT))
-        return 1;
-    /* DXVK publishes attachment writes through a preceding global memory
-     * barrier, then moves the sampled backbuffer to transfer-source layout
-     * with an empty source access scope for the CPU readback copy. */
-    if(ps5vk_tiled_2d_sampled_color_image(image) &&
-       b->oldLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-       b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
-       !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
-       src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
-       dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT)
-        return 1;
-    /* The same DXVK backbuffer returns to shader-read layout after a transfer
-     * write or read. The read-back handover has no source access because its
-     * companion global memory barrier publishes the transfer operation. */
-    if(ps5vk_tiled_2d_sampled_color_image(image) &&
-       b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-       b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_SHADER_READ_BIT |
-           VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-           VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT) &&
-       src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) {
-        const VkPipelineStageFlags future=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
-        if(b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-           b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT && dst_stage==future)
-            return 1;
-        if(b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
-           !b->srcAccessMask && dst_stage==(VkPipelineStageFlags)(future |
-               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT))
-            return 1;
-    }
+    if(ps5vk_dxvk_tiled_backbuffer_barrier(b,src_stage,dst_stage))return 1;
     if(ps5vk_d32_gather_image(image))return ps5vk_d32_gather_barrier(b);
     if(ps5vk_bgra8_transfer_target(image))return
         ps5vk_bgra8_transfer_barrier(b) || ps5vk_color_discard_barrier(b);

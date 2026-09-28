@@ -295,6 +295,7 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                 ps5vk_array_color_barrier(b) ||
                 ps5vk_bgra8_transfer_barrier(b) ||
                 ps5vk_bgra8_present_barrier(b) ||
+                ps5vk_dxvk_tiled_backbuffer_barrier(b,op->src_stage,op->dst_stage) ||
                 (ps5vk_tiled_cube_sampled_image(b->image) &&
                  b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
                  b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
