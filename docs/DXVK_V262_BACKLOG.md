@@ -185,6 +185,32 @@ loads `winevulkan.dll` or `vulkan-1.dll` and needs a working Vulkan entrypoint
 bridge to ps5vk, Wine's PE imports and the D3D10 API wrapper. No console
 render or presentation is claimed for these DLLs.
 
+### PE application controls for the four APIs (2026-09-28)
+
+`examples/dxvk_pe_frontends/` contains one small PE consumer per API. Each
+opens a fixed 1920×1080 window, creates the D3D device and swapchain, clears
+two frames to distinct colours, calls `Present` twice, prints a stage/result
+marker, and releases its objects. D3D10 enters through the application-facing
+`D3D10CreateDeviceAndSwapChain` wrapper; that wrapper must reach DXVK's
+`d3d10core.dll` in Prospero Win. The other controls import their matching
+DXVK entry DLLs directly.
+
+With the overlaid DLL build above available, regenerate all eight x64/x86
+executables and their hash/import receipt offline:
+
+```sh
+python3 tools/build_dxvk_pe_frontends.py
+```
+
+`build/dxvk-pe-frontends/receipt.json` records each executable's SHA-256,
+source hash, PE imports, the linked DXVK DLL hashes, and `executed: false`.
+The builder verifies the overlaid DLL hashes before linking. The controls are
+ready as inputs to a Prospero Win run; they do not establish that Wine loads
+the DLL chain, reaches ps5vk, or presents correct pixels on PS5. The first
+runtime sequence should be x64 D3D11, D3D9, D3D8 and D3D10, followed by x86
+once the 32-bit Vulkan bridge is known to work. Capture the first failed stage
+and verify the two displayed colours independently of the `Present` return.
+
 ## Current integration target (2026-09-26)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,
