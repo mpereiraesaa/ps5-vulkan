@@ -24,11 +24,15 @@ Prospero Win, ps5vk and native payload identities with the result.
 | --- | --- | --- | --- |
 | D3D8 | `d3d8.dll`, `d3d9.dll` | No Prospero Win DXVK run | Load both modules and render/present a D3D8 frame |
 | D3D9 | `d3d9.dll` | No Prospero Win DXVK run | Load the module and render/present a D3D9 frame |
-| D3D10 | `d3d10core.dll`, `d3d11.dll`, `dxgi.dll` | No Prospero Win DXVK run | Resolve the D3D10 module path and render/present a D3D10 frame |
+| D3D10 | `d3d10core.dll`, `d3d11.dll`, `dxgi.dll` | No Prospero Win DXVK run | Resolve the D3D10 API wrapper and render/present a D3D10 frame |
 | D3D11 | `d3d11.dll`, `dxgi.dll` | Static native offscreen render only | Load PE modules in Prospero Win and render/present a D3D11 frame |
 
 The module lists identify DXVK's side of each path; Prospero Win also needs a
 working PE loader/import path and Vulkan bridge for the selected architecture.
+The pinned `d3d10core.dll` exports `D3D10CoreCreateDevice`, which takes a DXGI
+factory and adapter; it does not export the application-level
+`D3D10CreateDevice`. D3D10 applications therefore also need a working
+`d3d10.dll` API wrapper before that DXVK module can be exercised.
 Neither a static eboot link nor a host presentation run proves that contract.
 The matrix below tracks Vulkan feature evidence, not PE loading or per-API game
 compatibility. Focused CTS is useful when it diagnoses a real dependency; full
