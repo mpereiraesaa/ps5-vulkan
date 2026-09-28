@@ -3183,8 +3183,16 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:computeFullSubgroups",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "EXT and Vulkan 1.3 query/opt-in and wave32 full-subgroup compute pipeline constraints are host tested. A bounded SDK witness exists. The original CTS case with REQUIRE_FULL_SUBGROUPS is diagnostic only. Not implemented yet: the original CTS full-subgroup oracle also requires truthful BALLOT reporting; package it with that prerequisite, prove native active-lane results and repeat acceptance.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "examples/subgroup_size_witness/main.c",
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_pipeline.c",
+          "tests/test_vk_core_version.c",
+          "tests/test_vk_pipeline.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -3367,8 +3375,10 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl",
       "implementation": {
-        "detail": "EXT and Vulkan 1.3 query/opt-in contracts gate pipeline cache-control flags. Compute and graphics cold misses refuse compilation; warm entries retain cache identity. Batch creation supports early return, null uncreated outputs and ownership of successful siblings. Dynamic topology creation rolls back a warm primary when a variant needs compilation. Externally synchronized cache creation is accepted only with opt-in. Derivative hints preserve cache identity, validate same-device/type base handles or earlier batch indices with ALLOW_DERIVATIVES, and retain independent result ownership. Static rasterizer discard admits position-producing vertex-only pipelines, ignores post-raster state and links an internal empty pixel program; host compiler and emitted-state tests cover this route. Draw submission without any framebuffer attachment remains refused. Pinned graphics cache-control CTS cases request unreported list restart and are excluded; eight compute cases are prepared for measurement. Host tests cover these contracts. Not implemented yet: SDK-linked delivery witness and native execution remain pending; the shipping platform does not advertise this capability.",
+        "detail": "EXT and Vulkan 1.3 query/opt-in contracts gate pipeline cache-control flags. Compute and graphics cold misses refuse compilation; warm entries retain cache identity. Batch creation supports early return, null uncreated outputs and ownership of successful siblings. Dynamic topology creation rolls back a warm primary when a variant needs compilation. Externally synchronized cache creation is accepted only with opt-in. Derivative hints preserve cache identity, validate same-device/type base handles or earlier batch indices with ALLOW_DERIVATIVES, and retain independent result ownership. Static rasterizer discard admits position-producing vertex-only pipelines, ignores post-raster state and links an internal empty pixel program; host compiler and emitted-state tests cover this route. Draw submission without any framebuffer attachment remains refused. Pinned graphics cache-control CTS cases request unreported list restart and are excluded; eight compute cases are prepared for measurement. Host tests cover these contracts, and SDK-linked compute and graphics witness sources plus earlier offline candidates exist. Not implemented yet: rebuild the integrated candidate from current source and prove native execution and canonical acceptance; the shipping platform does not advertise this capability.",
         "refs": [
+          "examples/dxvk_render_witness/cache_compute.h",
+          "examples/dxvk_render_witness/main.c",
           "native/runtime_graphics_cache.c",
           "src/vk_core_version.c",
           "src/vk_device.c",
@@ -3650,8 +3660,16 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:subgroupSizeControl",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "EXT and Vulkan 1.3 query/opt-in, fixed wave32 properties, and compute pipeline flag/required-size contracts are host tested. A bounded SDK witness exists. The original CTS selection now distinguishes the no-flag control from the SPIR-V 1.6 variant that sets ALLOW_VARYING_SUBGROUP_SIZE. Not implemented yet: package the flagged selection from the current source, prove GPU results and graphics-stage varying-size bounds, then repeat acceptance.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "examples/subgroup_size_witness/main.c",
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_pipeline.c",
+          "tests/test_vk_core_version.c",
+          "tests/test_vk_pipeline.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",

@@ -28,6 +28,8 @@ class DxvkMatrixTests(unittest.TestCase):
         for name, evidence in (
                 ("shaderSubgroupExtendedTypes", "original CTS compute leaves"),
                 ("subgroupBroadcastDynamicId", "runtime-ID Broadcast CTS"),
+                ("subgroupSizeControl", "ALLOW_VARYING_SUBGROUP_SIZE"),
+                ("computeFullSubgroups", "REQUIRE_FULL_SUBGROUPS"),
                 ("shaderZeroInitializeWorkgroupMemory", "SDK-linked delivery witness")):
             with self.subTest(name=name):
                 row = rows[name]
@@ -35,6 +37,13 @@ class DxvkMatrixTests(unittest.TestCase):
                 self.assertEqual("missing", row["implementation"]["state"])
                 self.assertIn(evidence, row["implementation"]["detail"])
                 self.assertNotEqual("native-evidence", row["native"]["state"])
+        self.assertIn("BALLOT", rows["computeFullSubgroups"]["implementation"]["detail"])
+        cache = rows["pipelineCreationCacheControl"]
+        self.assertEqual("blocker", cache["verdict"])
+        self.assertIn("SDK-linked compute and graphics witness sources",
+                      cache["implementation"]["detail"])
+        self.assertIn("rebuild the integrated candidate from current source",
+                      cache["implementation"]["detail"])
 
     def test_integer_dot_api_is_not_shipping_without_platform_bit(self):
         extension = "VK_KHR_shader_integer_dot_product"

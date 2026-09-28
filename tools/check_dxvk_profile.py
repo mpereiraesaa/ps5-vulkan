@@ -175,6 +175,40 @@ CORE_IMPLEMENTATIONS = {
         "gaps": ("prove runtime-selected Broadcast ID on the GPU with complete BALLOT "
                  "operation reporting and unchanged native CTS",),
     },
+    "feature:VkPhysicalDeviceVulkan13Features:subgroupSizeControl": {
+        "citations": (
+            ("src/vk_core_version.c", "out->subgroupSizeControl ="),
+            ("src/vk_device.c", "PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL"),
+            ("src/vk_pipeline.c", "VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT"),
+            ("tests/test_vk_core_version.c", "subgroup_size_negotiation"),
+            ("tests/test_vk_pipeline.c", "subgroup_stage_contract"),
+            ("examples/subgroup_size_witness/main.c", "SUBGROUP_SIZE_RESULT"),
+            ("cts/upstream/manifest.json", "allow_varying_subgroup_size_flags_spirv16"),
+        ),
+        "detail": ("EXT and Vulkan 1.3 query/opt-in, fixed wave32 properties, and compute "
+                   "pipeline flag/required-size contracts are host tested. A bounded SDK "
+                   "witness exists. The original CTS selection now distinguishes the no-flag "
+                   "control from the SPIR-V 1.6 variant that sets ALLOW_VARYING_SUBGROUP_SIZE."),
+        "gaps": ("package the flagged selection from the current source, prove GPU "
+                 "results and graphics-stage varying-size bounds, then repeat acceptance",),
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:computeFullSubgroups": {
+        "citations": (
+            ("src/vk_core_version.c", "out->computeFullSubgroups ="),
+            ("src/vk_device.c", "PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS"),
+            ("src/vk_pipeline.c", "VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT"),
+            ("tests/test_vk_core_version.c", "subgroup_size_negotiation"),
+            ("tests/test_vk_pipeline.c", "subgroup_stage_contract"),
+            ("examples/subgroup_size_witness/main.c", "SUBGROUP_SIZE_RESULT"),
+            ("cts/upstream/manifest.json", "require_full_subgroups_flags_spirv16"),
+        ),
+        "detail": ("EXT and Vulkan 1.3 query/opt-in and wave32 full-subgroup compute "
+                   "pipeline constraints are host tested. A bounded SDK witness exists. "
+                   "The original CTS case with REQUIRE_FULL_SUBGROUPS is diagnostic only."),
+        "gaps": ("the original CTS full-subgroup oracle also requires truthful BALLOT "
+                 "reporting; package it with that prerequisite, prove native active-lane "
+                 "results and repeat acceptance",),
+    },
     "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl": {
         "citations": (
             ("src/vk_device.c", "PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL"),
@@ -184,6 +218,8 @@ CORE_IMPLEMENTATIONS = {
             ("native/runtime_graphics_cache.c", "fail_on_compile_required"),
             ("tests/test_runtime_pipeline_cache.c", "static void cache_control"),
             ("tests/test_vk_core_version.c", "cache_control_negotiation"),
+            ("examples/dxvk_render_witness/cache_compute.h", "cache_compute_witness"),
+            ("examples/dxvk_render_witness/main.c", "DXVK_CACHE_WITNESS_CREATED"),
         ),
         "detail": ("EXT and Vulkan 1.3 query/opt-in contracts gate pipeline cache-control "
                    "flags. Compute and graphics cold misses refuse compilation; warm "
@@ -200,9 +236,11 @@ CORE_IMPLEMENTATIONS = {
                    "Draw submission without any framebuffer attachment remains refused. "
                    "Pinned graphics cache-control CTS cases request unreported list "
                    "restart and are excluded; eight compute cases are prepared for measurement. "
-                   "Host tests cover these contracts."),
-        "gaps": ("SDK-linked delivery witness and native execution remain pending; "
-                 "the shipping platform does not advertise this capability",),
+                   "Host tests cover these contracts, and SDK-linked compute and graphics "
+                   "witness sources plus earlier offline candidates exist."),
+        "gaps": ("rebuild the integrated candidate from current source and prove native "
+                 "execution and canonical acceptance; the shipping platform does not "
+                 "advertise this capability",),
     },
     "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
         "citations": (
