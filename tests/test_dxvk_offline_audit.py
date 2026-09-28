@@ -56,6 +56,7 @@ class DxvkOfflineAuditTests(unittest.TestCase):
                          report["subgroup_size_package"]["combined_cts_prepared"],
                          all(r["phase"] == "native_validation" for r in size_rows.values()))
         self.assertTrue(report["integer_dot_package"]["artifact_verified"])
+        self.assertTrue(report["integer_dot_package"]["package_verified"])
         self.assertTrue(report["robust_image_package"]["artifact_verified"])
         self.assertEqual(11, report["robust_image_package"]["variant_count"])
         self.assertEqual(8, report["robust_image_package"]["image_variants"])
