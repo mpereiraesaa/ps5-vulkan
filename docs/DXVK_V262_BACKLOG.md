@@ -68,6 +68,31 @@ The immediate integration contract is therefore PE module override/search,
 these imports and Win32 WSI, followed by a working Vulkan entrypoint into
 ps5vk. The x64 build does not cover 32-bit applications.
 
+The same clean pinned source also built all five **x86 PE32** modules with
+`build-win32.txt`. The ignored `build/dxvk-pe-x86/inventory.json` records their
+architecture, import tables, sizes and hashes. The DXVK-to-DXVK dependency
+chains and the set of external import modules match x64. Both builds export
+the expected `Direct3DCreate8`, `Direct3DCreate9`, `D3D10CoreCreateDevice`,
+`D3D11CreateDevice` and `CreateDXGIFactory` entrypoints. Build them separately:
+
+```sh
+meson setup build/dxvk-pe-x86 "$DXVK_DIR" --cross-file "$DXVK_DIR/build-win32.txt" --wrap-mode=nodownload -Dbuildtype=release
+ninja -C build/dxvk-pe-x86 -j 8 src/dxgi/dxgi.dll src/d3d11/d3d11.dll src/d3d10/d3d10core.dll src/d3d9/d3d9.dll src/d3d8/d3d8.dll
+```
+
+| x86 PE module | SHA-256 of this build |
+| --- | --- |
+| `dxgi.dll` | `1d1a7ff491489e70899a8051d1f46b1f8959e47f40227f59f381a674cd2131be` |
+| `d3d11.dll` | `98fe2ceeabcdd7f8ea278d4422e5894605b8ad66a4040fe18f6f103c719e0edc` |
+| `d3d10core.dll` | `cd08d010eb3037709c1e1ce68c660387a49c388476870073522010c73cafcb47` |
+| `d3d9.dll` | `71e5313ada3e8fb69bb5de44e10935def2d6281cd9e6a1909eb77064fe6e72d1` |
+| `d3d8.dll` | `00432312177f0a8871be9fbf5c5b11df63b78dfb98281cd3652bbd0a8f56d434` |
+
+PE32 execution still requires the matching x86 calling conventions, loader,
+Win32 services and Vulkan bridge inside Prospero Win. These binaries have not
+been loaded or executed there; compiling both architectures is only dependency
+preparation.
+
 ## Current integration target (2026-09-26)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,
