@@ -347,7 +347,7 @@ stays refused before any state is mutated. `linearTilingFeatures` and
 `vkGetPhysicalDeviceImageFormatProperties` report exactly this one shape and
 nothing else.
 
-The public table has 40 filterable sampled formats. Nearest and linear sampling
+The public table has 42 filterable sampled formats. Nearest and linear sampling
 have native deterministic readback evidence for the
 original 24 filterable formats. The sixteen BC formats have original CTS
 sampling coverage and focused native filtering witnesses. 20 additional signed and unsigned
@@ -842,14 +842,18 @@ zero (including `memoryTypeBits`) for a description `vkCreateBuffer` or
 `vkCreateImage` refuses. `VkPhysicalDeviceMaintenance4Properties::maxBufferSize`
 is the single-allocation budget (1 GiB on the graphics profile, the extension's
 minimum). With `maintenance4` enabled, compute pipelines accept
-`LocalSizeId` whose operands are 32-bit integer `OpConstant`s or direct
-`OpSpecConstant`s; the latter use the supplied specialization map or their
-declared defaults. Compound `OpSpecConstantOp` workgroup expressions remain
-unsupported. The old maintenance4 SDK diagnostic switch has been retired.
-The graphics interface still requires matching producer/consumer vector widths;
-a wider producer vector is not admitted through maintenance4's relaxed matching
-rule. Thus the feature's bounded memory-query and compute routes do not imply
-general maintenance4 conformance.
+`LocalSizeId` with 32-bit integer constants and specialization expressions,
+including arithmetic, comparisons, boolean selection, vector operations and
+nested array/structure extraction and insertion. Specialization uses the supplied
+map or declared defaults. Expressions may convert between enabled 8/16/32-bit
+integer types, with truncation and sign extension; the final dimensions must
+still be 32-bit integers. This does not enable an unreported arithmetic feature.
+The old maintenance4 SDK diagnostic switch has been retired. With the feature
+enabled, whole-location producer vectors may be wider than consumer vectors;
+host compiler tests cover float/int/uint interfaces and per-patch boundaries.
+These host checks do not establish native delivery or general maintenance4
+conformance; native specialization, interface and memory-query validation
+remains pending.
 The ordinary graphics profile exposes the second memory type with the same
 heap and backing as type 0 plus `HOST_COHERENT`; its diagnostic switch has
 been retired. The driver keeps it coherent instead of the application:

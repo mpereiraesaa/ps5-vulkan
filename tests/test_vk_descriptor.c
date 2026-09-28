@@ -1378,10 +1378,11 @@ static void inline_uniform_layouts(void)
     assert(l->inline_uniform.bytes[3] == 16 && l->inline_uniform.offset[3] == 0);
     assert(l->inline_uniform.bytes[5] == 256 && l->inline_uniform.offset[5] == 16);
     assert(l->inline_uniform.bytes[0] == 0);
-    /* Every consumer refuses the type explicitly: no table record exists. */
+    /* Reserve the UBO records plus owned payloads; compiler negotiation is separate. */
     struct ps5vk_descriptor_table_layout table;
-    assert(ps5vk_descriptor_table_layout_build(1, &l->signature, &table) ==
-           VK_ERROR_FEATURE_NOT_PRESENT);
+    assert(ps5vk_descriptor_table_layout_build(1, &l->signature, &table) == VK_SUCCESS);
+    assert(table.binding[0][3].byte_offset == 32 && table.binding[0][3].byte_stride == 16 &&
+        table.binding[0][5].byte_offset == 64 && table.set_bytes[0] == 336);
     vkDestroyDescriptorSetLayout(&d, l, NULL);
     /* Zero-byte block: an empty binding that takes no slot or storage. */
     b[0].descriptorCount = 0;
@@ -1520,7 +1521,7 @@ static void inline_uniform_updates(void)
     assert(d.lifetime_errors == ++errors);
     inline_write_bytes(&d, s, 2, 0, 8, words, 4);   /* dataSize != descriptorCount */
     assert(d.lifetime_errors == ++errors);
-    inline_write_bytes(&d, s, 2, 24, 12, words, 12); /* past the block end */
+    inline_write_bytes(&d, s, 2, 24, 28, words, 28); /* past all compatible bindings */
     assert(d.lifetime_errors == ++errors);
     inline_write_bytes(&d, s, 2, 32, 4, words, 4);  /* offset == block size */
     assert(d.lifetime_errors == ++errors);
@@ -1584,6 +1585,137 @@ static void inline_uniform_updates(void)
     vkDestroyDescriptorSetLayout(&d, l, NULL);
     assert(!d.descriptor_objects);
 }
+static void inline_uniform_rollover_templates(void)
+{
+    struct VkDevice_T d = {.inline_uniform_block_enabled = VK_TRUE};
+    VkDescriptorSetLayoutBinding sb[] = {
+        {0, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 16, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {2, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 24, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {3, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 8, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+    VkDescriptorSetLayoutBinding db[] = {
+        {1, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 8, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {4, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 32, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+        {7, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 8, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
+    VkDescriptorSetLayout layouts[2];
+    assert(inline_layout(&d, sb, 3, &layouts[0]) == VK_SUCCESS);
+    assert(inline_layout(&d, db, 3, &layouts[1]) == VK_SUCCESS);
+    VkDescriptorPool pool;
+    assert(inline_pool(&d, 2, 96, 6, VK_TRUE, &pool) == VK_SUCCESS);
+    VkDescriptorSetAllocateInfo ai = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = pool, .descriptorSetCount = 2, .pSetLayouts = layouts};
+    VkDescriptorSet sets[2];
+    assert(vkAllocateDescriptorSets(&d, &ai, sets) == VK_SUCCESS);
+    VkDescriptorSet src = sets[0], dst = sets[1];
+    uint8_t data[64];
+    for (unsigned i = 0; i < sizeof(data); ++i) data[i] = (uint8_t)(i * 7 + 1);
+    inline_write_bytes(&d, src, 0, 0, 48, data, 48);
+    assert(!d.lifetime_errors && !memcmp(src->inline_data, data, 48));
+    for (unsigned i = 0; i < 3; ++i) assert(src->defined[i]);
+    /* Source and destination cross different byte boundaries and empty bindings.
+     * Visibility must match within each range, not between the two sets. */
+    VkCopyDescriptorSet copy = {.sType = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET,
+        .srcSet = src, .srcBinding = 0, .srcArrayElement = 4,
+        .dstSet = dst, .dstBinding = 1, .dstArrayElement = 4, .descriptorCount = 40};
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &copy);
+    assert(!d.lifetime_errors && !memcmp(dst->inline_data + 4, data + 4, 40));
+    for (unsigned i = 0; i < 3; ++i) assert(dst->defined[i]);
+    assert(!dst->inline_data[0] && !dst->inline_data[47]);
+    uint8_t saved[sizeof(dst->inline_data)];
+    memset(dst->defined, 0, 3 * sizeof(*dst->defined));
+    VkBool32 saved_defined[3] = {0};
+    memcpy(saved, dst->inline_data, sizeof(saved));
+    uint64_t generation = dst->generation;
+    unsigned errors = d.lifetime_errors;
+#define UNCHANGED() do { assert(d.lifetime_errors == ++errors); \
+    assert(dst->generation == generation && !memcmp(saved, dst->inline_data, sizeof(saved))); \
+    assert(!memcmp(saved_defined, dst->defined, sizeof(saved_defined))); } while (0)
+    dst->signature.binding[4].stages = VK_SHADER_STAGE_VERTEX_BIT;
+    inline_write_bytes(&d, dst, 1, 4, 40, data, 40); UNCHANGED();
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &copy); UNCHANGED();
+    dst->signature.binding[4].stages = VK_SHADER_STAGE_FRAGMENT_BIT;
+    dst->signature.type[4] = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    inline_write_bytes(&d, dst, 1, 4, 40, data, 40); UNCHANGED();
+    dst->signature.type[4] = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+    src->signature.binding[3].stages = VK_SHADER_STAGE_VERTEX_BIT;
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &copy); UNCHANGED();
+    src->signature.binding[3].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+    copy.descriptorCount = 48;
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &copy); UNCHANGED();
+    copy.srcSet = dst; copy.srcBinding = 1; copy.srcArrayElement = 0;
+    copy.descriptorCount = 40;
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &copy); UNCHANGED(); /* overlap */
+    copy.srcBinding = 4; copy.srcArrayElement = 0;
+    copy.dstBinding = 4; copy.dstArrayElement = 16; copy.descriptorCount = 12;
+    vkUpdateDescriptorSets(&d, 0, NULL, 1, &copy);
+    assert(d.lifetime_errors == errors && !memcmp(dst->inline_data + 24, saved + 8, 12));
+
+    VkDescriptorUpdateTemplateEntry entry = {.dstBinding = 1, .dstArrayElement = 4,
+        .descriptorCount = 40, .descriptorType = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
+        .offset = 3, .stride = SIZE_MAX};
+    VkDescriptorUpdateTemplateCreateInfo ti = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO,
+        .descriptorUpdateEntryCount = 1, .pDescriptorUpdateEntries = &entry,
+        .templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET,
+        .descriptorSetLayout = layouts[1]};
+    VkDescriptorUpdateTemplate t;
+    entry.descriptorCount = 48;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &t) != VK_SUCCESS && !t);
+    entry.descriptorCount = 6;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &t) != VK_SUCCESS && !t);
+    entry.descriptorCount = 40; entry.offset = SIZE_MAX - 2;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &t) != VK_SUCCESS && !t);
+    entry.offset = 3;
+    assert(vkCreateDescriptorUpdateTemplateKHR(&d, &ti, NULL, &t) == VK_SUCCESS);
+    vkDestroyDescriptorSetLayout(&d, layouts[1], NULL);
+    generation = dst->generation;
+    /* An unaligned source and huge ignored stride still copy contiguous bytes. */
+    vkUpdateDescriptorSetWithTemplateKHR(&d, dst, t, data);
+    assert(d.lifetime_errors == errors && dst->generation == generation + 1);
+    assert(!memcmp(dst->inline_data + 4, data + 3, 40));
+    memcpy(saved, dst->inline_data, sizeof(saved)); generation = dst->generation;
+    memcpy(saved_defined, dst->defined, sizeof(saved_defined));
+    dst->pending = 1;
+    vkUpdateDescriptorSetWithTemplateKHR(&d, dst, t, data); UNCHANGED();
+    dst->pending = 0;
+    dst->signature.inline_bytes[4] = 28;
+    vkUpdateDescriptorSetWithTemplateKHR(&d, dst, t, data); UNCHANGED();
+    dst->signature.inline_bytes[4] = 32;
+    vkDestroyDescriptorUpdateTemplateKHR(&d, t, NULL);
+    vkDestroyDescriptorSetLayout(&d, layouts[0], NULL);
+    vkDestroyDescriptorPool(&d, pool, NULL);
+    assert(!d.descriptor_objects);
+#undef UNCHANGED
+}
+
+static void inline_uniform_maximum_update(void)
+{
+    struct VkDevice_T d = {.inline_uniform_block_enabled = VK_TRUE};
+    VkDescriptorSetLayoutBinding bindings[4];
+    for (unsigned i = 0; i < 4; ++i)
+        bindings[i] = (VkDescriptorSetLayoutBinding){i * 8,
+            VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK, 256, VK_SHADER_STAGE_ALL, NULL};
+    VkDescriptorSetLayout layout;
+    assert(inline_layout(&d, bindings, 4, &layout) == VK_SUCCESS);
+    VkDescriptorPool pool;
+    assert(inline_pool(&d, 1, 1024, 4, VK_TRUE, &pool) == VK_SUCCESS);
+    VkDescriptorSetAllocateInfo ai = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = pool, .descriptorSetCount = 1, .pSetLayouts = &layout};
+    VkDescriptorSet set;
+    assert(vkAllocateDescriptorSets(&d, &ai, &set) == VK_SUCCESS);
+    uint8_t data[1024];
+    for (unsigned i = 0; i < sizeof(data); ++i) data[i] = (uint8_t)(i ^ (i >> 8));
+    inline_write_bytes(&d, set, 0, 0, sizeof(data), data, sizeof(data));
+    assert(!d.lifetime_errors && !memcmp(set->inline_data, data, sizeof(data)));
+    for (unsigned i = 0; i < 4; ++i) assert(set->defined[i]);
+    uint64_t generation = set->generation;
+    inline_write_bytes(&d, set, 0, 0, 1028, data, 1028);
+    assert(d.lifetime_errors == 1 && set->generation == generation);
+    assert(!memcmp(set->inline_data, data, sizeof(data)));
+    vkDestroyDescriptorPool(&d, pool, NULL);
+    vkDestroyDescriptorSetLayout(&d, layout, NULL);
+    assert(!d.descriptor_objects);
+}
+
 static void inline_uniform_pipeline_layouts(void)
 {
     struct VkDevice_T d = {0};
@@ -1595,6 +1727,9 @@ static void inline_uniform_pipeline_layouts(void)
             .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT};
     VkDescriptorSetLayout frag4, vert1, all1;
     assert(inline_layout(&d, b, 4, &frag4) == VK_SUCCESS);
+    for (unsigned j = 0; j < 4; ++j)
+        assert(frag4->signature.inline_bytes[j] == 64 &&
+            frag4->signature.binding[j].count == 1);
     b[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     assert(inline_layout(&d, b, 1, &vert1) == VK_SUCCESS);
     b[0].stageFlags = VK_SHADER_STAGE_ALL;
@@ -1603,10 +1738,10 @@ static void inline_uniform_pipeline_layouts(void)
     VkPipelineLayoutCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pSetLayouts = sets};
     VkPipelineLayout pl = VK_NULL_HANDLE;
-    /* Four fragment blocks plus a vertex block: 320 bytes, per stage <= 4. */
+    /* Five blocks across sets exceed maxDescriptorSetInlineUniformBlocks,
+     * even though bytes and each individual stage remain within limits. */
     sets[0] = frag4; sets[1] = vert1; pi.setLayoutCount = 2;
-    assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_SUCCESS);
-    vkDestroyPipelineLayout(&d, pl, NULL);
+    assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_ERROR_FEATURE_NOT_PRESENT && !pl);
     /* ALL counts toward the fragment stage: five fragment blocks. */
     sets[1] = all1; pl = VK_NULL_HANDLE;
     assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_ERROR_FEATURE_NOT_PRESENT && !pl);
@@ -1619,8 +1754,8 @@ static void inline_uniform_pipeline_layouts(void)
     sets[0] = sets[1] = sets[2] = sets[3] = big; pi.setLayoutCount = 4;
     assert(vkCreatePipelineLayout(&d, &pi, NULL, &pl) == VK_SUCCESS);
     vkDestroyPipelineLayout(&d, pl, NULL);
-    /* 3 x 256 vertex + 2 x 256 fragment: per-stage counts fit, 1280 bytes
-     * exceed the total. */
+    /* 3 x 256 vertex + 2 x 256 fragment exceed both the aggregate block
+     * count and total bytes despite fitting each per-stage count. */
     b[0].stageFlags = b[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     assert(inline_layout(&d, b, 2, &big2) == VK_SUCCESS);
     sets[3] = big2; pl = VK_NULL_HANDLE;
@@ -1640,7 +1775,8 @@ int main(void)
     separate_sampler_types();
     update_templates();
     inline_uniform_limits(); inline_uniform_layouts(); inline_uniform_pools();
-    inline_uniform_updates(); inline_uniform_pipeline_layouts();
+    inline_uniform_updates(); inline_uniform_rollover_templates(); inline_uniform_maximum_update();
+    inline_uniform_pipeline_layouts();
     null_descriptors();
     puts("Descriptor ownership/pools/updates: pass (host only)");
 }

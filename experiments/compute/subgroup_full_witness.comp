@@ -1,0 +1,50 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+// Occupancy oracle for fixed wave32, using only BASIC subgroup operations.
+// Build each XYZ shape separately. Dispatch along X; each invocation emits
+// eight words. The caller supplies guarded output storage and checks every word.
+#ifndef SIZE_X
+#define SIZE_X 32
+#endif
+#ifndef SIZE_Y
+#define SIZE_Y 3
+#endif
+#ifndef SIZE_Z
+#define SIZE_Z 1
+#endif
+layout(local_size_x = SIZE_X, local_size_y = SIZE_Y, local_size_z = SIZE_Z) in;
+layout(std430, set = 0, binding = 0) buffer Results { uint words[]; };
+shared uint participants[32];
+shared uint lanes[32];
+shared uint leaders[32];
+void main()
+{
+    const uint count = SIZE_X * SIZE_Y * SIZE_Z;
+    uint local = gl_LocalInvocationIndex;
+    for (uint i = local; i < 32u; i += count) {
+        participants[i] = 0u;
+        lanes[i] = 0u;
+        leaders[i] = 0u;
+    }
+    barrier();
+    // Clamp only the shared-memory index so an unexpected subgroup ID produces
+    // a reported mismatch rather than an out-of-bounds diagnostic access.
+    uint group = min(gl_SubgroupID, 31u);
+    uint lane = gl_SubgroupInvocationID;
+    bool elected = subgroupElect();
+    atomicAdd(participants[group], 1u);
+    if (lane < 32u)
+        atomicOr(lanes[group], 1u << lane);
+    if (elected)
+        atomicAdd(leaders[group], 1u);
+    barrier();
+    uint base = (gl_WorkGroupID.x * count + local) * 8u;
+    words[base + 0u] = gl_SubgroupSize;
+    words[base + 1u] = lane;
+    words[base + 2u] = gl_SubgroupID;
+    words[base + 3u] = gl_NumSubgroups;
+    words[base + 4u] = participants[group];
+    words[base + 5u] = lanes[group];
+    words[base + 6u] = leaders[group];
+    words[base + 7u] = local;
+}

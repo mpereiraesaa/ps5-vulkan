@@ -33,7 +33,7 @@ formats and resource limits are documented in [API.md](API.md).
 - **Pixels and textures:** independent and dual-source blending, fragment
   storage writes/atomics, 2x/4x colour multisampling with per-sample shading and
   resolve, cube arrays, bounded BC textures, depth sampling and extended gather.
-  The ledger records 61 sampled texture formats: 40 filterable rows and
+  The ledger records 63 sampled texture formats: 42 filterable rows and
   20 integer rows restricted to nearest filtering.
 - **Compute and shaders:** runtime SPIR-V compilation through pinned PSBC/ACO,
   shader/pipeline caches, up to four compute descriptor sets, push and
@@ -54,6 +54,10 @@ for artifact-identified native witnesses and deterministic GPU readback.
 Host CI alone does not establish hardware correctness.
 
 ## Current runtime milestone
+
+The target is DXVK 2.6.2 D3D8, D3D9, D3D10 and D3D11 applications running in
+Prospero Win on ps5vk. Each API still needs a PE-DLL load, rendered and
+presented frame, and clean relaunch in that environment.
 
 The Vulkan 1.3 route exposes promoted feature queries and commands directly,
 including synchronization2, dynamic rendering and maintenance4. The pinned

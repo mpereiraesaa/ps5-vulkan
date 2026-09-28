@@ -46,6 +46,10 @@ struct ps5vk_graphics_key {
      * the same either way, so library matching and the compile cache ignore
      * it and the adapter checks it on every acquisition. */
     uint32_t feature_mask;
+    /* Acceptance-only maintenance4 interface relaxation, checked before compile. */
+    VkBool32 maintenance4;
+    /* Acquisition policy only, excluded from shader/cache identity. */
+    VkBool32 fail_on_compile_required;
     VkPrimitiveTopology topology;
     /* Per-attachment colour state, attachment i in element i, bounded by the
      * colour-attachment contract. The count is the subpass's own. Recording
@@ -203,6 +207,25 @@ static inline int ps5vk_agc_primitive_linkable(uint32_t primitive_type)
         primitive_type==PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_FAN ||
         (primitive_type>=PS5VK_AGC_PRIMITIVE_TYPE_LINE_LIST_ADJ &&
          primitive_type<=PS5VK_AGC_PRIMITIVE_TYPE_TRIANGLE_STRIP_ADJ);
+}
+/* Owned SPIR-V for `#version 450
+ * void main() {}` in the fragment stage. Rasterizer discard never invokes it;
+ * the native link ABI still needs a pixel program. It has no inputs, outputs,
+ * descriptors, push constants or side effects and is stable cache identity. */
+static inline struct ps5vk_graphics_module_key ps5vk_discard_fragment(void)
+{
+    static const uint32_t words[]={
+        0x07230203u,0x00010000u,0x0008000bu,0x00000006u,0x00000000u,0x00020011u,
+        0x00000001u,0x0006000bu,0x00000001u,0x4c534c47u,0x6474732eu,0x3035342eu,
+        0x00000000u,0x0003000eu,0x00000000u,0x00000001u,0x0005000fu,0x00000004u,
+        0x00000004u,0x6e69616du,0x00000000u,0x00030010u,0x00000004u,0x00000007u,
+        0x00030003u,0x00000002u,0x000001c2u,0x00040005u,0x00000004u,0x6e69616du,
+        0x00000000u,0x00020013u,0x00000002u,0x00030021u,0x00000003u,0x00000002u,
+        0x00050036u,0x00000002u,0x00000004u,0x00000000u,0x00000003u,0x000200f8u,
+        0x00000005u,0x000100fdu,0x00010038u,
+    };
+    return (struct ps5vk_graphics_module_key){.words=words,
+        .word_count=sizeof(words)/sizeof(words[0]),.entry="main"};
 }
 VkResult ps5vk_graphics_resolve(const struct ps5vk_graphics_library *,
     const struct ps5vk_graphics_key *, const struct ps5vk_graphics_program **);

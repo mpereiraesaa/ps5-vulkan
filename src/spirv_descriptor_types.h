@@ -23,7 +23,9 @@
  *   OpTypeImage SubpassData               -> INPUT_ATTACHMENT
  *   OpTypeImage other, Sampled 1 / 2      -> SAMPLED_IMAGE / STORAGE_IMAGE
  * Block-typed Uniform/StorageBuffer variables are buffers and are left to the
- * existing buffer checks. Returns 0 on malformed input or any mismatch. */
+ * existing buffer checks. Inline blocks must be direct Uniform Block structs,
+ * never storage buffers or arrays of descriptor blocks. Returns 0 on malformed
+ * input or any mismatch. */
 static inline int ps5vk_spirv_opaque_descriptor_type(const uint32_t *words, uint32_t bound,
     const uint32_t *type_at, uint32_t id, VkDescriptorType *out)
 {
@@ -56,6 +58,50 @@ static inline int ps5vk_spirv_opaque_descriptor_type(const uint32_t *words, uint
     return -1;
 }
 
+struct ps5vk_spirv_resource_decorations {
+    uint32_t set, binding;
+    unsigned seen, block, buffer_block;
+};
+
+/* Resolve resource decorations applied directly or through OpGroupDecorate.
+ * Instruction bounds and group ids have already been checked by the scanner.
+ * GroupMemberDecorate addresses members, never descriptor variables/types. */
+static inline int ps5vk_spirv_resource_decorations(const uint32_t *words, size_t count,
+    const uint32_t *type_at, uint32_t bound, uint32_t id,
+    struct ps5vk_spirv_resource_decorations *out)
+{
+    struct ps5vk_spirv_resource_decorations result = {UINT32_MAX, UINT32_MAX, 0, 0, 0};
+    for (size_t at = 5; at < count; at += words[at] >> 16) {
+        const uint32_t n = words[at] >> 16, op = words[at] & 0xffffu;
+        if (op != 71u || n < 3) continue;
+        const uint32_t target = words[at + 1], decoration = words[at + 2];
+        if (decoration != 2u && decoration != 3u && decoration != 33u && decoration != 34u)
+            continue;
+        int applies = target == id;
+        if (!applies && target < bound && type_at[target] &&
+            (words[type_at[target]] & 0xffffu) == 73u) {
+            for (size_t g = 5; g < count && !applies; g += words[g] >> 16)
+                if ((words[g] & 0xffffu) == 74u && words[g + 1] == target)
+                    for (uint32_t t = 2; t < words[g] >> 16; ++t)
+                        if (words[g + t] == id) applies = 1;
+        }
+        if (!applies) continue;
+        if (decoration == 2u || decoration == 3u) {
+            if (n != 3) return 0;
+            if (decoration == 2u) result.block = 1;
+            else result.buffer_block = 1;
+        } else {
+            if (n != 4) return 0;
+            const unsigned bit = decoration == 34u ? 1u : 2u;
+            uint32_t *value = decoration == 34u ? &result.set : &result.binding;
+            if ((result.seen & bit) && *value != words[at + 3]) return 0;
+            *value = words[at + 3]; result.seen |= bit;
+        }
+    }
+    *out = result;
+    return 1;
+}
+
 static inline int ps5vk_spirv_descriptor_types_scan(const uint32_t *words, size_t count,
     uint32_t set_count, const struct ps5vk_set_signature *sets, uint32_t *type_at,
     uint32_t bound)
@@ -64,33 +110,48 @@ static inline int ps5vk_spirv_descriptor_types_scan(const uint32_t *words, size_
     for (size_t at = 5; at < count;) {
         const uint32_t n = words[at] >> 16, op = words[at] & 0xffffu;
         if (!n || n > count - at) return 0;
-        if ((op >= 25u && op <= 29u) || op == 32u) {
-            if (n < 2 || words[at + 1] >= bound) return 0;
+        if ((op >= 25u && op <= 30u) || op == 32u || op == 73u) {
+            if (n < 2 || words[at + 1] >= bound || (op == 73u && n != 2)) return 0;
             type_at[words[at + 1]] = (uint32_t)at;
         }
         at += n;
     }
-    /* Second pass: every decorated variable against the layout. Decorations
-     * precede the variables, so the (set, binding) of an id is gathered from
-     * the decoration section on demand. */
+    /* Group targets cannot themselves be decoration groups. This also rules
+     * out cycles before resolving applications, independent of declaration order. */
+    for (size_t at = 5; at < count; at += words[at] >> 16) {
+        const uint32_t n = words[at] >> 16, op = words[at] & 0xffffu;
+        if (op != 74u) continue;
+        if (n < 3 || words[at + 1] >= bound || !type_at[words[at + 1]] ||
+            (words[type_at[words[at + 1]]] & 0xffffu) != 73u) return 0;
+        for (uint32_t t = 2; t < n; ++t) {
+            const uint32_t id = words[at + t];
+            if (!id || id >= bound || (type_at[id] &&
+                (words[type_at[id]] & 0xffffu) == 73u)) return 0;
+        }
+    }
+    /* Every decorated variable is checked against the layout. */
     for (size_t at = 5; at < count;) {
         const uint32_t n = words[at] >> 16, op = words[at] & 0xffffu;
         if (op == 59u && n >= 4) {
             const uint32_t pointer = words[at + 1], id = words[at + 2];
-            uint32_t set = UINT32_MAX, binding = UINT32_MAX;
-            for (size_t d = 5; d < count;) {
-                const uint32_t dn = words[d] >> 16, dop = words[d] & 0xffffu;
-                if (dop == 71u && dn == 4 && words[d + 1] == id) {
-                    if (words[d + 2] == 34u) set = words[d + 3];
-                    if (words[d + 2] == 33u) binding = words[d + 3];
-                }
-                d += dn;
-            }
+            struct ps5vk_spirv_resource_decorations resource;
+            if (!ps5vk_spirv_resource_decorations(words, count, type_at, bound, id, &resource)) return 0;
+            const uint32_t set = resource.set, binding = resource.binding;
             if (set < set_count && binding < PS5VK_MAX_BINDINGS &&
-                sets[set].binding[binding].count && pointer < bound &&
-                type_at[pointer]) {
+                sets[set].binding[binding].count) {
+                if (pointer >= bound || !type_at[pointer]) return 0;
                 const uint32_t *p = words + type_at[pointer];
                 if ((p[0] & 0xffffu) != 32u || (p[0] >> 16) < 4) return 0;
+                if (sets[set].type[binding] == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+                    if (words[at + 3] != 2u || p[2] != 2u || p[3] >= bound ||
+                        !type_at[p[3]] ||
+                        (words[type_at[p[3]]] & 0xffffu) != 30u) return 0;
+                    struct ps5vk_spirv_resource_decorations block;
+                    if (!ps5vk_spirv_resource_decorations(words, count, type_at, bound, p[3], &block) ||
+                        !block.block || block.buffer_block) return 0;
+                    at += n;
+                    continue;
+                }
                 VkDescriptorType type;
                 const int opaque = ps5vk_spirv_opaque_descriptor_type(words, bound,
                     type_at, p[3], &type);

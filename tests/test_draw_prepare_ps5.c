@@ -804,4 +804,68 @@ int main(void)
         ps5vk_native_release_draw(&prepared);
         assert(allocations==releases && !prepared.descriptor_tables[0] && !prepared.state);
     }
+    /* Inline bytes are snapshotted in the draw arena by the real shared
+     * encoder. Ordinary buffers keep their existing placement stub. */
+    {
+        struct VkDescriptorPool_T pool={.device=&d};
+        struct VkDescriptorSet_T set={.pool=&pool,.generation=73};
+        static struct ps5vk_descriptor_storage slots;
+        memset(&slots,0,sizeof(slots));ps5vk_descriptor_set_use_storage(&set,&slots);
+        for(unsigned b=0;b<PS5VK_MAX_BINDINGS;++b) {
+            set.signature.binding[b].first=set.signature.count;
+            if(b==0 || b==2 || b==4) {
+                set.signature.binding[b].count=1;
+                set.signature.binding[b].stages=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+                set.signature.type[b]=b==2?VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+                ++set.signature.count;
+            }
+        }
+        set.signature.inline_bytes[0]=set.inline_uniform.bytes[0]=20;
+        set.signature.inline_bytes[4]=set.inline_uniform.bytes[4]=4;
+        set.inline_uniform.offset[4]=20;set.inline_uniform.total_bytes=24;set.inline_uniform.blocks=2;
+        for(unsigned i=0;i<24;++i)set.inline_data[i]=(uint8_t)(i*11+7);
+        set.defined[0]=set.defined[1]=VK_TRUE; /* binding4 unused and undefined */
+        set.buffers[1]=(VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)1,0,16};
+        struct VkPipeline_T pipeline=p;pipeline.set_count=1;pipeline.sets[0]=set.signature;
+        struct ps5vk_operation draw=op;draw.pipeline=&pipeline;draw.sets[0]=&set;draw.generations[0]=73;
+        runtime=(struct ps5vk_runtime_draw_abi){.enabled=1};hull_runtime=(struct ps5vk_runtime_draw_abi){0};
+        runtime.fragment_descriptor_valid[0]=1;runtime.fragment_used_bindings[0]=5;
+        expected_bytes=((sizeof(struct ps5vk_draw_state)+15u)&~(size_t)15u)+96;
+        unsigned allocated=allocations, buffers=buffer_calls;
+        assert(ps5vk_native_prepare_resource_draw(&d,&draw,&area,NULL,shader_address,NULL,&prepared)==
+            VK_ERROR_FEATURE_NOT_PRESENT && allocations==allocated && !prepared.backing);
+        d.inline_uniform_block_enabled=VK_TRUE;
+        assert(ps5vk_native_prepare_resource_draw(&d,&draw,&area,NULL,shader_address,NULL,&prepared)==VK_SUCCESS);
+        const uint32_t *table=prepared.descriptor_tables[0];
+        assert(prepared.descriptor_bytes[0]==96 && buffer_calls==buffers+1);
+        assert((table[0]|((uint64_t)table[1]<<32))==(uintptr_t)(table+4));
+        assert(table[2]==20 && table[3]==0x31016fac && !memcmp(table+4,set.inline_data,20));
+        for(unsigned i=9;i<12;++i)assert(!table[i]);
+        for(unsigned i=0;i<4;++i)assert(table[12+i]==456+i);
+        for(unsigned i=16;i<24;++i)assert(!table[i]);
+        uint32_t snapshot[24];memcpy(snapshot,table,sizeof(snapshot));
+        memset(set.inline_data,0xcc,sizeof(set.inline_data));
+        assert(!memcmp(snapshot,table,sizeof(snapshot)));
+        ps5vk_native_release_draw(&prepared);
+        assert(allocations==releases && !prepared.descriptor_tables[0]);
+        /* The same table can serve vertex and fragment consumers. */
+        runtime.vertex_descriptor_valid[0]=1;runtime.vertex_used_bindings[0]=1;
+        runtime.fragment_used_bindings[0]=20;set.defined[2]=VK_TRUE;
+        assert(ps5vk_native_prepare_resource_draw(&d,&draw,&area,NULL,shader_address,NULL,&prepared)==VK_SUCCESS);
+        table=prepared.descriptor_tables[0];
+        assert((table[16]|((uint64_t)table[17]<<32))==(uintptr_t)(table+20));
+        assert(table[18]==4 && table[20]==0xcccccccc && !table[21] && !table[22] && !table[23]);
+        ps5vk_native_release_draw(&prepared);
+        /* Failure after allocation releases the unpublished snapshot. */
+        set.inline_uniform.bytes[0]=16;allocated=allocations;
+        assert(ps5vk_native_prepare_resource_draw(&d,&draw,&area,NULL,shader_address,NULL,&prepared)!=VK_SUCCESS);
+        assert(allocations==allocated+1 && allocations==releases && !prepared.backing && !prepared.state);
+        set.inline_uniform.bytes[0]=20;set.defined[0]=VK_FALSE;allocated=allocations;
+        assert(ps5vk_native_prepare_resource_draw(&d,&draw,&area,NULL,shader_address,NULL,&prepared)!=VK_SUCCESS && allocations==allocated);
+        set.defined[0]=VK_TRUE;flush_rc=VK_ERROR_MEMORY_MAP_FAILED;
+        assert(ps5vk_native_prepare_resource_draw(&d,&draw,&area,NULL,shader_address,NULL,&prepared)==flush_rc);
+        assert(allocations==releases && !prepared.backing);
+        flush_rc=VK_SUCCESS;d.inline_uniform_block_enabled=VK_FALSE;
+    }
+
 }

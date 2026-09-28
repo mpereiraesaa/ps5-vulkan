@@ -267,7 +267,8 @@ static VkResult rendering_pass(VkDevice d, const VkGraphicsPipelineCreateInfo *i
     if (r->pNext || r->viewMask ||
         r->colorAttachmentCount > PS5VK_MAX_COLOR_ATTACHMENTS ||
         (r->colorAttachmentCount && !r->pColorAttachmentFormats) || in->subpass ||
-        !in->pMultisampleState)
+        (!in->pMultisampleState && (!in->pRasterizationState ||
+         !in->pRasterizationState->rasterizerDiscardEnable)))
         return refuse(2);
     const VkFormat depth = r->depthAttachmentFormat != VK_FORMAT_UNDEFINED ?
         r->depthAttachmentFormat : r->stencilAttachmentFormat;
@@ -275,7 +276,9 @@ static VkResult rendering_pass(VkDevice d, const VkGraphicsPipelineCreateInfo *i
         r->stencilAttachmentFormat != VK_FORMAT_UNDEFINED &&
         r->depthAttachmentFormat != r->stencilAttachmentFormat) return refuse(2);
     memset(out, 0, sizeof(*out));
-    const VkSampleCountFlagBits samples = in->pMultisampleState->rasterizationSamples;
+    const VkSampleCountFlagBits samples = in->pRasterizationState &&
+        in->pRasterizationState->rasterizerDiscardEnable ? VK_SAMPLE_COUNT_1_BIT :
+        in->pMultisampleState->rasterizationSamples;
     uint32_t n = 0;
     for (uint32_t i = 0; i < r->colorAttachmentCount; ++i) {
         if (r->pColorAttachmentFormats[i] == VK_FORMAT_UNDEFINED) return refuse(2);
@@ -354,8 +357,10 @@ static VkResult create(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         }
         /* A shape the profile refuses for that topology (primitive restart on
          * a list or a fan) leaves it undrawable; running out of memory fails
-         * the whole pipeline. */
-        if(rc==VK_ERROR_OUT_OF_HOST_MEMORY || rc==VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+         * the whole pipeline, as does a required variant that cannot be
+         * acquired without compilation. */
+        if(rc==VK_ERROR_OUT_OF_HOST_MEMORY || rc==VK_ERROR_OUT_OF_DEVICE_MEMORY ||
+           rc==VK_PIPELINE_COMPILE_REQUIRED) {
             vkDestroyPipeline(d,*out,allocator);
             *out=VK_NULL_HANDLE;
             return rc;
@@ -370,6 +375,7 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     if (in->sType != VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO || !in->layout ||
         in->layout->device != d || (in->renderPass && in->renderPass->device != d))
         return VK_ERROR_UNKNOWN;
+    const VkBool32 discard=in->pRasterizationState && in->pRasterizationState->rasterizerDiscardEnable;
     struct rendering_pass rendering;
     VkRenderPass render_pass = in->renderPass;
     if (!render_pass) {
@@ -380,12 +386,13 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     /* The pipeline is created for ONE subpass, which must exist in the pass it
      * names. A nonzero index is no longer refused outright: it identifies the
      * scope this pipeline may draw in. */
-    /* Two stages are the vertex+fragment profile every earlier tranche used;
-     * three through five add the optional tessellation control/evaluation pair
-     * and geometry after evaluation. Nothing else is accepted, so a
-     * mesh or task stage still fails here. */
-    if ((in->pNext && in->renderPass) || in->flags || in->subpass >= render_pass->subpass_count ||
-        (in->stageCount < 2 || in->stageCount > 5) || !in->pStages ||
+    /* Vertex is mandatory; static rasterizer discard may omit fragment.
+     * Tessellation control/evaluation are paired, with optional geometry.
+     * Mesh and task stages remain outside this profile. */
+    if ((in->pNext && in->renderPass) || (in->flags & ~(VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT | VK_PIPELINE_CREATE_DERIVATIVE_BIT |
+                         VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
+                         VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) || in->subpass >= render_pass->subpass_count ||
+        (in->stageCount < 1 || in->stageCount > 5) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return refuse(2);
     VkBool32 dynamic_viewport,dynamic_scissor,dynamic_depth_bias,dynamic_stencil[3];
@@ -396,6 +403,11 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     /* With *_WITH_COUNT the viewport and scissor arrays, and their count,
      * are the command buffer's: the static counts must be zero
      * (VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-03379, -03380). */
+    if(discard) {
+        dynamic_viewport=dynamic_scissor=dynamic_depth_bias=VK_FALSE;
+        memset(dynamic_stencil,0,sizeof(dynamic_stencil));
+        eds &= PS5VK_EDS_PRIMITIVE_TOPOLOGY | PS5VK_EDS_VERTEX_INPUT_BINDING_STRIDE;
+    }
     const VkBool32 with_count=(eds & PS5VK_EDS_VIEWPORT_WITH_COUNT) ? VK_TRUE : VK_FALSE;
     if(with_count) dynamic_viewport=dynamic_scissor=VK_TRUE;
     const VkPipelineShaderStageCreateInfo *vs=NULL, *fs=NULL, *gs=NULL,
@@ -416,8 +428,8 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     /* Vulkan requires the control and evaluation stages to appear together, and
      * the stage count to name exactly the stages that were provided. */
-    if (!vs || !fs || (!!tcs != !!tes) ||
-        in->stageCount != (unsigned)(2 + (tcs?2:0) + (gs?1:0)))
+    if (!vs || (!fs && !discard) || (!!tcs != !!tes) ||
+        in->stageCount != (unsigned)(1 + (fs?1:0) + (tcs?2:0) + (gs?1:0)))
         return VK_ERROR_UNKNOWN;
     /* A geometry pipeline needs the feature the logical device enabled. The
      * private witness build keeps its own gate, exactly as the multiview
@@ -466,6 +478,32 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     const VkPipelineMultisampleStateCreateInfo *m=in->pMultisampleState;
     const VkPipelineViewportStateCreateInfo *vp=in->pViewportState;
     const VkPipelineColorBlendStateCreateInfo *b=in->pColorBlendState;
+    /* Post-rasterization state is ignored under static discard. Canonical
+     * values let the native link/state ABI stay well formed without reading
+     * optional application state or requiring dynamic state that cannot run. */
+    const struct ps5vk_subpass *discard_subpass=ps5vk_render_pass_subpass(render_pass,in->subpass);
+    VkPipelineRasterizationStateCreateInfo discard_raster;
+    VkPipelineMultisampleStateCreateInfo discard_samples={.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples=VK_SAMPLE_COUNT_1_BIT};
+    const VkViewport discard_viewport={0,0,1,1,0,1};
+    const VkRect2D discard_scissor={{0,0},{1,1}};
+    const VkPipelineViewportStateCreateInfo discard_view={.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount=1,.pViewports=&discard_viewport,.scissorCount=1,.pScissors=&discard_scissor};
+    const VkPipelineColorBlendAttachmentState discard_colors[PS5VK_MAX_COLOR_ATTACHMENTS]={{0}};
+    const VkPipelineColorBlendStateCreateInfo discard_blend={.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount=discard_subpass->color_count,.pAttachments=discard_colors};
+    const VkPipelineDepthStencilStateCreateInfo discard_depth={.sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    if(discard) {
+        if(!r || r->sType!=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO ||
+           discard_subpass->color_count>PS5VK_MAX_COLOR_ATTACHMENTS)return VK_ERROR_UNKNOWN;
+        discard_raster=(VkPipelineRasterizationStateCreateInfo){.sType=r->sType,.pNext=r->pNext,
+            .flags=r->flags,.rasterizerDiscardEnable=VK_TRUE,.lineWidth=1.0f};
+        r=&discard_raster;
+        uint32_t attachment=discard_subpass->color_count?discard_subpass->color[0].attachment:
+            discard_subpass->depth.attachment;
+        if(attachment!=VK_ATTACHMENT_UNUSED)discard_samples.rasterizationSamples=render_pass->attachments[attachment].samples;
+        m=&discard_samples;vp=&discard_view;b=&discard_blend;
+    }
     /* The colour blend state is optional for the same reason the
      * depth-stencil state is: a pipeline for a DEPTH-ONLY subpass has no
      * colour attachment to blend into, and the pinned upstream depth clamp
@@ -557,10 +595,6 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          * topology, so it is not part of this blanket refusal. */
         ia->pNext || ia->flags ||
         !rasterization_pnext_supported(r->pNext) || r->flags ||
-        /* Rasterizer discard is admitted only for a pipeline that captures:
-         * the pinned DXVK sets it for stream output with no rasterized
-         * stream, and nothing else in this profile draws without raster. */
-        (r->rasterizerDiscardEnable && !capture.buffers_mask) ||
         /* depthClampEnable needs depthClamp ENABLED on this logical device;
          * the state itself executes (native PA_CL_CLIP_CNTL ZCLIP_*_DISABLE
          * with the viewport depth range as the clamp interval). */
@@ -623,7 +657,7 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         (!(eds & PS5VK_EDS_FRONT_FACE) && r->frontFace != VK_FRONT_FACE_CLOCKWISE &&
          r->frontFace != VK_FRONT_FACE_COUNTER_CLOCKWISE))
         return VK_ERROR_UNKNOWN;
-    const VkPipelineDepthStencilStateCreateInfo *depth=in->pDepthStencilState;
+    const VkPipelineDepthStencilStateCreateInfo *depth=discard?&discard_depth:in->pDepthStencilState;
     VkRenderPass pass=render_pass;
     /* The formats come from the subpass this pipeline names, not from the
      * first one: the identity is what a draw is later checked against. */
@@ -655,9 +689,14 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
          (depth->depthCompareOp < VK_COMPARE_OP_NEVER ||
           depth->depthCompareOp > VK_COMPARE_OP_ALWAYS))))
         return refuse(16);
+    if ((in->flags & (VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |
+                      VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)) &&
+        !(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     struct ps5vk_graphics_key key={
         .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
-        .fragment={.words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName},
+        .fragment=discard?ps5vk_discard_fragment():(struct ps5vk_graphics_module_key){
+            .words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName},
         .geometry=gs? (struct ps5vk_graphics_module_key){
             .words=gs->module->words,.word_count=gs->module->word_count,.entry=gs->pName} :
             (struct ps5vk_graphics_module_key){0},
@@ -669,6 +708,8 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
             (struct ps5vk_graphics_module_key){0},
         .patch_control_points=tcs?in->pTessellationState->patchControlPoints:0,
         .feature_mask=d->enabled_features,
+        .maintenance4=!!(d->enabled_features_t09 & PS5VK_T09_FEATURE_MAINTENANCE4),
+        .fail_on_compile_required=!!(in->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT),
         .transform_feedback_buffers=capture.buffers_mask,
         .rasterizer_discard=r->rasterizerDiscardEnable?VK_TRUE:VK_FALSE,
         .topology=ia->topology,
@@ -743,7 +784,7 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                 return refuse(18);
     }
     if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
-       !specialization_key(fs->pSpecializationInfo,&key.fragment) ||
+       (!discard && !specialization_key(fs->pSpecializationInfo,&key.fragment)) ||
        (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)) ||
        (tcs && !specialization_key(tcs->pSpecializationInfo,&key.tess_control)) ||
        (tes && !specialization_key(tes->pSpecializationInfo,&key.tess_eval)))
@@ -763,7 +804,8 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         }
     } else {
         rc=ps5vk_graphics_resolve(d->graphics_library,&key,&program);
-        if(rc!=VK_SUCCESS)return rc;
+        if(rc!=VK_SUCCESS)return key.fail_on_compile_required &&
+            rc==VK_ERROR_FEATURE_NOT_PRESENT?VK_PIPELINE_COMPILE_REQUIRED:rc;
         data=program->backend_data;
     }
     VkAllocationCallbacks saved={0}; VkBool32 custom=VK_FALSE;
@@ -793,6 +835,7 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return rc == VK_SUCCESS ? VK_ERROR_INITIALIZATION_FAILED : rc;
     }
     p->device=d; p->allocator=saved; p->custom_allocator=custom; p->graphics=VK_TRUE;
+    p->allow_derivatives=!!(in->flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
     p->subpass=in->subpass;
     p->dynamic_rendering=in->renderPass?VK_FALSE:VK_TRUE;
     /* The multisample state the native draw state reads (DXVK262-T06): the
@@ -905,8 +948,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(VkDevice d, VkPipelineC
         return refuse(18);
     VkResult rc=VK_SUCCESS;
     for (uint32_t i=0;i<count;++i) {
-        VkResult current=create(d,&infos[i],allocator,&out[i]);
-        if (rc == VK_SUCCESS && current != VK_SUCCESS) rc=current;
+        const int32_t index=infos[i].basePipelineIndex;
+        const VkPipelineCreateFlags indexed_flags=index>=0 && (uint32_t)index<i?infos[index].flags:0;
+        VkResult current=ps5vk_pipeline_derivative_valid(d,infos[i].flags,
+            infos[i].basePipelineHandle,index,i,indexed_flags,VK_TRUE)?
+            create(d,&infos[i],allocator,&out[i]):VK_ERROR_UNKNOWN;
+        if (current != VK_SUCCESS && (rc == VK_SUCCESS ||
+            (rc == VK_PIPELINE_COMPILE_REQUIRED && current < 0))) rc=current;
+        if (current != VK_SUCCESS && (infos[i].flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT) &&
+            (d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL)) break;
     }
     return rc;
 }

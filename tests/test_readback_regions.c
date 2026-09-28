@@ -156,6 +156,52 @@ int main(void)
     for (size_t b = 16384 + W * H * 4; b < 40964; ++b) assert(buffer_bytes[b] == 0xcd);
     for (size_t b = 40964 + (8 * 20 + 11) * 4; b < BUFFER; ++b) assert(buffer_bytes[b] == 0xcd);
 
+    /* The native DXVK presentation frame begins its readback from a sampled
+     * colour target and returns it to shader-read layout after the copy. The
+     * recorder and upload prelude accept both exact barriers; the postlude
+     * planner must agree before the job can be submitted. */
+    image.info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    struct ps5vk_operation sampled[4] = {
+        {.type = PS5VK_IMAGE_BARRIER, .src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT,
+         .dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT,
+         .image_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .image = &image,
+             .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+             .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+             .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT}},
+        copy(16384, 64, 64, 0, 0, W, H),
+        global(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_HOST_READ_BIT),
+        {.type = PS5VK_IMAGE_BARRIER, .src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT,
+         .dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+             VK_PIPELINE_STAGE_TRANSFER_BIT |
+             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+         .image_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .image = &image,
+             .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+             .dstAccessMask = VK_ACCESS_SHADER_READ_BIT |
+                 VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                 VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT}}
+    };
+    assert(plan(sampled, 4, &regions, &site) == VK_SUCCESS && regions.count == 1);
+    image.info.format = VK_FORMAT_B8G8R8A8_UNORM;
+    assert(plan(sampled, 4, &regions, &site) == VK_SUCCESS && regions.count == 1);
+    memset(buffer_bytes, 0xcd, sizeof(buffer_bytes));
+    assert(!ps5vk_readback_region_detile(&image, regions.target[0].layer_stride,
+        &regions.target[0].region, buffer_bytes, sizeof(buffer_bytes), source, SOURCE));
+    for (uint32_t y = 0; y < H; ++y)
+        for (uint32_t x = 0; x < W; ++x) {
+            uint32_t raw;
+            memcpy(&raw, buffer_bytes + 16384 + ((size_t)y * W + x) * 4, 4);
+            assert(raw == texel(x, y));
+        }
+    image.info.format = VK_FORMAT_R8G8B8A8_UNORM;
+    image.info.usage &= ~VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
     /* Refusals: each returns an error and leaves the caller's state alone. */
     struct ps5vk_operation bad[OPS];
 #define REFUSED(n) do { \

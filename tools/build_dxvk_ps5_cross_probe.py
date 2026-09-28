@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-link pinned DXVK 2.6.2 D3D11/DXGI with the PS5 WSI adapter.
+"""Cross-link all pinned DXVK 2.6.2 frontends with the PS5 WSI adapter.
 
 The WSI adapter is linked, but the output cannot present until ps5vk implements
 the Vulkan display-surface and swapchain route. No PS5 execution is inferred.
@@ -44,6 +44,14 @@ EXCLUDED_SOURCES = (
     "wsi_monitor_sdl2.cpp", "wsi_platform_sdl2.cpp", "wsi_window_sdl2.cpp",
     "wsi_edid.cpp", "wsi_platform.cpp",
 )
+FRONTEND_LINK_ORDER = ("dxgi", "d3d11", "d3d10", "d3d9", "d3d8")
+FRONTEND_DEPENDENCIES = {
+    "dxgi": (),
+    "d3d11": ("dxgi",),
+    "d3d10": ("d3d11",),
+    "d3d9": (),
+    "d3d8": ("d3d9",),
+}
 
 
 def command(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -56,6 +64,13 @@ def compile_entry(index: int, entry: dict, build: Path, output: Path,
     source = entry["file"]
     args = shlex.split(entry["command"])
     args[0] = str(cc if source.endswith(".c") else cxx)
+    source_util = next(
+        ((build / arg[2:]).resolve().parents[2] / "src/util"
+         for arg in args if arg.startswith("-I") and
+         (build / arg[2:]).resolve().parts[-3:] == ("include", "native", "directx")),
+        None)
+    if source_util is None or not source_util.is_dir():
+        raise ValueError("DXVK source util include directory not found")
     filtered = []
     skip_next = False
     for arg in args:
@@ -66,7 +81,7 @@ def compile_entry(index: int, entry: dict, build: Path, output: Path,
         elif arg not in ("-MD", "-O2", "-g"):
             filtered.append("-DDXVK_WSI_PS5" if arg == "-DDXVK_WSI_SDL2" else arg)
     filtered[1:1] = ["-include", str(compat),
-                     f"-I{build.parent / 'src/util'}"]
+                     f"-I{source_util}"]
     obj = output / f"{index:03d}.o"
     filtered.extend(("-O0", "-o", str(obj)))
     try:
@@ -148,10 +163,12 @@ def main() -> int:
         selected = [(index, entry) for index, entry in enumerate(entries)
                     if not entry["output"].startswith("subprojects/libdisplay-info/")
                     and not entry["file"].endswith(EXCLUDED_SOURCES)]
-        if not any(entry["output"].startswith("src/d3d11/") for _, entry in selected):
-            raise ValueError("native DXVK build has no D3D11 target")
-        if not any(entry["output"].startswith("src/dxgi/") for _, entry in selected):
-            raise ValueError("native DXVK build has no DXGI target")
+        missing_targets = [target for target in FRONTEND_LINK_ORDER
+                           if not any(entry["output"].startswith(f"src/{target}/")
+                                      for _, entry in selected)]
+        if missing_targets:
+            raise ValueError("native DXVK build lacks targets: " +
+                             ", ".join(missing_targets))
         output.mkdir(parents=True, exist_ok=True)
         objects = output / "objects"
         objects.mkdir(exist_ok=True)
@@ -194,13 +211,15 @@ def main() -> int:
         grouped.setdefault("src/wsi", []).append(no_edid_obj)
         archives = {group: archive(output, group, objects)
                     for group, objects in grouped.items()
-                    if group not in ("src/dxgi", "src/d3d11")}
+                    if group not in {f"src/{target}" for target in FRONTEND_LINK_ORDER}}
         common = [archives[group] for group in (
-            "src/dxvk", "src/util", "src/spirv", "src/wsi", "src/vulkan", "src/dxbc")]
+            "src/dxvk", "src/util", "src/spirv", "src/wsi", "src/vulkan",
+            "src/dxbc", "src/dxso")]
         artifacts = {}
-        for target in ("dxgi", "d3d11"):
+        for target in FRONTEND_LINK_ORDER:
             library = output / f"libdxvk_{target}.so"
-            link_group = ([output / "libdxvk_dxgi.so"] if target == "d3d11" else []) + common
+            link_group = [output / f"libdxvk_{dependency}.so"
+                          for dependency in FRONTEND_DEPENDENCIES[target]] + common
             command([str(cxx), "-shared", "-Wl,--no-undefined",
                      f"-Wl,-soname,{library.name}",
                      *(str(obj) for obj in grouped[f"src/{target}"]),
@@ -210,9 +229,12 @@ def main() -> int:
                              else library)
             artifacts[target] = {"path": str(artifact_path),
                                  "sha256": sha256(library), "bytes": library.stat().st_size}
-        dynamic = command(["readelf", "-d", str(output / "libdxvk_d3d11.so")]).stdout
-        if "Shared library: [libdxvk_dxgi.so]" not in dynamic:
-            raise ValueError("D3D11 does not depend on the relocatable DXGI soname")
+        for target, dependencies in FRONTEND_DEPENDENCIES.items():
+            dynamic = command(["readelf", "-d", str(output / f"libdxvk_{target}.so")]).stdout
+            for dependency in dependencies:
+                if f"Shared library: [libdxvk_{dependency}.so]" not in dynamic:
+                    raise ValueError(f"{target} does not depend on the relocatable "
+                                     f"{dependency} soname")
         receipt = {
             "profile": "dxvk-v262-ps5-cross-link-probe",
             "dxvk_commit": actual,
@@ -221,7 +243,7 @@ def main() -> int:
             "excluded_units": len(entries) - len(selected) - 1,
             "artifacts": artifacts,
             "runtime_ready": False,
-            "runtime_blocker": "ps5vk has no Vulkan display-surface/swapchain route",
+            "runtime_blocker": "cross-linking does not execute DXVK or validate Prospero Win",
         }
         manifest = output / "receipt.json"
         manifest.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")

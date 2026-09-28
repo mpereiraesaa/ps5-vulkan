@@ -50,6 +50,12 @@ def tessellation_build_profile(environment):
             "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC",
             "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
             "PS5VK_SHADER_INT16_DIAGNOSTIC",
+            "PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC",
+            "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC",
+            "PS5VK_INLINE_UNIFORM_DIAGNOSTIC",
+            "PS5VK_SUBGROUP_SIZE_DIAGNOSTIC",
+            "PS5VK_INTEGER_DOT_DIAGNOSTIC",
+            "PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC",
         )
     }
     return {
@@ -1039,6 +1045,7 @@ def main(argv=None):
         # compressed-format sampling tests.
         cts_root / "external/vulkancts/modules/vulkan/texture/vktTextureTestUtil.cpp",
         cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingShaderAccessTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/binding_model/vktBindingDescriptorCopyTests.cpp",
         focused_sources / "vktBindingBufferDeviceAddressTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicEventTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationBasicFenceTests.cpp",
@@ -1050,12 +1057,15 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/synchronization/vktSynchronizationOperation.cpp",
         cts_root / "external/vulkancts/modules/vulkan/memory/vktMemoryMappingTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeBasicComputeShaderTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeIndirectComputeDispatchTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/compute/vktComputeTestsUtil.cpp",
-        # Original subgroup Broadcast and arithmetic bodies, support gates and GPU oracles.
+        # Original subgroup Broadcast, arithmetic and size-control bodies, support gates and GPU oracles.
         # Registration alone does not select a case or advertise a feature.
         cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsScanHelpers.cpp",
         cts_root / "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsTestsUtils.cpp",
         # Original dynamic-state compute/transfer non-interference module.  It
@@ -1230,7 +1240,9 @@ def main(argv=None):
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmUtils.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmWorkgroupMemoryTests.cpp",
         cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIndexingTests.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp",
         ROOT / "cts/upstream/volatile_atomic_focus.cpp",
+        cts_root / "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmMultipleShadersTests.cpp",
     ]
     for src in test_cpp:
         obj = obj_dir / "modules" / (src.stem + ".o")

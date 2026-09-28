@@ -2852,8 +2852,14 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:shaderSubgroupExtendedTypes",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "Vulkan 1.2 and KHR query/opt-in contracts are implemented but default off. Host compiler probes cover bounded subgroup type and operation variants, and the original CTS compute leaves are selected only as diagnostics. Not implemented yet: complete BALLOT and ARITHMETIC operations over every advertised type, then validate the platform feature and native CTS execution.",
+        "refs": [
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_pipeline.c",
+          "tests/test_t08_subgroup_contract.py",
+          "tests/test_vk_core_version.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -2894,8 +2900,14 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "Vulkan 1.2 query/opt-in and nonconstant-ID module admission contracts are implemented but default off. The original runtime-ID Broadcast CTS leaf is a diagnostic, not acceptance evidence. Not implemented yet: prove runtime-selected Broadcast ID on the GPU with complete BALLOT operation reporting and unchanged native CTS.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "src/vk_core_version.c",
+          "src/vk_internal.h",
+          "src/vk_pipeline.c",
+          "tests/test_vk_pipeline.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -3171,8 +3183,16 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:computeFullSubgroups",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "EXT and Vulkan 1.3 query/opt-in and wave32 full-subgroup compute pipeline constraints are host tested. A bounded SDK witness exists. The original CTS case with REQUIRE_FULL_SUBGROUPS is diagnostic only. Not implemented yet: the original CTS full-subgroup oracle also requires truthful BALLOT reporting; package it with that prerequisite, prove native active-lane results and repeat acceptance.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "examples/subgroup_size_witness/main.c",
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_pipeline.c",
+          "tests/test_vk_core_version.c",
+          "tests/test_vk_pipeline.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -3306,13 +3326,16 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:maintenance4",
       "implementation": {
-        "detail": "Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; creation-description memory requirements, maxBufferSize and LocalSizeId with constant or direct specialization-constant operands. Not implemented yet: LocalSizeId operands that are compound OpSpecConstantOp expressions are refused (src/vk_pipeline.c local_size); a producer output vector wider than the consumer's input is refused by the graphics interface policy.",
+        "detail": "Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; creation-description memory requirements, maxBufferSize, legacy BuiltIn WorkgroupSize precedence and specialization, and LocalSizeId with constants, direct specialization and bounded scalar 32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, integer comparisons, boolean specialization and conditional selection, plus vector construction, insertion, shuffle and scalar extraction, nested array/structure extraction and insertion, null aggregates, 8/16/32-bit integer-width conversions with truncation and sign extension, and mixed aggregates with floating-point members, checked against the host compiler. Whole-location producer vectors may be wider than consumer vectors when maintenance4 is enabled; the VS-to-FS path has cache opt-in guards. Permanent real-compiler tests cover 147 float/int/uint interface cases across VS/TCS/TES/GS/FS and per-patch boundaries, with no native delivery claim.",
         "refs": [
           "native/platform_ps5.c",
           "src/vk_memory.c",
-          "src/vk_pipeline.c"
+          "src/vk_pipeline.c",
+          "tests/maintenance4_interface_inspect.c",
+          "tests/test_local_size_id.c",
+          "tests/test_maintenance4_interfaces.py"
         ],
-        "state": "missing"
+        "state": "implemented"
       },
       "kind": "feature",
       "name": "maintenance4",
@@ -3352,8 +3375,18 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "EXT and Vulkan 1.3 query/opt-in contracts gate pipeline cache-control flags. Compute and graphics cold misses refuse compilation; warm entries retain cache identity. Batch creation supports early return, null uncreated outputs and ownership of successful siblings. Dynamic topology creation rolls back a warm primary when a variant needs compilation. Externally synchronized cache creation is accepted only with opt-in. Derivative hints preserve cache identity, validate same-device/type base handles or earlier batch indices with ALLOW_DERIVATIVES, and retain independent result ownership. Static rasterizer discard admits position-producing vertex-only pipelines, ignores post-raster state and links an internal empty pixel program; host compiler and emitted-state tests cover this route. Draw submission without any framebuffer attachment remains refused. Pinned graphics cache-control CTS cases request unreported list restart and are excluded; eight compute cases are prepared for measurement. Host tests cover these contracts, and SDK-linked compute and graphics witness sources plus earlier offline candidates exist. Not implemented yet: rebuild the integrated candidate from current source and prove native execution and canonical acceptance; the shipping platform does not advertise this capability.",
+        "refs": [
+          "examples/dxvk_render_witness/cache_compute.h",
+          "examples/dxvk_render_witness/main.c",
+          "native/runtime_graphics_cache.c",
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_graphics_pipeline.c",
+          "src/vk_pipeline.c",
+          "tests/test_runtime_pipeline_cache.c",
+          "tests/test_vk_core_version.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -3577,8 +3610,16 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "KHR and Vulkan 1.3 query/opt-in contracts exist behind an unreported platform capability. Module admission requires opt-in and a matching OpConstantNull initializer. The pinned host compiler emits zero stores and an additional workgroup barrier before application shared-memory access; a control shader without the initializer omits both. Compiler regression covers a 2048-byte shared array and checks allocation. An SDK-linked delivery witness and strict host verifier are prepared. Not implemented yet: native execution remains pending; the shipping platform does not advertise this capability.",
+        "refs": [
+          "examples/zero_initialize_witness/main.c",
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_pipeline.c",
+          "tests/test_runtime_compiler.c",
+          "tests/test_vk_core_version.c",
+          "tests/test_zero_initialize_witness.py"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -3619,8 +3660,16 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:subgroupSizeControl",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "EXT and Vulkan 1.3 query/opt-in, fixed wave32 properties, and compute pipeline flag/required-size contracts are host tested. A bounded SDK witness exists. The original CTS selection now distinguishes the no-flag control from the SPIR-V 1.6 variant that sets ALLOW_VARYING_SUBGROUP_SIZE. Not implemented yet: package the flagged selection from the current source, prove GPU results and graphics-stage varying-size bounds, then repeat acceptance.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "examples/subgroup_size_witness/main.c",
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_pipeline.c",
+          "tests/test_vk_core_version.c",
+          "tests/test_vk_pipeline.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -4266,8 +4315,8 @@
         "pass": 30
       },
       "implementation": {
-        "blocker": 17,
-        "satisfied": 45
+        "blocker": 16,
+        "satisfied": 46
       },
       "native": {
         "blocker": 17,

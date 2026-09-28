@@ -683,6 +683,7 @@ VkResult ps5vk_runtime_graphics_descriptor_options(const struct ps5vk_graphics_k
             PsbcDescriptorType type;
             switch(key->descriptor_sets[s].type[b]) {
             case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER;break;
+            case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
@@ -925,7 +926,7 @@ static VkResult runtime_graphics_compile(const struct ps5vk_graphics_key *key,co
              * removes the unreachable store. The interface policy already ties
              * the declaration to the key, so the export has to agree with it
              * and carry no secondary. */
-            const unsigned expected=key->color_attachment_count?1u:0u;
+            const unsigned expected=key->color_attachment_count && !key->rasterizer_discard?1u:0u;
             if(secondary || primary_mask!=expected)goto failed;
         } else if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) {
             /* The pinned compiler publishes 0x44/0xff for both shapes. The

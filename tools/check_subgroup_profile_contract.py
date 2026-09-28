@@ -161,9 +161,11 @@ def check_reporting(contract, report, matrix, profile_source, device_source,
         require(sorted(exported.intersection(commands)) ==
                 command_gate["current_core_dispatch"],
                 f"Vulkan 1.{version[-1]} core command dispatch changed; re-audit API gate")
-    require("VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES" not in device_source and
+    require("VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES" in device_source and
+            "PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES" in device_source and
+            "ps5vk_subgroup_public_bits(" in device_source and
             "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES" not in device_source,
-            "new subgroup query route requires contract review")
+            "subgroup feature query route requires contract review")
     marker = "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES"
     if marker in device_source:
         start = device_source.find("vkGetPhysicalDeviceProperties2KHR(")
@@ -235,8 +237,10 @@ def check(root=ROOT):
                     (root / "src/vk_device.c").read_text(),
                     (root / "src/vk_dispatch.c").read_text())
     core = (root / "src/vk_core_version.c").read_text()
-    require(not re.search(r"->(shaderSubgroupExtendedTypes|subgroupBroadcastDynamicId)\s*=", core),
-            "core Vulkan 1.2 subgroup bit is assigned; re-audit subgroup profile")
+    require("const uint32_t subgroup = ps5vk_subgroup_public_bits(" in core and
+            "subgroup & PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES" in core and
+            "subgroup & PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID" in core,
+            "core Vulkan 1.2 subgroup route requires contract review")
     sources = list((root / "src").glob("*.c")) + list((root / "native").glob("*.c"))
     check_core_sources(contract, (root / "include/ps5vk/ps5vk.h").read_text(),
                        "\n".join(path.read_text() for path in sources))

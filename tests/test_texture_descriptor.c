@@ -234,6 +234,76 @@ int main(void)
     vkDestroyImageView(&d,tiled_cube_view,NULL);
     vkDestroyImage(&d,tiled_cube_image,NULL);
     vkFreeMemory(&d,tiled_cube_memory,NULL);
+    /* DXVK's rendered 2D backbuffer is sampled by its display blit. The
+     * descriptor must retain the attachment's 64KB_R_X tile mode. */
+    VkImageCreateInfo present_ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+        .extent={256,256,1},.mipLevels=1,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+        .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+               VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    VkImage present_image;
+    assert(vkCreateImage(&d,&present_ii,NULL,&present_image)==VK_SUCCESS);
+    VkMemoryAllocateInfo present_ai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize=present_image->requirements.size};
+    VkDeviceMemory present_memory;
+    assert(vkAllocateMemory(&d,&present_ai,NULL,&present_memory)==VK_SUCCESS);
+    assert(vkBindImageMemory(&d,present_image,present_memory,0)==VK_SUCCESS);
+    VkImageViewCreateInfo present_vi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image=present_image,.viewType=VK_IMAGE_VIEW_TYPE_2D,
+        .format=VK_FORMAT_R8G8B8A8_UNORM,
+        .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+    VkImageView present_view;
+    assert(vkCreateImageView(&d,&present_vi,NULL,&present_view)==VK_SUCCESS);
+    uint32_t present_words[12],present_resource[8];
+    assert(ps5vk_texture_descriptor(&d,present_view,sampler,present_words)==VK_SUCCESS);
+    assert(ps5vk_sampled_image_descriptor(&d,present_view,present_resource)==VK_SUCCESS);
+    assert(present_words[3]==0x91b00facu &&
+        !memcmp(present_words,present_resource,sizeof(present_resource)));
+    vkDestroyImageView(&d,present_view,NULL);
+    vkDestroyImage(&d,present_image,NULL);
+    vkFreeMemory(&d,present_memory,NULL);
+    /* Prospero Win's DXVK backbuffer asks for mutable BGRA8. A sampled SRGB
+     * view keeps the same tiled address and Z,Y,X,W selectors while switching
+     * only the image format word to SRGB decode. */
+    d.mutable_format_views=VK_TRUE;
+    d.maintenance2_extension_enabled=VK_TRUE;
+    present_ii.format=VK_FORMAT_B8G8R8A8_UNORM;
+    present_ii.flags=VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    assert(vkCreateImage(&d,&present_ii,NULL,&present_image)==VK_SUCCESS);
+    present_ai.allocationSize=present_image->requirements.size;
+    assert(vkAllocateMemory(&d,&present_ai,NULL,&present_memory)==VK_SUCCESS);
+    assert(vkBindImageMemory(&d,present_image,present_memory,0)==VK_SUCCESS);
+    VkImageViewUsageCreateInfo sampled_usage={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
+        .usage=VK_IMAGE_USAGE_SAMPLED_BIT};
+    present_vi.image=present_image;
+    present_vi.format=VK_FORMAT_B8G8R8A8_SRGB;
+    present_vi.pNext=&sampled_usage;
+    assert(vkCreateImageView(&d,&present_vi,NULL,&present_view)==VK_SUCCESS);
+    assert(ps5vk_sampled_image_descriptor(&d,present_view,present_resource)==VK_SUCCESS);
+    assert((present_resource[1] & UINT32_C(0x1ff00000))==UINT32_C(0x08200000) &&
+        present_resource[3]==UINT32_C(0x91b00f2e));
+    vkDestroyImageView(&d,present_view,NULL);
+    /* The measured D3D9 X8R8G8B8 presenter requests constant-one alpha on
+     * its sampled BGRA8 UNORM backbuffer. The view must carry that promise
+     * into the resource selector rather than silently sampling stored alpha. */
+    present_vi.format=VK_FORMAT_B8G8R8A8_UNORM;
+    present_vi.components=(VkComponentMapping){VK_COMPONENT_SWIZZLE_R,
+        VK_COMPONENT_SWIZZLE_G,VK_COMPONENT_SWIZZLE_B,VK_COMPONENT_SWIZZLE_ONE};
+    assert(vkCreateImageView(&d,&present_vi,NULL,&present_view)==VK_SUCCESS);
+    assert(ps5vk_sampled_image_descriptor(&d,present_view,present_resource)==VK_SUCCESS);
+    assert(present_resource[3]==UINT32_C(0x91b0032e));
+    vkDestroyImageView(&d,present_view,NULL);
+    present_vi.format=VK_FORMAT_B8G8R8A8_SRGB;
+    assert(vkCreateImageView(&d,&present_vi,NULL,&present_view)==VK_ERROR_FEATURE_NOT_PRESENT);
+    present_vi.format=VK_FORMAT_B8G8R8A8_UNORM;
+    present_vi.components.a=VK_COMPONENT_SWIZZLE_ZERO;
+    assert(vkCreateImageView(&d,&present_vi,NULL,&present_view)==VK_ERROR_FEATURE_NOT_PRESENT);
+    present_vi.components=(VkComponentMapping){0};
+    vkDestroyImage(&d,present_image,NULL);
+    vkFreeMemory(&d,present_memory,NULL);
+    d.mutable_format_views=VK_FALSE;
+    d.maintenance2_extension_enabled=VK_FALSE;
     d.memory.allocate=allocate;
     d.max_allocation=16384;
 

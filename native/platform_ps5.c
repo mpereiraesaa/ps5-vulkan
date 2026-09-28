@@ -406,6 +406,32 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * The original message-passing CTS factory requires core Vulkan 1.1, so
      * the KHR route has a separate bounded native witness. */
     platform->supported_features |= PS5VK_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE;
+#if defined(PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC) && PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC
+    /* Measurement only: image bounds and native numerical acceptance pending. */
+    platform->supported_features_v13 |= PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS;
+#endif
+#if defined(PS5VK_INTEGER_DOT_DIAGNOSTIC) && PS5VK_INTEGER_DOT_DIAGNOSTIC
+    /* Measurement only: compiler contracts do not prove numerical GPU results. */
+    platform->supported_features_v13 |= PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;
+#endif
+#if defined(PS5VK_SUBGROUP_SIZE_DIAGNOSTIC) && PS5VK_SUBGROUP_SIZE_DIAGNOSTIC
+    /* Measurement only; native stage-size and full-subgroup acceptance pending. */
+    platform->supported_features_v13 |= PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL |
+        PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS;
+#endif
+#if defined(PS5VK_INLINE_UNIFORM_DIAGNOSTIC) && PS5VK_INLINE_UNIFORM_DIAGNOSTIC
+    /* Measurement only: host encoding/compilation does not establish native correctness. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK;
+#endif
+#if defined(PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC) && PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC
+    /* Measurement only: native cache-control acceptance is not established. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+#endif
+#if defined(PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC) && PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC
+    /* Default-off original CTS measurement; host compilation is not evidence
+     * for native initialization or synchronization. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY;
+#endif
 #if defined(PS5VK_SHADER_INT16_DIAGNOSTIC) && PS5VK_SHADER_INT16_DIAGNOSTIC
     /* Measure the core Int16 route with original CTS before considering the
      * shader feature for the ordinary profile. Subgroup bits stay separate. */
@@ -418,8 +444,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features |= PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
 #endif
 #if defined(PS5VK_SUBGROUP_IADD_DIAGNOSTIC) && PS5VK_SUBGROUP_IADD_DIAGNOSTIC
-    /* Private compute IAdd measurement only. This is narrower than the
-     * public ARITHMETIC operation bit and reports no subgroup properties. */
+    /* Private compute arithmetic-family measurement, using the existing
+     * IAdd switch. No public ARITHMETIC operation bit is reported. */
     platform->supported_features |= PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
 #endif
     /* Compute subgroup BASIC (Elect, subgroup barriers and the subgroup
@@ -427,6 +453,18 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * witness checked all 896 outputs. VkPhysicalDeviceSubgroupProperties
      * reports exactly this: size 32, the compute stage, the BASIC operation. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+#if defined(PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC) && PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC && \
+    defined(PS5VK_SUBGROUP_IADD_DIAGNOSTIC) && PS5VK_SUBGROUP_IADD_DIAGNOSTIC && \
+    defined(PS5VK_SHADER_INT16_DIAGNOSTIC) && PS5VK_SHADER_INT16_DIAGNOSTIC
+    /* Combined original-CTS measurement only. Each operation bit is a claim
+     * over an entire family, so it remains absent from the ordinary build.
+     * The compute witnesses and host compiler census prepare this experiment;
+     * neither establishes GPU results or public feature conformance. */
+    platform->supported_features_v13 |= PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+        PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE |
+        PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES |
+        PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+#endif
 #if defined(PS5VK_SHADER_INT8_DIAGNOSTIC) && PS5VK_SHADER_INT8_DIAGNOSTIC
     /* Compiler-only probe; public shaderInt8 and subgroup features stay false. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_INT8_COMPUTE;

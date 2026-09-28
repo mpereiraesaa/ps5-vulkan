@@ -289,7 +289,8 @@ class TestFormatCapabilities(unittest.TestCase):
         summary = self.plan["summary"]
         self.assertEqual(total + summary["satisfied_by_this_task"] +
                          summary["additional_satisfied_by_t07"] +
-                         summary["additional_satisfied_by_storage_texel"],
+                         summary["additional_satisfied_by_storage_texel"] +
+                         summary["additional_satisfied_by_bgra"],
                          summary["mandatory_cells_in_scope"])
         self.assertEqual(
             total - classification["implemented-pending-physical-diagnostic"]["cells"],
@@ -298,13 +299,15 @@ class TestFormatCapabilities(unittest.TestCase):
                          summary["satisfied_by_this_task"]
                          + summary["additional_satisfied_by_t07"]
                          + summary["additional_satisfied_by_storage_texel"]
+                         + summary["additional_satisfied_by_bgra"]
                          + summary["ready_pending_physical_validation"]
                          + summary["blocked_without_backend"])
         blockers = [row for row in self.format_rows if row["verdict"] == "blocker"]
         self.assertEqual(len(blockers), summary["mandatory_cells_in_scope"] -
                          summary["satisfied_by_this_task"] -
                          summary["additional_satisfied_by_t07"] -
-                         summary["additional_satisfied_by_storage_texel"])
+                         summary["additional_satisfied_by_storage_texel"] -
+                         summary["additional_satisfied_by_bgra"])
         by_reason = {}
         for name, row in classification.items():
             features = BLOCKER_REASON_FEATURES[name] if name != "profile-has-no-image-model" else None

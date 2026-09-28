@@ -269,6 +269,36 @@ def main():
             raise SystemExit("PS5VK_SUBGROUP_IADD_DIAGNOSTIC must be 0 or 1")
         if subgroup_iadd_diagnostic == "1":
             native_cflags.append("-DPS5VK_SUBGROUP_IADD_DIAGNOSTIC=1")
+        zero_initialize_diagnostic = os.environ.get("PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC", "0")
+        if zero_initialize_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC must be 0 or 1")
+        if zero_initialize_diagnostic == "1":
+            native_cflags.append("-DPS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC=1")
+        image_robustness_diagnostic = os.environ.get("PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC", "0")
+        if image_robustness_diagnostic not in {"0", "1"}:
+            raise SystemExit("PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC must be 0 or 1")
+        if image_robustness_diagnostic == "1":
+            native_cflags.append("-DPS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC=1")
+        integer_dot_diagnostic = os.environ.get("PS5VK_INTEGER_DOT_DIAGNOSTIC", "0")
+        if integer_dot_diagnostic not in {"0", "1"}:
+            raise SystemExit("PS5VK_INTEGER_DOT_DIAGNOSTIC must be 0 or 1")
+        if integer_dot_diagnostic == "1":
+            native_cflags.append("-DPS5VK_INTEGER_DOT_DIAGNOSTIC=1")
+        subgroup_size_diagnostic = os.environ.get("PS5VK_SUBGROUP_SIZE_DIAGNOSTIC", "0")
+        if subgroup_size_diagnostic not in {"0", "1"}:
+            raise SystemExit("PS5VK_SUBGROUP_SIZE_DIAGNOSTIC must be 0 or 1")
+        if subgroup_size_diagnostic == "1":
+            native_cflags.append("-DPS5VK_SUBGROUP_SIZE_DIAGNOSTIC=1")
+        inline_uniform_diagnostic = os.environ.get("PS5VK_INLINE_UNIFORM_DIAGNOSTIC", "0")
+        if inline_uniform_diagnostic not in {"0", "1"}:
+            raise SystemExit("PS5VK_INLINE_UNIFORM_DIAGNOSTIC must be 0 or 1")
+        if inline_uniform_diagnostic == "1":
+            native_cflags.append("-DPS5VK_INLINE_UNIFORM_DIAGNOSTIC=1")
+        pipeline_cache_control_diagnostic = os.environ.get("PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC", "0")
+        if pipeline_cache_control_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC must be 0 or 1")
+        if pipeline_cache_control_diagnostic == "1":
+            native_cflags.append("-DPS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC=1")
         shader_int16_diagnostic = os.environ.get("PS5VK_SHADER_INT16_DIAGNOSTIC", "0")
         if shader_int16_diagnostic not in ("0", "1"):
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")

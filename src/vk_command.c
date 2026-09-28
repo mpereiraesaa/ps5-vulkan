@@ -1361,7 +1361,7 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_HOST_BIT |
         VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT |
         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
@@ -1380,6 +1380,9 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
          * dependency the compute scope alone can carry is left to it. */
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    /* DXVK D3D9's BGRA8 backbuffer hand-over names geometry among several
+     * potential shader readers. This stage is implemented by the graphics
+     * profile; the queue's conservative cache dependency orders it. */
     /* INDEX_READ, UNIFORM_READ and INPUT_ATTACHMENT_READ are accesses this
      * profile really serves in a graphics command: the promoted index path
      * reads the index buffer, descriptors feed uniform buffers to the vertex
@@ -1521,34 +1524,9 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
      * release may name MEMORY_READ at ALL_COMMANDS as DXVK does; the release
      * still requires an exact producer write and an image role it declared.
      * Stage/access compatibility is checked by the caller. */
-    if (image->swapchain_owned) {
-        const VkBool32 transfer = !!(usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-        const VkBool32 color = !!(usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        const VkBool32 from_present = b->oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        const VkBool32 to_present = b->newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        if (from_present || to_present) {
-            if (from_present && !b->srcAccessMask &&
-                ((transfer && b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-                  b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT) ||
-                 (color && b->newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-                  b->dstAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) ||
-                 ((transfer || color) && b->newLayout == VK_IMAGE_LAYOUT_GENERAL &&
-                  (b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT ||
-                   b->dstAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))))
-                return 1;
-            if (to_present && (b->dstAccessMask == 0 ||
-                               b->dstAccessMask == VK_ACCESS_MEMORY_READ_BIT) &&
-                ((transfer && b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-                  b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT) ||
-                 (color && b->oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-                  b->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) ||
-                 ((transfer || color) && b->oldLayout == VK_IMAGE_LAYOUT_GENERAL &&
-                  (b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT ||
-                   b->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))))
-                return 1;
-            return 0;
-        }
-    }
+    if (b->oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR ||
+        b->newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        return ps5vk_swapchain_present_barrier(b);
     if(ps5vk_tiled_cube_sampled_image(image))return
         b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
         b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
@@ -1556,9 +1534,14 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
         b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT &&
         src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
         dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    if(ps5vk_dxvk_tiled_backbuffer_barrier(b,src_stage,dst_stage))return 1;
+    if(ps5vk_bgra8_readback_barrier(b,src_stage,dst_stage))return 1;
     if(ps5vk_d32_gather_image(image))return ps5vk_d32_gather_barrier(b);
     if(ps5vk_bgra8_transfer_target(image))return
-        ps5vk_bgra8_transfer_barrier(b) || ps5vk_color_discard_barrier(b);
+        ps5vk_bgra8_transfer_barrier(b) ||
+        (ps5vk_tiled_2d_sampled_color_image(image) ?
+         ps5vk_dxvk_bgra8_initial_color_barrier(b,src_stage,dst_stage) :
+         ps5vk_color_discard_barrier(b));
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
     if(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image))
         return ps5vk_linear_image_barrier(b);
@@ -1766,7 +1749,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         VkImageSubresourceRange resolved;
         if(!c->pool->device->graphics_enabled ||
             b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
-            !transform_feedback_scope(c,src,b->srcAccessMask) || !transform_feedback_scope(c,dst,b->dstAccessMask) ||
+            !transform_feedback_scope(c,src,b->srcAccessMask) ||
+            !transform_feedback_scope(c,dst,b->dstAccessMask) ||
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
             !image || image->device!=c->pool->device) {invalid(c);return;}
@@ -1796,7 +1780,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
              (resolved.baseMipLevel || resolved.baseArrayLayer ||
               resolved.levelCount != image->info.mipLevels ||
               resolved.layerCount != image->info.arrayLayers)) ||
-            ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS) {invalid(c);return;}
+            ps5vk_image_span(c->pool->device,image,&address,&bytes)!=VK_SUCCESS) {
+            CMD_MARK("PS5VK_IMAGE_BARRIER_REFUSE format=%u usage=0x%x swapchain=%u layout=%u>%u access=0x%x>0x%x stages=0x%x>0x%x",
+                (unsigned)image->info.format,(unsigned)image->info.usage,
+                (unsigned)image->swapchain_owned,(unsigned)b->oldLayout,
+                (unsigned)b->newLayout,(unsigned)b->srcAccessMask,
+                (unsigned)b->dstAccessMask,(unsigned)src,(unsigned)dst);
+            invalid(c);return;
+        }
     }
     /* Append only after every member validates: a rejected mixed dependency
      * never leaves a prefix of recorded operations behind. */

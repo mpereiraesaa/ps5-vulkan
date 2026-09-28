@@ -2,8 +2,13 @@
 """Build the bounded public-SDK DXVK first-draw recording witness (DXVK262-T10).
 
 Dynamic rendering, copy_commands2, maintenance1 and extended dynamic state all
-ship, so the witness is built on the ordinary SDK as their regression check."""
+ship, so the default witness uses the ordinary SDK. --cache-control builds an
+explicit diagnostic SDK variant for compute/graphics cold misses, warm
+derivatives and discard execution. --inline-uniform adds the inline compute
+update/copy/template oracle and the inline fragment image oracle. Neither build
+is hardware evidence."""
 
+import argparse
 import hashlib
 import json
 import os
@@ -24,8 +29,8 @@ def run(*command: str, env: dict | None = None) -> None:
     subprocess.run(command, cwd=ROOT, env=env, check=True)
 
 
-def checked_spirv(payload: bytes) -> None:
-    """A plain Vulkan-1.0 SPIR-V module with the Shader capability only."""
+def checked_spirv(payload: bytes, stage: str = "other") -> None:
+    """Accept only the stage's required Vulkan-1.0 SPIR-V capability."""
     if len(payload) % 4:
         raise ValueError("SPIR-V length is not word aligned")
     words = struct.unpack(f"<{len(payload) // 4}I", payload)
@@ -40,11 +45,25 @@ def checked_spirv(payload: bytes) -> None:
         if opcode == 17 and size == 2:  # OpCapability
             capabilities.add(words[index + 1])
         index += size
-    if capabilities != {1}:
-        raise ValueError("witness shaders use the Shader capability only")
+    if capabilities != ({2} if stage == "geom" else {3} if stage in ("tesc", "tese") else {1}):
+        raise ValueError("unexpected witness SPIR-V capabilities")
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    variants = parser.add_mutually_exclusive_group()
+    variants.add_argument("--cache-control", action="store_true",
+                        help="build the diagnostic compute/graphics cache execution variant")
+    variants.add_argument("--inline-uniform", action="store_true",
+                          help="build the diagnostic inline compute and graphics execution variant")
+    variants.add_argument("--maintenance4-interface", action="store_true",
+                          help="build the shipping maintenance4 relaxed graphics interface witness")
+    parser.add_argument("--inline-graphics-boundary", choices=("vertex", "fragment", "geometry",
+                                                        "tess-control", "tess-evaluation"),
+                        help="exercise four256-byte blocks in the selected graphics stage")
+    args = parser.parse_args()
+    if args.inline_graphics_boundary and not args.inline_uniform:
+        parser.error("--inline-graphics-boundary requires --inline-uniform")
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
@@ -55,8 +74,13 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    build = ROOT / "build/dxvk-render-witness"
-    dist = ROOT / "dist-dxvk-render-witness/PPSA99994"
+    name = ("dxvk-inline-witness" if args.inline_uniform else
+            "dxvk-cache-witness" if args.cache_control else
+            "dxvk-maintenance4-witness" if args.maintenance4_interface else "dxvk-render-witness")
+    if args.inline_graphics_boundary:
+        name += "-" + args.inline_graphics_boundary + "-boundary"
+    build = ROOT / "build" / name
+    dist = ROOT / ("dist-" + name) / "PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -64,6 +88,26 @@ def main() -> None:
         "dxvk_render_witness_vert_spirv": ROOT / "experiments/graphics/dxvk_render_witness.vert",
         "dxvk_render_witness_frag_spirv": ROOT / "experiments/graphics/dxvk_render_witness.frag",
     }
+    if args.maintenance4_interface:
+        shaders["dxvk_render_witness_vert_spirv"] = ROOT / "experiments/graphics/dxvk_maintenance4_interface.vert"
+        shaders["dxvk_render_witness_frag_spirv"] = ROOT / "experiments/graphics/dxvk_maintenance4_interface.frag"
+    if args.cache_control:
+        shaders["dxvk_cache_compute_spirv"] = ROOT / "experiments/compute/cache_witness.comp"
+    if args.inline_uniform:
+        shaders["dxvk_render_witness_frag_spirv"] = ROOT / "experiments/graphics/dxvk_inline_witness.frag"
+        shaders["dxvk_inline_compute_spirv"] = ROOT / "experiments/compute/inline_witness.comp"
+        shaders["dxvk_inline_boundary_spirv"] = ROOT / "experiments/compute/inline_boundary.comp"
+        shaders["dxvk_inline_split_spirv"] = ROOT / "experiments/compute/inline_split.comp"
+    if args.inline_graphics_boundary:
+        shaders["dxvk_render_witness_frag_spirv"] = ROOT / "experiments/graphics/dxvk_render_witness.frag"
+        if args.inline_graphics_boundary in ("tess-control", "tess-evaluation"):
+            for stage in ("tesc", "tese"):
+                variant = "dxvk_inline_boundary" if args.inline_graphics_boundary == (
+                    "tess-control" if stage == "tesc" else "tess-evaluation") else "dxvk_tess_passthrough"
+                shaders["dxvk_render_witness_" + stage + "_spirv"] = ROOT / f"experiments/graphics/{variant}.{stage}"
+        else:
+            stage = {"vertex":"vert", "fragment":"frag", "geometry":"geom"}[args.inline_graphics_boundary]
+            shaders["dxvk_render_witness_" + stage + "_spirv"] = ROOT / ("experiments/graphics/dxvk_inline_boundary." + stage)
     arrays = []
     shader_hashes = {}
     for name, shader_source in shaders.items():
@@ -71,14 +115,20 @@ def main() -> None:
         run(glslang, "-V", "--target-env", "vulkan1.0", str(shader_source),
             "-o", str(target))
         payload = target.read_bytes()
-        checked_spirv(payload)
+        checked_spirv(payload, stage=name.removeprefix("dxvk_render_witness_").removesuffix("_spirv"))
         arrays.append(emit_array(name, payload))
         shader_hashes[name] = hashlib.sha256(payload).hexdigest()
     (build / "dxvk_render_witness_shaders.h").write_text(
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
 
-    # The ordinary SDK: every route the witness negotiates ships.
+    # Only explicit variants enable their unpromoted diagnostic routes.
     sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk))
+    # Refuse ambient diagnostics: the receipt must describe the actual SDK.
+    for key, value in sdk_env.items():
+        if key.startswith("PS5VK_") and "DIAGNOSTIC" in key and value != "0":
+            raise SystemExit(f"unset ambient diagnostic {key} before building witness")
+    sdk_env["PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC"] = "1" if args.cache_control else "0"
+    sdk_env["PS5VK_INLINE_UNIFORM_DIAGNOSTIC"] = "1" if args.inline_uniform else "0"
     run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
     source = ROOT / "examples/dxvk_render_witness/main.c"
@@ -86,6 +136,12 @@ def main() -> None:
     dep = build / "main.d"
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
+        *(["-DPS5VK_CACHE_CONTROL_WITNESS=1"] if args.cache_control else []),
+        *(["-DPS5VK_MAINTENANCE4_INTERFACE_WITNESS=1"] if args.maintenance4_interface else []),
+        *(["-DPS5VK_INLINE_UNIFORM_WITNESS=1"] if args.inline_uniform else []),
+        *(["-DPS5VK_INLINE_GRAPHICS_STAGE=" + {"vertex":"1","fragment":"16","geometry":"8",
+             "tess-control":"2","tess-evaluation":"4"}[args.inline_graphics_boundary]]
+          if args.inline_graphics_boundary else []),
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger),
@@ -134,12 +190,26 @@ def main() -> None:
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": "dxvk-render-public-sdk-witness",
+        "profile": ("dxvk-inline-public-sdk-witness" if args.inline_uniform else
+                    "dxvk-cache-public-sdk-witness" if args.cache_control else
+                    "dxvk-maintenance4-public-sdk-witness" if args.maintenance4_interface else
+                    "dxvk-render-public-sdk-witness"),
+        "maintenance4_interface_version": 1 if args.maintenance4_interface else None,
+        "inline_execution_version": 7 if args.inline_uniform else None,
+        "inline_graphics_stage": ((args.inline_graphics_boundary or "small").replace("-", "_")) if args.inline_uniform else None,
+        "cache_execution_version": 2 if args.cache_control else None,
         "extent": 64, "format": "R8G8B8A8_UNORM",
-        "diagnostic_switch": None,
+        "diagnostic_switch": ("PS5VK_INLINE_UNIFORM_DIAGNOSTIC" if args.inline_uniform else
+                              "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC" if args.cache_control else None),
+        "inline_compute_sha256": hashlib.sha256((source.parent / "inline_compute.h").read_bytes()).hexdigest()
+            if args.inline_uniform else None,
+        "inline_graphics_sha256": hashlib.sha256((source.parent / "inline_graphics.h").read_bytes()).hexdigest()
+            if args.inline_uniform else None,
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "cache_compute_sha256": hashlib.sha256((source.parent / "cache_compute.h").read_bytes()).hexdigest()
+            if args.cache_control else None,
     }
     artifact_path = dist.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")

@@ -118,14 +118,15 @@ static VkResult prepare(VkDevice device, const struct ps5vk_submission *submissi
             }
             size_t code_bytes = program->code_words * 4;
             size_t table_offset = (code_bytes + 255) & ~(size_t)255;
-            /* Each set's table is as long as the records the program reads
-             * (up to PS5VK_MAX_DESCRIPTORS of them); the bootstrap template
+            /* Each set's table holds the records the program reads and their
+             * inline snapshots; the bootstrap template
              * still needs one mapped 512-byte anchor when no set is read. */
             size_t set_dwords[PS5VK_MAX_SETS] = {0}, set_offsets[PS5VK_MAX_SETS] = {0};
             size_t table_bytes = 0;
             for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set) {
                 if (!(program->descriptor_set_mask & (1u << set))) continue;
-                set_dwords[set] = ps5vk_compute_table_dwords(program, set);
+                set_dwords[set] = ps5vk_compute_table_dwords(program, set,
+                    op->sets[set] ? &op->sets[set]->signature : NULL);
                 if (!set_dwords[set]) { result = VK_ERROR_UNKNOWN; goto fail; }
                 set_offsets[set] = table_bytes / 4;
                 table_bytes += (set_dwords[set] * 4 + 15) & ~(size_t)15;

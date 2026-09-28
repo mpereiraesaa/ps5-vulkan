@@ -133,6 +133,11 @@ static void dispatch_base_flag(void)
     vkDestroyPipeline(&d, pipeline, NULL);
     ci.flags |= VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
     assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
+                                    &pipeline) == VK_SUCCESS);
+    assert(pipeline->dispatch_base_enabled && pipeline->allow_derivatives);
+    vkDestroyPipeline(&d, pipeline, NULL);
+    ci.flags |= VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
+    assert(vkCreateComputePipelines(&d, VK_NULL_HANDLE, 1, &ci, NULL,
                                     &pipeline) != VK_SUCCESS);
     assert(!pipeline);
     vkDestroyPipelineLayout(&d, l, NULL);
@@ -369,6 +374,26 @@ static void diagnostic_compute_broadcast_gate(void)
     vkDestroyPipeline(&device, pipeline, NULL);
     vkDestroyShaderModule(&device, module, NULL);
 
+    struct VkPhysicalDevice_T physical = {0};
+    device.physical = &physical;
+    device.platform_features = 0;
+    physical.platform.supported_features_v13 = PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+
+    /* The private compute gate admits the complete BALLOT opcode family;
+     * the public supportedOperations bit remains independent and off. */
+    for (uint32_t opcode = 337u; opcode <= 344u; ++opcode) {
+        words[20] = (5u << 16) | opcode;
+        assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+        vkDestroyShaderModule(&device, module, NULL);
+        module = VK_NULL_HANDLE;
+    }
     words[20] = (5u << 16) | 345u; /* Shuffle is outside the measured slice. */
     assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
            VK_ERROR_FEATURE_NOT_PRESENT && !module);
@@ -469,7 +494,25 @@ static void diagnostic_compute_iadd_gate(void)
     vkDestroyPipeline(&device, pipeline, NULL);
     vkDestroyShaderModule(&device, module, NULL);
 
-    words[20] = (5u << 16) | 351u; /* IMul is outside the diagnostic gate. */
+    struct VkPhysicalDevice_T physical = {0};
+    device.physical = &physical;
+    device.platform_features = 0;
+    physical.platform.supported_features_v13 = PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
+
+    for (uint32_t opcode = 349u; opcode <= 361u; ++opcode) {
+        words[20] = (5u << 16) | opcode;
+        assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+        vkDestroyShaderModule(&device, module, NULL);
+        module = VK_NULL_HANDLE;
+    }
+    words[20] = (5u << 16) | 362u; /* No opcode beyond the arithmetic family. */
     assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
            VK_ERROR_FEATURE_NOT_PRESENT && !module);
     words[20] = (5u << 16) | 349u;
@@ -482,6 +525,94 @@ static void diagnostic_compute_iadd_gate(void)
            VK_ERROR_FEATURE_NOT_PRESENT && !module);
     vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
     assert(!device.pipeline_objects && !device.descriptor_objects);
+}
+static void subgroup_dynamic_id_gate(void)
+{
+    uint32_t words[30];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[3] = 3;
+    words[5] = words[7] = (2u << 16) | 17u;
+    words[6] = 61u;
+    words[8] = 64u;
+    memcpy(words + 9, module_a + 5, 11 * sizeof(uint32_t));
+    words[20] = (4u << 16) | 43u; /* Constant source lane, result id 2. */
+    words[21] = 1u; words[22] = 2u; words[23] = 7u;
+    words[24] = (6u << 16) | 337u;
+    words[25] = words[26] = words[27] = words[28] = 1u;
+    words[29] = 2u;
+    struct VkPhysicalDevice_T physical = {0};
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    physical.platform.supported_features_v13 =
+        PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+        PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+    struct VkDevice_T device = {.physical = &physical};
+    VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    words[29] = 1u; /* Runtime ID has no constant defining instruction. */
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.enabled_features_v13 = PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    device.enabled_features_v13 = 0;
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects);
+}
+static void subgroup_extended_type_gate(void)
+{
+    uint32_t words[] = {
+        0x07230203, 0x10300, 0, 16, 0,
+        (2u << 16) | 17u, 61u, /* GroupNonUniform */
+        (2u << 16) | 17u, 63u, /* GroupNonUniformArithmetic */
+        (2u << 16) | 17u, 22u, /* Int16 */
+        (5u << 16) | 15u, 5u, 1u, 0x6e69616du, 0,
+        (4u << 16) | 21u, 2u, 16u, 1u, /* signed 16-bit scalar */
+        (4u << 16) | 23u, 3u, 2u, 2u, /* vector of two int16 */
+        (4u << 16) | 21u, 4u, 32u, 1u, /* 32-bit control */
+        (6u << 16) | 349u, 2u, 7u, 8u, 0u, 9u, /* IAdd */
+    };
+    const size_t result_type = sizeof(words) / sizeof(words[0]) - 5u;
+    struct VkPhysicalDevice_T physical = {0};
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    physical.platform.supported_features =
+        PS5VK_FEATURE_SHADER_INT16 | PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
+    physical.platform.supported_features_v13 =
+        PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+        PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE |
+        PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
+    struct VkDevice_T device = {.physical = &physical,
+        .enabled_features = PS5VK_FEATURE_SHADER_INT16};
+    VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.enabled_features_v13 = PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL); module = VK_NULL_HANDLE;
+    words[result_type] = 3u; /* Vector result needs the same opt-in. */
+    device.enabled_features_v13 = 0;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.enabled_features_v13 = PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL); module = VK_NULL_HANDLE;
+    words[result_type] = 4u; /* Unrelated Int16 declaration does not gate IAdd32. */
+    device.enabled_features_v13 = 0;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL); module = VK_NULL_HANDLE;
+    words[result_type] = 2u;
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects);
 }
 static void unadvertised_int16_gate(void)
 {
@@ -516,14 +647,130 @@ static void unadvertised_int16_gate(void)
     vkDestroyShaderModule(&device, module, NULL);
     assert(!device.pipeline_objects && !device.descriptor_objects);
 }
+static void unadvertised_wide_type_gate(void)
+{
+    uint32_t words[18];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = (2u << 16) | 17u;
+    memcpy(words + 7, module_a + 5, 11 * sizeof(uint32_t));
+    VkShaderModuleCreateInfo shader_info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    struct VkDevice_T device = {0};
+    VkShaderModule module = VK_NULL_HANDLE;
+    for (unsigned cap = 9u; cap <= 11u; cap += 2u) {
+        words[6] = cap;
+        assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !module);
+        device.platform_features = PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
+        assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+        vkDestroyShaderModule(&device, module, NULL);
+        module = VK_NULL_HANDLE;
+        device.platform_features = 0;
+    }
+    assert(!device.pipeline_objects);
+}
+static void subgroup_stage_contract(void)
+{
+    const uint32_t shapes[][3]={{64,1,1},{16,2,1},{1,32,1},{32,3,1},{32,32,1},{1024,1,1},{33,1,1}};
+    for(unsigned shape=0;shape<sizeof(shapes)/sizeof(shapes[0]);++shape) {
+        uint32_t words[16];memcpy(words,module_a,sizeof(words));
+        memcpy(words+13,shapes[shape],sizeof(shapes[shape]));
+        struct ps5vk_compiled_program program=fixture(words,code_a);
+        memcpy(program.local_size,shapes[shape],sizeof(program.local_size));
+        struct ps5vk_program_library library={&program,1};
+        struct VkDevice_T d={.compiler={&library,ps5vk_program_resolve}};
+        VkShaderModule m=shader(&d,words);VkPipelineLayout l=layout(&d);
+        VkComputePipelineCreateInfo ci=info(m,l);VkPipeline pipeline=NULL;
+        VkPipelineShaderStageRequiredSubgroupSizeCreateInfo required={
+            .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
+            .requiredSubgroupSize=32};
+        for(unsigned enable=0;enable<4;++enable) {
+            d.subgroup_size_control_enabled=!!(enable&1);
+            d.compute_full_subgroups_enabled=!!(enable&2);
+            for(unsigned flags=0;flags<4;++flags) for(unsigned explicit_size=0;explicit_size<2;++explicit_size) {
+                ci.stage.flags=(flags&1?VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT:0)|
+                    (flags&2?VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT:0);
+                ci.stage.pNext=explicit_size?&required:NULL;
+                VkBool32 feature_missing=((flags&1) && !(enable&1)) || ((flags&2) && !(enable&2));
+                VkBool32 malformed=explicit_size && (flags&1);
+                VkResult expected=feature_missing?VK_ERROR_FEATURE_NOT_PRESENT:
+                    malformed?VK_ERROR_UNKNOWN:
+                    (explicit_size && !(enable&1))?VK_ERROR_FEATURE_NOT_PRESENT:
+                    ((flags&2) && shapes[shape][0]%32)?VK_ERROR_UNKNOWN:VK_SUCCESS;
+                VkResult result=vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline);
+                assert(result==expected);
+                if(result==VK_SUCCESS) {
+                    assert(pipeline && pipeline->program.wave_size==32);
+                    vkDestroyPipeline(&d,pipeline,NULL);pipeline=NULL;
+                } else assert(!pipeline);
+            }
+        }
+        d.subgroup_size_control_enabled=d.compute_full_subgroups_enabled=VK_TRUE;
+        ci.stage.flags=0;ci.stage.pNext=&required;
+        const uint32_t invalid_sizes[]={0,1,16,31,33,64,UINT32_MAX};
+        for(unsigned n=0;n<sizeof(invalid_sizes)/sizeof(invalid_sizes[0]);++n) {
+            required.requiredSubgroupSize=invalid_sizes[n];
+            assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        }
+        required.requiredSubgroupSize=32;required.pNext=&required;
+        assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        required.pNext=NULL;required.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        required.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO;
+        ci.stage.flags=0x80000000u;
+        assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        ci.stage.flags=0;program.wave_size=64;
+        assert(vkCreateComputePipelines(&d,VK_NULL_HANDLE,1,&ci,NULL,&pipeline)==VK_ERROR_UNKNOWN && !pipeline);
+        vkDestroyShaderModule(&d,m,NULL);vkDestroyPipelineLayout(&d,l,NULL);
+        assert(!d.pipeline_objects && !d.descriptor_objects && !d.lifetime_errors);
+    }
+}
+
+static void integer_dot_module_gate(void)
+{
+    /* Structural admission fixtures for all six shader execution models;
+     * executable integer-dot compiler fixtures are a separate contract. */
+    for (uint32_t model = 0; model <= 5; ++model) {
+        for (unsigned variant = 0; variant < 10; ++variant) {
+            uint32_t words[24] = {0};
+            memcpy(words, module_a, sizeof(module_a)); words[6] = model;
+            const unsigned n = variant < 4 ? 2 : (variant < 7 ? 5 : 6);
+            words[16] = (n << 16) | (variant < 4 ? 17u : 4450u + variant - 4);
+            words[17] = variant < 4 ? 6016u + variant : 1;
+            VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .codeSize = (16 + n) * sizeof(uint32_t), .pCode = words};
+            struct VkPhysicalDevice_T physical = {0};
+            physical.platform.supported_features_v13 = PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;
+            struct VkDevice_T d = {.physical = &physical};
+            VkShaderModule module = VK_NULL_HANDLE;
+            assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_ERROR_FEATURE_NOT_PRESENT && !module);
+            d.enabled_features_v13 = PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL | PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS;
+            assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_ERROR_FEATURE_NOT_PRESENT && !module);
+            d.enabled_features_v13 |= PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;
+            assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_SUCCESS && module);
+            vkDestroyShaderModule(&d, module, NULL); assert(!d.pipeline_objects);
+            /* OpDot (floating point) remains independent of the integer opt-in. */
+            d.enabled_features_v13 = 0; words[16] = (5u << 16) | 148u;
+            info.codeSize = 21 * sizeof(uint32_t);
+            assert(vkCreateShaderModule(&d, &info, NULL, &module) == VK_SUCCESS && module);
+            vkDestroyShaderModule(&d, module, NULL); assert(!d.pipeline_objects);
+        }
+    }
+}
+
 int main(void)
 {
+    integer_dot_module_gate();
+    subgroup_stage_contract();
     full_set_table_offsets();
     lifecycle(); legacy_offline_abi(); dispatch_base_flag(); negative(); graphics_entries();
     t08_capability_gates(); uniform_block_layout_gate(); unadvertised_subgroup_gate();
     diagnostic_compute_basic_gate();
     int8_compute_probe_gate();
     diagnostic_compute_broadcast_gate(); diagnostic_compute_iadd_gate();
+    subgroup_dynamic_id_gate();
+    subgroup_extended_type_gate();
     unadvertised_int16_gate();
+    unadvertised_wide_type_gate();
     puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
 }

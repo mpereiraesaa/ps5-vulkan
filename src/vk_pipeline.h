@@ -123,6 +123,7 @@ struct VkPipeline_T {
     void *cache_entry;
     VkBool32 graphics;
     VkBool32 dispatch_base_enabled;
+    VkBool32 allow_derivatives;
     VkBool32 graphics_usage_known;
     uint32_t graphics_used_set_mask;
     /* The subpass this graphics pipeline was created against. A pipeline is
@@ -212,4 +213,10 @@ static inline int ps5vk_graphics_set_required(VkPipeline p,unsigned set)
     return p && set<p->set_count && set<PS5VK_MAX_SETS && p->sets[set].count &&
         (!p->graphics_usage_known || (p->graphics_used_set_mask & (1u<<set)));
 }
+/* Derivatives are creation-time optimization hints. Each result owns its code;
+ * no base-pipeline reference survives creation. indexed_flags is consulted only
+ * after validating that base_index names an earlier member of the batch. */
+VkBool32 ps5vk_pipeline_derivative_valid(VkDevice, VkPipelineCreateFlags,
+    VkPipeline base, int32_t base_index, uint32_t ordinal,
+    VkPipelineCreateFlags indexed_flags, VkBool32 graphics);
 #endif

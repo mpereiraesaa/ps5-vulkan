@@ -52,6 +52,23 @@ static inline VkBool32 ps5vk_tiled_cube_sampled_image(VkImage image)
         image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
         image->info.mipLevels == 1 && image->info.arrayLayers >= 6;
 }
+/* DXVK's single-layer colour backbuffer is rendered, sampled by the display
+ * blit and copied for CPU readback. It has the same 64KB_R_X storage as a
+ * colour attachment, not the padded-linear sampled-image backing. */
+static inline VkBool32 ps5vk_tiled_2d_sampled_color_image(VkImage image)
+{
+    return image && (image->info.format == VK_FORMAT_R8G8B8A8_UNORM ||
+                     image->info.format == VK_FORMAT_B8G8R8A8_UNORM) &&
+        image->info.imageType == VK_IMAGE_TYPE_2D && !image->info.flags &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.usage == (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                              VK_IMAGE_USAGE_SAMPLED_BIT |
+                              VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                              VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1;
+}
 struct VkImageView_T {
     VkDevice device;
     VkAllocationCallbacks allocator;
@@ -60,6 +77,8 @@ struct VkImageView_T {
     VkImageViewType view_type;
     VkImageSubresourceRange range;
     VkFormat format;
+    /* Vulkan component remap carried into the GFX10 sampled descriptor. */
+    VkComponentMapping components;
     /* The usage VkImageViewUsageCreateInfo narrowed this view to, or zero when
      * the view was created without it and inherits its image's usage. The
      * structure cannot name an empty usage, so zero is unambiguous. */
@@ -179,7 +198,15 @@ static inline VkBool32 ps5vk_rgba_linear_image(VkImage image)
     const VkImageCreateInfo *i = &image->info;
     const VkImageUsageFlags allowed = VK_IMAGE_USAGE_SAMPLED_BIT |
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    return (i->format == VK_FORMAT_R8G8B8A8_UNORM || i->format == VK_FORMAT_R8G8B8A8_SRGB) &&
+    /* BGRA textures with a sampled role use the same padded-linear byte
+     * upload/readback executor; the BGRA transfer-only display target and the
+     * four-role tiled backbuffer retain their separate storage routes. */
+    const VkBool32 sampled_bgra =
+        (i->format == VK_FORMAT_B8G8R8A8_UNORM ||
+         i->format == VK_FORMAT_B8G8R8A8_SRGB) &&
+        (i->usage & VK_IMAGE_USAGE_SAMPLED_BIT);
+    return (i->format == VK_FORMAT_R8G8B8A8_UNORM ||
+            i->format == VK_FORMAT_R8G8B8A8_SRGB || sampled_bgra) &&
         i->imageType == VK_IMAGE_TYPE_2D && i->tiling == VK_IMAGE_TILING_OPTIMAL &&
         i->extent.depth == 1 && i->mipLevels && i->mipLevels <= PS5VK_MAX_TEXTURE_MIP_LEVELS &&
         i->arrayLayers && i->samples == VK_SAMPLE_COUNT_1_BIT &&
@@ -425,6 +452,22 @@ static inline VkBool32 ps5vk_integer_colour_readback_image(VkImage image)
         image->info.usage == exact && !image->info.flags;
 }
 
+/* The mutable DXVK BGRA8 colour target can be copied back in its native byte
+ * order. Its optional sampled role does not change the tiled 64KB_R_X layout. */
+static inline VkBool32 ps5vk_bgra8_colour_readback_image(VkImage image)
+{
+    const VkImageUsageFlags required = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return image && image->info.format == VK_FORMAT_B8G8R8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D && !image->info.flags &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1 &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        (image->info.usage == required ||
+         image->info.usage == (required | VK_IMAGE_USAGE_SAMPLED_BIT));
+}
+
 static inline VkBool32 ps5vk_d32_gather_image(VkImage image)
 {
     const VkImageUsageFlags exact = VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -443,6 +486,7 @@ static inline VkBool32 ps5vk_d32_gather_image(VkImage image)
 static inline VkBool32 ps5vk_colour_readback_image(VkImage image)
 {
     return ps5vk_basic_colour_readback_image(image) ||
+        ps5vk_bgra8_colour_readback_image(image) ||
         ps5vk_integer_colour_readback_image(image) ||
         ps5vk_colour_transfer_image(image) ||
         ps5vk_input_attachment_readback_image(image);

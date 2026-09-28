@@ -18,8 +18,47 @@ static void rejects(unsigned count,struct ps5vk_set_signature *sets)
     assert(ps5vk_descriptor_table_layout_build(count,sets,&out)!=VK_SUCCESS);
     assert(!memcmp(&out,&before,sizeof(out)));
 }
+static void inline_payload_layouts(void)
+{
+    struct ps5vk_set_signature set = {0};
+    for (unsigned b = 0; b < 4; ++b) {
+        set.binding[b] = (struct ps5vk_binding){.count=1,.stages=VK_SHADER_STAGE_ALL};
+        set.type[b] = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+        set.inline_bytes[b] = 256;
+    }
+    prefix(&set);
+    struct ps5vk_descriptor_table_layout table;
+    assert(ps5vk_descriptor_table_layout_build(1, &set, &table) == VK_SUCCESS);
+    assert(table.set_bytes[0] == 4 * 272 && table.set_bytes[0] / 4 <= PS5VK_MAX_TABLE_DWORDS);
+    for (unsigned b = 0; b < 4; ++b)
+        assert(table.binding[0][b].byte_offset == b * 272 && table.binding[0][b].byte_stride == 16 &&
+            ps5vk_descriptor_span_dwords(&set, b, set.type[b]) == 68);
+    struct ps5vk_set_signature good = set;
+    const uint32_t invalid_sizes[] = {0, 1, 6, 260, UINT32_MAX};
+    for (unsigned i = 0; i < sizeof(invalid_sizes) / sizeof(invalid_sizes[0]); ++i) {
+        set.inline_bytes[0] = invalid_sizes[i]; rejects(1, &set);
+    }
+    set = good;
+    set.binding[0].count = 2; prefix(&set); rejects(1, &set); set = good;
+    set.binding[4] = set.binding[0]; set.type[4] = set.type[0];
+    set.inline_bytes[4] = 4; prefix(&set); rejects(1, &set); set = good;
+    set.inline_bytes[4] = 4; rejects(1, &set); set = good;
+    set.type[0] = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; rejects(1, &set); set = good;
+    /* Padding belongs to each inline binding and never changes its record stride. */
+    const uint32_t sizes[] = {4, 20, 32, 252};
+    uint32_t offset = 0;
+    for (unsigned b = 0; b < 4; ++b) set.inline_bytes[b] = sizes[b];
+    assert(ps5vk_descriptor_table_layout_build(1, &set, &table) == VK_SUCCESS);
+    for (unsigned b = 0; b < 4; ++b) {
+        assert(table.binding[0][b].byte_offset == offset);
+        offset += 16 + ((sizes[b] + 15) & ~15u);
+    }
+    assert(table.set_bytes[0] == offset);
+}
+
 int main(void)
 {
+    inline_payload_layouts();
     struct ps5vk_descriptor_table_layout out;
     assert(ps5vk_descriptor_table_layout_build(0,NULL,&out)==VK_SUCCESS);
     assert(!out.binding_count && !out.descriptor_count);
@@ -92,13 +131,13 @@ int main(void)
     assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)==32);
     assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_SAMPLER)==16);
     assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)==16);
-    assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)==0);
+    assert(ps5vk_descriptor_record_bytes(VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)==16);
     assert(ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_SAMPLER)==4 &&
            ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)==8 &&
            ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)==4 &&
            ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)==8 &&
            ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)==4);
-    assert(!ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
+    assert(ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)==12 &&
            !ps5vk_compute_record_dwords(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT));
     memset(sets,0,sizeof(sets));
     for(unsigned s=0;s<2;++s) {

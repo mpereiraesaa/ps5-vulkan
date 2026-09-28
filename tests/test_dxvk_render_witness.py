@@ -9,15 +9,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from run_dxvk_render_witness import (  # noqa: E402
     EXTENT, SAMPLE_POINTS, expected_digest, expected_image, front_facing_clockwise, rgba,
-    verify)
+    verify, expected_compute_digest, expected_inline_digest)
 
 ARTIFACT = dict(profile="dxvk-render-public-sdk-witness", extent=64, format="R8G8B8A8_UNORM",
                 diagnostic_switch=None, eboot_sha256="artifact-sha")
 
 
 def fixture_log(*, features=(1, 1), mismatches=(0, 0, 0), visible=None, top=None,
-                digest=None, samples=None, retired=True, failure=False):
-    image, expected_visible, expected_top = expected_image()
+                digest=None, samples=None, retired=True, failure=False, tessellation=False):
+    image, expected_visible, expected_top = expected_image(tessellation=tessellation)
     samples = samples or [image[y * EXTENT + x] for x, y in SAMPLE_POINTS]
     lines = ["DXVK_RENDER_WITNESS_START extent=64 dynamicRendering=%d extendedDynamicState=%d"
              % features,
@@ -29,7 +29,7 @@ def fixture_log(*, features=(1, 1), mismatches=(0, 0, 0), visible=None, top=None
              "submissions=1 fence=complete" % (
                  *mismatches, expected_visible if visible is None else visible,
                  expected_top if top is None else top,
-                 expected_digest() if digest is None else digest)]
+                 expected_digest(tessellation=tessellation) if digest is None else digest)]
     if failure:
         lines.append("DXVK_RENDER_WITNESS_FAILURE result=-3 step=vkQueueSubmit")
     if retired:
@@ -62,6 +62,13 @@ class ExpectedImage(unittest.TestCase):
         self.assertEqual(image[5 * EXTENT + 7], rgba(28, 20, 64, 255))
         self.assertEqual(image[63 * EXTENT + 47], rgba(188, 252, 64, 255))
 
+    def test_tessellation_oracle_keeps_both_markers_without_culling(self):
+        image, visible, top = expected_image(tessellation=True)
+        self.assertEqual((visible, top), (6, 0))
+        self.assertEqual(image[0 * EXTENT + 48], rgba(0, 0, 255, 255))
+        self.assertEqual(image[63 * EXTENT + 63], rgba(0, 255, 0, 255))
+        self.assertNotEqual(expected_digest(tessellation=True), expected_digest())
+
 
 class Verify(unittest.TestCase):
     def test_accepts_the_exact_result(self):
@@ -89,6 +96,197 @@ class Verify(unittest.TestCase):
             verify(log, receipt(log), dict(ARTIFACT, diagnostic_switch="PS5VK_X"))
         with self.assertRaises(ValueError):
             verify(log, dict(receipt(log), bye=False), ARTIFACT)
+
+
+class Maintenance4InterfaceVerify(unittest.TestCase):
+    artifact = dict(ARTIFACT, profile="dxvk-maintenance4-public-sdk-witness",
+                    maintenance4_interface_version=1)
+    marker = b"DXVK_MAINTENANCE4_INTERFACE producer=4 consumer=2 feature=enabled\n"
+
+    def log(self):
+        return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP", self.marker + b"DXVK_RENDER_WITNESS_STEP")
+
+    def test_exact_interface_and_image(self):
+        log = self.log()
+        self.assertTrue(verify(log, receipt(log), self.artifact)["strict_verified"])
+        for bad in (log.replace(self.marker, b""), log.replace(self.marker, self.marker * 2),
+                    log.replace(b"producer=4", b"producer=3"),
+                    log.replace(b"consumer=2", b"consumer=4"),
+                    log.replace(b"feature=enabled", b"feature=disabled"),
+                    fixture_log() + self.marker):
+            with self.subTest(log=bad), self.assertRaises(ValueError):
+                verify(bad, receipt(bad), self.artifact)
+        with self.assertRaises(ValueError):
+            verify(log, receipt(log), dict(self.artifact, maintenance4_interface_version=0))
+        with self.assertRaises(ValueError):
+            verify(log, receipt(log), ARTIFACT)
+
+
+class CacheVerify(unittest.TestCase):
+    artifact = dict(ARTIFACT, profile="dxvk-cache-public-sdk-witness",
+                    diagnostic_switch="PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC", cache_execution_version=2)
+    created = ("DXVK_CACHE_WITNESS_CREATED cold_misses=2 warm_derivatives=2 "
+               "bases_retired=2 cache_retired=1\n")
+    queries = "DXVK_CACHE_WITNESS_QUERIES normal=3072 discard=0\n"
+
+    compute = ("DXVK_CACHE_WITNESS_COMPUTE words=1024 cold_misses=2 warm_derivatives=1 "
+               "factor=5 mismatches=0 guards=0 inputs=0 digest=" + expected_compute_digest() +
+               " submissions=1 fence=complete resources=retired\n")
+
+    def log(self, created=None, queries=None, compute=None):
+        return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP",
+            ((self.compute if compute is None else compute) +
+             (self.created if created is None else created) +
+             (self.queries if queries is None else queries)).encode() + b"DXVK_RENDER_WITNESS_STEP")
+
+    def test_cache_image_and_lifetime_result(self):
+        log = self.log()
+        out = verify(log, receipt(log), self.artifact)
+        self.assertTrue(out["strict_verified"])
+        self.assertEqual(out["profile"], self.artifact["profile"])
+
+    def test_missing_duplicate_false_or_out_of_order_cache_evidence(self):
+        for log in (self.log(created=""), self.log(queries=""),
+                    self.log(created=self.created * 2), self.log(queries=self.queries * 2),
+                    self.log(created=self.created.replace("bases_retired=2", "bases_retired=0")),
+                    self.log(created=self.created.replace("cold_misses=2", "cold_misses=1")),
+                    self.log(created=self.created.replace("warm_derivatives=2", "warm_derivatives=1")),
+                    self.log(created=self.created.replace("cache_retired=1", "cache_retired=0")),
+                    self.log(queries=self.queries.replace("3072", "0")),
+                    self.log(queries=self.queries.replace("3072", str(2**64 - 1))),
+                    self.log(queries=self.queries.replace("discard=0", "discard=1")),
+                    self.log(created=self.queries, queries=self.created),
+                    self.log() + b"DXVK_RENDER_WITNESS_PENDING resources=retained\n",
+                    self.log().replace(b"full_mismatches=0", b"full_mismatches=1")):
+            with self.subTest(log=log), self.assertRaises(ValueError):
+                verify(log, receipt(log), self.artifact)
+
+    def test_compute_result_requires_every_contract(self):
+        variants = ["", self.compute * 2]
+        for old, new in (("words=1024", "words=1023"), ("factor=5", "factor=3"),
+                         ("cold_misses=2", "cold_misses=1"),
+                         ("warm_derivatives=1", "warm_derivatives=0"),
+                         ("mismatches=0", "mismatches=1"), ("guards=0", "guards=1"),
+                         ("inputs=0", "inputs=1"), (expected_compute_digest(), "00000000"),
+                         ("submissions=1", "submissions=0"), ("complete", "timeout"),
+                         ("retired", "pending")):
+            variants.append(self.compute.replace(old, new))
+        for compute in variants:
+            log = self.log(compute=compute)
+            with self.subTest(compute=compute), self.assertRaises(ValueError):
+                verify(log, receipt(log), self.artifact)
+        log = self.log()
+        with self.assertRaises(ValueError):
+            verify(log, receipt(log), dict(self.artifact, cache_execution_version=1))
+
+    def test_artifact_cannot_cross_profiles(self):
+        for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),
+                              (self.log(), dict(self.artifact, diagnostic_switch=None))):
+            with self.subTest(artifact=artifact), self.assertRaises(ValueError):
+                verify(log, receipt(log), artifact)
+
+
+class InlineVerify(unittest.TestCase):
+    artifact = dict(ARTIFACT, profile="dxvk-inline-public-sdk-witness",
+                    diagnostic_switch="PS5VK_INLINE_UNIFORM_DIAGNOSTIC", inline_execution_version=7, inline_graphics_stage="small")
+    compute = ("DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 mismatches=0 guards=0 digest=" +
+               expected_inline_digest() + " submissions=1 fence=complete resources=retired\n")
+
+    boundary = ("DXVK_INLINE_WITNESS_BOUNDARY blocks=4 bytes=1024 routes=4 words=1024 mismatches=0 guards=0 digest=" +
+                expected_inline_digest(256) + " submissions=1 fence=complete resources=retired\n")
+
+    graphics = "DXVK_INLINE_WITNESS_GRAPHICS stage=small blocks=2 bytes=24\n"
+    split = boundary.replace("WITNESS_BOUNDARY blocks=4", "WITNESS_SPLIT sets=4 blocks=4")
+
+    def log(self, compute=None, tessellation=False):
+        return fixture_log(tessellation=tessellation).replace(b"DXVK_RENDER_WITNESS_STEP",
+            ((self.compute if compute is None else compute) + self.boundary + self.split + self.graphics).encode() + b"DXVK_RENDER_WITNESS_STEP")
+
+    def test_exact_inline_result(self):
+        log = self.log()
+        result = verify(log, receipt(log), self.artifact)
+        self.assertTrue(result["strict_verified"])
+        self.assertEqual(result["total_submissions"], 4)
+
+    def test_inline_requires_each_result_and_ownership_field(self):
+        variants = ["", self.compute * 2, self.compute + "DXVK_INLINE_WITNESS_COMPUTE malformed\n"]
+        for old, new in (("routes=4", "routes=3"), ("words=1024", "words=1023"),
+                         ("mismatches=0", "mismatches=1"), ("guards=0", "guards=1"),
+                         (expected_inline_digest(), "00000000"), ("submissions=1", "submissions=0"),
+                         ("complete", "timeout"), ("retired", "pending")):
+            variants.append(self.compute.replace(old, new))
+        for compute in variants:
+            log = self.log(compute)
+            with self.subTest(compute=compute), self.assertRaises(ValueError):
+                verify(log, receipt(log), self.artifact)
+        for log in (self.compute.encode() + fixture_log(), fixture_log() + self.compute.encode(),
+                    self.log() + b"DXVK_RENDER_WITNESS_PENDING resources=retained\n"):
+            with self.assertRaises(ValueError):
+                verify(log, receipt(log), self.artifact)
+
+    def test_boundary_requires_full_result(self):
+        for bad in ("", self.boundary*2, self.boundary.replace("blocks=4","blocks=3"),
+                    self.boundary.replace("bytes=1024","bytes=280"),
+                    self.boundary.replace("mismatches=0","mismatches=1"),
+                    self.boundary.replace("guards=0","guards=1"),
+                    self.boundary.replace(expected_inline_digest(256),expected_inline_digest()),
+                    self.boundary.replace("complete","timeout"),
+                    self.boundary.replace("retired","pending")):
+            log=self.log().replace(self.boundary.encode(),bad.encode())
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                verify(log,receipt(log),self.artifact)
+
+    def test_split_requires_full_result(self):
+        for bad in ("", self.split*2, self.split.replace("sets=4","sets=1"),
+                    self.split.replace("bytes=1024","bytes=256"),
+                    self.split.replace("mismatches=0","mismatches=1"),
+                    self.split.replace("guards=0","guards=1"),
+                    self.split.replace("complete","timeout"),
+                    self.split.replace("retired","pending")):
+            log=self.log().replace(self.split.encode(),bad.encode())
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                verify(log,receipt(log),self.artifact)
+
+    def test_graphics_boundary_stage_and_capacity(self):
+        for stage in ("vertex", "fragment", "geometry", "tess_control", "tess_evaluation"):
+            marker=f"DXVK_INLINE_WITNESS_GRAPHICS stage={stage} blocks=4 bytes=1024\n"
+            is_tess = stage in ("tess_control", "tess_evaluation")
+            log=self.log(tessellation=is_tess).replace(self.graphics.encode(),marker.encode())
+            artifact=dict(self.artifact,inline_graphics_stage=stage)
+            self.assertTrue(verify(log,receipt(log),artifact)["strict_verified"])
+            if is_tess:
+                wrong_oracle = self.log().replace(self.graphics.encode(), marker.encode())
+                with self.assertRaises(ValueError):
+                    verify(wrong_oracle, receipt(wrong_oracle), artifact)
+            for bad in ("",marker*2,marker.replace("blocks=4","blocks=2"),
+                        marker.replace("bytes=1024","bytes=24"),
+                        marker.replace(stage,"fragment" if stage=="vertex" else "vertex")):
+                altered=log.replace(marker.encode(),bad.encode())
+                with self.subTest(stage=stage,bad=bad),self.assertRaises(ValueError):
+                    verify(altered,receipt(altered),artifact)
+            with self.assertRaises(ValueError):verify(log,receipt(log),self.artifact)
+
+    def test_fragment_boundary_all_words_are_visible(self):
+        image,_,_=expected_image()
+        for word in range(256):
+            pixels=[y*64+x for y in range(64) for x in range(48) if x%16+(y%16)*16==word]
+            self.assertEqual(len(pixels),12)
+            self.assertTrue(all(image[p]!=0xffff00ff for p in pixels))
+
+    def test_inline_cannot_cross_profiles_or_versions(self):
+        for log, artifact in ((self.log(), ARTIFACT), (fixture_log(), self.artifact),
+                             (self.log(), dict(self.artifact, profile="dxvk-inline-compute-public-sdk-witness")),
+                             (self.log(), dict(self.artifact, inline_execution_version=1)),
+                             (self.log(), dict(self.artifact, inline_execution_version=2)),
+                             (self.log(), dict(self.artifact, inline_execution_version=3)),
+                             (self.log(), dict(self.artifact, inline_execution_version=4)),
+                             (self.log(), dict(self.artifact, inline_execution_version=5)),
+                             (self.log(), dict(self.artifact, inline_execution_version=6)),
+                             (self.log(), dict(self.artifact, inline_graphics_stage=None)),
+                             (self.log(), dict(self.artifact, diagnostic_switch=None)),
+                             (CacheVerify().log(), self.artifact), (self.log(), CacheVerify.artifact)):
+            with self.subTest(artifact=artifact), self.assertRaises(ValueError):
+                verify(log, receipt(log), artifact)
 
 
 if __name__ == "__main__":

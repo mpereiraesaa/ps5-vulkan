@@ -53,6 +53,255 @@ onscreen DXVK presentation, all Vulkan 1.3 contracts or conformance. General
 core coverage remains a separate audit. Implemented command/feature paths and
 remaining resource limits are listed in [API.md](API.md).
 
+## Native DXVK display-adapter WSI witness (2026-09-28)
+
+An isolated public-SDK payload linked the PS5 display adapter from pinned
+DXVK 2.6.2 (`9d6f54a1ade20d1d27dd421024717a636f3d8c68`) to the ordinary
+ps5vk SDK built from `d3d8a0f4`. The adapter created a Vulkan display-plane
+surface, and the payload created the fixed two-image BGRA8 FIFO swapchain.
+It acquired, cleared, submitted, fenced and presented three frames in image
+order 0, 1, 0. The native presentation backend matched all three completion
+events; the last registration retired during close. The application closed
+cleanly and the previous eboot was restored. The console's previously
+owner-reported firmware was 12.02; this run did not query firmware again.
+
+- Witness eboot SHA-256: `9f3d0ec9f0ee999d9bec9d19d9ad3ba33980d4109763b96574c523aa7229782f`.
+- Adapter source SHA-256: `d96b3f9eae40d687dc828e98d587d49d7294fa1564d8e2072d7d8de40e7c4deb`.
+- Run: `20260928T165939465Z_PPSA99994_ps5vk_0x3add0685e2bd`; log SHA-256:
+  `7d042cd36df1168115baea69f919d5444c8377650a3c59cfa737ad0de05069a0`.
+- `tools/run_wsi_native_witness.py` returned `strict_verified=true` and
+  `lifecycle_ok=true`; after restoration, the console was idle with no claim.
+
+This validates the adapter and bounded ps5vk presentation path on hardware.
+It does not load a DXVK PE DLL, traverse Prospero Win's Vulkan bridge, or
+compare the displayed pixels with an independent visual oracle. Those are
+still required for D3D8/9/10/11 frontend acceptance.
+
+## Native DXVK presentation candidate: sampler refusal (2026-09-28)
+
+The separate pinned DXVK 2.6.2 D3D11/DXGI presentation payload, built against
+ordinary ps5vk `c65dcd2d`, created a feature-level 11_0 device and context.
+Swapchain creation then stopped at a pixel-coordinate sampler request:
+`vkCreateSampler` returned `VK_ERROR_FEATURE_NOT_PRESENT` with linear min/mag,
+nearest mip, clamp-to-border on all axes and
+`unnormalizedCoordinates=VK_TRUE`. The runner classified the result
+`incomplete`; no frame or pixel oracle was observed. It recorded no crash or
+suspected GPU hang, and the original project payload was restored.
+
+- Candidate eboot SHA-256: `b1c25f8cae6a93f998b2d91cd7f4bcc4a0c4e8c3a7ef009aaf85c286124fdc6e`.
+- Run: `20260928T173253093Z_PPSA99994_ps5vk_0x3cad32c5a047`; log SHA-256:
+  `e71d9d4ece14349c34a1aff56fc5ff123e202e3d9ca795ad5caed696ee9f8c74`.
+
+The sampler implementation now encodes GFX10 S# `FORCE_UNNORMALIZED` for
+Vulkan-valid pixel-coordinate samplers, and a host contract reproduces the
+DXVK call. A new native artifact from clean `41e426fd` confirmed that the
+sampler refusal moved: DXGI created its swapchain and backbuffer, the D3D11
+render target, staging resource, shaders, draw and copy all completed. Its
+readback `Map` then ended a command buffer with `VK_ERROR_UNKNOWN`. The first
+recorder refusal was an image barrier from colour attachment to shader-read
+layout for the rendered, sampled, transfer-capable backbuffer. No frame or
+pixel oracle passed; there was no crash or suspected GPU hang, and the
+original project payload was restored.
+
+- Second candidate eboot SHA-256: `a0bc87a9dc90fd42cb72a10da5203977b626519f308cce4a51258c59f6fb3537`.
+- Run: `20260928T174406278Z_PPSA99994_ps5vk_0x3d49ef299790`; log SHA-256:
+  `f837583cf727329a381c6c85f990c17340fc143a8e83954b2b6ad510e23fa459`.
+
+The next source slice records that exact render-to-sample dependency and
+encodes the single-layer tiled colour resource for sampling, with host
+barrier and descriptor tests. A third clean artifact from `f717681f` confirmed
+that the render-to-sample barrier passed. The next refusal was the same
+backbuffer's shader-read to transfer-source transition while DXVK mapped its
+staging readback; `vkEndCommandBuffer` returned `VK_ERROR_UNKNOWN`. No frame or
+pixel oracle passed; lifecycle remained clean and the previous payload was
+restored.
+
+- Third candidate eboot SHA-256: `01d54afa7c1094c6f5f822ddb73b0ae864cfb48c79ceb2da5067ef1a7c7ac750`.
+- Run: `20260928T180117531Z_PPSA99994_ps5vk_0x3e3a09ab7d41`; log SHA-256:
+  `5007bd4f8ac1a2a965fc4f09060f9239b511250f9a26908f6df06f1c23bd5cdc`.
+
+The host recorder now accepts that measured transition and logs image role,
+layout and access details at any subsequent barrier refusal. The fourth clean
+artifact, ps5vk `b0096931`, confirmed that the shader-read to transfer-source
+transition passed. The next two refused transitions were on the same RGBA8
+backbuffer with colour, sampled and transfer roles: transfer-destination to
+shader-read, then transfer-source to shader-read. Both were recorded with
+their exact stage and access masks. The run stopped in `Map` without an oracle
+or presented frame, reported no crash or suspected GPU hang, and restored the
+previous payload.
+
+- Fourth candidate eboot SHA-256: `1519b9897543f92480c04bbf093bb1979f1ebda488dc2b67327029382ca68f14`.
+- Run: `20260928T181335007Z_PPSA99994_ps5vk_0x3ee5bd8d1439`; log SHA-256:
+  `829d96aa92f01362110c110573d13a3d62055dda7aa292f8a6ef7674a31dcd96`.
+
+The host recorder now accepts those two measured return-to-sampling
+transitions for the bounded tiled backbuffer role. The fifth clean artifact,
+ps5vk `ee73854d`, confirmed all four recorded transitions passed, but the
+native upload prelude refused the transfer-destination to shader-read barrier
+when the work was submitted. The backend reported `VK_ERROR_DEVICE_LOST`; the
+first-frame readback had 4,096/4,096 mismatches, and shutdown raised signal 6.
+The runner marked a suspected GPU hang, though the log identifies a software
+prepare refusal before submission, so a physical GPU hang is not established.
+The previous payload was restored and the console was idle afterward. No
+presentation frame or pixel oracle passed.
+
+- Fifth candidate eboot SHA-256: `7bae7e8ca7025b1c452c9791e9c4e6dfa4c919004149d5193bce5cbec081b05a`.
+- Run: `20260928T182507101Z_PPSA99994_ps5vk_0x3f86e1983579`; log SHA-256:
+  `6f578f34f14b24b79abdb558b4b9a89ca430ffa3fde224f4e6c5213a87f33c2a`.
+
+A host regression now reproduces all four measured barriers at the native
+upload prelude, which shares a bounded predicate with the recorder. The sixth
+clean artifact, ps5vk `f961e749`, confirmed the upload prelude accepted them.
+The next refusal occurred in the general readback postlude planner (`site=42`),
+which had no shader-read handover shape for the sampled backbuffer. The backend
+reported `VK_ERROR_DEVICE_LOST`, first-frame readback had 4,096/4,096
+mismatches, and shutdown raised signal 6. The log places the refusal in
+software preparation before submission; physical GPU hang is not established.
+The wrapper restored the previous payload and the console was idle afterward.
+
+- Sixth candidate eboot SHA-256: `44a2cecd7e98c2fa0f4ac3fb3e861612c5070dd0479741907c28a082cecbf3e8`.
+- Run: `20260928T184233607Z_PPSA99994_ps5vk_0x407a89638442`; log SHA-256:
+  `5a347b18561ae40b3660b00ebcdfb9d4edcc5335d5cab66b1048edf0d102d67b`.
+
+A host regression reproduces the postlude's sampled-backbuffer handover and
+handback. The planner now uses the same bounded predicate as the recorder and
+upload prelude. The seventh clean artifact, ps5vk `c8224bef`, completed the
+first native DXVK D3D11 frame: all 4,096 readback pixels matched the oracle,
+checksum `6e17a4c5`, and `Present` returned success. It is a one-frame result,
+not the required three-frame presentation acceptance. During the second frame,
+the native postlude refused a swapchain-owned BGRA8 colour-attachment-to-present
+release that recording had accepted; `vkQueueSubmit2` returned
+`VK_ERROR_FEATURE_NOT_PRESENT`. The run then aborted in `Map`, without a
+suspected GPU hang. The wrapper restored the previous payload and left the
+console idle.
+
+- Seventh candidate eboot SHA-256: `7afeaa19fe9c0981f8c4dad02664818723c537f42075787796bf5c07f29181c4`.
+- Run: `20260928T185324700Z_PPSA99994_ps5vk_0x4112211e471b`; log SHA-256:
+  `0f21b3d654db2d0d441dfbd8793378d8bba1df625df5faf67e41066029fe9985`.
+
+A host regression reproduces the exact display release and now passes through
+a shared recorder/native predicate. Two clean hardware runs of ps5vk
+`6a6033a8` then passed strict native DXVK 2.6.2 D3D11/DXGI presentation:
+three frames per run, 4,096 readback pixels per frame with zero mismatches,
+checksums `6e17a4c5`, `8052d0c5`, `c0bc44c5`, successful `Present` for each,
+and zero final swapchain, device and context references. Neither run reported a
+Vulkan refusal, crash or suspected GPU hang. The wrapper restored the prior
+payload and the console was idle with no claim after each run.
+
+- Accepted candidate eboot SHA-256: `99a08de014872f8e391ee1ba8d7ccc655fc8f7c40137d700d21416c520a243b1`.
+- Runs: `20260928T190358419Z_PPSA99994_ps5vk_0x41a5ad1bf860` (log SHA-256
+  `424a377957ce87a59976bb7830357c35bb0c071e97272ca8b85b3ceeef05e2ac`)
+  and `20260928T190426485Z_PPSA99994_ps5vk_0x41ac35ff49d3` (log SHA-256
+  `e52c8e8702732dd44f9d7d2a25e5fabcc089ebd4ae1c60ed96e2f59a5bbc5c4d`).
+
+This proves the native SDK-linked DXVK presentation workload. It does not load
+PE DLLs through Prospero Win or verify every external scanout pixel. Separate
+Prospero Win integration runs report that all four unmodified x64 PE frontends
+reach ps5vk, while the accepted driver stops at the BGRA8 mutable-backbuffer
+format query. This change carries the bounded BGRA8
+image, barrier, clear-only pass and sampled-view routes. The D3D8, D3D9,
+D3D10 and D3D11 PE controls on both x64 and x86 each completed two successful
+`Present` calls with matching GPU completion and video-presentation events.
+The exact SDK SHA-256 `fc0db3420999d847b4beed1af4498cea1c5f2b9c727dae78552fe8d1e0b705d2`
+covers D3D8/9 on both architectures and D3D10 x86;
+the earlier D3D10 x64 and D3D11 x64/x86 controls need rechecking on that
+combined hash. D3D9 additionally exercised a
+two-command-buffer transfer batch, its colour clear and a sampled BGRA8 view
+with constant-one alpha. The x86 clear-only controls made no actual
+`vkMapMemory` call, leaving the x86 PE mapping contract untested. An
+independent PE backbuffer or scanout pixel oracle remains pending for every
+frontend.
+
+A separate public-SDK BGRA8 mutable-view witness on that exact SDK read back
+three 16x16 GPU draws. Its UNORM view with constant-one alpha had zero byte
+differences against a channel-swapped reference; its SRGB mutable view matched
+the independent SRGB-image control and stayed within one output code of the
+calculated SRGB decode, with clean resource retirement. Witness eboot SHA-256:
+`de37dd7888434b77a064eda5c3adcbce78475990bec20a362d9b02f9987ba502`;
+run `20260928T213847455Z_PPSA99994_ps5vk_0x4a186adc718d`, log SHA-256
+`a4e3ab214ee0512f3f70e61e9bd336850ab99ccd7eed8c8aa2277a8deb0aba6e`.
+The BGRA8 sampled/filter format roles are now in the format ledger; the DXVK
+readiness score remains **45/62**. This witness does not read PE backbuffers
+or prove x86 address placement.
+
+The final diagnostic-free SDK archive SHA-256
+`178d8a82cd94a80a2007e658c9605eeafdfd78e833d0b44c811259c22e4f21e6`
+then passed the stronger variant with the render target itself BGRA8. Three
+draws each completed GPU colour readback of 1024 native BGRA bytes; the
+constant-one-alpha UNORM output had zero differences and the mutable SRGB
+output matched its separate SRGB-image control, with no output outside one
+code of the calculated decode. Eboot SHA-256
+`5835a88a298dcb4ea49443adfb07411ecc08d659715dca65860151b6d3df9b58`;
+run `20260928T220803680Z_PPSA99994_ps5vk_0x4bb1508aa63e`, log SHA-256
+`7b6544578c7210f8644a08822e7beb03dbf1cd4d71be231bd9ecd74cae25f6c7`.
+The strict verifier reported `lifecycle_ok=true`; the prior payload was
+restored and the console released. This directly witnesses the advertised
+BGRA8 colour-readback role, while the PE framebuffers remain separately
+unread.
+
+A temporary diagnostic variant of that SDK-linked witness also measured four
+successful `vkMapMemory` staging-buffer calls on hardware. Every returned
+native mapping lay above 4 GiB; the same strict BGRA8 pixel oracle and clean
+lifecycle passed. The diagnostic eboot SHA-256 was
+`5ed4b4d6ae96371e4038f51fe7a147e2e29f5e03e24c1b12443bdb7d2eea4ba3`,
+SDK archive SHA-256
+`83f91b0eeeaaafe21cae1955f8d8b448edadd4d056b9ec85e711ed894684c661`,
+run `20260928T222814633Z_PPSA99994_ps5vk_0x4ccb41f4e72f`, log SHA-256
+`b276ed9fac26d9330128df3165b0351dcfeffe6d6106492543308abff464c498`.
+The prior payload was restored and the console released. The 32-bit Wine
+Vulkan thunk would narrow such a pointer, but an x86 PE `vkMapMemory` call
+has not yet been observed; this native measurement identifies the placement
+problem without claiming an end-to-end x86 failure.
+
+A second temporary probe requested a 64-KiB direct-memory mapping with a
+sub-4-GiB address hint and zero mapping flags. The native kernel returned a
+usable address below 4 GiB, though not the exact hint; unmap and physical
+release both succeeded. The strict BGRA8 oracle and lifecycle passed again:
+run `20260928T223440455Z_PPSA99994_ps5vk_0x4d2516632588`, eboot SHA-256
+`65139d6d8f6e6dd3b1c7b22416ec222d8f672dc51d2a1357ba4773c8144293d8`,
+log SHA-256 `01642684c0cc91ba52d0a71a1d4b7acc04c47fa5bcddc1dc3c7d4170b277b8a5`.
+The prior payload was restored and the console released. This shows a low
+direct-memory mapping is possible in the ps5vk test title; it does not prove
+that Prospero Win can reserve enough low virtual address space alongside an
+x86 guest or that ps5vk's default allocation path uses it.
+
+The ps5vk candidate now keeps the GPU allocation's original mapping and
+creates a second, bounded CPU alias below 4 GiB on the first `vkMapMemory`.
+Failure to obtain a low alias returns `VK_ERROR_MEMORY_MAP_FAILED` instead
+of exposing a high pointer to a 32-bit thunk. A public-SDK BGRA8 witness
+on SDK archive SHA-256
+`ef68ba3a378469aa0ca2195ae42aa8f00e95e0d9ef521f3455d85368540aa12d`
+reported four successful low CPU aliases; its strict three-draw GPU pixel
+oracle and resource retirement passed. Run
+`20260928T224222797Z_PPSA99994_ps5vk_0x4d90bbabf3aa`, eboot SHA-256
+`de8facae41b015062bfbea2d6011788908c1da6db0525e4a4061e3cc9a7c3d40`,
+log SHA-256 `8cad21c77d699a50df241ae91322e547f1487868a8703fcb77340dfea50dda26`.
+The previous payload was restored and the console released. This verifies
+CPU writes and GPU access through the two virtual addresses in the ps5vk
+title, not low-range availability or `vkMapMemory` in Prospero Win's x86
+process.
+
+The current frozen CTS selection was rebuilt from this candidate and run on
+hardware: 878/879 passed, with only
+`dEQP-VK.info.device_mandatory_features` failing because the experimental
+Vulkan 1.3 report does not enable all mandatory 1.3 features. Candidate eboot
+SHA-256 `1a4ee40a1b1d5eadf92243ea0643e78da1939a1689f981079c2db25cd1e4ea76`,
+selection SHA-256 `31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28`,
+run `20260928T225105922Z_PPSA99994_upstream-cts_0x4e0a880b2824`, log SHA-256
+`bbdd5da22dbf7d7434a9f0150f02f2f9d5f8f30978921c5f485891d89efa34c2`.
+The runner's receipt write initially missed its output directory, but the
+captured QPA was verified offline against the exact eboot and selection; the
+title had closed and the prior payload was restored. A separate hardware run
+of that prior payload (eboot SHA-256
+`aafab072dbe86ce622e5d2e8e896bc7874b2b23d88d1a6fa28d8fd6a0695943e`)
+reported 1102/1103 passes and the same mandatory-feature failure (run
+`20260928T225337976Z_PPSA99994_upstream-cts_0x4e2def09ab38`, log SHA-256
+`cc6424419260fa87781a92b809c68ac68404b3bc1dacd9c724c52d5f3fc691f3`).
+The selections differ by 224 leaves; every one of the candidate's 879 leaves
+had the same status in the prior run. Thus the low-CPU-alias change showed no
+CTS regression on the common selection, but the current acceptance result is
+not 879/879. Full Vulkan 1.3 conformance is outside this DXVK execution gate.
+
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 
 The public capability probe was rebuilt from clean `main` (`aa7f36e8`) with
@@ -75,9 +324,11 @@ nineteen-case witness in [the geometry promotion](#geometry-promotion-2026-09-17
 [the T04 validation](#merged-t04-tessellation-validation-2026-09-20)),
 `shaderDrawParameters` (its existing witness, now with an implementation
 review) and `maxBufferSize` ([the 1 GiB buffer witness](#dxvk-1-gib-buffer-witness-2026-09-25)).
-`maintenance4` stays blocked: compound `LocalSizeId` specialization
-expressions and wider producer output vectors are refused, and no witness
-executes its creation-description memory-requirement queries directly.
+`maintenance4` stays blocked. Subsequent offline work covers scalar/vector
+and nested aggregate `LocalSizeId` expressions and wider producer vectors
+in host tests, including 8/16/32-bit integer-width conversions. No admitted native
+receipt yet validates those routes or executes its creation-description
+memory-requirement queries directly.
 `apiVersion` stays blocked: the profile requires 1.3.204 including the patch
 level, and the device reports 1.3.0. DXVK's own 1.3.0 device filter passes.
 The other 15 blockers are queried false or zero: two Vulkan 1.2 subgroup
@@ -2015,8 +2266,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
-the code path that enforces them, 151 mandatory format-feature cells satisfied
-with 511 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 155 mandatory format-feature cells satisfied
+with 507 documented per-format blockers, 60 format-query consistency
 checks, and eighteen shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.

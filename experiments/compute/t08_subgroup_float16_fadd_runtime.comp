@@ -1,0 +1,15 @@
+#version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_shader_subgroup_extended_types_float16 : require
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) buffer Data { uint words[]; } data;
+
+void main()
+{
+    uint source = data.words[gl_WorkGroupID.x * 2u + gl_SubgroupID];
+    float16_t value = float16_t(source) +
+        float16_t((gl_SubgroupInvocationID & 1u) != 0u ? 0.5 : 1.0);
+    data.words[16u + gl_GlobalInvocationID.x] = uint(subgroupAdd(value));
+}

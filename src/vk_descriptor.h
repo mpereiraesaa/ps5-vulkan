@@ -15,8 +15,8 @@ enum { PS5VK_MAX_PUSH_CONSTANT_BYTES = 256, PS5VK_MAX_PUSH_CONSTANT_DWORDS = 64 
  * equals or exceeds the core minimum (256 bytes, 4 blocks, 256 bytes total).
  * Update-after-bind layouts are refused, so the two update-after-bind limits
  * equal the plain ones. The descriptor model does not make the feature
- * consumable: no shader path encodes an inline block yet, and every
- * consumer refuses the descriptor type explicitly. */
+ * consumable: shader lowering and table snapshots exist, but public feature
+ * negotiation is diagnostic-only pending native witnesses and validation. */
 enum {
     PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES = 256,
     PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET = 4,
@@ -43,9 +43,12 @@ struct ps5vk_set_signature {
     struct ps5vk_binding binding[PS5VK_MAX_BINDINGS];
     VkDescriptorType type[PS5VK_MAX_BINDINGS];
     uint32_t count;
+    /* Inline blocks consume one table slot, but descriptorCount is their byte
+     * length. Preserve it for layout compatibility, compiler bounds and keys. */
+    uint32_t inline_bytes[PS5VK_MAX_BINDINGS];
 };
 /* An inline uniform block occupies ONE descriptor slot of the signature (the
- * slot a future buffer record would address) and bytes[] of the set's own
+ * slot its buffer record addresses) and bytes[] of the set's own
  * inline storage. bytes[b] is zero for every other binding. */
 struct ps5vk_inline_uniform_layout {
     uint32_t offset[PS5VK_MAX_BINDINGS], bytes[PS5VK_MAX_BINDINGS];

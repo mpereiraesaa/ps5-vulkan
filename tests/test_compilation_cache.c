@@ -65,6 +65,20 @@ int main(void)
     assert(memcmp(&specialized_a,&key_mut,sizeof(key_mut)));
     layout.push_constant_stages[0]=VK_SHADER_STAGE_COMPUTE_BIT;
 
+    /* A slot count of one must not alias inline blocks with different byte
+     * lengths, even when all other descriptor and shader inputs match. */
+    struct VkPipelineLayout_T inline_layout = layout;
+    inline_layout.sets[0].type[0] = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+    inline_layout.sets[0].inline_bytes[0] = 16;
+    struct ps5vk_cache_key inline16, inline32;
+    assert(ps5vk_cache_build_key(spv_a, 32, "main", &inline_layout, NULL, 0, &inline16));
+    inline_layout.sets[0].inline_bytes[0] = 32;
+    assert(ps5vk_cache_build_key(spv_a, 32, "main", &inline_layout, NULL, 0, &inline32));
+    assert(memcmp(&inline16, &inline32, sizeof(inline16)));
+    inline_layout.sets[0].inline_bytes[0] = 16;
+    assert(ps5vk_cache_build_key(spv_a, 32, "main", &inline_layout, NULL, 0, &key_mut));
+    assert(!memcmp(&inline16, &key_mut, sizeof(inline16)));
+
     /* 3. Lookup on empty cache: miss */
     assert(ps5vk_compilation_cache_lookup(cache, &key_a, spv_a) == NULL);
     struct ps5vk_cache_stats stats;

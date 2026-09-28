@@ -1,7 +1,35 @@
 #define _DEFAULT_SOURCE 1
 #include <ps5vk/ps5vk.h>
 #include "ps5log.h"
-#if defined(T08_SUBGROUP_IADD_INT8_WITNESS)
+#if defined(T08_SUBGROUP_BALLOT_WITNESS)
+#include "t08_subgroup_ballot_shader.h"
+#define WITNESS_SPIRV t08_subgroup_ballot_spirv
+#define WITNESS_START "T08_SUBGROUP_BALLOT_START"
+#define WITNESS_RESULT "T08_SUBGROUP_BALLOT_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_BALLOT_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_BALLOT_FAILURE"
+#elif defined(T08_SUBGROUP_IADD_INT64_WITNESS)
+#include "t08_subgroup_iadd_int64_shader.h"
+#define WITNESS_SPIRV t08_subgroup_iadd_int64_spirv
+#define WITNESS_START "T08_SUBGROUP_IADD_INT64_START"
+#define WITNESS_RESULT "T08_SUBGROUP_IADD_INT64_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_IADD_INT64_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_IADD_INT64_FAILURE"
+#elif defined(T08_SUBGROUP_FADD_FLOAT16_WITNESS)
+#include "t08_subgroup_fadd_float16_shader.h"
+#define WITNESS_SPIRV t08_subgroup_fadd_float16_spirv
+#define WITNESS_START "T08_SUBGROUP_FADD_FLOAT16_START"
+#define WITNESS_RESULT "T08_SUBGROUP_FADD_FLOAT16_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_FADD_FLOAT16_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_FADD_FLOAT16_FAILURE"
+#elif defined(T08_SUBGROUP_IADD_INT16_WITNESS)
+#include "t08_subgroup_iadd_int16_shader.h"
+#define WITNESS_SPIRV t08_subgroup_iadd_int16_spirv
+#define WITNESS_START "T08_SUBGROUP_IADD_INT16_START"
+#define WITNESS_RESULT "T08_SUBGROUP_IADD_INT16_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_IADD_INT16_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_IADD_INT16_FAILURE"
+#elif defined(T08_SUBGROUP_IADD_INT8_WITNESS)
 #include "t08_subgroup_iadd_int8_shader.h"
 #define WITNESS_SPIRV t08_subgroup_iadd_int8_spirv
 #define WITNESS_START "T08_SUBGROUP_IADD_INT8_START"
@@ -62,8 +90,13 @@ static int witness(void)
     uint32_t mismatches = 0, guards = 0;
     uint32_t digest = UINT32_C(2166136261);
 
+    VkApplicationInfo app_info = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .apiVersion = VK_API_VERSION_1_3,
+    };
     VkInstanceCreateInfo instance_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &app_info,
     };
     TRY(vkCreateInstance(&instance_info, NULL, &instance));
     uint32_t physical_count = 1;
@@ -72,8 +105,21 @@ static int witness(void)
     REQUIRE(physical_count == 1 && physical, "one physical device");
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physical, &properties);
-    REQUIRE(properties.apiVersion == VK_API_VERSION_1_0,
-            "diagnostic API remains 1.0");
+    REQUIRE(properties.apiVersion == VK_API_VERSION_1_3,
+            "diagnostic API must match current 1.3 report");
+    VkPhysicalDeviceVulkan12Features subgroup_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+    };
+    VkPhysicalDeviceFeatures2 features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &subgroup_features,
+    };
+    vkGetPhysicalDeviceFeatures2(physical, &features);
+    REQUIRE(!subgroup_features.shaderSubgroupExtendedTypes &&
+            !subgroup_features.subgroupBroadcastDynamicId,
+            "diagnostic subgroup features remain unadvertised");
+    REQUIRE(!features.features.shaderInt64 && !subgroup_features.shaderFloat16,
+            "wide shader types remain unadvertised");
     float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -87,7 +133,7 @@ static int witness(void)
     vkGetDeviceQueue(device, 0, 0, &queue);
     REQUIRE(queue, "queue exists");
     ps5log_printf(PS5LOG_MARK,
-        WITNESS_START " subgroups=4 outputs=128 ids=7,19,31,1 api=1.0");
+        WITNESS_START " subgroups=4 outputs=128 ids=7,19,31,1 api=1.3 public=off");
 
     VkShaderModuleCreateInfo shader_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -236,10 +282,25 @@ static int witness(void)
         guards += words[i] != sentinel;
     for (uint32_t i = 0; i < OUTPUTS; ++i) {
         uint32_t subgroup = i / 32;
-#if defined(T08_SUBGROUP_IADD_INT8_WITNESS)
+#if defined(T08_SUBGROUP_IADD_INT64_WITNESS)
+        uint32_t expected = 32u * source_lanes[subgroup];
+#elif defined(T08_SUBGROUP_FADD_FLOAT16_WITNESS)
+        uint32_t expected = 32u * source_lanes[subgroup] + 24u;
+#elif defined(T08_SUBGROUP_IADD_INT16_WITNESS)
+        uint32_t total = 32u * source_lanes[subgroup] * 97u + 496u * 13u;
+        int32_t signed_value = (int32_t)(total & 0xffffu);
+        if (signed_value >= 0x8000) signed_value -= 0x10000;
+        uint32_t expected = (uint32_t)signed_value;
+#elif defined(T08_SUBGROUP_IADD_INT8_WITNESS)
         uint32_t expected = (32u * source_lanes[subgroup] + 496u) & 0xffu;
 #elif defined(T08_SUBGROUP_IADD_WITNESS)
         uint32_t expected = 32u * source_lanes[subgroup] + 496u;
+#elif defined(T08_SUBGROUP_BALLOT_WITNESS)
+        uint32_t lane = i % 32u;
+        uint32_t expected = ((lane & 1u) ? 0u : 3u) |
+            (16u << 2u) | (((lane + 2u) / 2u) << 7u) |
+            (((lane + 1u) / 2u) << 12u) | (1u << 17u) | (1u << 18u) |
+            (source_lanes[subgroup] << 24u);
 #else
         uint32_t expected = (subgroup / 2) * 1000u +
                             (subgroup % 2) * 100u + source_lanes[subgroup];

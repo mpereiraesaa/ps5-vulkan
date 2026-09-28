@@ -84,6 +84,66 @@ class MeasurementManifestTests(unittest.TestCase):
         paths = [c["path"] for c in derived["cases"]]
         self.assertEqual(len(paths), len(set(paths)))
 
+    def test_cache_control_measurement_preserves_acceptance(self):
+        frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        derived = build_measurement_manifest(frozen, {"pipeline-cache-control-pending"})
+        self.assertEqual(8, derived["measurement"]["moved"])
+        self.assertEqual(887, len(derived["cases"]))
+        self.assertEqual(frozen["cases"], derived["cases"][:879])
+        self.assertEqual(349, len(derived["diagnostics"]))
+
+    def test_inline_uniform_measurement_selects_original_limit_oracles(self):
+        frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        derived = build_measurement_manifest(frozen, {"inline-uniform-pending"})
+        expected = {
+            "dEQP-VK.info.vulkan1p2_limits_validation.ext_inline_uniform_block",
+            "dEQP-VK.info.vulkan1p3_limits_validation.max_inline_uniform_total_size",
+        }
+        self.assertEqual(expected, {c["path"] for c in derived["cases"][len(frozen["cases"]):]})
+        self.assertEqual(2, derived["measurement"]["moved"])
+        self.assertEqual(frozen["cases"], derived["cases"][:len(frozen["cases"])])
+
+    def test_t08_subgroup_categories_select_original_leaves_separately(self):
+        frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        categories = {
+            "t08-subgroup-dynamic-id-pending": 1,
+            "t08-subgroup-extended-int16-pending": 2,
+            "t08-subgroup-extended-float16-pending": 1,
+            "t08-subgroup-extended-int64-pending": 1,
+        }
+        for category, count in categories.items():
+            with self.subTest(category=category):
+                derived = build_measurement_manifest(frozen, {category})
+                moved = derived["cases"][len(frozen["cases"]):]
+                self.assertEqual(count, len(moved))
+                self.assertTrue(all(c["path"].startswith("dEQP-VK.subgroups.")
+                                    for c in moved))
+                self.assertTrue(all(c["measurement_origin"] ==
+                                    f"diagnostic:{category}" for c in moved))
+                self.assertEqual(frozen["cases"], derived["cases"][:len(frozen["cases"])])
+
+    def test_t08_size_and_full_subgroup_measurement_is_diagnostic(self):
+        frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        for category, count in (("t08-subgroup-size-control-pending", 5),
+                                ("t08-compute-full-subgroups-pending", 1)):
+            with self.subTest(category=category):
+                derived = build_measurement_manifest(frozen, {category})
+                moved = derived["cases"][len(frozen["cases"]):]
+                self.assertEqual(count, len(moved))
+                self.assertTrue(all(c["path"].startswith("dEQP-VK.subgroups.size_control.")
+                                    for c in moved))
+                self.assertEqual(frozen["cases"], derived["cases"][:len(frozen["cases"])])
+
+    def test_zero_initialize_measurement_preserves_acceptance(self):
+        frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        derived = build_measurement_manifest(frozen, {"zero-initialize-workgroup-pending"})
+        self.assertEqual(42, derived["measurement"]["moved"])
+        self.assertEqual(921, len(derived["cases"]))
+        self.assertEqual(frozen["cases"], derived["cases"][:879])
+        self.assertEqual(315, len(derived["diagnostics"]))
+        self.assertTrue(all(c["measurement_origin"] == "diagnostic:zero-initialize-workgroup-pending"
+                            for c in derived["cases"][879:]))
+
     def test_frozen_manifest_contains_promoted_bda_selection(self):
         frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
         prefix = ("dEQP-VK.binding_model.buffer_device_address."
@@ -93,7 +153,7 @@ class MeasurementManifestTests(unittest.TestCase):
                     if c["category"] == "t08-buffer-device-address-base"]
         self.assertEqual(expected, {c["path"] for c in selected})
         self.assertEqual(879, len(frozen["cases"]))
-        self.assertEqual(66, len(frozen["diagnostics"]))
+        self.assertEqual(357, len(frozen["diagnostics"]))
         self.assertEqual("31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28",
                          selection_hash(frozen["cases"]))
         self.assertFalse(expected & {d["path"] for d in frozen["diagnostics"]})

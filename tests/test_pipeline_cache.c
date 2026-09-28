@@ -99,6 +99,13 @@ int main(void)
     VkPipelineCache out = (VkPipelineCache)(uintptr_t)0x1;
     assert(vkCreatePipelineCache(device, &bad, NULL, &out) != VK_SUCCESS);
     assert(out == VK_NULL_HANDLE);
+    assert(vkCreatePipelineCache(device, &bad, NULL, &out) == VK_ERROR_FEATURE_NOT_PRESENT);
+    device->enabled_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    assert(vkCreatePipelineCache(device, &bad, NULL, &out) == VK_SUCCESS && out);
+    vkDestroyPipelineCache(device, out, NULL);
+    bad.flags = 2u;
+    assert(vkCreatePipelineCache(device, &bad, NULL, &out) != VK_SUCCESS && !out);
+    device->enabled_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
     VkPipelineCacheCreateInfo bad_size = {.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
                                           .initialDataSize = 64, .pInitialData = NULL};
     assert(vkCreatePipelineCache(device, &bad_size, NULL, &out) != VK_SUCCESS);

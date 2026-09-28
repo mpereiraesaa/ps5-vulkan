@@ -129,6 +129,7 @@ bool ps5vk_cache_build_key(const uint32_t *spirv, size_t spirv_words,
             out_key->sets[s].bindings[b].first = sig->binding[b].first;
             out_key->sets[s].bindings[b].stages = sig->binding[b].stages;
             out_key->sets[s].bindings[b].type = sig->type[b];
+            out_key->sets[s].bindings[b].inline_bytes = sig->inline_bytes[b];
         }
     }
     out_key->push_constant_size = layout->push_constant_size;

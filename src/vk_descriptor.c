@@ -50,51 +50,78 @@ static int indices(VkDescriptorSet set, uint32_t binding, uint32_t element,
     return set && signature_indices(&set->signature, binding, element, count, out);
 }
 
-/* Byte range [offset, offset + bytes) inside one inline block. Offsets and
- * sizes are multiples of four (VUID-VkWriteDescriptorSet-descriptorType-02219
- * and -02220, VkCopyDescriptorSet -02223/-02224/-02225). A range that would
- * continue into the next binding is refused: that consecutive-binding
- * rollover is not implemented for inline blocks. */
-static VkBool32 inline_range(VkDescriptorSet set, uint32_t binding, uint32_t offset,
-                             uint32_t bytes)
+/* Inline descriptor counts and array elements are bytes. Resolve the complete
+ * range before invalidation or mutation, skipping empty bindings and requiring
+ * equal type/visibility across each nonempty binding it crosses. */
+struct inline_range {
+    uint32_t offset;
+    uint32_t slots[PS5VK_MAX_INLINE_UNIFORM_SET_BYTES / 4];
+};
+static VkBool32 inline_range(const struct ps5vk_set_signature *sig,
+    uint32_t binding, uint32_t offset, uint32_t bytes, struct inline_range *out)
 {
-    if (binding >= PS5VK_MAX_BINDINGS ||
-        set->signature.type[binding] != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ||
-        !bytes || (offset | bytes) % 4u) return VK_FALSE;
-    uint32_t size = set->inline_uniform.bytes[binding];
-    return offset < size && bytes <= size - offset;
+    if (binding >= PS5VK_MAX_BINDINGS || !bytes || (offset | bytes) % 4u ||
+        bytes > PS5VK_MAX_INLINE_UNIFORM_SET_BYTES ||
+        sig->type[binding] != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ||
+        offset >= sig->inline_bytes[binding]) return VK_FALSE;
+    const VkShaderStageFlags stages = sig->binding[binding].stages;
+    uint32_t start = offset;
+    for (uint32_t b = 0; b < binding; ++b) start += sig->inline_bytes[b];
+    if (start > PS5VK_MAX_INLINE_UNIFORM_SET_BYTES - bytes) return VK_FALSE;
+    struct inline_range range = {.offset = start};
+    for (uint32_t i = 0; i < bytes / 4; ++i) {
+        while (binding < PS5VK_MAX_BINDINGS &&
+               offset == sig->inline_bytes[binding]) {
+            ++binding; offset = 0;
+            while (binding < PS5VK_MAX_BINDINGS && !sig->binding[binding].count) ++binding;
+        }
+        if (binding == PS5VK_MAX_BINDINGS ||
+            sig->type[binding] != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ||
+            sig->binding[binding].stages != stages || sig->binding[binding].count != 1 ||
+            sig->binding[binding].first >= PS5VK_MAX_DESCRIPTORS ||
+            !sig->inline_bytes[binding] || sig->inline_bytes[binding] % 4 ||
+            sig->inline_bytes[binding] > PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES ||
+            offset >= sig->inline_bytes[binding]) return VK_FALSE;
+        range.slots[i] = sig->binding[binding].first;
+        offset += 4;
+    }
+    *out = range;
+    return VK_TRUE;
 }
 
 static VkBool32 inline_write(VkDevice d, const VkWriteDescriptorSet *w)
 {
     const VkWriteDescriptorSetInlineUniformBlock *data = w->pNext;
+    struct inline_range range;
     if (!data || data->sType != VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK ||
         data->pNext || !data->pData || data->dataSize != w->descriptorCount ||
-        !inline_range(w->dstSet, w->dstBinding, w->dstArrayElement, w->descriptorCount))
-        return VK_FALSE;
+        !inline_range(&w->dstSet->signature, w->dstBinding, w->dstArrayElement,
+                      w->descriptorCount, &range)) return VK_FALSE;
     if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_DESCRIPTOR_SET, w->dstSet))
         return VK_FALSE;
     VkDescriptorSet set = w->dstSet;
-    memcpy(set->inline_data + set->inline_uniform.offset[w->dstBinding] + w->dstArrayElement,
-           data->pData, w->descriptorCount);
-    set->defined[set->signature.binding[w->dstBinding].first] = VK_TRUE;
+    memcpy(set->inline_data + range.offset, data->pData, w->descriptorCount);
+    for (uint32_t i = 0; i < w->descriptorCount / 4; ++i)
+        set->defined[range.slots[i]] = VK_TRUE;
     ++set->generation;
     return VK_TRUE;
 }
 
 static VkBool32 inline_copy(VkDevice d, const VkCopyDescriptorSet *c)
 {
-    if (!inline_range(c->srcSet, c->srcBinding, c->srcArrayElement, c->descriptorCount) ||
-        !inline_range(c->dstSet, c->dstBinding, c->dstArrayElement, c->descriptorCount))
-        return VK_FALSE;
+    struct inline_range src, dst;
+    if (!inline_range(&c->srcSet->signature, c->srcBinding, c->srcArrayElement,
+                      c->descriptorCount, &src) ||
+        !inline_range(&c->dstSet->signature, c->dstBinding, c->dstArrayElement,
+                      c->descriptorCount, &dst)) return VK_FALSE;
+    if (c->srcSet == c->dstSet && src.offset < dst.offset + c->descriptorCount &&
+        dst.offset < src.offset + c->descriptorCount) return VK_FALSE;
     if (d->invalidate && !d->invalidate(d, VK_OBJECT_TYPE_DESCRIPTOR_SET, c->dstSet))
         return VK_FALSE;
-    memmove(c->dstSet->inline_data + c->dstSet->inline_uniform.offset[c->dstBinding] +
-                c->dstArrayElement,
-            c->srcSet->inline_data + c->srcSet->inline_uniform.offset[c->srcBinding] +
-                c->srcArrayElement, c->descriptorCount);
-    if (c->srcSet->defined[c->srcSet->signature.binding[c->srcBinding].first])
-        c->dstSet->defined[c->dstSet->signature.binding[c->dstBinding].first] = VK_TRUE;
+    memcpy(c->dstSet->inline_data + dst.offset, c->srcSet->inline_data + src.offset,
+           c->descriptorCount);
+    for (uint32_t i = 0; i < c->descriptorCount / 4; ++i)
+        if (c->srcSet->defined[src.slots[i]]) c->dstSet->defined[dst.slots[i]] = VK_TRUE;
     ++c->dstSet->generation;
     return VK_TRUE;
 }
@@ -302,6 +329,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice d,
                 signature.count == PS5VK_MAX_DESCRIPTORS)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             inline_uniform.bytes[b->binding] = b->descriptorCount;
+            signature.inline_bytes[b->binding] = b->descriptorCount;
             ++inline_uniform.blocks;
             signature.binding[b->binding].count = 1;
             signature.type[b->binding] = b->descriptorType;
@@ -654,17 +682,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(VkDevice d,
         VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
         VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, VK_SHADER_STAGE_GEOMETRY_BIT,
         VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_COMPUTE_BIT};
-    uint32_t inline_bytes = 0, inline_per_stage[6] = {0};
+    uint32_t inline_bytes = 0, inline_blocks = 0, inline_per_stage[6] = {0};
     for (uint32_t j = 0; j < info->setLayoutCount; ++j) {
         const VkDescriptorSetLayout set = info->pSetLayouts[j];
         inline_bytes += set->inline_uniform.total_bytes;
         for (unsigned b = 0; b < PS5VK_MAX_BINDINGS; ++b) {
             if (!set->inline_uniform.bytes[b]) continue;
+            ++inline_blocks;
             for (unsigned s = 0; s < 6; ++s)
                 if (set->signature.binding[b].stages & inline_stages[s])
                     ++inline_per_stage[s];
         }
     }
+    /* VUID-VkPipelineLayoutCreateInfo-descriptorType-02216/02217:
+     * maxDescriptorSetInlineUniformBlocks counts all sets in the layout. */
+    if (inline_blocks > PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if (inline_bytes > PS5VK_MAX_INLINE_UNIFORM_TOTAL_BYTES)
         return VK_ERROR_FEATURE_NOT_PRESENT;
     for (unsigned s = 0; s < 6; ++s)
@@ -718,7 +751,8 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipelineLayout(VkDevice d, VkPipelineLayout 
 
 /* Descriptor update templates (VK_KHR_descriptor_update_template). A template
  * is a recorded list of VkWriteDescriptorSet shapes: an update gathers each
- * entry's elements from pData at offset + k * stride and applies them through
+ * entry's elements from pData at offset + k * stride (contiguous bytes at
+ * offset for inline blocks) and applies them through
  * vkUpdateDescriptorSets, so templates and direct writes share one validation
  * and one storage path. Only DESCRIPTOR_SET templates exist here; push
  * descriptors are not implemented. */
@@ -760,6 +794,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplateKHR(VkDevice d,
         const VkDescriptorUpdateTemplateEntry *e = &info->pDescriptorUpdateEntries[j];
         /* Each entry is a legal write range of the layout: the starting
          * binding's type, then rollover through same-typed bindings. */
+        if (e->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+            struct inline_range range;
+            if (!inline_range(&layout->signature, e->dstBinding, e->dstArrayElement,
+                              e->descriptorCount, &range) ||
+                e->offset > SIZE_MAX - e->descriptorCount) return INVALID;
+            continue;
+        }
         if (e->dstBinding >= PS5VK_MAX_BINDINGS ||
             layout->signature.type[e->dstBinding] != e->descriptorType ||
             !(template_image_type(e->descriptorType) || template_texel_type(e->descriptorType) ||
@@ -809,6 +850,20 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplateKHR(VkDevice d,
     enum { CHUNK = 64 };
     for (uint32_t j = 0; j < t->entry_count; ++j) {
         const VkDescriptorUpdateTemplateEntry *e = &t->entries[j];
+        if (e->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+            /* Inline entries name contiguous bytes; stride is ignored. */
+            VkWriteDescriptorSetInlineUniformBlock block = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK,
+                .dataSize = e->descriptorCount, .pData = bytes + e->offset};
+            VkWriteDescriptorSet write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = &block, .dstSet = set, .dstBinding = e->dstBinding,
+                .dstArrayElement = e->dstArrayElement, .descriptorCount = e->descriptorCount,
+                .descriptorType = e->descriptorType};
+            unsigned before = d->lifetime_errors;
+            vkUpdateDescriptorSets(d, 1, &write, 0, NULL);
+            if (d->lifetime_errors != before) return;
+            continue;
+        }
         uint32_t binding = e->dstBinding, element = e->dstArrayElement;
         for (uint32_t done = 0; done < e->descriptorCount;) {
             const uint32_t n = e->descriptorCount - done < CHUNK ? e->descriptorCount - done : CHUNK;

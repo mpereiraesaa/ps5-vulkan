@@ -9486,6 +9486,3171 @@
       "path": "dEQP-VK.spirv_assembly.instruction.compute.8bit_storage.uniform_8_to_8.stress_test",
       "rationale": "The original shader uses StorageBuffer8BitAccess, but the test also sets coherentMemory=true and therefore requires a HOST_COHERENT memory type. ps5vk truthfully exposes one HOST_VISIBLE non-coherent type, so the pinned upstream allocator reports NotSupported before shader execution. This is retained as a diagnostic and is not evidence against the nine storage-only shader oracles.",
       "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsm8bitStorageTests.cpp:1898"
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.bool",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.bvec2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.bvec3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.bvec4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.uint32_t",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.uvec2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.uvec3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.uvec4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.int32_t",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.ivec2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.ivec3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.ivec4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.float32_t",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32vec2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32vec3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32vec4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat2x2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat2x3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat2x4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat3x2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat3x3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat3x4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat4x2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat4x3",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.types.f32mat4x4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.composites.0",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.composites.1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.composites.2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.4",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.16",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.64",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.max_workgroup_memory.128",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.1_1_1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.8_1_1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.1_8_1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.1_1_8",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.8_8_1",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.8_1_8",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.1_8_8",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.8_8_8",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-workgroup-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED: original upstream zero-initialization oracle. Requires the default-off zero-initialize workgroup measurement build. Host API/compiler contracts exist; this path is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_64_even_repeat_2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-repeat-precondition",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_64_odd_repeat_2",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-repeat-precondition",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_4_even_repeat_16",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-repeat-precondition",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
+    },
+    {
+      "path": "dEQP-VK.compute.zero_initialize_workgroup_memory.repeat_pipeline.x_4_odd_repeat_16",
+      "source": "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp:1364",
+      "category": "zero-initialize-repeat-precondition",
+      "expected_status": "NotSupported",
+      "features_required": [
+        "shaderZeroInitializeWorkgroupMemory"
+      ],
+      "rationale": "UNMEASURED precondition gap: the pinned repeated-pipeline factory requests HOST_CACHED memory, which this profile does not report. Its constructor takes (xSize, repeat, odd), but the factory passes (x, odd, repeat); even-named cases therefore submit zero times and odd-named cases once. No pass from this pinned family may establish repeated initialization."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.single_pipeline_no_compile",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.batch_pipelines_early_return",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_explicit_caching",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_no_caching",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_explicit_cache",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_no_cache",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original compute pipeline cache-control return/handle/timing oracle, using the default-off measurement build. Does not execute GPU work or establish native acceptance. Graphics vertex-only rasterizer-discard cases need separate implementation."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_single_recreate_derivative",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original derivative compute pipeline creation oracle, using the default-off cache-control measurement build. Host contracts cover base handles, earlier batch indices, cache identity and independent result ownership. Does not execute GPU work or establish native acceptance."
+    },
+    {
+      "path": "dEQP-VK.pipeline.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_derivative_index",
+      "source": "external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp:1349",
+      "category": "pipeline-cache-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "pipelineCreationCacheControl"
+      ],
+      "rationale": "UNMEASURED: original derivative compute pipeline creation oracle, using the default-off cache-control measurement build. Host contracts cover base handles, earlier batch indices, cache identity and independent result ownership. Does not execute GPU work or establish native acceptance."
+    },
+    {
+      "path": "dEQP-VK.info.vulkan1p2_limits_validation.ext_inline_uniform_block",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:7697",
+      "category": "inline-uniform-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "inlineUniformBlock"
+      ],
+      "rationale": "UNMEASURED: Original Vulkan 1.2 extension limits validator checks the reported inline uniform block bounds. Requires the default-off inline uniform diagnostic build; this is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.info.vulkan1p3_limits_validation.max_inline_uniform_total_size",
+      "source": "external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp:7733",
+      "category": "inline-uniform-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "inlineUniformBlock"
+      ],
+      "rationale": "UNMEASURED: Original Vulkan 1.3 limits validator checks maxInlineUniformTotalSize. Requires the default-off inline uniform diagnostic build; this is not acceptance or native evidence."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.all_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits-neg_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.limits_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.small-neg_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.small-neg_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.small-neg_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.small-neg_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.small_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.small_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.small_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotaccsatkhr.small_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1226",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.all_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.small_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.small_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.small_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsdotkhr.small_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1172",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.all_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits-neg_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.limits_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.small-neg_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.small-neg_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.small-neg_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.small-neg_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.small_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.small_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.small_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotaccsatkhr.small_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1282",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.all_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.small_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.small_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.small_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opsudotkhr.small_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1206",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.all_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.limits_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.nosat_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.small-nosat_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.small-nosat_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.small-nosat_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.small-nosat_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.small_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.small_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.small_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotaccsatkhr.small_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1255",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_ss_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_ss_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_ss_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_su_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_su_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_su_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_us_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_us_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_us_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_uu_v2i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_uu_v3i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.all_uu_v4i32_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_ss_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_su_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_us_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_uu_v4i8_out32",
+      "source": "external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmIntegerDotProductTests.cpp:1189",
+      "category": "integer-dot-product-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_KHR_shader_integer_dot_product",
+        "shaderIntegerDotProduct"
+      ],
+      "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_nonconst_uint",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp:514",
+      "category": "t08-subgroup-dynamic-id-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "subgroupBroadcastDynamicId",
+        "subgroup:compute",
+        "subgroup:BALLOT"
+      ],
+      "rationale": "UNMEASURED: original compute Broadcast oracle with a runtime-selected ID. Host compiler and API contracts do not prove native execution; select only with a diagnostic build advertising the truthful feature and operation bits."
+    },
+    {
+      "path": "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_uint16_t",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp:514",
+      "category": "t08-subgroup-extended-int16-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderSubgroupExtendedTypes",
+        "shaderInt16",
+        "storageBuffer16BitAccess",
+        "subgroup:compute",
+        "subgroup:BALLOT"
+      ],
+      "rationale": "UNMEASURED: original 16-bit integer Broadcast oracle. Requires truthful extended-type, shader, storage and subgroup reporting plus native result evidence."
+    },
+    {
+      "path": "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int16_t",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp:541",
+      "category": "t08-subgroup-extended-int16-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderSubgroupExtendedTypes",
+        "shaderInt16",
+        "storageBuffer16BitAccess",
+        "subgroup:compute",
+        "subgroup:ARITHMETIC"
+      ],
+      "rationale": "UNMEASURED: original 16-bit integer arithmetic reduction oracle; native arithmetic and CTS acceptance remain unverified."
+    },
+    {
+      "path": "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_float16_t",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp:541",
+      "category": "t08-subgroup-extended-float16-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderSubgroupExtendedTypes",
+        "shaderFloat16",
+        "storageBuffer16BitAccess",
+        "subgroup:compute",
+        "subgroup:ARITHMETIC"
+      ],
+      "rationale": "UNMEASURED: original 16-bit float arithmetic reduction oracle; host compiler coverage does not establish GPU numerical correctness."
+    },
+    {
+      "path": "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int64_t",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp:541",
+      "category": "t08-subgroup-extended-int64-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderSubgroupExtendedTypes",
+        "shaderInt64",
+        "subgroup:compute",
+        "subgroup:ARITHMETIC"
+      ],
+      "rationale": "UNMEASURED: original 64-bit integer arithmetic reduction oracle; native lane semantics and CTS acceptance remain unverified."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.generic.subgroup_size_properties",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1109",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroup:compute"
+      ],
+      "rationale": "UNMEASURED: original subgroup size property sanity oracle; the diagnostic build must report a truthful fixed wave32 range."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.allow_varying_subgroup_size",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1126",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroup:compute"
+      ],
+      "rationale": "UNMEASURED: original no-flag compute control case; paired with the flagged SPIR-V 1.6 variant below so the measurement cannot be mistaken for varying-size coverage."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.allow_varying_subgroup_size_flags_spirv16",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1126",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroupSizeControl",
+        "subgroup:compute",
+        "SPIR-V:1.6"
+      ],
+      "rationale": "UNMEASURED: original compute oracle that actually sets ALLOW_VARYING_SUBGROUP_SIZE; host admission alone cannot prove GPU execution."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.required_subgroup_size_min",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1263",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroupSizeControl",
+        "subgroup:compute"
+      ],
+      "rationale": "UNMEASURED: original required-minimum subgroup-size compute oracle; a fixed wave32 implementation must produce the reported size."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.required_subgroup_size_max",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1236",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroupSizeControl",
+        "subgroup:compute"
+      ],
+      "rationale": "UNMEASURED: original required-maximum subgroup-size compute oracle; a fixed wave32 implementation must produce the reported size."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.require_full_subgroups_flags_spirv16",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1170",
+      "category": "t08-compute-full-subgroups-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroupSizeControl",
+        "computeFullSubgroups",
+        "subgroup:compute",
+        "subgroup:BALLOT",
+        "SPIR-V:1.6"
+      ],
+      "rationale": "UNMEASURED: original compute oracle sets REQUIRE_FULL_SUBGROUPS and ALLOW_VARYING_SUBGROUP_SIZE; CTS also requires BALLOT, so the size-only diagnostic build cannot make this leaf applicable."
     }
   ]
 }

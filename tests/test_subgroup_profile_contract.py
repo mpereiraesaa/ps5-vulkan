@@ -106,24 +106,7 @@ class SubgroupProfileContract(unittest.TestCase):
         """The shipped report: compute BASIC at wave32 behind the measured
         platform bit, and nothing without it. Any other assignment is a new
         query route that needs contract review."""
-        source = """VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(
-            VkPhysicalDevice p, VkPhysicalDeviceProperties2 *out)
-        {
-            for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext;
-                 next; next = next->pNext) {
-                if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES) {
-                    VkPhysicalDeviceSubgroupProperties *properties =
-                        (VkPhysicalDeviceSubgroupProperties *)next;
-                    const int basic = !!(p->platform.supported_features_t09 &
-                        PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE);
-                    properties->subgroupSize = basic ? 32u : 0u;
-                    properties->supportedStages = basic ? VK_SHADER_STAGE_COMPUTE_BIT : 0u;
-                    properties->supportedOperations = basic ? VK_SUBGROUP_FEATURE_BASIC_BIT : 0u;
-                    properties->quadOperationsInAllStages = VK_FALSE;
-                }
-            }
-        }
-        """
+        source = self.device_source
         self.validate(device_source=source)
         for old, new in (("basic ? 32u : 0u", "basic ? 64u : 0u"),
                          ("basic ? VK_SUBGROUP_FEATURE_BASIC_BIT : 0u",

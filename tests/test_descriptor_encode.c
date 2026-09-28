@@ -24,8 +24,81 @@ VkResult ps5vk_image_span(VkDevice d, VkImage image, void **address,
     *bytes = image->requirements.size;
     return VK_SUCCESS;
 }
+static void inline_payload_snapshots(void)
+{
+    struct VkDevice_T device = {.inline_uniform_block_enabled = VK_TRUE};
+    struct VkDescriptorPool_T pool = {.device = &device};
+    struct VkDescriptorSet_T set = {.pool = &pool};
+    struct ps5vk_descriptor_storage storage = {0};
+    ps5vk_descriptor_set_use_storage(&set, &storage);
+    set.signature.count = 3;
+    for (unsigned b = 0, prefix = 0; b < PS5VK_MAX_BINDINGS; ++b) {
+        set.signature.binding[b].first = prefix;
+        if (b == 0 || b == 2 || b == 4) {
+            set.signature.binding[b].count = 1;
+            set.signature.binding[b].stages = VK_SHADER_STAGE_COMPUTE_BIT;
+            set.signature.type[b] = b == 0 ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER :
+                VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+            set.defined[prefix++] = VK_TRUE;
+        }
+    }
+    set.buffers[0] = (VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)0x100004000, 0, 256};
+    set.signature.inline_bytes[2] = set.inline_uniform.bytes[2] = 20;
+    set.signature.inline_bytes[4] = set.inline_uniform.bytes[4] = 4;
+    set.inline_uniform.offset[4] = 20;
+    set.inline_uniform.total_bytes = 24; set.inline_uniform.blocks = 2;
+    for (unsigned i = 0; i < 24; ++i) set.inline_data[i] = (uint8_t)(i * 7 + 3);
+    struct ps5vk_compiled_program program = {.gfx = 1013, .descriptor_count = 3,
+        .descriptors = {{0, 0, 0, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
+            {0, 2, 0, 4, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK},
+            {0, 4, 0, 16, VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK}}};
+    uint32_t table[32], saved[32];
+    memset(table, 0xab, sizeof(table));
+    assert(ps5vk_compute_table_dwords(&program, 0, &set.signature) == 24);
+    assert(ps5vk_descriptor_encode(&device, &program, 0, &set, NULL, table, 32) == VK_SUCCESS);
+    uint64_t first = table[4] | ((uint64_t)table[5] << 32);
+    uint64_t second = table[16] | ((uint64_t)table[17] << 32);
+    assert(first == (uintptr_t)(table + 8) && second == (uintptr_t)(table + 20));
+    assert(table[6] == 20 && table[7] == 0x31016fac && table[18] == 4 && table[19] == 0x31016fac);
+    assert(!memcmp(table + 8, set.inline_data, 20) && !memcmp(table + 20, set.inline_data + 20, 4));
+    assert(!table[13] && !table[14] && !table[15] && !table[21] && !table[22] && !table[23]);
+    for (unsigned i = 24; i < 32; ++i) assert(table[i] == 0xabababab);
+    memcpy(saved, table, sizeof(saved));
+    memset(set.inline_data, 0xee, sizeof(set.inline_data));
+    assert(!memcmp(table, saved, sizeof(table))); /* Snapshot owns its bytes. */
+#define REFUSE() do { assert(ps5vk_descriptor_encode(&device, &program, 0, &set, NULL, table, 32) != VK_SUCCESS); \
+    assert(!memcmp(table, saved, sizeof(table))); } while (0)
+    device.inline_uniform_block_enabled = VK_FALSE; REFUSE(); device.inline_uniform_block_enabled = VK_TRUE;
+    set.defined[1] = VK_FALSE; REFUSE(); set.defined[1] = VK_TRUE;
+    set.inline_uniform.bytes[2] = 16; REFUSE(); set.inline_uniform.bytes[2] = 20;
+    set.inline_uniform.offset[2] = 4; REFUSE(); set.inline_uniform.offset[2] = 0;
+    set.inline_uniform.total_bytes = 19; REFUSE(); set.inline_uniform.total_bytes = 24;
+    const uint32_t bad_sizes[] = {0, 6, 260};
+    for (unsigned i = 0; i < 3; ++i) {
+        set.signature.inline_bytes[2] = bad_sizes[i]; REFUSE();
+        assert(!ps5vk_compute_table_dwords(&program, 0, &set.signature));
+    }
+    set.signature.inline_bytes[2] = 20;
+    program.descriptors[1].element = 1; REFUSE(); program.descriptors[1].element = 0;
+    program.descriptors[1].table_dword = 8; REFUSE(); program.descriptors[1].table_dword = 4;
+    program.descriptors[0].table_dword = 12; REFUSE(); program.descriptors[0].table_dword = 0;
+    assert(ps5vk_descriptor_encode(&device, &program, 0, &set, NULL, table, 23) != VK_SUCCESS);
+    assert(!memcmp(table, saved, sizeof(table)));
+    /* Maximum block size, with the inline record last among USED bindings. */
+    program.descriptor_count = 2;
+    set.signature.inline_bytes[2] = set.inline_uniform.bytes[2] = 256;
+    set.inline_uniform.offset[4] = 256; set.inline_uniform.total_bytes = 260;
+    uint32_t maximum[80]; memset(maximum, 0xab, sizeof(maximum));
+    assert(ps5vk_compute_table_dwords(&program, 0, &set.signature) == 72);
+    assert(ps5vk_descriptor_encode(&device, &program, 0, &set, NULL, maximum, 80) == VK_SUCCESS);
+    assert(maximum[6] == 256 && !memcmp(maximum + 8, set.inline_data, 256));
+    for (unsigned i = 72; i < 80; ++i) assert(maximum[i] == 0xabababab);
+#undef REFUSE
+}
+
 int main(void)
 {
+    inline_payload_snapshots();
     struct VkDevice_T device = {0};
     struct VkDescriptorPool_T pool = {.device = &device};
     struct VkDescriptorSet_T set={.pool = &pool};
@@ -343,10 +416,59 @@ int main(void)
         separate_table,20)!=VK_SUCCESS);
     assert(!memcmp(saved,separate_table,sizeof(saved)));
     typed_view.format=VK_FORMAT_R32_UINT;
-    /* A compiled type the compute path has no record for is refused. */
-    separate_program.descriptors[0].type=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    /* Compute combined records occupy all twelve words, before the SSBO. */
     separate.signature.type[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    assert(ps5vk_descriptor_encode(&device,&separate_program,0,&separate,dynamic,
-        separate_table,20)!=VK_SUCCESS);
+    separate.signature.type[1]=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    separate.images[0]=(VkDescriptorImageInfo){&sampler,&sampled_view,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    separate.image_resources[0]=&sampled_image;
+    separate.buffers[1]=(VkDescriptorBufferInfo){(VkBuffer)(uintptr_t)0x200004000,64,256};
+    struct ps5vk_compiled_program combined_program={.gfx=1013,.descriptor_count=2,
+        .descriptors={{0,0,0,0,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+                      {0,1,0,12,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}}};
+    assert(ps5vk_texture_descriptor(&device,&sampled_view,&sampler,combined)==VK_SUCCESS);
+    assert(ps5vk_buffer_descriptor(&device,&separate.buffers[1],0,record)==VK_SUCCESS);
+    memset(separate_table,0xab,sizeof(separate_table));
+    assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+        separate_table,20)==VK_SUCCESS);
+    assert(!memcmp(separate_table,combined,sizeof(combined)));
+    assert(!memcmp(separate_table+12,record,sizeof(record)));
+    assert(separate_table[16]==0xabababab);
+    uint32_t combined_saved[20];
+    memcpy(combined_saved,separate_table,sizeof(combined_saved));
+    for(unsigned bad=0;bad<7;++bad) {
+        separate.images[0].imageLayout=bad==0 ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL :
+            VK_IMAGE_LAYOUT_GENERAL;
+        separate.image_resources[0]=bad==1 ? VK_NULL_HANDLE : &sampled_image;
+        separate.images[0].sampler=bad==2 ? VK_NULL_HANDLE : &sampler;
+        sampler.device=bad==3 ? VK_NULL_HANDLE : &device;
+        combined_program.descriptors[1].table_dword=bad==4 ? 8 : 12;
+        separate.images[0].imageView=bad==6 ? VK_NULL_HANDLE : &sampled_view;
+        assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+            separate_table,bad==5 ? 11 : 20)!=VK_SUCCESS);
+        assert(!memcmp(combined_saved,separate_table,sizeof(combined_saved)));
+    }
+    separate.images[0].imageView=&sampled_view;
+    assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+        separate_table,20)==VK_SUCCESS);
+    /* A null combined image retains its valid sampler under nullDescriptor. */
+    separate.images[0].imageView=VK_NULL_HANDLE;
+    separate.image_resources[0]=VK_NULL_HANDLE;
+    device.enabled_features_t09|=PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+    assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+        separate_table,20)==VK_SUCCESS);
+    for(unsigned i=0;i<8;++i) assert(separate_table[i]==0);
+    assert(!memcmp(separate_table+8,sampler.words,sizeof(sampler.words)));
+    assert(!memcmp(separate_table+12,record,sizeof(record)));
+    memcpy(combined_saved,separate_table,sizeof(combined_saved));
+    for(unsigned bad=0;bad<4;++bad) {
+        device.enabled_features_t09=bad==0 ? 0 : PS5VK_T09_FEATURE_NULL_DESCRIPTOR;
+        separate.images[0].sampler=bad==1 ? VK_NULL_HANDLE : &sampler;
+        sampler.device=bad==2 ? VK_NULL_HANDLE : &device;
+        separate.image_resources[0]=bad==3 ? &sampled_image : VK_NULL_HANDLE;
+        assert(ps5vk_descriptor_encode(&device,&combined_program,0,&separate,dynamic,
+            separate_table,20)!=VK_SUCCESS);
+        assert(!memcmp(combined_saved,separate_table,sizeof(combined_saved)));
+    }
     puts("Compiler-ordered raw descriptor table: pass (host only)");
 }

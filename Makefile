@@ -571,7 +571,19 @@ test-compiler: build/libpsbc.host.a test-shaders
 	$(MAKE) test-runtime-graphics-compiler
 	$(MAKE) test-runtime-graphics-native
 	mkdir -p build/tests
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cache_witness.comp -o build/test-shaders/cache_witness.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/inline_witness.comp -o build/test-shaders/inline_witness.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/inline_boundary.comp -o build/test-shaders/inline_boundary.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/inline_split.comp -o build/test-shaders/inline_split.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=32 -DSIZE_Y=3 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_0.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=64 -DSIZE_Y=2 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_1.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=32 -DSIZE_Y=2 -DSIZE_Z=2 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_2.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=1024 -DSIZE_Y=1 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_3.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=33 -DSIZE_Y=1 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_4.spv
+	$(GLSLANG) -V --target-env vulkan1.1 -DSIZE_X=1 -DSIZE_Y=1 -DSIZE_Z=1 experiments/compute/subgroup_full_witness.comp -o build/test-shaders/subgroup_full_5.spv
 	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/cts_ssbo_local_barrier.comp -o build/test-shaders/cts_ssbo_local_barrier.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/zero_initialize_workgroup.comp -o build/test-shaders/zero_initialize_workgroup.spv
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp -DZERO_INITIALIZE=1 experiments/compute/zero_initialize_workgroup.comp -o build/test-shaders/zero_initialize_workgroup_null.spv
 	$(GLSLANG) -V --target-env vulkan1.2 -S comp experiments/compute/t08_subgroup_int8_iadd_runtime.comp -o build/test-shaders/t08_subgroup_int8_iadd_runtime.spv
 	$(GLSLANG) -V --target-env vulkan1.2 -S comp experiments/compute/t08_subgroup_iadd_runtime.comp -o build/test-shaders/t08_subgroup_iadd_runtime.spv
 	$(PYTHON) tools/build_dxvk_descriptor_capacity_witness.py --shaders-only build/test-shaders/descriptor-capacity
@@ -579,6 +591,8 @@ test-compiler: build/libpsbc.host.a test-shaders
 	./build/tests/test_runtime_compiler
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_runtime_pipeline_cache.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_runtime_pipeline_cache
 	./build/tests/test_runtime_pipeline_cache
+	$(GLSLANG) -V --target-env vulkan1.0 -S comp experiments/compute/maintenance4_local_size.comp -o build/test-shaders/maintenance4_local_size_base.spv
+	$(PYTHON) tools/maintenance4_local_size_spirv.py --source experiments/compute/maintenance4_local_size.comp --input build/test-shaders/maintenance4_local_size_base.spv --output build/test-shaders/maintenance4_local_size_id.spv
 	$(CC) -std=c11 -Wall -Wextra -Werror $(VULKAN_CFLAGS) -Isrc -Iinclude -Ithird_party/psbc-reference -Ithird_party/opengnm/include $(VK_DEVICE_SOURCES) src/platform_host.c src/ps5vk_compiler.c src/ps5_compiler_shims.c tests/test_local_size_id.c build/libpsbc.host.a -lstdc++ -lm -lpthread -o build/tests/test_local_size_id
 	./build/tests/test_local_size_id
 doctor:
@@ -593,6 +607,18 @@ native-bootstrap:
 .PHONY: check-graphics-stages graphics-stage-shaders
 graphics-stage-shaders:
 	mkdir -p build/runtime-graphics
+	$(GLSLANG) -V experiments/graphics/dxvk_render_witness.vert -o build/runtime-graphics/dxvk_render_witness.vert.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_maintenance4_interface.vert -o build/runtime-graphics/dxvk_maintenance4_interface.vert.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_maintenance4_interface.frag -o build/runtime-graphics/dxvk_maintenance4_interface.frag.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_inline_witness.frag -o build/runtime-graphics/dxvk_inline_witness.frag.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_inline_boundary.frag -o build/runtime-graphics/dxvk_inline_boundary.frag.spv
+	$(GLSLANG) -V -S geom experiments/graphics/dxvk_inline_boundary.geom -o build/runtime-graphics/dxvk_inline_boundary.geom.spv
+	$(GLSLANG) -V -S tesc experiments/graphics/dxvk_inline_boundary.tesc -o build/runtime-graphics/dxvk_inline_boundary.tesc.spv
+	$(GLSLANG) -V -S tese experiments/graphics/dxvk_inline_boundary.tese -o build/runtime-graphics/dxvk_inline_boundary.tese.spv
+	$(GLSLANG) -V -S tesc experiments/graphics/dxvk_tess_passthrough.tesc -o build/runtime-graphics/dxvk_tess_passthrough.tesc.spv
+	$(GLSLANG) -V -S tese experiments/graphics/dxvk_tess_passthrough.tese -o build/runtime-graphics/dxvk_tess_passthrough.tese.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_inline_boundary.vert -o build/runtime-graphics/dxvk_inline_boundary.vert.spv
+	$(GLSLANG) -V experiments/graphics/dxvk_render_witness.frag -o build/runtime-graphics/dxvk_render_witness.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.vert -o build/runtime-graphics/triangle.vert.spv
 	$(GLSLANG) -V experiments/graphics/runtime_triangle.frag -o build/runtime-graphics/triangle.frag.spv
 	$(GLSLANG) -V experiments/graphics/runtime_dual_source.frag -o build/runtime-graphics/dual_source.frag.spv

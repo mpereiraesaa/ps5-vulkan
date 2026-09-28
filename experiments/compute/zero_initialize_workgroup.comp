@@ -1,0 +1,17 @@
+#version 450
+#ifdef ZERO_INITIALIZE
+#extension GL_EXT_null_initializer : require
+#endif
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) buffer Result { uint result[]; };
+#ifdef ZERO_INITIALIZE
+shared uint scratch[512] = {};
+#else
+shared uint scratch[512];
+#endif
+void main() {
+    uint i = gl_LocalInvocationIndex;
+    if (i == 0) scratch[0] = 123;
+    barrier();
+    result[gl_GlobalInvocationID.x] = scratch[gl_GlobalInvocationID.x % 512] + scratch[0];
+}

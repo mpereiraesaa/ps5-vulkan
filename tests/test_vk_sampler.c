@@ -66,6 +66,26 @@ int main(void)
     vkDestroySampler(&d,sampler,NULL);
     BAD(flags,VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
     BAD(unnormalizedCoordinates,VK_TRUE);BAD(mipLodBias,NAN);BAD(mipLodBias,2.01f);
+    /* DXVK's pixel-coordinate blit sampler: linear filtering, nearest mip,
+     * border clamp on all axes. The S# descriptor must carry the hardware bit. */
+    VkSamplerCreateInfo pixel=info;
+    pixel.magFilter=VK_FILTER_LINEAR;
+    pixel.minFilter=VK_FILTER_LINEAR;
+    pixel.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    pixel.addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    pixel.addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    pixel.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    pixel.borderColor=VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    pixel.unnormalizedCoordinates=VK_TRUE;
+    assert(vkCreateSampler(&d,&pixel,NULL,&sampler)==VK_SUCCESS);
+    assert(sampler->words[0]==((6u|(6u<<3)|(6u<<6))|(1u<<15)));
+    assert(sampler->words[2]==((1u<<20)|(1u<<22)|(1u<<26)));
+    vkDestroySampler(&d,sampler,NULL);
+    pixel.minFilter=VK_FILTER_NEAREST;
+    assert(vkCreateSampler(&d,&pixel,NULL,&sampler)==VK_ERROR_FEATURE_NOT_PRESENT);
+    pixel.minFilter=VK_FILTER_LINEAR;
+    pixel.addressModeW=VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    assert(vkCreateSampler(&d,&pixel,NULL,&sampler)==VK_ERROR_FEATURE_NOT_PRESENT);
     BAD(mipLodBias,-2.01f);BAD(minLod,NAN);BAD(maxLod,INFINITY);
     BAD(magFilter,VK_FILTER_CUBIC_EXT);BAD(minFilter,VK_FILTER_CUBIC_EXT);
     BAD(addressModeW,VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE);

@@ -10,6 +10,7 @@
 #include "vktTextureFilteringTests.hpp"
 #include "vktImagelessFramebufferTests.hpp"
 #include "vktBindingShaderAccessTests.hpp"
+#include "vktBindingDescriptorCopyTests.hpp"
 #include "vktBindingBufferDeviceAddressTests.hpp"
 #include "vktSynchronizationBasicFenceTests.hpp"
 #include "vktSynchronizationBasicEventTests.hpp"
@@ -17,9 +18,11 @@
 #include "vktSynchronizationTimelineSemaphoreTests.hpp"
 #include "vktMemoryMappingTests.hpp"
 #include "vktComputeBasicComputeShaderTests.hpp"
+#include "vktComputeZeroInitializeWorkgroupMemoryTests.hpp"
 #include "vktComputeIndirectComputeDispatchTests.hpp"
 #include "vktPipelinePushConstantTests.hpp"
 #include "vktPipelineCacheTests.hpp"
+#include "vktPipelineCreationCacheControlTests.hpp"
 #include "vktPipelineBlendTests.hpp"
 #include "vktPipelineMultisampleTests.hpp"
 
@@ -30,6 +33,8 @@
 
 #include "vktSpvAsmWorkgroupMemoryTests.hpp"
 #include "vktSpvAsmIndexingTests.hpp"
+#include "vktSpvAsmIntegerDotProductTests.hpp"
+#include "vktSpvAsmMultipleShadersTests.hpp"
 #include "vktDynamicStateComputeTests.hpp"
 #include "vktRobustnessBufferAccessTests.hpp"
 #include "vktDrawShaderDrawParametersTests.hpp"
@@ -51,6 +56,7 @@
 #include "vktUniformBlockTests.hpp"
 #include "subgroups/vktSubgroupsBallotBroadcastTests.hpp"
 #include "subgroups/vktSubgroupsArithmeticTests.hpp"
+#include "subgroups/vktSubgroupsSizeControlTests.hpp"
 #include "vktQueryPoolTests.hpp"
 #include "vktShaderRenderTextureGatherTests.hpp"
 #include "vktTestGroupUtil.hpp"
@@ -63,6 +69,7 @@ namespace vkt
 namespace SpirVAssembly
 {
 tcu::TestCaseGroup *createFocusedVolatileAtomicComputeGroup(tcu::TestContext &testCtx);
+tcu::TestCaseGroup *createFocusedLocalSizeIdGroup(tcu::TestContext &testCtx);
 }
 }
 
@@ -108,7 +115,7 @@ FocusedVkTestPackage::~FocusedVkTestPackage(void)
 
 void FocusedVkTestPackage::init(void)
 {
-    // Original subgroup Broadcast and arithmetic factories and support checks. No subgroup
+    // Original subgroup Broadcast, arithmetic and size-control factories and support checks. No subgroup
     // leaves enter the frozen selection until the public API/profile gate is
     // satisfied and their unchanged oracles pass on hardware.
     {
@@ -116,6 +123,7 @@ void FocusedVkTestPackage::init(void)
             new tcu::TestCaseGroup(m_testCtx, "subgroups"));
         subgroupGroup->addChild(vkt::subgroups::createSubgroupsBallotBroadcastTests(m_testCtx));
         subgroupGroup->addChild(vkt::subgroups::createSubgroupsArithmeticTests(m_testCtx));
+        subgroupGroup->addChild(vkt::subgroups::createSubgroupsSizeControlTests(m_testCtx));
         addChild(subgroupGroup.release());
     }
 
@@ -145,12 +153,12 @@ void FocusedVkTestPackage::init(void)
     // cases.txt remains the execution filter.
     addChild(vkt::createRenderPass2Tests(m_testCtx, "renderpass2"));
 
-    // info group: original upstream enumeration and physical-device query
-    // bodies. cases.txt remains the execution filter; registering these
-    // factories does not replace their result oracles.
+    // info group: original upstream enumeration, physical-device queries and
+    // limit-validation bodies. The latter include inline uniform block limits;
+    // cases.txt remains the execution filter for all of them.
     {
         de::MovePtr<tcu::TestCaseGroup> infoGroup(
-            new tcu::TestCaseGroup(m_testCtx, "info"));
+            vkt::api::createFeatureInfoTests(m_testCtx));
         vkt::api::createFeatureInfoInstanceTests(infoGroup.get());
         vkt::api::createFeatureInfoDeviceTests(infoGroup.get());
         addChild(infoGroup.release());
@@ -187,10 +195,11 @@ void FocusedVkTestPackage::init(void)
         addChild(textureGroup.release());
     }
 
-    // binding_model.shader_access group
+    // Original binding model factories; cases.txt filters the selected leaves.
     {
         de::MovePtr<tcu::TestCaseGroup> bindingModelGroup(new tcu::TestCaseGroup(m_testCtx, "binding_model"));
         bindingModelGroup->addChild(vkt::BindingModel::createShaderAccessTests(m_testCtx));
+        bindingModelGroup->addChild(vkt::BindingModel::createDescriptorCopyTests(m_testCtx));
         // Original BDA test body, support gate and GPU oracle. The build copy
         // bounds registration to two base-address compute cases; cases.txt
         // remains the execution filter for measurement versus acceptance.
@@ -371,6 +380,8 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::compute::createBasicComputeShaderTests(m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
         computeGroup->addChild(vkt::compute::createIndirectComputeDispatchTests(
             m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
+        computeGroup->addChild(vkt::compute::createZeroInitializeWorkgroupMemoryTests(
+            m_testCtx, vk::COMPUTE_PIPELINE_CONSTRUCTION_TYPE_PIPELINE));
         addChild(computeGroup.release());
     }
 
@@ -391,6 +402,7 @@ void FocusedVkTestPackage::init(void)
     // execution filter.
     {
         de::MovePtr<tcu::TestCaseGroup> pipelineGroup(new tcu::TestCaseGroup(m_testCtx, "pipeline"));
+        pipelineGroup->addChild(vkt::pipeline::createCacheControlTests(m_testCtx));
         pipelineGroup->addChild(vkt::pipeline::createPushConstantTests(
             m_testCtx, vk::PIPELINE_CONSTRUCTION_TYPE_MONOLITHIC));
         // pipeline.cache: the upstream factory registers its whole family; the
@@ -458,9 +470,18 @@ void FocusedVkTestPackage::init(void)
         computeGroup->addChild(vkt::SpirVAssembly::createFocused8BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocused16BitStorageComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createWorkgroupMemoryComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createFocusedLocalSizeIdGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createMultipleShaderExtendedGroup(m_testCtx));
         // Original Vulkan 1.0 Int16 indexing leaves give the dormant core
         // shaderInt16 route an applicable CTS oracle once it is measured.
         computeGroup->addChild(vkt::SpirVAssembly::createIndexingComputeGroup(m_testCtx));
+        // Original integer-dot shaders, support checks and numerical oracles.
+        computeGroup->addChild(vkt::SpirVAssembly::createOpSDotKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpUDotKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpSUDotKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpSDotAccSatKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpUDotAccSatKHRComputeGroup(m_testCtx));
+        computeGroup->addChild(vkt::SpirVAssembly::createOpSUDotAccSatKHRComputeGroup(m_testCtx));
         computeGroup->addChild(vkt::SpirVAssembly::createFocusedVolatileAtomicComputeGroup(m_testCtx));
         instructionGroup->addChild(computeGroup.release());
         spirvGroup->addChild(instructionGroup.release());

@@ -15,6 +15,7 @@
  * mocked; no GPU work runs. */
 #include "vk_internal.h"
 #include "vk_command.h"
+#include "vk_pipeline.h"
 #include "graphics_formats.h"
 #include "graphics_program.h"
 #include "physical_device_profile.h"
@@ -23,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../examples/dxvk_render_witness/inline_graphics.h"
 
 static VkResult alloc_memory(void *ctx, VkDeviceSize size, void **address, void **backing)
 {
@@ -41,14 +43,15 @@ static VkResult open_backend(void *ctx, struct ps5vk_memory_backend *backend)
 static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend; }
 VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
-    /* The witness build's platform bits (the shipping routes). */
+    /* Shipping render routes plus the explicit cache-control diagnostic. */
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
         .max_allocation = 1u << 22, .queue_flags = VK_QUEUE_COMPUTE_BIT,
         .supported_features = PS5VK_FEATURE_MULTIVIEW,
         .supported_features_t09 = PS5VK_T09_FEATURE_MAINTENANCE2 |
             PS5VK_T09_FEATURE_CREATE_RENDERPASS2 | PS5VK_T09_FEATURE_EXTENDED_DYNAMIC_STATE |
             PS5VK_T09_FEATURE_COPY_COMMANDS2 | PS5VK_T09_FEATURE_DEPTH_STENCIL_RESOLVE |
-            PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1};
+            PS5VK_T09_FEATURE_DYNAMIC_RENDERING | PS5VK_T09_FEATURE_MAINTENANCE1 |
+            PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL | PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU", .heap_size = 1u << 22,
         .allocation_granularity = 1, .buffer_image_granularity = 1};
@@ -56,8 +59,16 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *p)
     return VK_SUCCESS;
 }
 static unsigned compiled;
+static VkBool32 warm[2];
 static VkResult compile_program(void *context, const struct ps5vk_graphics_key *key, const void **out)
-{ (void)context; (void)key; *out = &compiled; return VK_SUCCESS; }
+{
+    (void)context;
+    unsigned shape = !!key->rasterizer_discard;
+    if (!warm[shape] && key->fail_on_compile_required) return VK_PIPELINE_COMPILE_REQUIRED;
+    if (!warm[shape]) { warm[shape] = VK_TRUE; ++compiled; }
+    *out = &compiled;
+    return VK_SUCCESS;
+}
 static void release_program(void *context, const void *data) { (void)context; (void)data; }
 static VkResult create_graphics(VkDevice d, const void *data, uint32_t primitive, void **out)
 { (void)d; (void)data; (void)primitive; *out = malloc(1); return *out ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY; }
@@ -67,9 +78,14 @@ enum { EXTENT = 64, STAGING = 64 * 1024, FULL_OFFSET = 4096, SUB_OFFSET = 24576 
        SUB_X = 40, SUB_Y = 24, SUB_W = 24, SUB_H = 16, SUB_ROW = 32 };
 static const uint32_t vs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 0, 1, 0x6e69616d, 0};
 static const uint32_t fs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 4, 1, 0x6e69616d, 0};
+static const uint32_t gs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 3, 1, 0x6e69616d, 0};
+static const uint32_t tcs[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 1, 1, 0x6e69616d, 0};
+static const uint32_t tes[] = {0x07230203, 0x10000, 0, 2, 0, (5u << 16) | 15, 2, 1, 0x6e69616d, 0};
 
-int main(void)
+static void run_trace(VkBool32 cache_variant, unsigned inline_variant)
 {
+    warm[0] = warm[1] = VK_FALSE;
+    compiled = 0;
     const char *instance_extension = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
     VkInstanceCreateInfo instance_info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .enabledExtensionCount = 1, .ppEnabledExtensionNames = &instance_extension};
@@ -78,12 +94,19 @@ int main(void)
     uint32_t count = 1;
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     assert(vkEnumeratePhysicalDevices(instance, &count, &physical) == VK_SUCCESS);
+    VkPhysicalDevicePipelineCreationCacheControlFeatures cache_control = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
+        .pipelineCreationCacheControl = VK_TRUE};
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
         .extendedDynamicState = VK_TRUE};
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, .pNext = &eds,
         .dynamicRendering = VK_TRUE};
+    VkPhysicalDeviceInlineUniformBlockFeatures inline_uniform = {
+        .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES,.inlineUniformBlock=VK_TRUE};
+    if (cache_variant) eds.pNext = &cache_control;
+    if (inline_variant) eds.pNext = &inline_uniform;
     float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueCount = 1, .pQueuePriorities = &priority};
@@ -91,10 +114,24 @@ int main(void)
         VK_KHR_MULTIVIEW_EXTENSION_NAME, VK_KHR_MAINTENANCE_2_EXTENSION_NAME,
         VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
         VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
-        VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_EXTENSION_NAME};
+        VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_EXTENSION_NAME,
+        VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME};
+    if (inline_variant) device_extensions[8]=VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME;
+    if(inline_variant>=4) {
+        /* The host fixture opts into the already implemented optional-stage routes. */
+        physical->platform.supported_features|=inline_variant==4?
+            PS5VK_FEATURE_GEOMETRY_SHADER:PS5VK_FEATURE_TESSELLATION_SHADER;
+        VkPhysicalDeviceFeatures2 supported={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        vkGetPhysicalDeviceFeatures2(physical,&supported);
+        assert(inline_variant==4?supported.features.geometryShader:supported.features.tessellationShader);
+    }
+    VkPhysicalDeviceFeatures stage_features={0};
+    if(inline_variant==4) stage_features.geometryShader=VK_TRUE;
+    if(inline_variant>=5) stage_features.tessellationShader=VK_TRUE;
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pEnabledFeatures=inline_variant>=4?&stage_features:NULL,
         .pNext = &dynamic_rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
-        .enabledExtensionCount = 8, .ppEnabledExtensionNames = device_extensions};
+        .enabledExtensionCount = (cache_variant || inline_variant) ? 9 : 8, .ppEnabledExtensionNames = device_extensions};
     VkDevice device = VK_NULL_HANDLE;
     assert(vkCreateDevice(physical, &device_info, NULL, &device) == VK_SUCCESS);
     device->graphics_enabled = VK_TRUE;
@@ -134,25 +171,75 @@ int main(void)
     assert(vkAllocateMemory(device, &allocation, NULL, &staging_memory) == VK_SUCCESS);
     assert(vkBindBufferMemory(device, staging, staging_memory, 0) == VK_SUCCESS);
 
-    VkShaderModuleCreateInfo module_info[2] = {
+    VkShaderModuleCreateInfo module_info[4] = {
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = sizeof(vs), .pCode = vs},
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = sizeof(fs), .pCode = fs}};
-    VkShaderModule modules[2];
-    for (unsigned n = 0; n < 2; ++n)
+    module_info[2]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(gs),.pCode=gs};
+    if(inline_variant>=5) {
+        module_info[2]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(tcs),.pCode=tcs};
+        module_info[3]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize=sizeof(tes),.pCode=tes};
+    }
+    VkShaderModule modules[4];
+    for (unsigned n = 0; n < (inline_variant>=5?4u:inline_variant==4?3u:2u); ++n)
         assert(vkCreateShaderModule(device, &module_info[n], NULL, &modules[n]) == VK_SUCCESS);
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkDescriptorSetLayout inline_layout=VK_NULL_HANDLE;
+    VkDescriptorPool inline_pool=VK_NULL_HANDLE;
+    VkDescriptorSet inline_set=VK_NULL_HANDLE;
+    if(inline_variant) {
+        const VkShaderStageFlags boundary_stage=inline_variant==2?VK_SHADER_STAGE_VERTEX_BIT:
+            inline_variant==3?VK_SHADER_STAGE_FRAGMENT_BIT:
+            inline_variant==4?VK_SHADER_STAGE_GEOMETRY_BIT:
+            inline_variant==5?VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+            inline_variant==6?VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:0;
+        assert(inline_graphics_descriptors(device,&inline_layout,&inline_pool,&inline_set,
+            boundary_stage)==VK_SUCCESS);
+        if(inline_variant==1) {
+            const uint32_t expected[]={4,4,64,255,0x13579bdfu,0x2468ace0u};
+            assert(inline_set->inline_uniform.bytes[0]==20 && inline_set->inline_uniform.bytes[1]==4);
+            assert(!memcmp(inline_set->inline_data,expected,sizeof(expected)));
+        } else {
+            assert(inline_set->inline_uniform.blocks==4 && inline_set->inline_uniform.total_bytes==1024);
+            for(unsigned b=0;b<4;++b) {
+                assert(inline_set->signature.binding[b].stages==boundary_stage);
+                assert(inline_set->inline_uniform.bytes[b]==256);
+            }
+            for(unsigned i=0;i<256;++i) {
+                uint32_t value;memcpy(&value,inline_set->inline_data+i*4,4);
+                assert(value==0x4b000001u+i*37u);
+            }
+        }
+        layout_info.setLayoutCount=1;layout_info.pSetLayouts=&inline_layout;
+    }
     VkPipelineLayout layout = VK_NULL_HANDLE;
     assert(vkCreatePipelineLayout(device, &layout_info, NULL, &layout) == VK_SUCCESS);
-    VkPipelineShaderStageCreateInfo stages[2] = {
+    VkPipelineShaderStageCreateInfo stages[4] = {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[0],
          .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = modules[0], .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[1],
          .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = modules[1], .pName = "main"}};
+    if(inline_variant==4) {
+        stages[2]=stages[1];
+        stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext=&module_info[2],.stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=modules[2],.pName="main"};
+    }
+    if(inline_variant>=5) {
+        stages[3]=stages[1];
+        stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext=&module_info[2],.stage=VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,.module=modules[2],.pName="main"};
+        stages[2]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext=&module_info[3],.stage=VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,.module=modules[3],.pName="main"};
+    }
     VkPipelineVertexInputStateCreateInfo vertex_input = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     VkPipelineInputAssemblyStateCreateInfo assembly = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        .topology = inline_variant>=5?VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+    VkPipelineTessellationStateCreateInfo tessellation={
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,.patchControlPoints=3};
     VkPipelineViewportStateCreateInfo viewport_state = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
     VkPipelineRasterizationStateCreateInfo raster = {
@@ -181,14 +268,63 @@ int main(void)
         .colorAttachmentCount = 1, .pColorAttachmentFormats = &color_format};
     VkGraphicsPipelineCreateInfo pipeline_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .pNext = &rendering_info,
-        .stageCount = 2, .pStages = stages, .pVertexInputState = &vertex_input,
+        .stageCount = inline_variant>=5?4u:inline_variant==4?3u:2u,
+        .pStages = stages, .pVertexInputState = &vertex_input,
+        .pTessellationState=inline_variant>=5?&tessellation:NULL,
         .pInputAssemblyState = &assembly, .pViewportState = &viewport_state,
         .pRasterizationState = &raster, .pMultisampleState = &multisample,
         .pDepthStencilState = &depth_state, .pColorBlendState = &blend,
         .pDynamicState = &dynamic, .layout = layout, .basePipelineIndex = -1};
     VkPipeline pipeline = VK_NULL_HANDLE;
-    assert(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline) ==
-           VK_SUCCESS);
+    VkPipeline base = VK_NULL_HANDLE, discard = VK_NULL_HANDLE;
+    VkPipelineCache cache = VK_NULL_HANDLE;
+    VkQueryPool queries = VK_NULL_HANDLE;
+    VkResult result;
+#define TRY(call) assert((call) == VK_SUCCESS)
+#define REQUIRE(condition, reason) assert(condition)
+    if (cache_variant) {
+        VkPipelineCacheCreateInfo cache_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+            .flags = VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT};
+        TRY(vkCreatePipelineCache(device, &cache_info, NULL, &cache));
+        /* Cold miss must not compile. Warm derivatives execute after base retirement. */
+        pipeline_info.flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        result = vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &pipeline);
+        REQUIRE(result == VK_PIPELINE_COMPILE_REQUIRED && !pipeline, "cold graphics miss");
+        pipeline_info.flags = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+        TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &base));
+        pipeline_info.flags = VK_PIPELINE_CREATE_DERIVATIVE_BIT |
+            VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        pipeline_info.basePipelineHandle = base;
+        TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &pipeline));
+        vkDestroyPipeline(device, base, NULL); base = VK_NULL_HANDLE;
+        pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
+        pipeline_info.stageCount = 1;
+        raster.rasterizerDiscardEnable = VK_TRUE;
+        pipeline_info.pViewportState = NULL;
+        pipeline_info.pMultisampleState = NULL;
+        pipeline_info.pDepthStencilState = NULL;
+        pipeline_info.pColorBlendState = NULL;
+        pipeline_info.flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        result = vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &discard);
+        REQUIRE(result == VK_PIPELINE_COMPILE_REQUIRED && !discard, "cold discard miss");
+        pipeline_info.flags = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+        TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &base));
+        pipeline_info.flags = VK_PIPELINE_CREATE_DERIVATIVE_BIT |
+            VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+        pipeline_info.basePipelineHandle = base;
+        TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &discard));
+        vkDestroyPipeline(device, base, NULL); base = VK_NULL_HANDLE;
+        vkDestroyPipelineCache(device, cache, NULL); cache = VK_NULL_HANDLE;
+        VkQueryPoolCreateInfo query_info = {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .queryType = VK_QUERY_TYPE_OCCLUSION, .queryCount = 2};
+        TRY(vkCreateQueryPool(device, &query_info, NULL, &queries));
+        assert(compiled == 2);
+    } else {
+        TRY(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline));
+        assert(compiled == 1);
+    }
+#undef TRY
+#undef REQUIRE
 
     VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     VkCommandPool pool = VK_NULL_HANDLE;
@@ -253,18 +389,28 @@ int main(void)
     VkRenderingInfo rendering = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = {{0, 0}, {EXTENT, EXTENT}}, .layerCount = 1,
         .colorAttachmentCount = 1, .pColorAttachments = &color};
+    if (cache_variant) vkCmdResetQueryPool(command, queries, 0, 2);
     vkCmdBeginRenderingKHR(command, &rendering);
     vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    if(inline_variant) vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&inline_set,0,NULL);
     const VkViewport viewport = {0.0f, (float)EXTENT, (float)EXTENT, -(float)EXTENT, 0.0f, 1.0f};
     const VkRect2D scissor = {{0, 0}, {EXTENT, EXTENT}};
     vkCmdSetViewportWithCountEXT(command, 1, &viewport);
     vkCmdSetScissorWithCountEXT(command, 1, &scissor);
     vkCmdSetFrontFaceEXT(command, VK_FRONT_FACE_CLOCKWISE);
     vkCmdSetCullModeEXT(command, VK_CULL_MODE_NONE);
+    if (cache_variant) vkCmdBeginQuery(command, queries, 0, 0);
     vkCmdDraw(command, 6, 1, 0, 0);
+    if (cache_variant) vkCmdEndQuery(command, queries, 0);
     vkCmdSetCullModeEXT(command, VK_CULL_MODE_BACK_BIT);
     vkCmdDraw(command, 6, 1, 6, 0);
     vkCmdDraw(command, 6, 1, 12, 0);
+    if (cache_variant) {
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, discard);
+        vkCmdBeginQuery(command, queries, 1, 0);
+        vkCmdDraw(command, 18, 1, 0, 0);
+        vkCmdEndQuery(command, queries, 1);
+    }
     vkCmdEndRenderingKHR(command);
     assert(command->state == PS5VK_RECORDING);
     /* DXVK's exact global dependency from the attachment writes (host
@@ -317,16 +463,27 @@ int main(void)
     unsigned end = 0;
     for (unsigned k = 0; k < command->operation_count; ++k)
         if (command->operations[k].type == PS5VK_END_RENDER_PASS) end = k;
-    assert(command->operations[0].type == PS5VK_IMAGE_BARRIER &&
-           command->operations[1].type == PS5VK_BEGIN_RENDER_PASS && end == 5);
-    for (unsigned k = 2; k < 5; ++k) {
+    assert(command->operations[0].type == PS5VK_IMAGE_BARRIER);
+    if (cache_variant) {
+        const enum ps5vk_operation_type types[] = {PS5VK_IMAGE_BARRIER, PS5VK_QUERY_RESET,
+            PS5VK_BEGIN_RENDER_PASS, PS5VK_QUERY_BEGIN, PS5VK_DRAW, PS5VK_QUERY_END,
+            PS5VK_DRAW, PS5VK_DRAW, PS5VK_QUERY_BEGIN, PS5VK_DRAW, PS5VK_QUERY_END,
+            PS5VK_END_RENDER_PASS};
+        assert(end == sizeof(types) / sizeof(types[0]) - 1);
+        for (unsigned k = 0; k <= end; ++k) assert(command->operations[k].type == types[k]);
+        assert(command->operations[9].pipeline->rasterizer_discard &&
+               command->operations[9].vertex_count == 18);
+    } else assert(command->operations[1].type == PS5VK_BEGIN_RENDER_PASS && end == 5);
+    for (unsigned n = 0; n < 3; ++n) {
+        unsigned k = cache_variant ? (n == 0 ? 4 : n + 5) : n + 2;
         const struct ps5vk_operation *draw = &command->operations[k];
+        if(inline_variant) assert(draw->sets[0]==inline_set && draw->pipeline->sets[0].inline_bytes[0]==(inline_variant==1?20u:256u));
         assert(draw->type == PS5VK_DRAW && draw->vertex_count == 6 &&
-               draw->first_vertex == 6u * (k - 2u) && draw->viewport_count == 1 &&
+               draw->first_vertex == 6u * n && draw->viewport_count == 1 &&
                draw->viewports[0].height == -(float)EXTENT && draw->viewports[0].y == (float)EXTENT &&
-               draw->raster.fixed_function_resolved &&
+               draw->raster.fixed_function_resolved && !draw->pipeline->rasterizer_discard &&
                draw->raster.front_face == VK_FRONT_FACE_CLOCKWISE &&
-               draw->raster.cull_mode == (k == 2 ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT));
+               draw->raster.cull_mode == (n == 0 ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT));
     }
     const struct ps5vk_operation *postlude = &command->operations[end + 1];
     const unsigned postlude_count = command->operation_count - end - 1;
@@ -387,9 +544,14 @@ int main(void)
     vkFreeCommandBuffers(device, pool, 1, &init_barriers);
     vkFreeCommandBuffers(device, pool, 1, &init_buffer);
     vkDestroyCommandPool(device, pool, NULL);
+    if (queries) vkDestroyQueryPool(device, queries, NULL);
+    if (discard) vkDestroyPipeline(device, discard, NULL);
     vkDestroyPipeline(device, pipeline, NULL);
     vkDestroyPipelineLayout(device, layout, NULL);
-    for (unsigned n = 0; n < 2; ++n) vkDestroyShaderModule(device, modules[n], NULL);
+    if(inline_pool) vkDestroyDescriptorPool(device,inline_pool,NULL);
+    if(inline_layout) vkDestroyDescriptorSetLayout(device,inline_layout,NULL);
+    for (unsigned n = 0; n < (inline_variant>=5?4u:inline_variant==4?3u:2u); ++n)
+        vkDestroyShaderModule(device, modules[n], NULL);
     vkDestroyBuffer(device, staging, NULL);
     vkFreeMemory(device, staging_memory, NULL);
     vkDestroyImageView(device, view, NULL);
@@ -398,5 +560,17 @@ int main(void)
     vkDestroyDevice(device, NULL);
     vkDestroyInstance(instance, NULL);
     puts("dxvk render witness trace: pass (host recording and readback planning, no GPU)");
+}
+
+int main(void)
+{
+    run_trace(VK_FALSE,VK_FALSE);
+    run_trace(VK_TRUE,VK_FALSE);
+    run_trace(VK_FALSE,VK_TRUE);
+    run_trace(VK_FALSE,2);
+    run_trace(VK_FALSE,3);
+    run_trace(VK_FALSE,4);
+    run_trace(VK_FALSE,5);
+    run_trace(VK_FALSE,6);
     return 0;
 }

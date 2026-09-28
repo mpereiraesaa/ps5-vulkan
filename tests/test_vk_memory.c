@@ -15,6 +15,17 @@ static struct mock_gpu_address gpu_addresses[128];
 static unsigned gpu_address_count;
 static VkDeviceAddress next_gpu_address = UINT64_C(0x200000000);
 static int refuse_gpu_address;
+static void *cpu_alias_backing, *cpu_alias_address;
+static VkResult cpu_alias_result;
+static unsigned cpu_alias_calls;
+VkResult ps5vk_memory_backend_cpu_map(void *backing, void **out)
+{
+    if (out) *out = NULL;
+    if (backing != cpu_alias_backing) return VK_ERROR_FEATURE_NOT_PRESENT;
+    ++cpu_alias_calls;
+    if (cpu_alias_result == VK_SUCCESS && out) *out = cpu_alias_address;
+    return cpu_alias_result;
+}
 VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out)
 {
     if (out) *out = 0;
@@ -161,6 +172,31 @@ static void test_mapping(void)
     assert(vkInvalidateMappedMemoryRanges(&d, 1, &r) == VK_ERROR_DEVICE_LOST);
     vkFreeMemory(&d, m, NULL);
     assert(!d.memories && mock.allocations == mock.releases);
+}
+static void test_separate_cpu_mapping(void)
+{
+    struct mock mock = {0}; struct VkDevice_T d = device(&mock);
+    VkDeviceMemory m = memory(&d, 512);
+    uint8_t alias[512] = {0};
+    cpu_alias_backing = gpu_addresses[gpu_address_count - 1].backing;
+    cpu_alias_address = alias;
+    cpu_alias_result = VK_SUCCESS;
+    cpu_alias_calls = 0;
+    void *map = NULL;
+    assert(vkMapMemory(&d, m, 64, 128, 0, &map) == VK_SUCCESS);
+    assert(map == alias + 64 && map != (uint8_t *)cpu_alias_backing + 64);
+    assert(cpu_alias_calls == 1);
+    vkUnmapMemory(&d, m);
+    cpu_alias_result = VK_ERROR_MEMORY_MAP_FAILED;
+    map = (void *)(uintptr_t)1;
+    assert(vkMapMemory(&d, m, 0, VK_WHOLE_SIZE, 0, &map) ==
+           VK_ERROR_MEMORY_MAP_FAILED && !map && cpu_alias_calls == 2);
+    cpu_alias_result = VK_SUCCESS; cpu_alias_address = NULL;
+    assert(vkMapMemory(&d, m, 0, VK_WHOLE_SIZE, 0, &map) ==
+           VK_ERROR_MEMORY_MAP_FAILED && !map && cpu_alias_calls == 3);
+    cpu_alias_backing = cpu_alias_address = NULL;
+    vkFreeMemory(&d, m, NULL);
+    assert(mock.allocations == mock.releases);
 }
 struct allocator_state { unsigned allocated, freed; int fail; };
 static void *VKAPI_CALL host_alloc(void *ctx, size_t size, size_t alignment,
@@ -459,7 +495,8 @@ static void test_buffer_device_address(void)
 }
 int main(void)
 {
-    test_binding(); test_mapping(); test_failures_and_allocators(); test_buffer_views();
+    test_binding(); test_mapping(); test_separate_cpu_mapping();
+    test_failures_and_allocators(); test_buffer_views();
     test_commitment();
     test_buffer_device_address();
     puts("Vulkan memory contracts: pass (host mock only, no GPU evidence)");

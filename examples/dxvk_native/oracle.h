@@ -5,7 +5,9 @@
  * (pattern.ps.hlsl) writes, for pixel (x, y):
  *   r = 4x, g = 4y, b = (7x + 13y) & 255, a = 255
  * so columns 0..47 check rasterized geometry and position, and columns
- * 48..63 check that the clear survived outside the viewport.
+ * 48..63 check that the clear survived outside the viewport. Presentation
+ * checks the same region of its larger backbuffer and adds 16 * frame to
+ * the clear's red channel, so an earlier frame cannot satisfy a later oracle.
  *
  * Pure C, no platform headers: the PS5 payload, the host harness and the host
  * unit test all use this exact code. */
@@ -48,12 +50,17 @@ static inline uint32_t dxvk_oracle_pack(uint32_t r, uint32_t g, uint32_t b, uint
 }
 
 /* Expected packed RGBA of pixel (x, y). */
-static inline uint32_t dxvk_oracle_expected(uint32_t x, uint32_t y)
+static inline uint32_t dxvk_oracle_expected_frame(uint32_t x, uint32_t y, uint32_t frame)
 {
     if (x >= DXVK_ORACLE_VIEWPORT_WIDTH)
-        return dxvk_oracle_pack(DXVK_ORACLE_CLEAR_R, DXVK_ORACLE_CLEAR_G,
+        return dxvk_oracle_pack(DXVK_ORACLE_CLEAR_R + 16u * frame, DXVK_ORACLE_CLEAR_G,
                                 DXVK_ORACLE_CLEAR_B, DXVK_ORACLE_CLEAR_A);
     return dxvk_oracle_pack(x * 4u, y * 4u, (x * 7u + y * 13u) & 255u, 255u);
+}
+
+static inline uint32_t dxvk_oracle_expected(uint32_t x, uint32_t y)
+{
+    return dxvk_oracle_expected_frame(x, y, 0);
 }
 
 static inline uint32_t dxvk_oracle_fnv1a(uint32_t hash, uint32_t packed)
@@ -65,26 +72,31 @@ static inline uint32_t dxvk_oracle_fnv1a(uint32_t hash, uint32_t packed)
     return hash;
 }
 
-static inline uint32_t dxvk_oracle_expected_checksum(void)
+static inline uint32_t dxvk_oracle_expected_frame_checksum(uint32_t frame)
 {
     uint32_t hash = 2166136261u;
     for (uint32_t y = 0; y < DXVK_ORACLE_HEIGHT; ++y)
         for (uint32_t x = 0; x < DXVK_ORACLE_WIDTH; ++x)
-            hash = dxvk_oracle_fnv1a(hash, dxvk_oracle_expected(x, y));
+            hash = dxvk_oracle_fnv1a(hash, dxvk_oracle_expected_frame(x, y, frame));
     return hash;
+}
+
+static inline uint32_t dxvk_oracle_expected_checksum(void)
+{
+    return dxvk_oracle_expected_frame_checksum(0);
 }
 
 /* Compare a mapped image (row_pitch bytes per row, >= 4 * width) with the
  * expected one. Every pixel is checked; padding between rows is ignored.
  * Returns 0 when every pixel matches, 1 otherwise, -1 on bad arguments. */
-static inline int dxvk_oracle_check(const uint8_t *pixels, size_t row_pitch,
+static inline int dxvk_oracle_check_frame(const uint8_t *pixels, size_t row_pitch, uint32_t frame,
                                     dxvk_oracle_result *result)
 {
     if (!result) return -1;
     dxvk_oracle_result r;
     r.checked = r.mismatches = r.reported = 0;
     r.checksum = 2166136261u;
-    r.expected_checksum = dxvk_oracle_expected_checksum();
+    r.expected_checksum = dxvk_oracle_expected_frame_checksum(frame);
     for (unsigned i = 0; i < DXVK_ORACLE_MAX_REPORTED; ++i)
         r.first[i].x = r.first[i].y = r.first[i].got = r.first[i].expected = 0;
     if (!pixels || row_pitch < 4u * DXVK_ORACLE_WIDTH) {
@@ -96,7 +108,7 @@ static inline int dxvk_oracle_check(const uint8_t *pixels, size_t row_pitch,
         for (uint32_t x = 0; x < DXVK_ORACLE_WIDTH; ++x) {
             const uint8_t *p = row + 4u * x;
             uint32_t got = dxvk_oracle_pack(p[0], p[1], p[2], p[3]);
-            uint32_t expected = dxvk_oracle_expected(x, y);
+            uint32_t expected = dxvk_oracle_expected_frame(x, y, frame);
             r.checksum = dxvk_oracle_fnv1a(r.checksum, got);
             ++r.checked;
             if (got != expected) {
@@ -110,6 +122,12 @@ static inline int dxvk_oracle_check(const uint8_t *pixels, size_t row_pitch,
     }
     *result = r;
     return r.mismatches ? 1 : 0;
+}
+
+static inline int dxvk_oracle_check(const uint8_t *pixels, size_t row_pitch,
+                                    dxvk_oracle_result *result)
+{
+    return dxvk_oracle_check_frame(pixels, row_pitch, 0, result);
 }
 
 #ifdef __cplusplus

@@ -4,6 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,41 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_offline_subgroup_and_zero_initialize_work_remains_blocked(self):
+        rows = {row["name"]: row for row in matrix.generate()["requirements"]}
+        for name, evidence in (
+                ("shaderSubgroupExtendedTypes", "original CTS compute leaves"),
+                ("subgroupBroadcastDynamicId", "runtime-ID Broadcast CTS"),
+                ("subgroupSizeControl", "ALLOW_VARYING_SUBGROUP_SIZE"),
+                ("computeFullSubgroups", "REQUIRE_FULL_SUBGROUPS"),
+                ("shaderZeroInitializeWorkgroupMemory", "SDK-linked delivery witness")):
+            with self.subTest(name=name):
+                row = rows[name]
+                self.assertEqual("blocker", row["verdict"])
+                self.assertEqual("missing", row["implementation"]["state"])
+                self.assertIn(evidence, row["implementation"]["detail"])
+                self.assertNotEqual("native-evidence", row["native"]["state"])
+        self.assertIn("BALLOT", rows["computeFullSubgroups"]["implementation"]["detail"])
+        cache = rows["pipelineCreationCacheControl"]
+        self.assertEqual("blocker", cache["verdict"])
+        self.assertIn("SDK-linked compute and graphics witness sources",
+                      cache["implementation"]["detail"])
+        self.assertIn("rebuild the integrated candidate from current source",
+                      cache["implementation"]["detail"])
+
+    def test_integer_dot_api_is_not_shipping_without_platform_bit(self):
+        extension = "VK_KHR_shader_integer_dot_product"
+        self.assertNotIn(extension, matrix.implemented_device_extensions())
+        read_text = Path.read_text
+        def enabled_source(path, *args, **kwargs):
+            source = read_text(path, *args, **kwargs)
+            if path == matrix.ROOT / "native/platform_ps5.c":
+                source += "\nplatform->supported_features_v13 |= PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;\n"
+            return source
+        # Positive control proves the inventory follows the platform gate.
+        with mock.patch.object(Path, "read_text", enabled_source):
+            self.assertIn(extension, matrix.implemented_device_extensions())
+
     def test_sampler_mirror_clamp_shipping_khr_route_and_native_axes(self):
         document = matrix.generate()
         row = next(item for item in document["requirements"]
@@ -748,10 +784,22 @@ class CurrentProbeTests(unittest.TestCase):
                 self.assertEqual(artifact, row["native"]["artifact_sha256"])
                 self.assertEqual("satisfied", row["verdict"])
         m4 = rows["feature:VkPhysicalDeviceVulkan13Features:maintenance4"]
-        self.assertEqual(("satisfied", "missing", "reported-not-executed", "blocker"),
+        self.assertEqual(("satisfied", "implemented", "reported-not-executed", "blocker"),
                          (m4["api"]["state"], m4["implementation"]["state"],
                           m4["native"]["state"], m4["verdict"]))
-        self.assertIn("compound OpSpecConstantOp", m4["implementation"]["detail"])
+        self.assertIn("32-bit integer arithmetic/bitwise OpSpecConstantOp",
+                      m4["implementation"]["detail"])
+        self.assertIn("integer comparisons, boolean specialization and conditional selection",
+                      m4["implementation"]["detail"])
+        self.assertIn("vector construction, insertion, shuffle and scalar extraction",
+                      m4["implementation"]["detail"])
+        self.assertIn("nested array/structure extraction and insertion, null aggregates",
+                      m4["implementation"]["detail"])
+        self.assertIn("integer-width conversions with truncation and sign extension",
+                      m4["implementation"]["detail"])
+        self.assertIn("147 float/int/uint interface cases across VS/TCS/TES/GS/FS",
+                      m4["implementation"]["detail"])
+        self.assertIn("no native delivery claim", m4["implementation"]["detail"])
 
     def test_core_implementation_needs_every_citation_and_the_query(self):
         identifier = "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters"

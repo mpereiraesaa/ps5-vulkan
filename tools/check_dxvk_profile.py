@@ -147,6 +147,101 @@ DIAGNOSTIC_IMPLEMENTATIONS = {
 # `gaps` names required semantics the driver does not implement yet; a row with
 # a gap stays missing however its query reads.
 CORE_IMPLEMENTATIONS = {
+    "feature:VkPhysicalDeviceVulkan12Features:shaderSubgroupExtendedTypes": {
+        "citations": (
+            ("src/vk_core_version.c", "out->shaderSubgroupExtendedTypes ="),
+            ("src/vk_device.c", "saw_subgroup_extended_types = VK_TRUE"),
+            ("src/vk_pipeline.c", "ps5vk_subgroup_public_bits("),
+            ("tests/test_vk_core_version.c", "core.shaderSubgroupExtendedTypes"),
+            ("tests/test_t08_subgroup_contract.py", "test_full_subgroup_occupancy_shader_compiles_with_basic_only"),
+        ),
+        "detail": ("Vulkan 1.2 and KHR query/opt-in contracts are implemented but default off. "
+                   "Host compiler probes cover bounded subgroup type and operation variants, "
+                   "and the original CTS compute leaves are selected only as diagnostics."),
+        "gaps": ("complete BALLOT and ARITHMETIC operations over every advertised type, "
+                 "then validate the platform feature and native CTS execution",),
+    },
+    "feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId": {
+        "citations": (
+            ("src/vk_core_version.c", "out->subgroupBroadcastDynamicId ="),
+            ("src/vk_internal.h", "PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID"),
+            ("src/vk_pipeline.c", "d->enabled_features_v13 & PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID"),
+            ("tests/test_vk_pipeline.c", "subgroup_dynamic_id_gate"),
+            ("cts/upstream/manifest.json", "subgroupbroadcast_nonconst_uint"),
+        ),
+        "detail": ("Vulkan 1.2 query/opt-in and nonconstant-ID module admission contracts "
+                   "are implemented but default off. The original runtime-ID Broadcast CTS "
+                   "leaf is a diagnostic, not acceptance evidence."),
+        "gaps": ("prove runtime-selected Broadcast ID on the GPU with complete BALLOT "
+                 "operation reporting and unchanged native CTS",),
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:subgroupSizeControl": {
+        "citations": (
+            ("src/vk_core_version.c", "out->subgroupSizeControl ="),
+            ("src/vk_device.c", "PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL"),
+            ("src/vk_pipeline.c", "VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT"),
+            ("tests/test_vk_core_version.c", "subgroup_size_negotiation"),
+            ("tests/test_vk_pipeline.c", "subgroup_stage_contract"),
+            ("examples/subgroup_size_witness/main.c", "SUBGROUP_SIZE_RESULT"),
+            ("cts/upstream/manifest.json", "allow_varying_subgroup_size_flags_spirv16"),
+        ),
+        "detail": ("EXT and Vulkan 1.3 query/opt-in, fixed wave32 properties, and compute "
+                   "pipeline flag/required-size contracts are host tested. A bounded SDK "
+                   "witness exists. The original CTS selection now distinguishes the no-flag "
+                   "control from the SPIR-V 1.6 variant that sets ALLOW_VARYING_SUBGROUP_SIZE."),
+        "gaps": ("package the flagged selection from the current source, prove GPU "
+                 "results and graphics-stage varying-size bounds, then repeat acceptance",),
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:computeFullSubgroups": {
+        "citations": (
+            ("src/vk_core_version.c", "out->computeFullSubgroups ="),
+            ("src/vk_device.c", "PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS"),
+            ("src/vk_pipeline.c", "VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT"),
+            ("tests/test_vk_core_version.c", "subgroup_size_negotiation"),
+            ("tests/test_vk_pipeline.c", "subgroup_stage_contract"),
+            ("examples/subgroup_size_witness/main.c", "SUBGROUP_SIZE_RESULT"),
+            ("cts/upstream/manifest.json", "require_full_subgroups_flags_spirv16"),
+        ),
+        "detail": ("EXT and Vulkan 1.3 query/opt-in and wave32 full-subgroup compute "
+                   "pipeline constraints are host tested. A bounded SDK witness exists. "
+                   "The original CTS case with REQUIRE_FULL_SUBGROUPS is diagnostic only."),
+        "gaps": ("the original CTS full-subgroup oracle also requires truthful BALLOT "
+                 "reporting; package it with that prerequisite, prove native active-lane "
+                 "results and repeat acceptance",),
+    },
+    "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl": {
+        "citations": (
+            ("src/vk_device.c", "PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL"),
+            ("src/vk_core_version.c", "V13(pipelineCreationCacheControl"),
+            ("src/vk_pipeline.c", "VK_PIPELINE_COMPILE_REQUIRED"),
+            ("src/vk_graphics_pipeline.c", "fail_on_compile_required"),
+            ("native/runtime_graphics_cache.c", "fail_on_compile_required"),
+            ("tests/test_runtime_pipeline_cache.c", "static void cache_control"),
+            ("tests/test_vk_core_version.c", "cache_control_negotiation"),
+            ("examples/dxvk_render_witness/cache_compute.h", "cache_compute_witness"),
+            ("examples/dxvk_render_witness/main.c", "DXVK_CACHE_WITNESS_CREATED"),
+        ),
+        "detail": ("EXT and Vulkan 1.3 query/opt-in contracts gate pipeline cache-control "
+                   "flags. Compute and graphics cold misses refuse compilation; warm "
+                   "entries retain cache identity. Batch creation supports early return, "
+                   "null uncreated outputs and ownership of successful siblings. Dynamic "
+                   "topology creation rolls back a warm primary when a variant needs "
+                   "compilation. Externally synchronized cache creation is accepted "
+                   "only with opt-in. Derivative hints preserve cache identity, validate "
+                   "same-device/type base handles or earlier batch indices with "
+                   "ALLOW_DERIVATIVES, and retain independent result ownership. "
+                   "Static rasterizer discard admits position-producing vertex-only pipelines, ignores "
+                   "post-raster state and links an internal empty pixel program; "
+                   "host compiler and emitted-state tests cover this route. "
+                   "Draw submission without any framebuffer attachment remains refused. "
+                   "Pinned graphics cache-control CTS cases request unreported list "
+                   "restart and are excluded; eight compute cases are prepared for measurement. "
+                   "Host tests cover these contracts, and SDK-linked compute and graphics "
+                   "witness sources plus earlier offline candidates exist."),
+        "gaps": ("rebuild the integrated candidate from current source and prove native "
+                 "execution and canonical acceptance; the shipping platform does not "
+                 "advertise this capability",),
+    },
     "feature:VkPhysicalDeviceVulkan11Features:shaderDrawParameters": {
         "citations": (
             ("native/platform_ps5.c", "PS5VK_FEATURE_SHADER_DRAW_PARAMETERS"),
@@ -171,21 +266,52 @@ CORE_IMPLEMENTATIONS = {
                    "vkAllocateMemory and vkBindBufferMemory accept a buffer of that size."),
         "gaps": (),
     },
+    "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory": {
+        "citations": (
+            ("src/vk_device.c", "PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY"),
+            ("src/vk_core_version.c", "V13(shaderZeroInitializeWorkgroupMemory"),
+            ("src/vk_pipeline.c", "static VkResult workgroup_initializers"),
+            ("tests/test_vk_core_version.c", "zero_initialize_negotiation"),
+            ("tests/test_runtime_compiler.c", "zero_initialize_workgroup"),
+            ("examples/zero_initialize_witness/main.c", "zero_initialize_compute_witness"),
+            ("tests/test_zero_initialize_witness.py", "zero_initialize_check"),
+        ),
+        "detail": ("KHR and Vulkan 1.3 query/opt-in contracts exist behind an unreported "
+                   "platform capability. Module admission requires opt-in and a matching "
+                   "OpConstantNull initializer. The pinned host compiler emits zero stores "
+                   "and an additional workgroup barrier before application shared-memory "
+                   "access; a control shader without the initializer omits both. "
+                   "Compiler regression covers a 2048-byte shared array and checks allocation. "
+                   "An SDK-linked delivery witness and strict host verifier are prepared."),
+        "gaps": ("native execution remains pending; the shipping platform does not "
+                 "advertise this capability",),
+    },
     "feature:VkPhysicalDeviceVulkan13Features:maintenance4": {
         "citations": (
             ("native/platform_ps5.c", "PS5VK_T09_FEATURE_MAINTENANCE4"),
             ("src/vk_memory.c", "vkGetDeviceBufferMemoryRequirementsKHR"),
             ("src/vk_pipeline.c", "LocalSizeId (OpExecutionModeId 331, mode 38)"),
+            ("tests/test_local_size_id.c", "aggregate_vector_dimension"),
+            ("tests/test_local_size_id.c", "converted_dimension"),
+            ("tests/test_maintenance4_interfaces.py", "def test_stage_boundaries"),
+            ("tests/maintenance4_interface_inspect.c", "ps5vk_runtime_graphics_compile"),
         ),
         "detail": ("Reviewed KHR and Vulkan 1.3 aggregate query and opt-in; "
-                   "creation-description memory requirements, maxBufferSize and "
-                   "LocalSizeId with constant or direct specialization-constant operands."),
-        "gaps": (
-            "LocalSizeId operands that are compound OpSpecConstantOp expressions are "
-            "refused (src/vk_pipeline.c local_size)",
-            "a producer output vector wider than the consumer's input is refused by the "
-            "graphics interface policy",
-        ),
+                   "creation-description memory requirements, maxBufferSize, legacy "
+                   "BuiltIn WorkgroupSize precedence and specialization, and "
+                   "LocalSizeId with constants, direct specialization and bounded scalar "
+                   "32-bit integer arithmetic/bitwise OpSpecConstantOp expressions, "
+                   "integer comparisons, boolean specialization and conditional selection, "
+                   "plus vector construction, insertion, shuffle and scalar extraction, "
+                   "nested array/structure extraction and insertion, null aggregates, "
+                   "8/16/32-bit integer-width conversions with truncation and sign extension, "
+                   "and mixed aggregates with floating-point members, checked against "
+                   "the host compiler. Whole-location producer vectors may "
+                   "be wider than consumer vectors when maintenance4 is enabled; the "
+                   "VS-to-FS path has cache opt-in guards. Permanent real-compiler tests "
+                   "cover 147 float/int/uint interface cases across VS/TCS/TES/GS/FS "
+                   "and per-patch boundaries, with no native delivery claim."),
+        "gaps": (),
     },
 }
 
@@ -528,6 +654,12 @@ def implemented_device_extensions() -> set[str]:
 
 
         "PS5VK_SHADER_INT16_DIAGNOSTIC",
+        "PS5VK_ZERO_INITIALIZE_WORKGROUP_DIAGNOSTIC",
+        "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC",
+        "PS5VK_INLINE_UNIFORM_DIAGNOSTIC",
+        "PS5VK_SUBGROUP_SIZE_DIAGNOSTIC",
+        "PS5VK_INTEGER_DOT_DIAGNOSTIC",
+        "PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC",
 
         "PS5VK_MAINTENANCE4_DIAGNOSTIC",
 
@@ -544,10 +676,10 @@ def implemented_device_extensions() -> set[str]:
                 raise ValueError(f"malformed {name} guard")
             platform_source = pattern.sub("", platform_source)
     platform_source = re.sub(r"/\*.*?\*/|//[^\n]*", "", platform_source, flags=re.DOTALL)
-    assignments = re.findall(r"platform->supported_features(?:_t09)?\s*(?:\|=|=)\s*(.*?);",
+    assignments = re.findall(r"platform->supported_features(?:_t09|_v13)?\s*(?:\|=|=)\s*(.*?);",
                              platform_source, re.DOTALL)
     shipping_bits = {bit for assignment in assignments
-                     for bit in re.findall(r"PS5VK_(?:T09_)?FEATURE_[A-Z0-9_]+", assignment)}
+                     for bit in re.findall(r"PS5VK_(?:(?:T09|V13)_)?FEATURE_[A-Z0-9_]+", assignment)}
     gates = {
         "VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME": {
             "PS5VK_FEATURE_STORAGE_BUFFER_8BIT", "PS5VK_FEATURE_STORAGE_BUFFER_16BIT"},
@@ -589,6 +721,17 @@ def implemented_device_extensions() -> set[str]:
             "PS5VK_T09_FEATURE_DEDICATED_ALLOCATION"},
         "VK_KHR_BIND_MEMORY_2_EXTENSION_NAME": {"PS5VK_T09_FEATURE_BIND_MEMORY2"},
         "VK_KHR_MAINTENANCE_4_EXTENSION_NAME": {"PS5VK_T09_FEATURE_MAINTENANCE4"},
+        "VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME": {"PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS"},
+        "VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME": {
+            "PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT"},
+        "VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME": {
+            "PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL", "PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS"},
+        "VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK"},
+        "VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL"},
+        "VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_EXTENSION_NAME": {
+            "PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY"},
         "VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME": {
             "PS5VK_T09_FEATURE_DESCRIPTOR_UPDATE_TEMPLATE"},
         "VK_EXT_ROBUSTNESS_2_EXTENSION_NAME": {

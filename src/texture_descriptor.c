@@ -46,7 +46,8 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
         image->info.extent.height,slices,image->info.mipLevels,&layout))return VK_ERROR_UNKNOWN;
     VkDeviceSize layer_stride=layout.layer_stride;
     const VkBool32 tiled_cube=ps5vk_tiled_cube_sampled_image(image);
-    if(tiled_cube) {
+    const VkBool32 tiled_2d=ps5vk_tiled_2d_sampled_color_image(image);
+    if(tiled_cube || tiled_2d) {
         if(image->requirements.size%image->info.arrayLayers)
             return VK_ERROR_UNKNOWN;
         layer_stride=image->requirements.size/image->info.arrayLayers;
@@ -55,7 +56,8 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
          * would silently sample each face twice. Refuse that descriptor. */
         struct ps5vk_depth_layout tiled;
         if(ps5vk_depth_layout(image->info.extent.width,
-            image->info.extent.height,&tiled) || tiled.bytes!=layer_stride)
+            image->info.extent.height,&tiled) ||
+           (tiled_cube ? tiled.bytes!=layer_stride : tiled.bytes>layer_stride))
             return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     void *base;VkDeviceSize bytes;
@@ -134,10 +136,13 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     words[0]=(uint32_t)(address>>8);
     words[1]=(uint32_t)(address>>40)|format->descriptor_format_word|((width&3u)<<30);
     words[2]=(width>>2)|((image->info.extent.height-1)<<14)|(1u<<31);
-    words[3]=ps5vk_texture_format_dst_sel(format)|type_word|
+    uint32_t selectors=ps5vk_texture_format_dst_sel(format);
+    if(view->components.a==VK_COMPONENT_SWIZZLE_ONE)
+        selectors=(selectors & ~(7u<<9)) | (1u<<9);
+    words[3]=selectors|type_word|
         (view->range.baseMipLevel<<12)|
         ((view->range.baseMipLevel+view->range.levelCount-1)<<16);
-    if(tiled_cube)words[3]|=UINT32_C(0x01b00000);
+    if(tiled_cube || tiled_2d)words[3]|=UINT32_C(0x01b00000);
     if(d32_gather) words[3]|=24u<<20; /* GFX10 64KB_Z_X depth mip tail */
     words[4]=dimension_word;
     words[5]=(4u<<20)|((image->info.mipLevels-1)<<4);
@@ -150,7 +155,8 @@ static VkBool32 sampled_image_usage(VkImage image)
     const VkImageUsageFlags usage=image->info.usage;
     return (usage&VK_IMAGE_USAGE_SAMPLED_BIT) &&
         (!(usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) ||
-         ps5vk_tiled_cube_sampled_image(image));
+         ps5vk_tiled_cube_sampled_image(image) ||
+         ps5vk_tiled_2d_sampled_color_image(image));
 }
 
 VkResult ps5vk_texture_descriptor(VkDevice d,VkImageView view,VkSampler sampler,uint32_t out[12])

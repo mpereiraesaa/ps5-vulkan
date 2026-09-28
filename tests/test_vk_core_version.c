@@ -3,6 +3,7 @@
  * The raised version is a test-only mutation of the mocked profile; shipping
  * builds report PS5VK_DEVICE_API_VERSION. */
 #include "vk_internal.h"
+#include "vk_descriptor.h"
 #include "vk_core_version.h"
 #include "physical_device_profile.h"
 #include <assert.h>
@@ -294,13 +295,647 @@ static void graphics_core13_negotiation(void)
     vkDestroyInstance(i, NULL);
 }
 
+/* Isolate feature negotiation and module admission from shader execution. */
+static void zero_initialize_negotiation(void)
+{
+    const uint32_t versions[] = {VK_API_VERSION_1_0, VK_API_VERSION_1_2, VK_API_VERSION_1_3};
+    for (unsigned v = 0; v < 3; ++v) {
+        VkInstance instance;
+        VkPhysicalDevice p = physical(&instance, versions[v]);
+        p->platform.properties.apiVersion = versions[v];
+        VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures zero = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES,
+            .shaderZeroInitializeWorkgroupMemory = VK_TRUE};
+        VkPhysicalDeviceFeatures2 query = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                           .pNext = &zero};
+        vkGetPhysicalDeviceFeatures2(p, &query);
+        assert(!zero.shaderZeroInitializeWorkgroupMemory);
+        const char *extension = VK_KHR_ZERO_INITIALIZE_WORKGROUP_MEMORY_EXTENSION_NAME;
+        const float priority = 1;
+        VkDeviceQueueCreateInfo queue = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount = 1, .pQueuePriorities = &priority};
+        VkDeviceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &zero, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue,
+            .enabledExtensionCount = 1, .ppEnabledExtensionNames = &extension};
+        VkDevice d = VK_NULL_HANDLE;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY;
+        vkGetPhysicalDeviceFeatures2(p, &query);
+        assert(zero.shaderZeroInitializeWorkgroupMemory);
+        VkExtensionProperties extensions[64]; uint32_t count = 64; unsigned found = 0;
+        assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, extensions) == VK_SUCCESS);
+        for (uint32_t j = 0; j < count; ++j) found += !strcmp(extensions[j].extensionName, extension);
+        assert(found == 1);
+        if (versions[v] < VK_API_VERSION_1_3)
+            assert(create(p, &zero, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+        assert(d->enabled_features_t09 & PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY);
+        /* Structural fixture: module creation only, not a runnable shader. */
+        uint32_t words[] = {0x07230203, 0x10000, 0, 5, 0,
+            4u << 16 | 21, 1, 32, 0, 4u << 16 | 32, 2, 4, 1,
+            3u << 16 | 46, 1, 3, 5u << 16 | 59, 2, 4, 4, 3};
+        VkShaderModuleCreateInfo module_info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = sizeof(words), .pCode = words};
+        VkShaderModule module;
+        assert(vkCreateShaderModule(d, &module_info, NULL, &module) == VK_SUCCESS);
+        vkDestroyShaderModule(d, module, NULL);
+        words[14] = 2; /* Null initializer type differs from the pointee. */
+        assert(vkCreateShaderModule(d, &module_info, NULL, &module) != VK_SUCCESS && !module);
+        words[14] = 1;
+        vkDestroyDevice(d, NULL);
+        zero.shaderZeroInitializeWorkgroupMemory = VK_FALSE;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+        assert(!(d->enabled_features_t09 & PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY));
+        assert(vkCreateShaderModule(d, &module_info, NULL, &module) == VK_ERROR_FEATURE_NOT_PRESENT && !module);
+        words[16] = 4u << 16 | 59; words[20] = 1u << 16; /* no initializer, trailing OpNop */
+        assert(vkCreateShaderModule(d, &module_info, NULL, &module) == VK_SUCCESS);
+        vkDestroyShaderModule(d, module, NULL);
+        vkDestroyDevice(d, NULL);
+        zero.shaderZeroInitializeWorkgroupMemory = 2;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        zero.shaderZeroInitializeWorkgroupMemory = VK_TRUE;
+        VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures duplicate = zero;
+        zero.pNext = &duplicate;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        zero.pNext = NULL;
+        if (versions[v] == VK_API_VERSION_1_0) {
+            instance->features2_extension_enabled = VK_FALSE;
+            assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        }
+        if (versions[v] == VK_API_VERSION_1_3) {
+            VkPhysicalDeviceVulkan13Features core = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+            query.pNext = &core; vkGetPhysicalDeviceFeatures2(p, &query);
+            assert(core.shaderZeroInitializeWorkgroupMemory);
+            memset(&core, 0, sizeof(core)); core.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            core.shaderZeroInitializeWorkgroupMemory = VK_TRUE;
+            assert(create(p, &core, &d) == VK_SUCCESS);
+            assert(d->enabled_features_t09 & PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY);
+            vkDestroyDevice(d, NULL);
+            assert(create(p, &zero, &d) == VK_SUCCESS); /* Core name of individual structure. */
+            vkDestroyDevice(d, NULL);
+            core.pNext = &zero;
+            assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d);
+            core.pNext = NULL;
+            p->platform.supported_features_t09 &= ~PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY;
+            assert(create(p, &core, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        }
+        vkDestroyInstance(instance, NULL);
+    }
+}
+
+static void cache_control_negotiation(void)
+{
+    const uint32_t versions[] = {VK_API_VERSION_1_0, VK_API_VERSION_1_2, VK_API_VERSION_1_3};
+    for (unsigned v = 0; v < 3; ++v) {
+        VkInstance instance;
+        VkPhysicalDevice p = physical(&instance, versions[v]);
+        p->platform.properties.apiVersion = versions[v];
+        VkPhysicalDevicePipelineCreationCacheControlFeatures zero = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
+            .pipelineCreationCacheControl = VK_TRUE};
+        VkPhysicalDeviceFeatures2 query = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                           .pNext = &zero};
+        vkGetPhysicalDeviceFeatures2(p, &query);
+        assert(!zero.pipelineCreationCacheControl);
+        const char *extension = VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME;
+        const float priority = 1;
+        VkDeviceQueueCreateInfo queue = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount = 1, .pQueuePriorities = &priority};
+        VkDeviceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &zero, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue,
+            .enabledExtensionCount = 1, .ppEnabledExtensionNames = &extension};
+        VkDevice d = VK_NULL_HANDLE;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+        vkGetPhysicalDeviceFeatures2(p, &query);
+        assert(zero.pipelineCreationCacheControl);
+        VkExtensionProperties extensions[64]; uint32_t count = 64; unsigned found = 0;
+        assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, extensions) == VK_SUCCESS);
+        for (uint32_t j = 0; j < count; ++j) found += !strcmp(extensions[j].extensionName, extension);
+        assert(found == 1);
+        if (versions[v] < VK_API_VERSION_1_3)
+            assert(create(p, &zero, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+        assert(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL);
+        vkDestroyDevice(d, NULL);
+        zero.pipelineCreationCacheControl = VK_FALSE;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS);
+        assert(!(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL));
+        vkDestroyDevice(d, NULL);
+        zero.pipelineCreationCacheControl = 2;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        zero.pipelineCreationCacheControl = VK_TRUE;
+        VkPhysicalDevicePipelineCreationCacheControlFeatures duplicate = zero;
+        zero.pNext = &duplicate;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        zero.pNext = NULL;
+        if (versions[v] == VK_API_VERSION_1_0) {
+            instance->features2_extension_enabled = VK_FALSE;
+            assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        }
+        if (versions[v] == VK_API_VERSION_1_3) {
+            VkPhysicalDeviceVulkan13Features core = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+            query.pNext = &core; vkGetPhysicalDeviceFeatures2(p, &query);
+            assert(core.pipelineCreationCacheControl);
+            memset(&core, 0, sizeof(core)); core.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            core.pipelineCreationCacheControl = VK_TRUE;
+            assert(create(p, &core, &d) == VK_SUCCESS);
+            assert(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL);
+            vkDestroyDevice(d, NULL);
+            assert(create(p, &zero, &d) == VK_SUCCESS); /* Core name of individual structure. */
+            vkDestroyDevice(d, NULL);
+            core.pNext = &zero;
+            assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d);
+            core.pNext = NULL;
+            p->platform.supported_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+            assert(create(p, &core, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        }
+        vkDestroyInstance(instance, NULL);
+    }
+}
+
+static void subgroup_vulkan12_negotiation(void)
+{
+    VkInstance instance;
+    VkPhysicalDevice p = physical(&instance, VK_API_VERSION_1_3);
+    p->platform.properties.apiVersion = VK_API_VERSION_1_3;
+    VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures ext = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES};
+    VkPhysicalDeviceVulkan12Features core = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .pNext = &ext};
+    VkPhysicalDeviceFeatures2 query = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &core};
+    VkPhysicalDeviceSubgroupProperties subgroup = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+    VkPhysicalDeviceProperties2 properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &subgroup};
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && !core.subgroupBroadcastDynamicId &&
+           !ext.shaderSubgroupExtendedTypes);
+    const uint32_t feature_bits = PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES |
+        PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+    const uint32_t operation_bits = PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+        PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE;
+    p->platform.supported_features_v13 |= feature_bits | operation_bits;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && !core.subgroupBroadcastDynamicId);
+    vkGetPhysicalDeviceProperties2(p, &properties);
+    assert(!subgroup.supportedOperations && !subgroup.supportedStages);
+    p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    p->platform.supported_features_v13 &= ~operation_bits;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && !core.subgroupBroadcastDynamicId);
+    p->platform.supported_features_v13 |= PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && core.subgroupBroadcastDynamicId);
+    vkGetPhysicalDeviceProperties2(p, &properties);
+    assert(subgroup.subgroupSize == 32 &&
+           subgroup.supportedStages == VK_SHADER_STAGE_COMPUTE_BIT &&
+           subgroup.supportedOperations ==
+           (VK_SUBGROUP_FEATURE_BASIC_BIT | VK_SUBGROUP_FEATURE_BALLOT_BIT));
+    p->platform.supported_features_v13 |= PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && core.subgroupBroadcastDynamicId);
+    p->platform.supported_features |= PS5VK_FEATURE_SHADER_INT16;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(core.shaderSubgroupExtendedTypes && core.subgroupBroadcastDynamicId &&
+           ext.shaderSubgroupExtendedTypes);
+    vkGetPhysicalDeviceProperties2(p, &properties);
+    assert(subgroup.supportedOperations ==
+           (VK_SUBGROUP_FEATURE_BASIC_BIT | VK_SUBGROUP_FEATURE_BALLOT_BIT |
+            VK_SUBGROUP_FEATURE_ARITHMETIC_BIT));
+
+    memset(&core, 0, sizeof(core));
+    core.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    core.shaderSubgroupExtendedTypes = core.subgroupBroadcastDynamicId = VK_TRUE;
+    VkDevice d = VK_NULL_HANDLE;
+    assert(create(p, &core, &d) == VK_SUCCESS);
+    assert((d->enabled_features_v13 & feature_bits) == feature_bits);
+    vkDestroyDevice(d, NULL);
+    ext.shaderSubgroupExtendedTypes = VK_TRUE;
+    assert(create(p, &ext, &d) == VK_SUCCESS);
+    assert(d->enabled_features_v13 & PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES);
+    vkDestroyDevice(d, NULL);
+    core.pNext = &ext;
+    assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d);
+    core.pNext = NULL;
+    ext.shaderSubgroupExtendedTypes = 2;
+    assert(create(p, &ext, &d) == VK_ERROR_UNKNOWN && !d);
+    ext.shaderSubgroupExtendedTypes = VK_TRUE;
+    p->platform.supported_features_v13 &= ~PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE;
+    assert(create(p, &core, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    assert(create(p, &ext, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    vkDestroyInstance(instance, NULL);
+}
+
+static void inline_uniform_negotiation(void)
+{
+    const uint32_t versions[]={VK_API_VERSION_1_0,VK_API_VERSION_1_1,VK_API_VERSION_1_2,VK_API_VERSION_1_3};
+    for(unsigned v=0;v<4;++v) {
+        VkInstance instance;VkPhysicalDevice p=physical(&instance,versions[v]);
+        p->platform.properties.apiVersion=versions[v];
+        VkPhysicalDeviceInlineUniformBlockFeatures f={
+            .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES,
+            .inlineUniformBlock=VK_TRUE,.descriptorBindingInlineUniformBlockUpdateAfterBind=VK_TRUE};
+        VkPhysicalDeviceFeatures2 query={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,.pNext=&f};
+        vkGetPhysicalDeviceFeatures2(p,&query);
+        assert(!f.inlineUniformBlock && !f.descriptorBindingInlineUniformBlockUpdateAfterBind);
+        VkPhysicalDeviceInlineUniformBlockProperties limits={
+            .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES,
+            .maxInlineUniformBlockSize=UINT32_MAX};
+        VkPhysicalDeviceProperties2 properties={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,.pNext=&limits};
+        vkGetPhysicalDeviceProperties2(p,&properties);assert(!limits.maxInlineUniformBlockSize);
+        const char *extensions[]={VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,VK_KHR_MAINTENANCE_1_EXTENSION_NAME};
+        float priority=1;
+        VkDeviceQueueCreateInfo queue={.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount=1,.pQueuePriorities=&priority};
+        VkDeviceCreateInfo info={.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.pNext=&f,
+            .queueCreateInfoCount=1,.pQueueCreateInfos=&queue,
+            .enabledExtensionCount=v?1:2,.ppEnabledExtensionNames=extensions};
+        VkDevice d=NULL;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        p->platform.supported_features_t09|=PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK;
+        if(!v) {
+            vkGetPhysicalDeviceFeatures2(p,&query);assert(!f.inlineUniformBlock);
+            p->platform.supported_features_t09|=PS5VK_T09_FEATURE_MAINTENANCE1;
+            info.enabledExtensionCount=1;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+            info.enabledExtensionCount=2;
+        }
+        vkGetPhysicalDeviceFeatures2(p,&query);assert(f.inlineUniformBlock && !f.descriptorBindingInlineUniformBlockUpdateAfterBind);
+        vkGetPhysicalDeviceProperties2(p,&properties);
+        assert(limits.maxInlineUniformBlockSize==PS5VK_MAX_INLINE_UNIFORM_BLOCK_BYTES &&
+            limits.maxPerStageDescriptorInlineUniformBlocks==PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_STAGE &&
+            limits.maxDescriptorSetInlineUniformBlocks==PS5VK_MAX_INLINE_UNIFORM_BLOCKS_PER_SET &&
+            limits.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks==limits.maxPerStageDescriptorInlineUniformBlocks &&
+            limits.maxDescriptorSetUpdateAfterBindInlineUniformBlocks==limits.maxDescriptorSetInlineUniformBlocks);
+        VkExtensionProperties available[64];uint32_t count=64,found=0;
+        assert(vkEnumerateDeviceExtensionProperties(p,NULL,&count,available)==VK_SUCCESS);
+        for(uint32_t i=0;i<count;++i)found+=!strcmp(available[i].extensionName,extensions[0]);
+        assert(found==1);
+        if(v<3)assert(create(p,&f,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && d->inline_uniform_block_enabled &&
+            (d->enabled_features_t09&PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK));
+        VkDescriptorSetLayoutBinding binding={0,VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,16,VK_SHADER_STAGE_COMPUTE_BIT,NULL};
+        VkDescriptorSetLayoutCreateInfo li={.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount=1,.pBindings=&binding};
+        VkDescriptorSetLayout layout=NULL;
+        assert(vkCreateDescriptorSetLayout(d,&li,NULL,&layout)==VK_SUCCESS);
+        vkDestroyDescriptorSetLayout(d,layout,NULL);vkDestroyDevice(d,NULL);
+        f.inlineUniformBlock=VK_FALSE;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS && !d->inline_uniform_block_enabled);
+        assert(vkCreateDescriptorSetLayout(d,&li,NULL,&layout)==VK_ERROR_FEATURE_NOT_PRESENT && !layout);
+        vkDestroyDevice(d,NULL);
+        f.inlineUniformBlock=2;assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+        f.inlineUniformBlock=VK_TRUE;f.descriptorBindingInlineUniformBlockUpdateAfterBind=VK_TRUE;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        f.descriptorBindingInlineUniformBlockUpdateAfterBind=2;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+        f.descriptorBindingInlineUniformBlockUpdateAfterBind=VK_FALSE;
+        VkPhysicalDeviceInlineUniformBlockFeatures duplicate=f;f.pNext=&duplicate;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);f.pNext=NULL;
+        if(!v) {
+            instance->features2_extension_enabled=VK_FALSE;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        }
+        if(v==3) {
+            VkPhysicalDeviceVulkan13Features core={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+            query.pNext=&core;vkGetPhysicalDeviceFeatures2(p,&query);assert(core.inlineUniformBlock);
+            memset(&core,0,sizeof(core));core.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;core.inlineUniformBlock=VK_TRUE;
+            assert(create(p,&core,&d)==VK_SUCCESS && d->inline_uniform_block_enabled);vkDestroyDevice(d,NULL);
+            assert(create(p,&f,&d)==VK_SUCCESS && d->inline_uniform_block_enabled);vkDestroyDevice(d,NULL);
+            core.pNext=&f;assert(create(p,&core,&d)==VK_ERROR_UNKNOWN && !d);core.pNext=NULL;
+            VkPhysicalDeviceVulkan13Properties cprops={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
+            properties.pNext=&cprops;vkGetPhysicalDeviceProperties2(p,&properties);
+            assert(cprops.maxInlineUniformBlockSize==limits.maxInlineUniformBlockSize &&
+                cprops.maxPerStageDescriptorInlineUniformBlocks==limits.maxPerStageDescriptorInlineUniformBlocks &&
+                cprops.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks==limits.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks &&
+                cprops.maxDescriptorSetInlineUniformBlocks==limits.maxDescriptorSetInlineUniformBlocks &&
+                cprops.maxDescriptorSetUpdateAfterBindInlineUniformBlocks==limits.maxDescriptorSetUpdateAfterBindInlineUniformBlocks &&
+                cprops.maxInlineUniformTotalSize==PS5VK_MAX_INLINE_UNIFORM_TOTAL_BYTES);
+            p->platform.supported_features_t09&=~PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK;
+            assert(create(p,&core,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            vkGetPhysicalDeviceProperties2(p,&properties);assert(!cprops.maxInlineUniformBlockSize && !cprops.maxInlineUniformTotalSize);
+        }
+        vkDestroyInstance(instance,NULL);
+    }
+}
+
+static void subgroup_size_negotiation(void)
+{
+    const uint32_t versions[]={VK_API_VERSION_1_0,VK_API_VERSION_1_1,VK_API_VERSION_1_2,VK_API_VERSION_1_3};
+    for(unsigned v=0;v<4;++v) {
+        VkInstance instance;VkPhysicalDevice p=physical(&instance,versions[v]);
+        p->platform.properties.apiVersion=versions[v];
+        VkPhysicalDeviceSubgroupSizeControlFeatures f={
+            .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES};
+        VkPhysicalDeviceFeatures2 query={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,.pNext=&f};
+        VkPhysicalDeviceSubgroupSizeControlProperties props={
+            .sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES};
+        VkPhysicalDeviceProperties2 property={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,.pNext=&props};
+        const char *extension=VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME;
+        float priority=1;
+        VkDeviceQueueCreateInfo queue={.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount=1,.pQueuePriorities=&priority};
+        VkDeviceCreateInfo info={.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.pNext=&f,
+            .queueCreateInfoCount=1,.pQueueCreateInfos=&queue,.enabledExtensionCount=1,.ppEnabledExtensionNames=&extension};
+        VkDevice d=NULL;
+        p->platform.supported_features_v13=PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL|PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS;
+        vkGetPhysicalDeviceFeatures2(p,&query);assert(!f.subgroupSizeControl && !f.computeFullSubgroups);
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        p->platform.supported_features_t09|=PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+        vkGetPhysicalDeviceFeatures2(p,&query);vkGetPhysicalDeviceProperties2(p,&property);
+        VkExtensionProperties available[64];uint32_t count=64,found=0;
+        assert(vkEnumerateDeviceExtensionProperties(p,NULL,&count,available)==VK_SUCCESS);
+        for(uint32_t i=0;i<count;++i) found+=!strcmp(available[i].extensionName,extension);
+        if(!v) {
+            assert(!found && !f.subgroupSizeControl && !f.computeFullSubgroups && !props.minSubgroupSize);
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+            vkDestroyInstance(instance,NULL);continue;
+        }
+        assert(found==1 && f.subgroupSizeControl && f.computeFullSubgroups);
+        assert(props.minSubgroupSize==32 && props.maxSubgroupSize==32 &&
+            props.maxComputeWorkgroupSubgroups==p->platform.properties.limits.maxComputeWorkGroupInvocations/32 &&
+            props.requiredSubgroupSizeStages==VK_SHADER_STAGE_COMPUTE_BIT);
+        if(v<3) assert(create(p,&f,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        for(unsigned mask=0;mask<4;++mask) {
+            f.subgroupSizeControl=!!(mask&1);f.computeFullSubgroups=!!(mask&2);
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS);
+            assert(d->subgroup_size_control_enabled==f.subgroupSizeControl &&
+                d->compute_full_subgroups_enabled==f.computeFullSubgroups && d->enabled_features_v13==mask);
+            vkDestroyDevice(d,NULL);
+        }
+        for(unsigned bit=0;bit<2;++bit) {
+            p->platform.supported_features_v13=1u<<bit;
+            vkGetPhysicalDeviceFeatures2(p,&query);
+            assert(f.subgroupSizeControl==(bit==0) && f.computeFullSubgroups==(bit==1));
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_SUCCESS);vkDestroyDevice(d,NULL);
+            f.subgroupSizeControl=f.computeFullSubgroups=VK_TRUE;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        }
+        p->platform.supported_features_v13=3;
+        f.subgroupSizeControl=2;assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);
+        f.subgroupSizeControl=VK_TRUE;f.computeFullSubgroups=2;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);f.computeFullSubgroups=VK_TRUE;
+        VkPhysicalDeviceSubgroupSizeControlFeatures duplicate=f;f.pNext=&duplicate;
+        assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_UNKNOWN && !d);f.pNext=NULL;
+        if(v==3) {
+            VkPhysicalDeviceVulkan13Features core={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+            query.pNext=&core;vkGetPhysicalDeviceFeatures2(p,&query);
+            assert(core.subgroupSizeControl && core.computeFullSubgroups);
+            memset(&core,0,sizeof(core));core.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            core.subgroupSizeControl=core.computeFullSubgroups=VK_TRUE;
+            assert(create(p,&core,&d)==VK_SUCCESS && d->subgroup_size_control_enabled && d->compute_full_subgroups_enabled);
+            vkDestroyDevice(d,NULL);
+            assert(create(p,&f,&d)==VK_SUCCESS && d->enabled_features_v13==3);vkDestroyDevice(d,NULL);
+            core.pNext=&f;assert(create(p,&core,&d)==VK_ERROR_UNKNOWN && !d);core.pNext=NULL;
+            VkPhysicalDeviceVulkan13Properties cprops={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
+            property.pNext=&cprops;vkGetPhysicalDeviceProperties2(p,&property);
+            assert(cprops.minSubgroupSize==props.minSubgroupSize && cprops.maxSubgroupSize==props.maxSubgroupSize &&
+                cprops.maxComputeWorkgroupSubgroups==props.maxComputeWorkgroupSubgroups &&
+                cprops.requiredSubgroupSizeStages==props.requiredSubgroupSizeStages);
+            p->platform.supported_features_v13=0;
+            assert(create(p,&core,&d)==VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            vkGetPhysicalDeviceProperties2(p,&property);assert(!cprops.requiredSubgroupSizeStages && cprops.minSubgroupSize==32);
+            instance->api_version=VK_API_VERSION_1_0;p->platform.supported_features_v13=3;
+            assert(vkCreateDevice(p,&info,NULL,&d)==VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+        }
+        vkDestroyInstance(instance,NULL);
+    }
+}
+
+#define ASSERT_DOT_NOT_ACCELERATED(p) do { \
+    assert(!(p).integerDotProduct8BitUnsignedAccelerated); \
+    assert(!(p).integerDotProduct8BitSignedAccelerated); \
+    assert(!(p).integerDotProduct8BitMixedSignednessAccelerated); \
+    assert(!(p).integerDotProduct4x8BitPackedUnsignedAccelerated); \
+    assert(!(p).integerDotProduct4x8BitPackedSignedAccelerated); \
+    assert(!(p).integerDotProduct4x8BitPackedMixedSignednessAccelerated); \
+    assert(!(p).integerDotProduct16BitUnsignedAccelerated); \
+    assert(!(p).integerDotProduct16BitSignedAccelerated); \
+    assert(!(p).integerDotProduct16BitMixedSignednessAccelerated); \
+    assert(!(p).integerDotProduct32BitUnsignedAccelerated); \
+    assert(!(p).integerDotProduct32BitSignedAccelerated); \
+    assert(!(p).integerDotProduct32BitMixedSignednessAccelerated); \
+    assert(!(p).integerDotProduct64BitUnsignedAccelerated); \
+    assert(!(p).integerDotProduct64BitSignedAccelerated); \
+    assert(!(p).integerDotProduct64BitMixedSignednessAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating8BitUnsignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating8BitSignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating16BitUnsignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating16BitSignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating32BitUnsignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating32BitSignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating64BitUnsignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating64BitSignedAccelerated); \
+    assert(!(p).integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated); \
+} while (0)
+
+static void integer_dot_negotiation(void)
+{
+    const uint32_t versions[] = {VK_API_VERSION_1_0, VK_API_VERSION_1_1,
+                                VK_API_VERSION_1_2, VK_API_VERSION_1_3};
+    for (unsigned v = 0; v < 4; ++v) {
+        VkInstance instance;
+        VkPhysicalDevice p = physical(&instance, versions[v]);
+        p->platform.properties.apiVersion = versions[v];
+        VkPhysicalDeviceShaderIntegerDotProductFeatures f = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES,
+            .shaderIntegerDotProduct = VK_TRUE};
+        VkPhysicalDeviceFeatures2 query = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &f};
+        VkPhysicalDeviceShaderIntegerDotProductProperties props;
+        memset(&props, 0xff, sizeof(props));
+        VkBaseOutStructure sentinel = {.sType = (VkStructureType)0x7ffffffe};
+        props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_PROPERTIES;
+        props.pNext = &sentinel;
+        VkPhysicalDeviceProperties2 properties = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &props};
+        const char *extensions[] = {VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME,
+                                   VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME};
+        float priority = 1;
+        VkDeviceQueueCreateInfo queue = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount = 1, .pQueuePriorities = &priority};
+        VkDeviceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &f,
+            .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue,
+            .enabledExtensionCount = 1, .ppEnabledExtensionNames = extensions};
+        VkDevice d = NULL;
+        for (unsigned supported = 0; supported < 2; ++supported) {
+            p->platform.supported_features_v13 = supported ? PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT : 0;
+            vkGetPhysicalDeviceFeatures2(p, &query);
+            assert(f.shaderIntegerDotProduct == supported && f.pNext == NULL);
+            vkGetPhysicalDeviceProperties2(p, &properties);
+            ASSERT_DOT_NOT_ACCELERATED(props);
+            assert(props.pNext == &sentinel && sentinel.sType == (VkStructureType)0x7ffffffe);
+            VkExtensionProperties available[64]; uint32_t count = 64, found = 0;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, available) == VK_SUCCESS);
+            for (uint32_t n = 0; n < count; ++n)
+                if (!strcmp(available[n].extensionName, extensions[0])) {
+                    ++found; assert(available[n].specVersion == VK_KHR_SHADER_INTEGER_DOT_PRODUCT_SPEC_VERSION);
+                }
+            assert(found == supported);
+            assert(vkCreateDevice(p, &info, NULL, &d) ==
+                (supported ? VK_SUCCESS : VK_ERROR_EXTENSION_NOT_PRESENT));
+            if (d) { assert(d->enabled_features_v13 == PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT); vkDestroyDevice(d, NULL); }
+        }
+        /* Enumerating or enabling the extension alone never enables the feature. */
+        f.shaderIntegerDotProduct = VK_FALSE;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS && !d->enabled_features_v13);
+        vkDestroyDevice(d, NULL);
+        f.shaderIntegerDotProduct = VK_TRUE;
+        assert(create(p, &f, &d) == (v == 3 ? VK_SUCCESS : VK_ERROR_FEATURE_NOT_PRESENT));
+        if (d) { assert(d->enabled_features_v13 == PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT); vkDestroyDevice(d, NULL); }
+        info.enabledExtensionCount = 2;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        info.enabledExtensionCount = 1;
+        f.shaderIntegerDotProduct = 2;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        f.shaderIntegerDotProduct = VK_TRUE;
+        VkPhysicalDeviceShaderIntegerDotProductFeatures duplicate = f; f.pNext = &duplicate;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d); f.pNext = NULL;
+        if (v == 0) {
+            instance->features2_extension_enabled = VK_FALSE;
+            assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+            instance->features2_extension_enabled = VK_TRUE;
+        }
+        if (v == 3) {
+            VkPhysicalDeviceVulkan13Features core = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+            query.pNext = &core; vkGetPhysicalDeviceFeatures2(p, &query);
+            assert(core.shaderIntegerDotProduct && !core.subgroupSizeControl && !core.computeFullSubgroups);
+            memset(&core, 0, sizeof(core)); core.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            core.shaderIntegerDotProduct = VK_TRUE;
+            assert(create(p, &core, &d) == VK_SUCCESS && d->enabled_features_v13 == PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT);
+            vkDestroyDevice(d, NULL);
+            core.shaderIntegerDotProduct = 2;
+            assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d); core.shaderIntegerDotProduct = VK_TRUE;
+            core.pNext = &f; assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d); core.pNext = NULL;
+            VkPhysicalDeviceVulkan13Properties cp; memset(&cp, 0xff, sizeof(cp));
+            cp.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES; cp.pNext = NULL;
+            properties.pNext = &cp; vkGetPhysicalDeviceProperties2(p, &properties);
+            ASSERT_DOT_NOT_ACCELERATED(cp);
+            p->platform.supported_features_v13 = 0;
+            assert(create(p, &core, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            assert(create(p, &f, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            vkGetPhysicalDeviceFeatures2(p, &query); assert(!core.shaderIntegerDotProduct);
+            /* Physical reporting does not override an older application's opt-in route. */
+            p->platform.supported_features_v13 = PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT;
+            instance->api_version = VK_API_VERSION_1_2;
+            assert(create(p, &f, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS); vkDestroyDevice(d, NULL);
+        }
+        vkDestroyInstance(instance, NULL);
+    }
+}
+#undef ASSERT_DOT_NOT_ACCELERATED
+
+static void image_robustness_negotiation(void)
+{
+    const uint32_t versions[] = {VK_API_VERSION_1_0, VK_API_VERSION_1_1,
+                                VK_API_VERSION_1_2, VK_API_VERSION_1_3};
+    for (unsigned app = 0; app < 4; ++app) for (unsigned hw = 0; hw < 4; ++hw) {
+        VkInstance instance;
+        VkPhysicalDevice p = physical(&instance, versions[app]);
+        p->platform.properties.apiVersion = versions[hw];
+        const VkBool32 core_route = app == 3 && hw == 3;
+        VkBaseOutStructure sentinel = {.sType = (VkStructureType)0x7ffffffe};
+        VkPhysicalDeviceImageRobustnessFeatures f = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES,
+            .pNext = &sentinel, .robustImageAccess = VK_TRUE};
+        VkPhysicalDeviceFeatures2 query = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &f};
+        const char *extensions[] = {VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME,
+                                   VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME};
+        float priority = 1;
+        VkDeviceQueueCreateInfo queue = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueCount = 1, .pQueuePriorities = &priority};
+        VkDeviceCreateInfo info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &f,
+            .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue,
+            .enabledExtensionCount = 1, .ppEnabledExtensionNames = extensions};
+        VkDevice d = NULL;
+        for (unsigned supported = 0; supported < 2; ++supported) {
+            p->platform.supported_features_v13 = supported ? PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS : 0;
+            f.robustImageAccess = !supported; f.pNext = &sentinel;
+            vkGetPhysicalDeviceFeatures2(p, &query);
+            assert(f.robustImageAccess == supported && f.pNext == &sentinel);
+            assert(sentinel.sType == (VkStructureType)0x7ffffffe);
+            VkExtensionProperties available[64]; uint32_t count = 64, found = 0;
+            assert(vkEnumerateDeviceExtensionProperties(p, NULL, &count, available) == VK_SUCCESS);
+            for (uint32_t n = 0; n < count; ++n)
+                if (!strcmp(available[n].extensionName, extensions[0])) {
+                    ++found; assert(available[n].specVersion == VK_EXT_IMAGE_ROBUSTNESS_SPEC_VERSION);
+                }
+            assert(found == supported);
+            f.pNext = NULL; f.robustImageAccess = VK_TRUE;
+            assert(vkCreateDevice(p, &info, NULL, &d) ==
+                (supported ? VK_SUCCESS : VK_ERROR_EXTENSION_NOT_PRESENT));
+            if (d) { assert(d->enabled_features_v13 == PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS); vkDestroyDevice(d, NULL); }
+            if (!supported) assert(create(p, &f, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+        }
+        /* Query/enumeration/extension enable do not implicitly enable a feature. */
+        f.robustImageAccess = VK_FALSE;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_SUCCESS && !d->enabled_features_v13);
+        vkDestroyDevice(d, NULL);
+        f.robustImageAccess = VK_TRUE;
+        assert(create(p, &f, &d) == (core_route ? VK_SUCCESS : VK_ERROR_FEATURE_NOT_PRESENT));
+        if (d) { assert(d->enabled_features_v13 == PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS); vkDestroyDevice(d, NULL); }
+        info.enabledExtensionCount = 2;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        info.enabledExtensionCount = 1;
+        f.robustImageAccess = 2;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d);
+        f.robustImageAccess = VK_TRUE;
+        VkPhysicalDeviceImageRobustnessFeatures duplicate = f; f.pNext = &duplicate;
+        assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_UNKNOWN && !d); f.pNext = NULL;
+        if (app == 0) {
+            instance->features2_extension_enabled = VK_FALSE;
+            assert(vkCreateDevice(p, &info, NULL, &d) == VK_ERROR_EXTENSION_NOT_PRESENT && !d);
+            instance->features2_extension_enabled = VK_TRUE;
+        }
+        /* Robustness1 does not imply robustness2, buffer robustness or null descriptors. */
+        VkPhysicalDeviceRobustness2FeaturesEXT r2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+            .robustImageAccess2 = VK_TRUE, .robustBufferAccess2 = VK_TRUE, .nullDescriptor = VK_TRUE};
+        query.pNext = &r2; vkGetPhysicalDeviceFeatures2(p, &query);
+        assert(!r2.robustImageAccess2 && !r2.robustBufferAccess2 && !r2.nullDescriptor);
+        VkPhysicalDeviceVulkan13Features core = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            .robustImageAccess = VK_TRUE};
+        assert(create(p, &core, &d) == (core_route ? VK_SUCCESS : VK_ERROR_FEATURE_NOT_PRESENT));
+        if (d) { assert(d->enabled_features_v13 == PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS); vkDestroyDevice(d, NULL); }
+        if (core_route) {
+            query.pNext = &core; vkGetPhysicalDeviceFeatures2(p, &query);
+            assert(core.robustImageAccess && !core.shaderIntegerDotProduct && !core.subgroupSizeControl);
+            core.robustImageAccess = 2;
+            assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d); core.robustImageAccess = VK_TRUE;
+            core.pNext = &f;
+            assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d); core.pNext = NULL;
+            f.pNext = &core;
+            assert(create(p, &f, &d) == VK_ERROR_UNKNOWN && !d); f.pNext = NULL;
+            p->platform.supported_features_v13 = 0;
+            assert(create(p, &core, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+            vkGetPhysicalDeviceFeatures2(p, &query); assert(!core.robustImageAccess);
+        }
+        vkDestroyInstance(instance, NULL);
+    }
+}
+
 int main(void)
 {
+    image_robustness_negotiation();
+    integer_dot_negotiation();
+    subgroup_size_negotiation();
     dormant_on_vulkan_1_0();
     projections_when_reported();
     effective_version_is_the_lower();
     instance_versions();
     graphics_core13_negotiation();
+    zero_initialize_negotiation();
+    cache_control_negotiation();
+    subgroup_vulkan12_negotiation();
+    inline_uniform_negotiation();
     puts("vk core version: dormant on 1.0, projections and core names on raised versions");
     return 0;
 }

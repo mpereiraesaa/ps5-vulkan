@@ -165,7 +165,7 @@ static void physical_routes(void)
             ps5vk_texture_format_at(n)->format :
             n == ps5vk_texture_format_count() ? VK_FORMAT_D24_UNORM_S8_UINT :
             n == ps5vk_texture_format_count() + 1 ? VK_FORMAT_A8_UNORM_KHR :
-            VK_FORMAT_B8G8R8A8_SRGB;
+            VK_FORMAT_R8G8B8_UNORM;
         VkFormatProperties3 p3 = {.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3,
             .linearTilingFeatures = only64, .optimalTilingFeatures = only64,
             .bufferFeatures = only64};
@@ -216,7 +216,18 @@ static void physical_routes(void)
     assert(dxvk_limits(p, VK_FORMAT_R8G8B8A8_UNORM, 0, &family, &limits) ==
            VK_ERROR_FORMAT_NOT_SUPPORTED);
     assert(dxvk_limits(p, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
-                       NULL, &limits) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+                       NULL, &limits) == VK_SUCCESS);
+    VkPhysicalDeviceImageFormatInfo2 bgra_info = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+        .format = VK_FORMAT_B8G8R8A8_UNORM, .type = VK_IMAGE_TYPE_2D,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT};
+    VkImageFormatProperties2 bgra_props = {.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2};
+    assert(vkGetPhysicalDeviceImageFormatProperties2KHR(p, &bgra_info, &bgra_props) == VK_SUCCESS);
+    assert(bgra_props.imageFormatProperties.maxExtent.width >= 1920u &&
+           bgra_props.imageFormatProperties.maxExtent.height >= 1080u);
     assert(vkGetPhysicalDeviceImageFormatProperties(p, VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT, &limits) == VK_ERROR_FORMAT_NOT_SUPPORTED);
@@ -394,12 +405,17 @@ static void object_routes(void)
                VK_ERROR_FEATURE_NOT_PRESENT);
     const VkFormat bgra[2] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB};
     list.pViewFormats = bgra;
-    image_with(&d, VK_FORMAT_B8G8R8A8_UNORM,
-               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-               MUTABLE, &list, VK_ERROR_FEATURE_NOT_PRESENT);
-    image_with(&d, VK_FORMAT_B8G8R8A8_UNORM,
-               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-               MUTABLE, NULL, VK_ERROR_FEATURE_NOT_PRESENT);
+    VkImage bgra_image = image_with(&d, VK_FORMAT_B8G8R8A8_UNORM,
+               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+               VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+               MUTABLE, &list, VK_SUCCESS);
+    assert(bgra_image->mutable_format && bgra_image->view_format_count == 2);
+    assert(!bgra_image->info.flags && ps5vk_tiled_2d_sampled_color_image(bgra_image));
+    bind(&d, bgra_image);
+    VkImageView bgra_view = VK_NULL_HANDLE;
+    assert(view_with(&d, bgra_image, VK_FORMAT_B8G8R8A8_SRGB,
+                     VK_IMAGE_USAGE_SAMPLED_BIT, &bgra_view) == VK_SUCCESS);
+    vkDestroyImageView(&d, bgra_view, NULL);
     VkImageFormatListCreateInfo second = family;
     list = family; list.pNext = &second;
     image_with(&d, VK_FORMAT_R8G8B8A8_UNORM, RT_USAGE, MUTABLE, &list,

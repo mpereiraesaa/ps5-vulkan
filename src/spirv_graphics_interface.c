@@ -793,6 +793,18 @@ unsigned ps5vk_spirv_tess_pair_output_points(const struct ps5vk_graphics_key *ke
         resolve_tess_modes(&control,&evaluation)?control.control_points:0;
 }
 
+/* maintenance4 permits an output vector with extra trailing components.
+ * It never supplies absent inputs or changes the scalar numeric type. Keep
+ * this consumer-directed rule identical across every programmable boundary. */
+static int interface_match(struct interface_slot output, struct interface_slot input,
+                           VkBool32 maintenance4)
+{
+    if (!input.components) return 1;
+    if (output.numeric != input.numeric) return 0;
+    return output.components == input.components ||
+        (maintenance4 && input.components >= 2 && output.components > input.components);
+}
+
 int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
 {
     struct interface vs={0},fs={0},gs={0},tcs={0},tes={0};
@@ -928,14 +940,9 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
            (fs.outputs[i].components!=4 ||
             fs.outputs[i].numeric!=colour_numeric[1]))return 0;
         if(i && fs.secondary_outputs[i].components)return 0;
-        if(fs.inputs[i].components &&
-           (fs.inputs[i].components!=previous->outputs[i].components ||
-            fs.inputs[i].numeric!=previous->outputs[i].numeric))return 0;
-        /* A geometry stage's per-vertex inputs must be exactly what the stage
-         * before it exported, component for component. */
-        if(has_geometry && gs.inputs[i].components &&
-           (gs.inputs[i].components!=before_geometry->outputs[i].components ||
-            gs.inputs[i].numeric!=before_geometry->outputs[i].numeric))return 0;
+        if(!interface_match(previous->outputs[i],fs.inputs[i],key->maintenance4))return 0;
+        if(has_geometry &&
+           !interface_match(before_geometry->outputs[i],gs.inputs[i],key->maintenance4))return 0;
         if(has_geometry && before_geometry->outputs[i].components &&
            !gs.inputs[i].components)return 0;
         /* The tessellation chain: the control stage reads the vertex stage's
@@ -949,15 +956,9 @@ int ps5vk_spirv_graphics_interface(const struct ps5vk_graphics_key *key)
              * may use outputs for cross-invocation communication without the
              * TES declaring them. Every declared input still needs a producer.
              * Vulkan Shader Interfaces, "Interface Matching". */
-            if(tcs.inputs[i].components &&
-               (vs.outputs[i].components!=tcs.inputs[i].components ||
-                vs.outputs[i].numeric!=tcs.inputs[i].numeric))return 0;
-            if(tes.inputs[i].components &&
-               (tcs.outputs[i].components!=tes.inputs[i].components ||
-                tcs.outputs[i].numeric!=tes.inputs[i].numeric))return 0;
-            if(tes.patch_inputs[i].components &&
-               (tcs.patch_outputs[i].components!=tes.patch_inputs[i].components ||
-                tcs.patch_outputs[i].numeric!=tes.patch_inputs[i].numeric))return 0;
+            if(!interface_match(vs.outputs[i],tcs.inputs[i],key->maintenance4))return 0;
+            if(!interface_match(tcs.outputs[i],tes.inputs[i],key->maintenance4))return 0;
+            if(!interface_match(tcs.patch_outputs[i],tes.patch_inputs[i],key->maintenance4))return 0;
         }
     }
     return 1;

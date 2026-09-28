@@ -1,5 +1,6 @@
 #include "texture_layout.h"
 #include "vk_internal.h"
+#include "vk_image_transfer.h"
 #include <assert.h>
 #include <string.h>
 int main(void)
@@ -31,7 +32,8 @@ int main(void)
     assert(ps5vk_texture_mip_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,
         64,64,1,17,&m));
     assert(ps5vk_texture_layout_for_slices(VK_FORMAT_R8G8B8A8_UNORM,64,3,0,&l));
-    assert(ps5vk_texture_layout_for_format(VK_FORMAT_B8G8R8A8_UNORM,1,1,&l));
+    assert(!ps5vk_texture_layout_for_format(VK_FORMAT_B8G8R8A8_UNORM,1,1,&l) &&
+        l.row_pitch==256 && l.bytes==256);
     VkImageCreateInfo i={.imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
         .extent={65,3,1},.mipLevels=1,.arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,
         .tiling=VK_IMAGE_TILING_OPTIMAL,.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT};
@@ -41,7 +43,14 @@ int main(void)
     assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_SUCCESS && r.size==1536 && r.alignment==256);
     i.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     i.format=VK_FORMAT_B8G8R8A8_UNORM;
-    assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_ERROR_FORMAT_NOT_SUPPORTED);
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_SUCCESS &&
+        r.size==1536 && r.alignment==256);
+    struct VkImage_T bgra_texture={.info=i};
+    assert(ps5vk_rgba_linear_image(&bgra_texture) &&
+        !ps5vk_bgra8_transfer_target(&bgra_texture));
+    i.format=VK_FORMAT_B8G8R8A8_SRGB;
+    assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_SUCCESS &&
+        r.size==1536 && r.alignment==256);
     i.format=VK_FORMAT_R8G8B8A8_UNORM;i.usage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     assert(ps5vk_native_image_requirements(NULL,&i,&r)==VK_ERROR_FORMAT_NOT_SUPPORTED && !r.size);
     i.usage=VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -77,7 +86,8 @@ int main(void)
 
     /* Only formats with a sampled encoding have this generic arithmetic.
      * D32 has one for descriptors, though image creation uses tiled storage. */
-    assert(ps5vk_texture_layout_for_format(VK_FORMAT_B8G8R8A8_UNORM,4,4,&l));
+    assert(!ps5vk_texture_layout_for_format(VK_FORMAT_B8G8R8A8_UNORM,4,4,&l) &&
+        l.row_pitch==256 && l.bytes==1024);
     assert(!ps5vk_texture_layout_for_format(VK_FORMAT_D32_SFLOAT,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_R32G32B32_SFLOAT,4,4,&l));
     assert(ps5vk_texture_layout_for_format(VK_FORMAT_A2B10G10R10_UNORM_PACK32,4,4,&l));

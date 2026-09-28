@@ -1,5 +1,6 @@
 """Source-derived T08 subgroup gates and a real PSBC compile boundary."""
 from pathlib import Path
+import json
 import re
 import shutil
 import struct
@@ -27,6 +28,37 @@ def instructions(payload):
 
 
 class T08SubgroupContracts(unittest.TestCase):
+    def test_pinned_arithmetic_and_ballot_host_compiler_census(self):
+        """Every pinned arithmetic op and the ballot probes reach live SPIR-V
+        and real PSBC codegen; GPU semantics remain an independent gate."""
+        glslang = shutil.which("glslangValidator")
+        archive = ROOT / "build/libpsbc.host.a"
+        source = CTS / "vktSubgroupsArithmeticTests.cpp"
+        if not glslang or not archive.is_file() or not source.is_file():
+            self.skipTest("pinned CTS, GLSLang and host PSBC archive required")
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([
+                "python3", "tools/audit_t08_subgroup_operations.py",
+                "--out", directory], cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads((Path(directory) / "report.json").read_text())
+            rows = report["rows"]
+            self.assertEqual(21, len(report["operation_enum"]))
+            self.assertEqual(118, len(rows))
+            self.assertEqual({"uint": 21, "int": 21, "uvec4": 21,
+                              "ivec4": 21, "float": 12, "vec4": 12},
+                             {kind: sum(row["type"] == kind for row in rows
+                                        if not row["name"].startswith("ballot_"))
+                              for kind in ("uint", "int", "uvec4", "ivec4",
+                                           "float", "vec4")})
+            self.assertEqual(10, sum(row["name"].startswith("ballot_") for row in rows))
+            for row in rows:
+                self.assertEqual(0, row["glslang_exit"], row["name"])
+                self.assertEqual(0, row["psbc_exit"], row["name"])
+                self.assertRegex(row["psbc_output"],
+                                 r"^result=0 code_bytes=[1-9][0-9]* descriptors=1 fnv64=[0-9a-f]{16}$")
+                self.assertTrue(row["group_opcodes"], row["name"])
+
     def test_pinned_registry_routes(self):
         if not REGISTRY.is_file():
             self.skipTest("pinned Vulkan registry unavailable")
@@ -123,6 +155,42 @@ layout(set=0,binding=0,std430) buffer Data { uint values[]; } data;
                 else:
                     result = subprocess.run([str(probe), "subgroup", str(binary),
                                              "none"], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("result=0", result.stdout)
+                    self.assertRegex(result.stdout, r"code_bytes=[1-9][0-9]*")
+
+    def test_full_subgroup_occupancy_shader_compiles_with_basic_only(self):
+        """Compile the actual occupancy instrument, including a partial-wave control."""
+        glslang = shutil.which("glslangValidator")
+        archive = ROOT / "build/libpsbc.host.a"
+        if not glslang or not archive.is_file():
+            self.skipTest("host PSBC archive and glslangValidator required")
+        shader = ROOT / "experiments/compute/subgroup_full_witness.comp"
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            probe = temp / "probe"
+            subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            "-Ithird_party/psbc-reference/libpsbc",
+                            "tests/t08_compile_probe.c", str(archive),
+                            "-lstdc++", "-lm", "-lpthread", "-o", str(probe)],
+                           cwd=ROOT, check=True, capture_output=True, text=True)
+            for x, y, z in ((32, 3, 1), (64, 2, 1), (32, 2, 2), (1024, 1, 1),
+                            (33, 1, 1), (1, 1, 1)):
+                with self.subTest(shape=(x, y, z)):
+                    binary = temp / f"{x}-{y}-{z}.spv"
+                    subprocess.run([glslang, "-V", "--target-env", "vulkan1.1",
+                                    f"-DSIZE_X={x}", f"-DSIZE_Y={y}", f"-DSIZE_Z={z}",
+                                    str(shader), "-o", str(binary)], check=True,
+                                   capture_output=True, text=True)
+                    ops = list(instructions(binary.read_bytes()))
+                    self.assertEqual({args[0] for op, args in ops if op == 17}, {1, 61})
+                    # Workgroup barriers, shared atomic count/mask and BASIC Elect.
+                    for expected in (224, 234, 241, 333):
+                        self.assertIn(expected, [op for op, _ in ops])
+                    self.assertTrue(any(op == 16 and args[1:] == (17, x, y, z)
+                                        for op, args in ops))
+                    result = subprocess.run([str(probe), "subgroup", str(binary), "none"],
+                                            capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn("result=0", result.stdout)
                     self.assertRegex(result.stdout, r"code_bytes=[1-9][0-9]*")

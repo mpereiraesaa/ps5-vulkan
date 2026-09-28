@@ -18,12 +18,16 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.maintenance4_cts import local_size_paths, multiple_shader_paths
+
 MANIFEST = ROOT / "cts/upstream/manifest.json"
 UPSTREAM = ROOT / "third_party/vk-gl-cts"
 # The integration supplies the package and its leading groups; upstream supplies
 # everything below them.
 INTEGRATION_SOURCE = ROOT / "cts/upstream/package_ps5.cpp"
 VOLATILE_ATOMIC_WRAPPER = ROOT / "cts/upstream/volatile_atomic_focus.cpp"
+LOCAL_SIZE_WRAPPER = VOLATILE_ATOMIC_WRAPPER
 BDA_BUILD_SOURCE = ROOT / "tools/build_upstream_cts.py"
 # The capabilities a selection is allowed to rely on come from the device's own
 # sources, not from the selection itself.
@@ -391,6 +395,69 @@ def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
     type_names = re.findall(r"\{+\s*\"([a-z0-9_]+)\"\s*,", function_text)
     return {f"{capability}_{type_name}"
             for capability in capabilities for type_name in type_names}
+
+
+@_memoized
+def _subgroup_compute_leaf_names(text: str, family: str) -> set[str]:
+    """Derive compute leaves from the pinned subgroup factory and format table."""
+    utils = _read_source(UPSTREAM / "external/vulkancts/modules/vulkan/subgroups/"
+                         "vktSubgroupsTestsUtils.cpp")
+    fmt_match = re.search(r"getFormatNameForGLSL\(VkFormat format\)\s*\{(.*?)\n\}",
+                          utils, re.DOTALL)
+    if not fmt_match:
+        return set()
+    formats = set(re.findall(r'return "([a-zA-Z0-9_]+)";', fmt_match.group(1)))
+    if family == "ballot_broadcast":
+        if ('getOpTypeCaseName(opType) + "_" + '
+                'subgroups::getFormatNameForGLSL(format)' not in text or
+                'addFunctionCaseWithPrograms(testGroup, name, supportedCheck' not in text):
+            return set()
+        op_match = re.search(r"getOpTypeCaseName\(OpType opType\)\s*\{(.*?)\n\}",
+                             text, re.DOTALL)
+        operations = (set(re.findall(r'return "([a-zA-Z0-9_]+)";', op_match.group(1)))
+                      if op_match else set())
+    elif family == "arithmetic":
+        scan = _read_source(UPSTREAM / "external/vulkancts/modules/vulkan/subgroups/"
+                            "vktSubgroupsScanHelpers.cpp")
+        if ('de::toLower(getOpTypeName(op, st)) + "_" + formatName' not in text or
+                'getScanOpName("subgroup", "", op, scanType)' not in text or
+                'addFunctionCaseWithPrograms(computeGroup.get(), testName' not in text or
+                'case SCAN_REDUCE:\n        n = "";' not in scan):
+            return set()
+        operations = {"subgroup" + op.lower() for op in
+                      re.findall(r'n \+= "([A-Za-z]+)";', scan)}
+    else:
+        return set()
+    return {f"dEQP-VK.subgroups.{family}.compute.{op}_{fmt}"
+            for op in operations for fmt in formats}
+
+
+@_memoized
+def _subgroup_size_leaf_names(text: str) -> set[str]:
+    """Derive size-control leaves from the pinned factory's registrations."""
+    match = re.search(r"createSubgroupsSizeControlTests\(TestContext &testCtx\)", text)
+    if not match:
+        return set()
+    factory = _source_function_at_line(text, text.count("\n", 0, match.start()) + 1)
+    if (not factory or
+            'new TestCaseGroup(testCtx, "size_control")' not in factory or
+            "VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT" not in factory or
+            "VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT" not in factory or
+            not re.search(r'\{true,\s*true,\s*"_flags_spirv16"\}', factory) or
+            "params.flagsEnabled ? flagsVary : 0u" not in factory or
+            "params.flagsEnabled ? flagsFull : 0u" not in factory):
+        return set()
+    params = re.search(r"const TestParams testParams\[\] = \{(.*?)\};", factory)
+    postfixes = (set(re.findall(r'\{(?:true|false),\s*(?:true|false),\s*"([^"]*)"\}',
+                                 params.group(1))) if params else set())
+    names = set()
+    for leaf, suffix in re.findall(
+            r'computeGroup\.get\(\),\s*"([a-z_]+)"(\s*\+\s*params\.postfix)?', factory):
+        for postfix in postfixes if suffix else ("",):
+            names.add(f"dEQP-VK.subgroups.size_control.compute.{leaf}{postfix}")
+    for leaf in re.findall(r'genericGroup\.get\(\),\s*"([a-z_]+)"', factory):
+        names.add(f"dEQP-VK.subgroups.size_control.generic.{leaf}")
+    return names
 
 
 def _multisample_factory(text: str) -> str:
@@ -1057,6 +1124,109 @@ def _fill_update_generated_leaf_names(function_text: str) -> set[str]:
             for extra in range(4) for word in range(4)
         )
     return leaves
+
+
+@_memoized
+def _pipeline_cache_control_leaf_paths(text: str) -> set[str]:
+    """Derive registered cache-control leaves from the pinned TestParams table."""
+    table = re.search(r"static constexpr TestParams TEST_CASES\[\] = \{(.*?)\n\};", text, re.S)
+    if not table:
+        return set()
+    names = dict(re.findall(r'static constexpr TestParams\s+(\w+)\s*=\s*\{\s*"([^"\n]+)"', text))
+    identifiers = re.findall(r"^\s*([A-Z][A-Z_0-9]+),\s*$", table.group(1), re.M)
+    leaves = set()
+    for group in ("graphics_pipelines", "compute_pipelines"):
+        if f'group.getTestContext(), "{group}"' not in text:
+            return set()
+        for identifier in identifiers:
+            if identifier in names:
+                leaves.add(f"dEQP-VK.pipeline.creation_cache_control.{group}.{names[identifier]}")
+    return leaves
+
+
+@_memoized
+def _integer_dot_32_leaf_factories(text: str) -> dict[str, str]:
+    """Derive the pinned integer-dot leaves needing only 32-bit arithmetic.
+
+    Vector Int8/Int16 and narrow outputs need additional features. Packed 4x8
+    inputs with a 32-bit output do not. This recognizer deliberately excludes
+    the narrow routes; it is not an enumeration of the entire upstream group.
+    """
+    name_function = re.search(r"string getDotProductTestName\(.*?\n\}", text, re.S)
+    expected = ('return inputInfo.name + (packingInfo.packed ? string("_packed_") : "_") + '
+                '(packingInfo.signedLHS ? "s" : "u") + (packingInfo.signedRHS ? "s" : "u") + '
+                '"_v" + de::toString(inputInfo.vecLen) + "i" + '
+                'de::toString(inputInfo.vecElemSize) + "_out" + de::toString(outSize);')
+    compact = lambda value: re.sub(r"\s+", "", value)
+    if not name_function or compact(expected) not in compact(name_function[0]):
+        return {}
+    packing = re.search(r"dotProductPacking\[\]\s*=\s*\{(.*?)\};", text, re.S)
+    if not packing:
+        return {}
+    forms = re.findall(r"\{\s*(true|false),\s*(true|false),\s*(true|false)\s*\}", packing[1])
+    vectors = {}
+    for width in (8, 32):
+        table = re.search(rf"dotProductVector{width}\[\]\s*=\s*\{{(.*?)\}};", text, re.S)
+        if not table:
+            return {}
+        vectors[width] = [(int(bits), int(size)) for bits, size in re.findall(r"\{\s*(\d+),\s*(\d+)\s*\}", table[1])]
+    result = {}
+    pattern = r"tcu::TestCaseGroup \*(create(Op(?:S|U|SU)Dot(?:AccSat)?KHR)ComputeGroup)\(tcu::TestContext &testCtx\)\s*\{"
+    for factory in re.finditer(pattern, text):
+        end = text.find("return group.release();", factory.end())
+        if end < 0:
+            return {}
+        body = text[factory.end():end]
+        group = re.search(r'new tcu::TestCaseGroup\(testCtx, "([^"]+)"\)', body)
+        if not group:
+            return {}
+        calls = re.findall(rf'add(8|32)bit{factory[2]}ComputeTests\(.*?string\("([^"]+)"\)', body, re.S)
+        for width_text, scenario in calls:
+            for width, length in vectors[int(width_text)]:
+                for packed, lhs, rhs in forms:
+                    if (packed == "true" and (width, length) != (8, 4)) or (packed == "false" and width != 32):
+                        continue
+                    signs = ("s" if lhs == "true" else "u") + ("s" if rhs == "true" else "u")
+                    leaf = f'{scenario}{"_packed_" if packed == "true" else "_"}{signs}_v{length}i{width}_out32'
+                    result[f"dEQP-VK.spirv_assembly.instruction.compute.{group[1]}.{leaf}"] = factory[1]
+    return result
+
+
+def _zero_initialize_leaf_paths(text: str) -> set[str]:
+    """Recognize the pinned zero-initialize factories without accepting arbitrary
+    numeric or synthesized leaf names. Source shape drift fails closed."""
+    prefix = "dEQP-VK.compute.zero_initialize_workgroup_memory."
+    paths = set()
+    def body(start, end):
+        if start not in text or end not in text:
+            return ""
+        return text.split(start, 1)[1].split(end, 1)[0]
+    types = body("void AddTypeTests(", "struct CompositeCaseDef")
+    if "cases[i].typeName.c_str()" in types:
+        paths.update("types." + name for name in re.findall(r'\{"([a-zA-Z0-9_]+)",\s*\d+,', types))
+    composites = body("void AddCompositeTests(", "enum Dim")
+    if "de::toString(i), cases[i]" in composites:
+        count = len(re.findall(r"\n        \{\n            \d+,", composites))
+        paths.update(f"composites.{i}" for i in range(count))
+    maxmem = body("void AddMaxWorkgroupMemoryTests(", "struct TypeCaseDef")
+    sizes = re.search(r"workgroups = \{([0-9, ]+)\}", maxmem)
+    if sizes and "de::toString(numWG)" in maxmem:
+        paths.update("max_workgroup_memory." + n for n in re.findall(r"\d+", sizes[1]))
+    specialized = body("void AddSpecializeWorkgroupTests(", "class RepeatedPipelineInstance")
+    bounds = [re.search(r"uint32_t " + axis + r" = 1; " + axis + r" <= (\d+);", specialized)
+              for axis in "xyz"]
+    if all(bounds) and 'de::toString(x) + "_" + de::toString(y) + "_" + de::toString(z)' in specialized:
+        limits = [int(b[1]) for b in bounds]
+        if all(0 < n <= 16 for n in limits):
+            paths.update(f"specialize_workgroup.{x}_{y}_{z}" for x in range(1, limits[0] + 1)
+                         for y in range(1, limits[1] + 1) for z in range(1, limits[2] + 1))
+    repeated = body("void AddRepeatedPipelineTests(", "#ifndef CTS_USES_VULKANSC")
+    values = [re.search(name + r"\s*= \{([0-9, ]+)\}", repeated) for name in ("xSizes", "odds", "repeats")]
+    if all(values) and '(odd == 1 ? "_odd" : "_even") + "_repeat_"' in repeated:
+        xs, odds, reps = [[int(n) for n in re.findall(r"\d+", v[1])] for v in values]
+        paths.update(f"repeat_pipeline.x_{x}_{'odd' if odd == 1 else 'even'}_repeat_{r}"
+                     for x in xs for odd in odds for r in reps)
+    return {prefix + path for path in paths}
 
 
 @_memoized
@@ -1903,7 +2073,9 @@ def main() -> int:
     contract_pending: list[str] = []
     manifest_paths = {case["path"] for case in
                       manifest["cases"] + manifest.get("diagnostics", [])}
-    if multiview_util_path.is_file() and multiview_test_path.is_file():
+    needs_multiview_contract = contracts or any(
+        path.startswith("dEQP-VK.multiview.") for path in manifest_paths)
+    if needs_multiview_contract and multiview_util_path.is_file() and multiview_test_path.is_file():
         tests_text = multiview_test_path.read_text(encoding="utf-8", errors="replace")
         util_text = multiview_util_path.read_text(encoding="utf-8", errors="replace")
         leaves = _multiview_leaf_requirements(
@@ -1997,6 +2169,84 @@ def main() -> int:
                     text, integration_text, _read_source(BDA_BUILD_SOURCE))):
                 failures.append(
                     f"{path}: not produced by the pinned focused BDA factory {source_ref}")
+            continue
+
+        if source_path.name == "vktPipelineCreationCacheControlTests.cpp":
+            if (path not in _pipeline_cache_control_leaf_paths(text) or
+                    "vkt::pipeline::createCacheControlTests(" not in integration_text or
+                    "vktPipelineCreationCacheControlTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by the registered cache-control factory")
+            continue
+
+        if (case.get("category") == "maintenance4-local-size" or
+                path.startswith("dEQP-VK.spirv_assembly.instruction.compute.localsize_id.") or
+                source_path.name == "vktSpvAsmMultipleShadersTests.cpp"):
+            build_text = _read_source(BDA_BUILD_SOURCE)
+            if source_path.name == "vktSpvAsmInstructionTests.cpp":
+                wrapper = _read_source(LOCAL_SIZE_WRAPPER) if LOCAL_SIZE_WRAPPER.is_file() else ""
+                valid = (path in local_size_paths(text) and
+                    'vkt::SpirVAssembly::createFocusedLocalSizeIdGroup(' in integration_text and
+                    'ROOT / "cts/upstream/volatile_atomic_focus.cpp"' in build_text and
+                    '#include "vktSpvAsmInstructionTests.cpp"' in wrapper and
+                    'return createLocalSizeGroup(testCtx, true);' in wrapper)
+            elif source_path.name == "vktSpvAsmMultipleShadersTests.cpp":
+                valid = (path in multiple_shader_paths(text) and
+                    'vkt::SpirVAssembly::createMultipleShaderExtendedGroup(' in integration_text and
+                    'vktSpvAsmMultipleShadersTests.cpp' in build_text)
+            else:
+                valid = False
+            if not valid:
+                failures.append(f"{path}: not produced by a registered maintenance4 factory")
+            if not {"VK_KHR_maintenance4", "maintenance4"} <= set(case.get("features_required", [])):
+                failures.append(f"{path}: missing maintenance4 feature requirements")
+            continue
+
+        if source_path.name == "vktSpvAsmIntegerDotProductTests.cpp":
+            factory = _integer_dot_32_leaf_factories(text).get(path)
+            if (not factory or
+                    f"vkt::SpirVAssembly::{factory}(" not in integration_text or
+                    "vktSpvAsmIntegerDotProductTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by a registered 32-bit integer-dot factory")
+            required = {"VK_KHR_shader_integer_dot_product", "shaderIntegerDotProduct"}
+            if not required <= set(case.get("features_required", [])):
+                failures.append(f"{path}: missing integer-dot feature requirements")
+            continue
+
+        if source_path.name == "vktComputeZeroInitializeWorkgroupMemoryTests.cpp":
+            if (path not in _zero_initialize_leaf_paths(text) or
+                    "vkt::compute::createZeroInitializeWorkgroupMemoryTests(" not in integration_text or
+                    "vktComputeZeroInitializeWorkgroupMemoryTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by the registered zero-initialize factory")
+            continue
+
+        if case.get("category") in ("t08-subgroup-size-control-pending",
+                                    "t08-compute-full-subgroups-pending"):
+            if (source_path.name != "vktSubgroupsSizeControlTests.cpp" or
+                    path not in _subgroup_size_leaf_names(text) or
+                    "vkt::subgroups::createSubgroupsSizeControlTests(" not in integration_text or
+                    source_path.name not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by the registered pinned size-control factory")
+            required = set(case.get("features_required", []))
+            if (case["category"] == "t08-compute-full-subgroups-pending" and
+                    not {"computeFullSubgroups", "subgroup:BALLOT", "subgroupSizeControl"} <= required):
+                failures.append(f"{path}: full-subgroup CTS prerequisites are not declared")
+            if (path.endswith("_flags_spirv16") and "SPIR-V:1.6" not in required):
+                failures.append(f"{path}: flagged SPIR-V 1.6 variant is not declared")
+            continue
+
+        if case.get("category", "").startswith("t08-subgroup-"):
+            families = {
+                "vktSubgroupsBallotBroadcastTests.cpp":
+                    ("ballot_broadcast", "createSubgroupsBallotBroadcastTests"),
+                "vktSubgroupsArithmeticTests.cpp":
+                    ("arithmetic", "createSubgroupsArithmeticTests"),
+            }
+            family, factory = families.get(source_path.name, ("", ""))
+            if (not family or
+                    path not in _subgroup_compute_leaf_names(text, family) or
+                    f"vkt::subgroups::{factory}(" not in integration_text or
+                    source_path.name not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by a registered pinned subgroup factory")
             continue
 
         # Intermediate groups may come from the integration (package_ps5.cpp) or

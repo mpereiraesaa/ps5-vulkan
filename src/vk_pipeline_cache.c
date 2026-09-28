@@ -91,7 +91,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineCache(VkDevice d,
     if (!out) return INVALID;
     *out = VK_NULL_HANDLE;
     if (!d || !info || info->sType != VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO ||
-        info->pNext || info->flags) return INVALID;
+        info->pNext || (info->flags & ~VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT)) return INVALID;
+    if (info->flags && !(d->enabled_features_t09 & PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     /* initialDataSize == 0 with a non-NULL pointer is valid input. */
     if (info->initialDataSize && !info->pInitialData) return INVALID;
     const VkPhysicalDeviceProperties *properties = device_properties(d);

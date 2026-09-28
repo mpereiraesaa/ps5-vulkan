@@ -21,6 +21,11 @@ from run_consumer import close_and_confirm, control, running, wait_for_log  # no
 
 EXTENT = 64
 PROFILE = "dxvk-render-public-sdk-witness"
+CACHE_PROFILE = "dxvk-cache-public-sdk-witness"
+INLINE_PROFILE = "dxvk-inline-public-sdk-witness"
+MAINTENANCE4_PROFILE = "dxvk-maintenance4-public-sdk-witness"
+INLINE_SWITCH = "PS5VK_INLINE_UNIFORM_DIAGNOSTIC"
+CACHE_SWITCH = "PS5VK_PIPELINE_CACHE_CONTROL_DIAGNOSTIC"
 VIEWPORT = (0.0, 64.0, 64.0, -64.0)
 SAMPLE_POINTS = ((0, 0), (47, 63), (48, 0), (63, 40), (63, 63))
 
@@ -60,13 +65,13 @@ def front_facing_clockwise(first: int, viewport=VIEWPORT) -> bool:
     return area < 0.0
 
 
-def expected_image(viewport=VIEWPORT) -> tuple[list[int], int, int]:
+def expected_image(viewport=VIEWPORT, *, tessellation=False) -> tuple[list[int], int, int]:
     image = [rgba(4 * x, 4 * y, 64, 255) if x < 48 else rgba(255, 0, 0, 255)
              for y in range(EXTENT) for x in range(EXTENT)]
     visible, top_row = 0, None
     vx, vy, vw, vh = viewport
     for q, color in ((1, rgba(0, 255, 0, 255)), (2, rgba(0, 0, 255, 255))):
-        if not front_facing_clockwise(q * 6, viewport):
+        if not tessellation and not front_facing_clockwise(q * 6, viewport):
             continue
         y0n, y1n = (-1.0, 0.0) if q == 1 else (0.0, 1.0)
         rows = sorted((vy + vh / 2 + vh / 2 * y0n, vy + vh / 2 + vh / 2 * y1n))
@@ -78,15 +83,38 @@ def expected_image(viewport=VIEWPORT) -> tuple[list[int], int, int]:
     return image, visible, top_row if top_row is not None else 0xffffffff
 
 
-def expected_digest() -> str:
-    image, _, _ = expected_image()
+def expected_digest(*, tessellation=False) -> str:
+    image, _, _ = expected_image(tessellation=tessellation)
     return f"{fnv(b''.join(v.to_bytes(4, 'little') for v in image)):08x}"
 
 
+def expected_compute_digest() -> str:
+    values = [(17 * i + 11) * 5 + (i ^ 0x13579bdf) for i in range(1024)]
+    return f"{fnv(b''.join(v.to_bytes(4, 'little') for v in values)):08x}"
+
+
+def expected_inline_digest(words=70) -> str:
+    value = 2166136261
+    for route in range(4):
+        for i in range(256):
+            word = ((0x10203040 + route * 1009 + (i % words) * 37) * 3 + (i ^ 0x13579bdf)) & 0xffffffff
+            value = ((value ^ word) * 16777619) & 0xffffffff
+    return f"{value:08x}"
+
+
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
-    if (artifact.get("profile") != PROFILE or artifact.get("extent") != EXTENT or
+    cache_variant = artifact.get("profile") == CACHE_PROFILE
+    inline_variant = artifact.get("profile") == INLINE_PROFILE
+    maintenance4_variant = artifact.get("profile") == MAINTENANCE4_PROFILE
+    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE, INLINE_PROFILE, MAINTENANCE4_PROFILE) or
+            artifact.get("extent") != EXTENT or
             artifact.get("format") != "R8G8B8A8_UNORM" or
-            artifact.get("diagnostic_switch") is not None):
+            artifact.get("diagnostic_switch") != (INLINE_SWITCH if inline_variant else CACHE_SWITCH if cache_variant else None) or
+            (cache_variant and artifact.get("cache_execution_version") != 2) or
+            (maintenance4_variant and artifact.get("maintenance4_interface_version") != 1) or
+            (inline_variant and (artifact.get("inline_execution_version") != 7 or
+                                 artifact.get("inline_graphics_stage") not in ("small", "vertex", "fragment", "geometry",
+                                                                                "tess_control", "tess_evaluation")))):
         raise ValueError("unexpected DXVK render witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or
@@ -94,6 +122,14 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             receipt.get("sha256") != hashlib.sha256(log).hexdigest()):
         raise ValueError("incomplete or corrupt ps5log/1 receipt")
     text = log.decode("utf-8", errors="replace")
+    maintenance4_marker = "DXVK_MAINTENANCE4_INTERFACE producer=4 consumer=2 feature=enabled"
+    if maintenance4_variant:
+        if (text.count("DXVK_MAINTENANCE4_INTERFACE") != 1 or
+                maintenance4_marker not in text or
+                text.index(maintenance4_marker) >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("maintenance4 interface pipeline missing or malformed")
+    elif "DXVK_MAINTENANCE4_INTERFACE" in text:
+        raise ValueError("maintenance4 log requires maintenance4 artifact")
     start = re.findall(r"DXVK_RENDER_WITNESS_START extent=(\d+) dynamicRendering=(\d+) "
                        r"extendedDynamicState=(\d+)", text)
     steps = re.findall(r"DXVK_RENDER_WITNESS_STEP index=(\d+) fence=complete", text)
@@ -104,19 +140,78 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
                         r"visible_markers=([0-9a-f]+) marker_top=(\d+) digest=([0-9a-f]{8}) "
                         r"submissions=(\d+) fence=(\w+)", text)
     retired = re.findall(r"DXVK_RENDER_WITNESS_RETIRED resources=(\w+)", text)
-    image, visible, top_row = expected_image()
+    tessellation = inline_variant and artifact["inline_graphics_stage"] in ("tess_control", "tess_evaluation")
+    image, visible, top_row = expected_image(tessellation=tessellation)
     if (len(start) != 1 or len(result) != 1 or len(samples) != 1 or len(retired) != 1 or
             start[0] != (str(EXTENT), "1", "1") or steps != ["0"] or
             [int(s, 16) for s in samples[0]] != [image[y * EXTENT + x] for x, y in SAMPLE_POINTS] or
             result[0] != (str(EXTENT), "0", "0", "0", f"{visible:x}", str(top_row),
-                          expected_digest(), "1", "complete") or
+                          expected_digest(tessellation=tessellation), "1", "complete") or
             retired[0] != "clean" or
             text.index("DXVK_RENDER_WITNESS_START") >= text.index("DXVK_RENDER_WITNESS_RESULT") or
             text.index("DXVK_RENDER_WITNESS_RESULT") >= text.index("DXVK_RENDER_WITNESS_RETIRED") or
             "DXVK_RENDER_WITNESS_FAILURE" in text):
         raise ValueError("render, readback, fence or cleanup failed")
+    if cache_variant:
+        compute = re.findall(r"DXVK_CACHE_WITNESS_COMPUTE words=(\d+) cold_misses=(\d+) "
+                             r"warm_derivatives=(\d+) factor=(\d+) mismatches=(\d+) guards=(\d+) "
+                             r"inputs=(\d+) digest=([0-9a-f]{8}) submissions=(\d+) "
+                             r"fence=(\w+) resources=(\w+)", text)
+        if (compute != [("1024", "2", "1", "5", "0", "0", "0", expected_compute_digest(),
+                         "1", "complete", "retired")] or
+                text.index("DXVK_RENDER_WITNESS_START") >= text.index("DXVK_CACHE_WITNESS_COMPUTE")):
+            raise ValueError("compute cache execution or retirement failed")
+        created = re.findall(r"DXVK_CACHE_WITNESS_CREATED cold_misses=(\d+) "
+                             r"warm_derivatives=(\d+) bases_retired=(\d+) cache_retired=(\d+)", text)
+        queries = re.findall(r"DXVK_CACHE_WITNESS_QUERIES normal=(\d+) discard=(\d+)", text)
+        if (created != [("2", "2", "2", "1")] or len(queries) != 1 or
+                not 0 < int(queries[0][0]) < 2**64 - 1 or queries[0][1] != "0" or
+                text.index("DXVK_CACHE_WITNESS_COMPUTE") >= text.index("DXVK_CACHE_WITNESS_CREATED") or
+                text.index("DXVK_CACHE_WITNESS_CREATED") >= text.index("DXVK_CACHE_WITNESS_QUERIES") or
+                text.index("DXVK_CACHE_WITNESS_QUERIES") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("cache creation, lifetime or discard query failed")
+    elif "DXVK_CACHE_WITNESS_" in text:
+        raise ValueError("cache log requires cache witness artifact")
+    if inline_variant:
+        compute = re.findall(r"DXVK_INLINE_WITNESS_COMPUTE routes=(\d+) words=(\d+) "
+                             r"mismatches=(\d+) guards=(\d+) digest=([0-9a-f]{8}) "
+                             r"submissions=(\d+) fence=(\w+) resources=(\w+)", text)
+        if (text.count("DXVK_INLINE_WITNESS_COMPUTE") != 1 or
+                compute != [("4", "1024", "0", "0", expected_inline_digest(), "1", "complete", "retired")] or
+                text.index("DXVK_RENDER_WITNESS_START") >= text.index("DXVK_INLINE_WITNESS_COMPUTE") or
+                text.index("DXVK_INLINE_WITNESS_COMPUTE") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("inline compute result, ordering or retirement failed")
+        boundary = re.findall(r"DXVK_INLINE_WITNESS_BOUNDARY blocks=(\d+) bytes=(\d+) routes=(\d+) words=(\d+) "
+                              r"mismatches=(\d+) guards=(\d+) digest=([0-9a-f]{8}) "
+                              r"submissions=(\d+) fence=(\w+) resources=(\w+)", text)
+        if (text.count("DXVK_INLINE_WITNESS_BOUNDARY") != 1 or
+                boundary != [("4", "1024", "4", "1024", "0", "0", expected_inline_digest(256), "1", "complete", "retired")] or
+                text.index("DXVK_INLINE_WITNESS_COMPUTE") >= text.index("DXVK_INLINE_WITNESS_BOUNDARY") or
+                text.index("DXVK_INLINE_WITNESS_BOUNDARY") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("inline boundary result, ordering or retirement failed")
+        split = re.findall(r"DXVK_INLINE_WITNESS_SPLIT sets=(\d+) blocks=(\d+) bytes=(\d+) routes=(\d+) words=(\d+) "
+                              r"mismatches=(\d+) guards=(\d+) digest=([0-9a-f]{8}) "
+                              r"submissions=(\d+) fence=(\w+) resources=(\w+)", text)
+        if (text.count("DXVK_INLINE_WITNESS_SPLIT") != 1 or
+                split != [("4", "4", "1024", "4", "1024", "0", "0", expected_inline_digest(256), "1", "complete", "retired")] or
+                text.index("DXVK_INLINE_WITNESS_BOUNDARY") >= text.index("DXVK_INLINE_WITNESS_SPLIT") or
+                text.index("DXVK_INLINE_WITNESS_SPLIT") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("inline split-set result, ordering or retirement failed")
+        graphics = re.findall(r"DXVK_INLINE_WITNESS_GRAPHICS stage=(\w+) blocks=(\d+) bytes=(\d+)", text)
+        stage = artifact["inline_graphics_stage"]
+        if (text.count("DXVK_INLINE_WITNESS_GRAPHICS") != 1 or
+                graphics != [(stage, "2" if stage == "small" else "4", "24" if stage == "small" else "1024")] or
+                text.index("DXVK_INLINE_WITNESS_SPLIT") >= text.index("DXVK_INLINE_WITNESS_GRAPHICS") or
+                text.index("DXVK_INLINE_WITNESS_GRAPHICS") >= text.index("DXVK_RENDER_WITNESS_STEP")):
+            raise ValueError("inline graphics stage, capacity or ordering mismatch")
+    elif "DXVK_INLINE_WITNESS_" in text:
+        raise ValueError("inline log requires inline witness artifact")
+    if "DXVK_RENDER_WITNESS_PENDING" in text:
+        raise ValueError("submission still owns resources")
     return {
+        "profile": artifact["profile"],
         "strict_verified": True,
+        "total_submissions": 4 if inline_variant else 2 if cache_variant else 1,
         "run_id": receipt["run_id"],
         "extent": EXTENT,
         "visible_markers": visible,
@@ -141,7 +236,7 @@ def main() -> int:
         raise RuntimeError("refusing to launch while a title is active")
     artifact = json.loads(args.artifact.read_text())
     eboot = args.dist / "eboot.bin"
-    if (artifact.get("profile") != PROFILE or
+    if (artifact.get("profile") not in (PROFILE, CACHE_PROFILE, INLINE_PROFILE, MAINTENANCE4_PROFILE) or
             hashlib.sha256(eboot.read_bytes()).hexdigest() != artifact.get("eboot_sha256")):
         raise RuntimeError("artifact identity mismatch")
     known = {path.name for path in args.runs_dir.glob("*_PPSA99994_ps5vk_*.log")}

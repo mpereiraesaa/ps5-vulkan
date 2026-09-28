@@ -1451,10 +1451,11 @@ def main() -> int:
     selected = [case["path"] for case in manifest["cases"]]
     diagnostics = [case["path"] for case in manifest.get("diagnostics", [])]
 
-    # Applicable-CTS column. The limit rows are exactly what the diagnostic
-    # device-query cases check; no acceptance case depends on a value this
-    # increment touched, so the acceptance selection is unchanged.
-    limit_cases = [case for case in diagnostics if case.startswith("dEQP-VK.info.")]
+    # These Vulkan 1.0 limit rows use the generic device-query diagnostics.
+    # Extension/core-1.3 limit validators are selected separately and must not
+    # be attached to unrelated Vulkan 1.0 limits.
+    limit_cases = [case for case in diagnostics if case in (
+        "dEQP-VK.info.device_memory_properties", "dEQP-VK.info.device_properties")]
     for row in limits:
         row["applicable_cts"] = {"cases": limit_cases, "status": "diagnostic"}
     for row in formats:

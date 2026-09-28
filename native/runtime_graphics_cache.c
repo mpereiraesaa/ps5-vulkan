@@ -28,7 +28,7 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
 {
     /* Validation bounds each module at 4M words and entry names at 63 bytes.
      * Fixed 64-byte strings and explicit lengths prevent concatenation aliases. */
-    enum { DESCRIPTOR_WORDS=1+PS5VK_MAX_SETS*(1+PS5VK_MAX_BINDINGS*4),
+    enum { DESCRIPTOR_WORDS=1+PS5VK_MAX_SETS*(1+PS5VK_MAX_BINDINGS*5),
         VERTEX_WORDS=2+16*4+32*5,
         /* The optional geometry stage is part of the program identity: a
          * pipeline that carries one must never reuse the pair compiled for the
@@ -91,6 +91,7 @@ static uint32_t *pair_key(const struct ps5vk_graphics_key *key,
             words[at++]=sig?sig->binding[binding].first:0;
             words[at++]=sig?sig->binding[binding].stages:0;
             words[at++]=sig?sig->type[binding]:0;
+            words[at++]=sig?sig->inline_bytes[binding]:0;
         }
     }
     words[at++]=key->vertex_binding_count;
@@ -255,6 +256,7 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     /* The experimental second legacy-domain image is intentionally not part
      * of the normal cache payload. Keep this diagnostic ownership explicit. */
     if(ps5vk_graphics_has_tessellation(key)) {
+        if(key->fail_on_compile_required)return VK_PIPELINE_COMPILE_REQUIRED;
         const void *compiled=NULL;
         VkResult rc=ps5vk_runtime_graphics_compile(NULL,key,&compiled);
         if(rc!=VK_SUCCESS)return rc;
@@ -275,6 +277,7 @@ VkResult ps5vk_runtime_graphics_cached_acquire(void *context,
     if(!words)return VK_ERROR_OUT_OF_HOST_MEMORY;
     struct ps5vk_cache_entry *entry=ps5vk_compilation_cache_lookup(cache,&identity,words);
     if(!entry) {
+        if(key->fail_on_compile_required){free(words);return VK_PIPELINE_COMPILE_REQUIRED;}
         const void *compiled=NULL;
         VkResult rc=ps5vk_runtime_graphics_compile(NULL,key,&compiled);
         if(rc!=VK_SUCCESS){free(words);return rc;}

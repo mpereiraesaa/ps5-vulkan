@@ -41,6 +41,10 @@ struct ps5vk_memory_backend ps5vk_native_graphics_memory_backend(void);
 /* Resolve a direct-memory allocation's GPU virtual address. The host default
  * refuses this; native memory provides the address used by GPU descriptors. */
 VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out);
+/* A native backend may map the same physical allocation at a separate CPU
+ * address. The GPU and bound resources keep the original address. The host
+ * default has no alias and returns VK_ERROR_FEATURE_NOT_PRESENT. */
+VkResult ps5vk_memory_backend_cpu_map(void *backing, void **out);
 /* HOST_COHERENT maintenance at queue boundaries: CPU writeback of every mapped
  * coherent allocation before a GPU submission launches, CPU invalidate after
  * its completion is observed. Both are no-ops without such an allocation. */
@@ -149,8 +153,8 @@ enum ps5vk_feature_bits {
      * unset; a private measurement build may exercise the runtime path. It
      * is not a public Vulkan feature or subgroup-properties promise. */
     PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE = 1u << 29,
-    /* Independent private compute IAdd route; never a public ARITHMETIC
-     * operation or extended-types feature promise. */
+    /* Private compute arithmetic-family route, selected by the legacy IAdd
+     * diagnostic switch. Never a public ARITHMETIC or extended-types promise. */
     PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE = 1u << 30,
     /* Internal compute compiler probe only. Never maps to VkPhysicalDeviceFeatures. */
     PS5VK_FEATURE_SHADER_INT8_COMPUTE = 1u << 31,
@@ -251,6 +255,13 @@ enum ps5vk_t09_feature_bits {
      * subgroup built-ins) for a private measurement build. Not a subgroup
      * properties promise: VkPhysicalDeviceSubgroupProperties stays zero. */
     PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE = 1u << 28,
+    /* Workgroup OpConstantNull initialization. Kept unreported until a
+     * native witness proves the compiler stores and synchronization. */
+    PS5VK_T09_FEATURE_ZERO_INITIALIZE_WORKGROUP_MEMORY = 1u << 29,
+    /* Cache-only pipeline creation and early return; unreported until validated. */
+    PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL = 1u << 30,
+    /* Inline UBO snapshots; measurement-only until native acceptance. */
+    PS5VK_T09_FEATURE_INLINE_UNIFORM_BLOCK = 1u << 31,
     /* A second, HOST_COHERENT memory type whose coherence the driver keeps at
      * map/unmap and submission boundaries (src/physical_device_profile.h).
      * Only the diagnostic witness build sets it until native proof. */
@@ -355,6 +366,40 @@ struct ps5vk_queue_backend {
     void (*release)(VkDevice, void *);
 };
 
+/* Additional opt-ins after the two existing feature words were filled. */
+enum ps5vk_v13_feature_bits {
+    PS5VK_V13_FEATURE_SUBGROUP_SIZE_CONTROL = 1u << 0,
+    PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS = 1u << 1,
+    PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT = 1u << 2,
+    PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS = 1u << 3,
+    /* Public T08 contracts are separate from the private compiler switches.
+     * No shipping platform sets these bits before native subgroup evidence. */
+    PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE = 1u << 4,
+    PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE = 1u << 5,
+    PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES = 1u << 6,
+    PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID = 1u << 7,
+};
+
+static inline uint32_t ps5vk_subgroup_public_bits(uint32_t features,
+                                                  uint32_t t09, uint32_t v13)
+{
+    if (!(t09 & PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE)) return 0;
+    uint32_t bits = v13 & (PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+                            PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE);
+    if ((bits & (PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+                 PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE)) ==
+        (PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+         PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE) &&
+        (v13 & PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES) &&
+        (features & (PS5VK_FEATURE_SHADER_INT16 | PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) ==
+            (PS5VK_FEATURE_SHADER_INT16 | PS5VK_FEATURE_STORAGE_BUFFER_16BIT))
+        bits |= PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
+    if ((bits & PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE) &&
+        (v13 & PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID))
+        bits |= PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+    return bits;
+}
+
 /* Link-selected platform implementation. Production must query/configure its
  * native backend; test binaries provide explicit mock implementations. */
 struct ps5vk_platform {
@@ -372,6 +417,7 @@ struct ps5vk_platform {
      * to advertise a Vulkan feature without a native backend contract. */
     uint32_t supported_features;
     uint32_t supported_features_t09;
+    uint32_t supported_features_v13;
     /* DIAGNOSTIC ONLY, never set by a shipping build: open the
      * VK_KHR_maintenance4 route although the device reports Vulkan 1.0, so a
      * diagnostic DXVK run can be measured past it. The registry requires
@@ -437,6 +483,10 @@ struct VkDevice_T {
     VkDeviceSize max_allocation;
     uint32_t enabled_features;
     uint32_t enabled_features_t09;
+    uint32_t enabled_features_v13;
+    /* Fixed-wave compute stage contracts derived from negotiated V13 bits. */
+    VkBool32 subgroup_size_control_enabled;
+    VkBool32 compute_full_subgroups_enabled;
     VkBool32 device_group_extension_enabled;
     /* VK_KHR_create_renderpass2 was enabled on this device. The KHR render
      * pass 2 entry points refuse, and the proc-address lookup hides them,

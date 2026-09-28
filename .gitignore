@@ -18,5 +18,7 @@ dist-consumer/
 dist-cts/
 dist-upstream-cts/
 dist-dxvk-render-witness/
+dist-dxvk-cache-witness/
+dist-dxvk-inline-witness/
 dist-t13-vertex-robustness-witness/
 dist-dxvk-eds-witness/

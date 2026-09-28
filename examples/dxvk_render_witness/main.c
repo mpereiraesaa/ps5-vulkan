@@ -46,6 +46,21 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+#include "cache_compute.h"
+#endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+#include "inline_compute.h"
+#include "inline_graphics.h"
+#ifndef PS5VK_INLINE_GRAPHICS_STAGE
+#define PS5VK_INLINE_GRAPHICS_STAGE 0
+#endif
+/* Preprocessor conditions cannot evaluate Vulkan's enum identifiers. */
+_Static_assert(VK_SHADER_STAGE_GEOMETRY_BIT == 8, "geometry stage selector");
+_Static_assert(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT == 2, "control stage selector");
+_Static_assert(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT == 4, "evaluation stage selector");
+#endif
+
 enum { EXTENT = 64, STAGING = 64 * 1024 };
 /* DXVK's staging slice sits at an offset inside a shared buffer. */
 enum { FULL_OFFSET = 4096, SUB_OFFSET = 24576 + 256, SUB_X = 40, SUB_Y = 24,
@@ -89,6 +104,7 @@ static int front_facing_clockwise(uint32_t first, float vx, float vy, float vw, 
 /* The expected image: the clear, the gradient quad, and each marker quad the
  * back-face cull keeps, placed by the flipped viewport's row mapping. */
 static void expected_image(uint32_t *image, float vx, float vy, float vw, float vh,
+    VkBool32 cull_back,
     uint32_t *visible_marker, uint32_t *marker_top)
 {
     for (uint32_t y = 0; y < EXTENT; ++y)
@@ -98,7 +114,7 @@ static void expected_image(uint32_t *image, float vx, float vy, float vw, float 
     *visible_marker = 0; *marker_top = UINT32_MAX;
     for (uint32_t q = 1; q <= 2; ++q) {
         /* Both triangles of a quad share its winding. */
-        if (!front_facing_clockwise(q * 6u, vx, vy, vw, vh)) continue;
+        if (cull_back && !front_facing_clockwise(q * 6u, vx, vy, vw, vh)) continue;
         float y0n = q == 1u ? -1.0f : 0.0f, y1n = q == 1u ? 0.0f : 1.0f;
         float y0 = vy + vh * 0.5f + vh * 0.5f * y0n, y1 = vy + vh * 0.5f + vh * 0.5f * y1n;
         const uint32_t top = (uint32_t)(y0 < y1 ? y0 : y1), bottom = (uint32_t)(y0 < y1 ? y1 : y0);
@@ -135,8 +151,25 @@ static int run_witness(void)
     VkBuffer staging = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
     VkShaderModule vertex = VK_NULL_HANDLE, fragment = VK_NULL_HANDLE;
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+    VkShaderModule geometry = VK_NULL_HANDLE;
+#endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    VkShaderModule tess_control = VK_NULL_HANDLE, tess_evaluation = VK_NULL_HANDLE;
+#endif
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
+    VkBool32 submission_pending = VK_FALSE;
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    VkDescriptorSetLayout inline_layout = VK_NULL_HANDLE;
+    VkDescriptorPool inline_pool = VK_NULL_HANDLE;
+    VkDescriptorSet inline_set = VK_NULL_HANDLE;
+#endif
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    VkPipeline base = VK_NULL_HANDLE, discard = VK_NULL_HANDLE;
+    VkPipelineCache cache = VK_NULL_HANDLE;
+    VkQueryPool queries = VK_NULL_HANDLE;
+#endif
     VkCommandPool pool = VK_NULL_HANDLE;
     VkCommandBuffer command = VK_NULL_HANDLE;
     VkFence fence = VK_NULL_HANDLE;
@@ -154,17 +187,58 @@ static int run_witness(void)
     TRY(vkEnumeratePhysicalDevices(instance, &count, &physical));
     REQUIRE(count == 1 && physical, "one physical device");
 
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    VkPhysicalDevicePipelineCreationCacheControlFeatures cache_control = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES};
+#endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    VkPhysicalDeviceInlineUniformBlockFeatures inline_uniform = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES};
+#endif
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+    VkPhysicalDeviceMaintenance4Features maintenance4 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES};
+#endif
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, .pNext = &eds};
     VkPhysicalDeviceFeatures2 features2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .pNext = &dynamic_rendering};
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    eds.pNext = &cache_control;
+#endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    eds.pNext = &inline_uniform;
+#endif
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+    eds.pNext = &maintenance4;
+#endif
     vkGetPhysicalDeviceFeatures2KHR(physical, &features2);
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+    REQUIRE(maintenance4.maintenance4, "maintenance4 reported");
+    maintenance4.maintenance4 = VK_TRUE;
+#endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    REQUIRE(inline_uniform.inlineUniformBlock, "inline uniform reported");
+#endif
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    REQUIRE(cache_control.pipelineCreationCacheControl, "cache control reported");
+#endif
     ps5log_printf(PS5LOG_MARK,
         "DXVK_RENDER_WITNESS_START extent=%u dynamicRendering=%u extendedDynamicState=%u",
         EXTENT, (unsigned)dynamic_rendering.dynamicRendering, (unsigned)eds.extendedDynamicState);
     REQUIRE(dynamic_rendering.dynamicRendering && eds.extendedDynamicState, "features reported");
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8 || PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    VkPhysicalDeviceFeatures enabled_stages = {0};
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+    REQUIRE(features2.features.geometryShader, "geometry shader reported");
+    enabled_stages.geometryShader=VK_TRUE;
+#else
+    REQUIRE(features2.features.tessellationShader, "tessellation shader reported");
+    enabled_stages.tessellationShader=VK_TRUE;
+#endif
+#endif
 
     float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -173,14 +247,59 @@ static int run_witness(void)
         VK_KHR_MULTIVIEW_EXTENSION_NAME, VK_KHR_MAINTENANCE_2_EXTENSION_NAME,
         VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
         VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
-        VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_EXTENSION_NAME};
+        VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME, VK_KHR_MAINTENANCE_1_EXTENSION_NAME,
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+        VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME,
+#endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+        VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,
+        VK_KHR_DESCRIPTOR_UPDATE_TEMPLATE_EXTENSION_NAME,
+#endif
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+        VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
+#endif
+    };
     VkDeviceCreateInfo device_info = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8 || PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        .pEnabledFeatures = &enabled_stages,
+#endif
         .pNext = &dynamic_rendering, .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue_info,
         .enabledExtensionCount = sizeof(device_extensions) / sizeof(device_extensions[0]),
         .ppEnabledExtensionNames = device_extensions};
     TRY(vkCreateDevice(physical, &device_info, NULL, &device));
     vkGetDeviceQueue(device, 0, 0, &queue);
     REQUIRE(queue, "queue exists");
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    struct cache_compute_result compute;
+    result = cache_compute_witness(device, queue, dxvk_cache_compute_spirv,
+        sizeof(dxvk_cache_compute_spirv), &submission_pending, &compute);
+    if (result != VK_SUCCESS) { failed = compute.step; goto cleanup; }
+    ps5log_printf(PS5LOG_MARK, "DXVK_CACHE_WITNESS_COMPUTE words=1024 cold_misses=2 "
+        "warm_derivatives=1 factor=5 mismatches=%u guards=%u inputs=%u digest=%08x "
+        "submissions=1 fence=complete resources=retired", compute.mismatches,
+        compute.guards, compute.inputs, compute.digest);
+#endif
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    struct inline_compute_result inline_result;
+    result = inline_compute_witness(device, queue, dxvk_inline_compute_spirv,
+        sizeof(dxvk_inline_compute_spirv), &submission_pending, &inline_result);
+    if (result != VK_SUCCESS) { failed = inline_result.step; goto cleanup; }
+    ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_COMPUTE routes=4 words=1024 "
+        "mismatches=%u guards=%u digest=%08x submissions=1 fence=complete resources=retired",
+        inline_result.mismatches, inline_result.guards, inline_result.digest);
+    result = inline_compute_witness_mode(device, queue, dxvk_inline_boundary_spirv,
+        sizeof(dxvk_inline_boundary_spirv), &submission_pending, &inline_result, VK_TRUE);
+    if (result != VK_SUCCESS) { failed = inline_result.step; goto cleanup; }
+    ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_BOUNDARY blocks=4 bytes=1024 routes=4 words=1024 "
+        "mismatches=%u guards=%u digest=%08x submissions=1 fence=complete resources=retired",
+        inline_result.mismatches, inline_result.guards, inline_result.digest);
+    result = inline_compute_witness_mode(device, queue, dxvk_inline_split_spirv,
+        sizeof(dxvk_inline_split_spirv), &submission_pending, &inline_result, 2);
+    if (result != VK_SUCCESS) { failed = inline_result.step; goto cleanup; }
+    ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_SPLIT sets=4 blocks=4 bytes=1024 routes=4 words=1024 "
+        "mismatches=%u guards=%u digest=%08x submissions=1 fence=complete resources=retired",
+        inline_result.mismatches, inline_result.guards, inline_result.digest);
+#endif
     PFN_vkCmdBeginRenderingKHR begin_rendering = PROC(device, vkCmdBeginRenderingKHR);
     PFN_vkCmdEndRenderingKHR end_rendering = PROC(device, vkCmdEndRenderingKHR);
     PFN_vkCmdSetViewportWithCountEXT set_viewports = PROC(device, vkCmdSetViewportWithCountEXT);
@@ -225,26 +344,70 @@ static int run_witness(void)
         .memory = staging_memory, .size = VK_WHOLE_SIZE};
     TRY(vkFlushMappedMemoryRanges(device, 1, &range));
 
-    VkShaderModuleCreateInfo module_info[2] = {
+    VkShaderModuleCreateInfo module_info[4] = {
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
          .codeSize = sizeof(dxvk_render_witness_vert_spirv), .pCode = dxvk_render_witness_vert_spirv},
         {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
          .codeSize = sizeof(dxvk_render_witness_frag_spirv), .pCode = dxvk_render_witness_frag_spirv}};
     TRY(vkCreateShaderModule(device, &module_info[0], NULL, &vertex));
     TRY(vkCreateShaderModule(device, &module_info[1], NULL, &fragment));
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+    module_info[2]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(dxvk_render_witness_geom_spirv),.pCode=dxvk_render_witness_geom_spirv};
+    TRY(vkCreateShaderModule(device,&module_info[2],NULL,&geometry));
+#endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    module_info[2]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(dxvk_render_witness_tesc_spirv),.pCode=dxvk_render_witness_tesc_spirv};
+    module_info[3]=(VkShaderModuleCreateInfo){.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=sizeof(dxvk_render_witness_tese_spirv),.pCode=dxvk_render_witness_tese_spirv};
+    TRY(vkCreateShaderModule(device,&module_info[2],NULL,&tess_control));
+    TRY(vkCreateShaderModule(device,&module_info[3],NULL,&tess_evaluation));
+#endif
     VkPipelineLayoutCreateInfo layout_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    TRY(inline_graphics_descriptors(device, &inline_layout, &inline_pool, &inline_set, PS5VK_INLINE_GRAPHICS_STAGE));
+    ps5log_printf(PS5LOG_MARK, "DXVK_INLINE_WITNESS_GRAPHICS stage=%s blocks=%u bytes=%u",
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_VERTEX_BIT?"vertex":
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_FRAGMENT_BIT?"fragment":
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_GEOMETRY_BIT?"geometry":
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT?"tess_control":
+        PS5VK_INLINE_GRAPHICS_STAGE==VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT?"tess_evaluation":"small",
+        PS5VK_INLINE_GRAPHICS_STAGE?4u:2u,PS5VK_INLINE_GRAPHICS_STAGE?1024u:24u);
+    layout_info.setLayoutCount = 1;
+    layout_info.pSetLayouts = &inline_layout;
+#endif
     TRY(vkCreatePipelineLayout(device, &layout_info, NULL, &layout));
     /* DXVK's monolithic pipeline shape (dxvk_graphics.cpp:1388-1437). */
-    VkPipelineShaderStageCreateInfo stages[2] = {
+    VkPipelineShaderStageCreateInfo stages[4] = {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[0],
          .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vertex, .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .pNext = &module_info[1],
          .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fragment, .pName = "main"}};
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+    stages[2]=stages[1];
+    stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext=&module_info[2],.stage=VK_SHADER_STAGE_GEOMETRY_BIT,.module=geometry,.pName="main"};
+#endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    stages[3]=stages[1];
+    stages[1]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext=&module_info[2],.stage=VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,.module=tess_control,.pName="main"};
+    stages[2]=(VkPipelineShaderStageCreateInfo){.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext=&module_info[3],.stage=VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,.module=tess_evaluation,.pName="main"};
+#endif
     VkPipelineVertexInputStateCreateInfo vertex_input = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     VkPipelineInputAssemblyStateCreateInfo assembly = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+        .topology =
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+            VK_PRIMITIVE_TOPOLOGY_PATCH_LIST};
+    VkPipelineTessellationStateCreateInfo tessellation={
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,.patchControlPoints=3};
+#else
+            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+#endif
     VkPipelineViewportStateCreateInfo viewport_state = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
     VkPipelineRasterizationStateCreateInfo raster = {
@@ -274,12 +437,66 @@ static int run_witness(void)
         .colorAttachmentCount = 1, .pColorAttachmentFormats = &color_format};
     VkGraphicsPipelineCreateInfo pipeline_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .pNext = &rendering_info,
-        .stageCount = 2, .pStages = stages, .pVertexInputState = &vertex_input,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+        .stageCount = 3,
+#elif PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        .stageCount = 4,
+#else
+        .stageCount = 2,
+#endif
+        .pStages = stages, .pVertexInputState = &vertex_input,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        .pTessellationState=&tessellation,
+#endif
         .pInputAssemblyState = &assembly, .pViewportState = &viewport_state,
         .pRasterizationState = &raster, .pMultisampleState = &multisample,
         .pDepthStencilState = &depth_state, .pColorBlendState = &blend,
         .pDynamicState = &dynamic, .layout = layout, .basePipelineIndex = -1};
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    VkPipelineCacheCreateInfo cache_info = {.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        .flags = VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT};
+    TRY(vkCreatePipelineCache(device, &cache_info, NULL, &cache));
+    /* Cold miss must not compile. Warm derivatives execute after base retirement. */
+    pipeline_info.flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    result = vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &pipeline);
+    REQUIRE(result == VK_PIPELINE_COMPILE_REQUIRED && !pipeline, "cold graphics miss");
+    pipeline_info.flags = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &base));
+    pipeline_info.flags = VK_PIPELINE_CREATE_DERIVATIVE_BIT |
+        VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    pipeline_info.basePipelineHandle = base;
+    TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &pipeline));
+    vkDestroyPipeline(device, base, NULL); base = VK_NULL_HANDLE;
+    pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
+    pipeline_info.stageCount = 1;
+    raster.rasterizerDiscardEnable = VK_TRUE;
+    pipeline_info.pViewportState = NULL;
+    pipeline_info.pMultisampleState = NULL;
+    pipeline_info.pDepthStencilState = NULL;
+    pipeline_info.pColorBlendState = NULL;
+    pipeline_info.flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    result = vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &discard);
+    REQUIRE(result == VK_PIPELINE_COMPILE_REQUIRED && !discard, "cold discard miss");
+    pipeline_info.flags = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &base));
+    pipeline_info.flags = VK_PIPELINE_CREATE_DERIVATIVE_BIT |
+        VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    pipeline_info.basePipelineHandle = base;
+    TRY(vkCreateGraphicsPipelines(device, cache, 1, &pipeline_info, NULL, &discard));
+    vkDestroyPipeline(device, base, NULL); base = VK_NULL_HANDLE;
+    vkDestroyPipelineCache(device, cache, NULL); cache = VK_NULL_HANDLE;
+    VkQueryPoolCreateInfo query_info = {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .queryType = VK_QUERY_TYPE_OCCLUSION, .queryCount = 2};
+    TRY(vkCreateQueryPool(device, &query_info, NULL, &queries));
+    ps5log_printf(PS5LOG_MARK,
+        "DXVK_CACHE_WITNESS_CREATED cold_misses=2 warm_derivatives=2 bases_retired=2 cache_retired=1");
+#else
     TRY(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline));
+#endif
+#ifdef PS5VK_MAINTENANCE4_INTERFACE_WITNESS
+    ps5log_printf(PS5LOG_MARK,
+        "DXVK_MAINTENANCE4_INTERFACE producer=4 consumer=2 feature=enabled");
+#endif
 
     VkCommandPoolCreateInfo pool_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     TRY(vkCreateCommandPool(device, &pool_info, NULL, &pool));
@@ -344,8 +561,14 @@ static int run_witness(void)
     VkRenderingInfo rendering = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = {{0, 0}, {EXTENT, EXTENT}}, .layerCount = 1,
         .colorAttachmentCount = 1, .pColorAttachments = &color};
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    vkCmdResetQueryPool(command, queries, 0, 2);
+#endif
     begin_rendering(command, &rendering);
     vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &inline_set, 0, NULL);
+#endif
     /* DXVK's D3D viewport: y = H, height = -H (VK_KHR_maintenance1). */
     const VkViewport viewport = {0.0f, (float)EXTENT, (float)EXTENT, -(float)EXTENT, 0.0f, 1.0f};
     const VkRect2D scissor = {{0, 0}, {EXTENT, EXTENT}};
@@ -353,10 +576,30 @@ static int run_witness(void)
     set_scissors(command, 1, &scissor);
     set_front(command, VK_FRONT_FACE_CLOCKWISE);
     set_cull(command, VK_CULL_MODE_NONE);
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    vkCmdBeginQuery(command, queries, 0, 0);
+#endif
     vkCmdDraw(command, 6, 1, 0, 0);
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    vkCmdEndQuery(command, queries, 0);
+#endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    /* The tessellator supplies the triangles' domain winding. Both marker
+     * patches are observed with the same facing, so this variant tests its
+     * stage descriptors with culling disabled; the ordinary witness retains
+     * the DXVK dynamic-cull oracle. */
+    set_cull(command, VK_CULL_MODE_NONE);
+#else
     set_cull(command, VK_CULL_MODE_BACK_BIT);
+#endif
     vkCmdDraw(command, 6, 1, 6, 0);
     vkCmdDraw(command, 6, 1, 12, 0);
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, discard);
+    vkCmdBeginQuery(command, queries, 1, 0);
+    vkCmdDraw(command, 18, 1, 0, 0);
+    vkCmdEndQuery(command, queries, 1);
+#endif
     end_rendering(command);
 
     /* DXVK's readback: the global dependency from the attachment writes, the
@@ -407,12 +650,28 @@ static int run_witness(void)
     const VkCommandBuffer split[3] = {init_barriers, init_buffer, command};
     VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 3, .pCommandBuffers = split};
+    /* Even an unsuccessful submit may have handed work to the backend. */
+    submission_pending = VK_TRUE;
     TRY(vkQueueSubmit(queue, 1, &submit, fence));
     TRY(vkWaitForFences(device, 1, &fence, VK_TRUE, fence_timeout));
+    submission_pending = VK_FALSE;
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+    uint64_t samples_passed[2] = {UINT64_MAX, UINT64_MAX};
+    TRY(vkGetQueryPoolResults(device, queries, 0, 2, sizeof(samples_passed),
+        samples_passed, sizeof(samples_passed[0]), VK_QUERY_RESULT_64_BIT));
+    REQUIRE(samples_passed[0] > 0 && samples_passed[1] == 0, "occlusion positive control and discard");
+    ps5log_printf(PS5LOG_MARK, "DXVK_CACHE_WITNESS_QUERIES normal=%llu discard=%llu",
+        (unsigned long long)samples_passed[0], (unsigned long long)samples_passed[1]);
+#endif
     ps5log_printf(PS5LOG_MARK, "DXVK_RENDER_WITNESS_STEP index=0 fence=complete");
     TRY(vkInvalidateMappedMemoryRanges(device, 1, &range));
 
     expected_image(expected, viewport.x, viewport.y, viewport.width, viewport.height,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        VK_FALSE,
+#else
+        VK_TRUE,
+#endif
         &visible, &marker_top);
     full_mismatches = sub_mismatches = sentinel_mismatches = 0;
     for (uint32_t y = 0; y < EXTENT; ++y)
@@ -453,15 +712,37 @@ cleanup:
     if (failed)
         ps5log_printf(PS5LOG_ERR, "DXVK_RENDER_WITNESS_FAILURE result=%d step=%s",
             (int)result, failed);
+    /* On an incomplete submission preserve all GPU-owned objects until the
+     * process is closed. Never turn a bounded fence into an unbounded idle wait. */
+    if (submission_pending) {
+        ps5log_printf(PS5LOG_ERR, "DXVK_RENDER_WITNESS_PENDING resources=retained");
+        return 1;
+    }
     if (device) {
-        vkDeviceWaitIdle(device);
+#ifdef PS5VK_CACHE_CONTROL_WITNESS
+        if (queries) vkDestroyQueryPool(device, queries, NULL);
+        if (discard) vkDestroyPipeline(device, discard, NULL);
+        if (base) vkDestroyPipeline(device, base, NULL);
+        if (cache) vkDestroyPipelineCache(device, cache, NULL);
+#endif
         if (host) vkUnmapMemory(device, staging_memory);
         if (fence) vkDestroyFence(device, fence, NULL);
         if (pool) vkDestroyCommandPool(device, pool, NULL);
         if (pipeline) vkDestroyPipeline(device, pipeline, NULL);
         if (layout) vkDestroyPipelineLayout(device, layout, NULL);
+#ifdef PS5VK_INLINE_UNIFORM_WITNESS
+        if (inline_pool) vkDestroyDescriptorPool(device, inline_pool, NULL);
+        if (inline_layout) vkDestroyDescriptorSetLayout(device, inline_layout, NULL);
+#endif
         if (vertex) vkDestroyShaderModule(device, vertex, NULL);
         if (fragment) vkDestroyShaderModule(device, fragment, NULL);
+#if PS5VK_INLINE_GRAPHICS_STAGE == 8
+        if (geometry) vkDestroyShaderModule(device, geometry, NULL);
+#endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        if (tess_control) vkDestroyShaderModule(device, tess_control, NULL);
+        if (tess_evaluation) vkDestroyShaderModule(device, tess_evaluation, NULL);
+#endif
         if (staging) vkDestroyBuffer(device, staging, NULL);
         if (staging_memory) vkFreeMemory(device, staging_memory, NULL);
         if (view) vkDestroyImageView(device, view, NULL);

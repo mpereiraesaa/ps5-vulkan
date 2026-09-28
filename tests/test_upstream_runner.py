@@ -1193,6 +1193,10 @@ void oracle() { deMemCmp(referenceData, resultData, bufferSize); }
         manifest = json.loads(MANIFEST_PATH.read_text())
         for case in manifest["cases"]:
             group = case["path"].split(".")[1]
+            if group == "info":
+                self.assertIn("vkt::api::createFeatureInfoTests(m_testCtx)", integration,
+                              f"{case['path']}: upstream info factory is not registered")
+                continue
             self.assertRegex(integration, r'"' + re.escape(group) + r'"',
                              f"{case['path']}: group {group!r} is not registered")
 

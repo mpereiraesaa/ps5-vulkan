@@ -45,15 +45,457 @@ static void close_backend(struct ps5vk_memory_backend *backend) { (void)backend;
 VkResult ps5vk_platform_query(struct ps5vk_platform *p)
 {
     *p = (struct ps5vk_platform){.open = open_backend, .close = close_backend,
-                                 .max_allocation = 65536, .queue_flags = VK_QUEUE_COMPUTE_BIT};
+                                 .max_allocation = 131072, .queue_flags = VK_QUEUE_COMPUTE_BIT};
     const struct ps5vk_physical_profile_info profile = {
         .name = "host mock, not a GPU",
-        .heap_size = 65536,
+        .heap_size = 131072,
         .allocation_granularity = 1,
         .buffer_image_granularity = 1,
     };
     ps5vk_physical_profile_init(&p->properties, &p->memory_properties, &profile);
     return VK_SUCCESS;
+}
+
+static unsigned compile_calls;
+static VkResult counted_compile(void *context, const uint32_t *spirv, size_t words,
+    const char *entry, VkPipelineLayout layout, const VkSpecializationInfo *specialization,
+    uint32_t features, struct ps5vk_compiled_program *program, uint32_t **code)
+{
+    ++compile_calls;
+    return ps5vk_compiler_adapter_compile(context, spirv, words, entry, layout,
+                                         specialization, features, program, code);
+}
+
+static void subgroup_stage_cache(VkDevice d, const VkComputePipelineCreateInfo *base)
+{
+    size_t bytes;uint32_t *words=read_file("build/test-shaders/cache_witness.spv",&bytes);assert(words);
+    VkShaderModuleCreateInfo sm={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=bytes,.pCode=words};
+    VkShaderModule module;assert(vkCreateShaderModule(d,&sm,NULL,&module)==VK_SUCCESS);
+    struct ps5vk_compilation_cache *saved=d->pipeline_cache;
+    d->pipeline_cache=ps5vk_compilation_cache_create(8,1024*1024);assert(d->pipeline_cache);
+    d->compiler.compile=counted_compile;compile_calls=0;
+    uint32_t saved_features=d->enabled_features_t09;
+    d->enabled_features_t09|=PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    d->subgroup_size_control_enabled=d->compute_full_subgroups_enabled=VK_TRUE;
+    VkPipelineShaderStageRequiredSubgroupSizeCreateInfo required={
+        .sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,.requiredSubgroupSize=32};
+    VkComputePipelineCreateInfo ci=*base;ci.stage.module=module;ci.stage.pNext=&required;
+    ci.stage.flags=VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT;
+    ci.flags=VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    VkPipeline p=NULL;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_PIPELINE_COMPILE_REQUIRED && !p && !compile_calls);
+    ci.flags=0;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_SUCCESS && p && compile_calls==1);
+    assert(p->program.wave_size==32 && p->program.local_size[0]==64);
+    vkDestroyPipeline(d,p,NULL);
+    ci.flags=VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    for(unsigned variant=0;variant<4;++variant) {
+        ci.stage.pNext=(variant&1)?NULL:&required;
+        ci.stage.flags=(variant&1)?VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT:0;
+        if(variant&2) ci.stage.flags|=VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT;
+        assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_SUCCESS && p && compile_calls==1);
+        assert(p->program.wave_size==32);vkDestroyPipeline(d,p,NULL);
+    }
+    ci.stage.pNext=&required;ci.stage.flags=VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT;
+    required.requiredSubgroupSize=64;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_ERROR_UNKNOWN && !p && compile_calls==1);
+    required.requiredSubgroupSize=32;d->subgroup_size_control_enabled=VK_FALSE;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_ERROR_FEATURE_NOT_PRESENT && !p && compile_calls==1);
+    d->subgroup_size_control_enabled=VK_TRUE;d->compute_full_subgroups_enabled=VK_FALSE;
+    assert(vkCreateComputePipelines(d,VK_NULL_HANDLE,1,&ci,NULL,&p)==VK_ERROR_FEATURE_NOT_PRESENT && !p && compile_calls==1);
+    d->subgroup_size_control_enabled=VK_FALSE;d->enabled_features_t09=saved_features;
+    ps5vk_compilation_cache_destroy(d->pipeline_cache);d->pipeline_cache=saved;
+    d->compiler.compile=ps5vk_compiler_adapter_compile;
+    vkDestroyShaderModule(d,module,NULL);free(words);
+    puts("Subgroup stage requests: real wave32 compiler/cache contract passed; no native execution");
+}
+
+static void cache_control(VkDevice d, const VkComputePipelineCreateInfo *base)
+{
+    struct ps5vk_compilation_cache *saved = d->pipeline_cache;
+    d->pipeline_cache = ps5vk_compilation_cache_create(8, 1024 * 1024);
+    assert(d->pipeline_cache);
+    d->compiler.compile = counted_compile;
+    VkComputePipelineCreateInfo infos[3] = {*base, *base, *base};
+    VkPipeline out[3];
+    infos[0].flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 1, infos, NULL, out) == VK_ERROR_FEATURE_NOT_PRESENT && !out[0]);
+    d->enabled_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 1, infos, NULL, out) == VK_PIPELINE_COMPILE_REQUIRED && !out[0]);
+    assert(!compile_calls);
+    infos[0].flags |= VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT;
+    memset(out, 0xff, sizeof(out));
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 3, infos, NULL, out) == VK_PIPELINE_COMPILE_REQUIRED);
+    assert(!out[0] && !out[1] && !out[2] && !compile_calls);
+    infos[0].flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    infos[2].flags = infos[0].flags;
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 3, infos, NULL, out) == VK_PIPELINE_COMPILE_REQUIRED);
+    assert(!out[0] && out[1] && out[2] && compile_calls == 1);
+    vkDestroyPipeline(d, out[1], NULL); vkDestroyPipeline(d, out[2], NULL);
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 1, infos, NULL, out) == VK_SUCCESS && out[0]);
+    assert(compile_calls == 1);
+    vkDestroyPipeline(d, out[0], NULL);
+    infos[1].flags = VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT;
+    infos[1].stage.module = VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(d, VK_NULL_HANDLE, 3, infos, NULL, out) < 0);
+    assert(out[0] && !out[1] && !out[2] && compile_calls == 1);
+    vkDestroyPipeline(d, out[0], NULL);
+    /* Derivative hints do not require cache-control feature opt-in and do
+     * not create a different executable-cache identity. */
+    d->enabled_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    infos[0]=*base; infos[1]=*base; infos[2]=*base;
+    infos[0].flags=VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    infos[1].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT | VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    infos[1].basePipelineIndex=0;
+    infos[2].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+    infos[2].basePipelineIndex=1;
+    assert(vkCreateComputePipelines(d,0,3,infos,NULL,out)==VK_SUCCESS);
+    assert(out[0] && out[1] && out[2] && compile_calls==1);
+    VkPipeline parent=out[0], child=out[1];
+    assert(parent->allow_derivatives && child->allow_derivatives && !out[2]->allow_derivatives);
+    vkDestroyPipeline(d,out[2],NULL);
+    infos[2].basePipelineHandle=parent; infos[2].basePipelineIndex=-1;
+    d->enabled_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    infos[2].flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    VkPipeline derivative;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,&derivative)==VK_SUCCESS && derivative);
+    assert(compile_calls==1);
+    parent->allow_derivatives=VK_FALSE;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    parent->allow_derivatives=VK_TRUE;
+    parent->device=VK_NULL_HANDLE;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    parent->device=d; parent->graphics=VK_TRUE;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    parent->graphics=VK_FALSE;
+    infos[2].basePipelineIndex=0;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    infos[2].basePipelineHandle=VK_NULL_HANDLE;
+    for(int index=-2;index<=1;++index) {
+        infos[2].basePipelineIndex=index;
+        assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,out)<0 && !out[0]);
+    }
+    infos[0].flags=0;
+    assert(vkCreateComputePipelines(d,0,2,infos,NULL,out)<0 && out[0] && !out[1]);
+    vkDestroyPipeline(d,out[0],NULL);
+    /* A derivative with different code must use its own shader, not inherit
+     * the base executable or turn a cold miss into a false cache hit. */
+    size_t xor_bytes=0;
+    uint32_t *xor_words=read_file("build/test-shaders/xor.spv",&xor_bytes);
+    assert(xor_words);
+    VkShaderModuleCreateInfo xor_info={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize=xor_bytes,.pCode=xor_words};
+    VkShaderModule xor_module;
+    assert(vkCreateShaderModule(d,&xor_info,NULL,&xor_module)==VK_SUCCESS);
+    free(xor_words);
+    infos[2]=*base; infos[2].stage.module=xor_module;
+    infos[2].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT | VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
+    infos[2].basePipelineHandle=parent;infos[2].basePipelineIndex=-1;
+    VkPipeline different;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,&different)==VK_PIPELINE_COMPILE_REQUIRED && !different);
+    assert(compile_calls==1);
+    infos[2].flags=VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+    assert(vkCreateComputePipelines(d,0,1,&infos[2],NULL,&different)==VK_SUCCESS && different);
+    assert(compile_calls==2);
+    assert(different->program.code_words!=parent->program.code_words ||
+        memcmp(different->program.code,parent->program.code,parent->program.code_words*4));
+    vkDestroyShaderModule(d,xor_module,NULL);
+    vkDestroyPipeline(d,different,NULL);
+    vkDestroyPipeline(d,parent,NULL);
+    /* Both children retain their executable after the base is destroyed. */
+    assert(child->program.code_words && derivative->program.code_words);
+    assert(!memcmp(child->program.code,derivative->program.code,child->program.code_words*4));
+    vkDestroyPipeline(d,child,NULL); vkDestroyPipeline(d,derivative,NULL);
+    ps5vk_compilation_cache_destroy(d->pipeline_cache);
+    d->pipeline_cache = saved;
+    d->compiler.compile = ps5vk_compiler_adapter_compile;
+    d->enabled_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+}
+
+/* Run the actual public-SDK witness helper with the real host compiler and
+ * a synthetic queue. The queue checks the recording and injects controlled
+ * data; this proves the oracle and object contracts, not shader execution. */
+#include "vk_queue.h"
+#include "../examples/dxvk_render_witness/cache_compute.h"
+static unsigned witness_fault, witness_launches;
+static uint32_t witness_code_hash[2];
+static VkResult witness_compile(void *context, const uint32_t *spirv, size_t words,
+    const char *entry, VkPipelineLayout layout, const VkSpecializationInfo *specialization,
+    uint32_t features, struct ps5vk_compiled_program *program, uint32_t **code)
+{
+    VkResult r = counted_compile(context, spirv, words, entry, layout, specialization,
+        features, program, code);
+    assert(r == VK_SUCCESS && compile_calls <= 2);
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < program->code_words; ++i) hash = (hash ^ (*code)[i]) * 16777619u;
+    witness_code_hash[compile_calls - 1] = hash;
+    return r;
+}
+struct witness_job { uint64_t serial; unsigned char *data; };
+static VkResult witness_prepare(VkDevice device, const struct ps5vk_submission *s, void **out)
+{
+    assert(s->count == 1 && s->buffers[0]->operation_count == 3);
+    const struct ps5vk_operation *ops = s->buffers[0]->operations;
+    assert(ops[0].type == PS5VK_BARRIER && ops[1].type == PS5VK_DISPATCH &&
+        ops[2].type == PS5VK_BARRIER);
+    assert(ops[0].src_stage == VK_PIPELINE_STAGE_HOST_BIT &&
+        ops[0].dst_stage == VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT &&
+        ops[0].src_access == VK_ACCESS_HOST_WRITE_BIT &&
+        ops[0].dst_access == (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT));
+    assert(ops[2].src_stage == VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT &&
+        ops[2].dst_stage == VK_PIPELINE_STAGE_HOST_BIT &&
+        ops[2].src_access == VK_ACCESS_SHADER_WRITE_BIT &&
+        ops[2].dst_access == VK_ACCESS_HOST_READ_BIT);
+    assert(ops[1].groups[0] == 16 && ops[1].groups[1] == 1 && ops[1].groups[2] == 1);
+    assert(ops[1].pipeline->program.code_words && compile_calls == 2 &&
+        witness_code_hash[0] != witness_code_hash[1]);
+    uint32_t executable_hash = 2166136261u;
+    for (size_t i = 0; i < ops[1].pipeline->program.code_words; ++i)
+        executable_hash = (executable_hash ^ ops[1].pipeline->program.code[i]) * 16777619u;
+    assert(executable_hash == witness_code_hash[1]);
+    VkDescriptorSet set = ops[1].sets[0];
+    assert(set && set->buffers[0].buffer == set->buffers[1].buffer &&
+        set->buffers[0].offset == CACHE_INPUT && set->buffers[1].offset == CACHE_OUTPUT &&
+        set->buffers[0].range == CACHE_WORDS * 4 && set->buffers[1].range == CACHE_WORDS * 4);
+    struct witness_job *job = calloc(1, sizeof(*job));
+    assert(job); job->serial = s->serial;
+    void *address; VkDeviceSize size;
+    assert(ps5vk_buffer_span(device, set->buffers[0].buffer, 0, VK_WHOLE_SIZE,
+        &address, &size) == VK_SUCCESS && size >= CACHE_BYTES);
+    job->data = address; *out = job;
+    return VK_SUCCESS;
+}
+static VkResult witness_launch(VkDevice d, void *data)
+{
+    (void)d; struct witness_job *job = data; ++witness_launches;
+    for (uint32_t i = 0; i < CACHE_WORDS; ++i) {
+        uint32_t input, value;
+        memcpy(&input, job->data + CACHE_INPUT + i * 4, 4);
+        value = input * (witness_fault == 1 ? 3u : 5u) + (i ^ 0x13579bdfu);
+        memcpy(job->data + CACHE_OUTPUT + i * 4, &value, 4);
+    }
+    if (witness_fault == 2) job->data[CACHE_OUTPUT - 1] ^= 1;
+    if (witness_fault == 3) job->data[CACHE_INPUT] ^= 1;
+    return VK_SUCCESS;
+}
+static VkResult witness_poll(VkDevice d, void *data, uint64_t *serial)
+{ (void)d; *serial = ((struct witness_job *)data)->serial; return VK_SUCCESS; }
+static void witness_release(VkDevice d, void *data) { (void)d; free(data); }
+static uint64_t witness_clock(void *context) { (void)context; return 0; }
+static void witness_pause(void *context, uint64_t timeout)
+{ (void)context; (void)timeout; assert(!"synthetic queue should complete on first poll"); }
+static void check_compute_execution_witness(VkDevice d)
+{
+    size_t bytes;
+    uint32_t *words = read_file("build/test-shaders/cache_witness.spv", &bytes);
+    assert(words);
+    struct ps5vk_compilation_cache *saved_cache = d->pipeline_cache;
+    struct ps5vk_queue_backend saved_backend = d->submit_backend;
+    struct ps5vk_progress saved_progress = d->progress;
+    d->progress = (struct ps5vk_progress){NULL, ps5vk_queue_poll, witness_clock, witness_pause};
+    unsigned pipelines = d->pipeline_objects, descriptors = d->descriptor_objects;
+    d->enabled_features_t09 |= PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    d->compiler.compile = witness_compile;
+    d->submit_backend = (struct ps5vk_queue_backend){witness_prepare, witness_launch,
+        witness_poll, witness_release};
+    VkQueue queue; vkGetDeviceQueue(d, 0, 0, &queue);
+    for (witness_fault = 0; witness_fault < 4; ++witness_fault) {
+        d->pipeline_cache = ps5vk_compilation_cache_create(8, 1024 * 1024);
+        assert(d->pipeline_cache); compile_calls = witness_launches = 0;
+        VkBool32 pending = VK_TRUE;
+        struct cache_compute_result result;
+        VkResult rc = cache_compute_witness(d, queue, words, bytes, &pending, &result);
+        if (rc != (witness_fault ? VK_ERROR_UNKNOWN : VK_SUCCESS))
+            fprintf(stderr, "compute witness fault=%u rc=%d step=%s\n", witness_fault, rc, result.step);
+        assert(rc == (witness_fault ? VK_ERROR_UNKNOWN : VK_SUCCESS));
+        assert(!pending && compile_calls == 2 && witness_launches == 1);
+        assert(result.mismatches == (witness_fault == 1 ? CACHE_WORDS : 0));
+        assert(result.guards == (witness_fault == 2) && result.inputs == (witness_fault == 3));
+        assert(d->pipeline_objects == pipelines && d->descriptor_objects == descriptors &&
+            !d->buffers && !d->memories && !d->command_pools && !d->fences && !d->pipeline_caches &&
+            !d->lifetime_errors);
+        ps5vk_compilation_cache_destroy(d->pipeline_cache);
+    }
+    d->pipeline_cache = saved_cache; d->submit_backend = saved_backend;
+    d->progress = saved_progress;
+    d->enabled_features_t09 &= ~PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL;
+    d->compiler.compile = ps5vk_compiler_adapter_compile;
+    free(words);
+    puts("SDK compute cache witness: pass (real compiler, synthetic queue, three oracle faults; no GPU)");
+}
+
+#include "../examples/dxvk_render_witness/inline_compute.h"
+struct inline_job { uint64_t serial; unsigned char *data; uint32_t input[4][256]; unsigned word_count; };
+static unsigned inline_fault, inline_launches;
+static VkResult inline_prepare(VkDevice device, const struct ps5vk_submission *s, void **out)
+{
+    assert(s->count==1 && s->buffers[0]->operation_count==6);
+    const struct ps5vk_operation *ops=s->buffers[0]->operations;
+    assert(ops[0].type==PS5VK_BARRIER && ops[5].type==PS5VK_BARRIER);
+    assert(ops[0].src_stage==VK_PIPELINE_STAGE_HOST_BIT && ops[0].dst_stage==VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    assert(ops[0].src_access==VK_ACCESS_HOST_WRITE_BIT && ops[0].dst_access==(VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT));
+    assert(ops[5].src_stage==VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT && ops[5].dst_stage==VK_PIPELINE_STAGE_HOST_BIT);
+    assert(ops[5].src_access==VK_ACCESS_SHADER_WRITE_BIT && ops[5].dst_access==VK_ACCESS_HOST_READ_BIT);
+    struct inline_job *job=calloc(1,sizeof(*job));assert(job);job->serial=s->serial;
+    for(unsigned round=0;round<4;++round) {
+        const struct ps5vk_operation *op=&ops[round+1];
+        assert(op->type==PS5VK_DISPATCH && op->groups[0]==4 && op->groups[1]==1 && op->groups[2]==1);
+        assert(op->pipeline->program.code_words && op->pipeline==ops[1].pipeline);
+        VkDescriptorSet set=op->sets[0];assert(set);
+        unsigned parts=op->sets[1]?4:1;
+        unsigned blocks=parts==4?1:set->signature.inline_bytes[3]?4:3;
+        job->word_count=parts==4 || blocks==4?256:70;
+        assert(op->pipeline->program.descriptor_set_mask==(parts==4?15u:1u));
+        assert(op->pipeline->program.descriptor_count==parts*blocks+1);
+        for(unsigned part=0;part<parts;++part) for(unsigned binding=0;binding<blocks;++binding) {
+            unsigned matches=0;
+            for(unsigned n=0;n<op->pipeline->program.descriptor_count;++n) {
+                const struct ps5vk_program_descriptor *entry=&op->pipeline->program.descriptors[n];
+                matches+=entry->set==part && entry->binding==binding;
+            }
+            assert(matches==1); /* Real compiler retains every inline input. */
+        }
+        unsigned word=0;
+        for(unsigned part=0;part<parts;++part) {
+            VkDescriptorSet input=op->sets[part];assert(input);
+            for(unsigned binding=0;binding<blocks;++binding) {
+                unsigned expected_bytes=job->word_count==256?256:binding==0?20:binding==1?4:256;
+                assert(input->signature.inline_bytes[binding]==expected_bytes);
+                for(unsigned byte=0;byte<input->inline_uniform.bytes[binding];byte+=4) {
+                    uint32_t value;
+                    memcpy(&value,input->inline_data+input->inline_uniform.offset[binding]+byte,4);
+                    assert(value==0x10203040u+round*1009u+word*37u);
+                    job->input[round][word++]=value;
+                }
+            }
+        }
+        assert(word==job->word_count && set->buffers[blocks].offset==INLINE_OFFSET+round*INLINE_STRIDE &&
+            set->buffers[blocks].range==INLINE_RESULTS*4);
+        void *address;VkDeviceSize size;
+        assert(ps5vk_buffer_span(device,set->buffers[blocks].buffer,0,VK_WHOLE_SIZE,&address,&size)==VK_SUCCESS);
+        assert(size>=INLINE_BUFFER_BYTES && (!round || job->data==address));job->data=address;
+    }
+    *out=job;return VK_SUCCESS;
+}
+static VkResult inline_launch(VkDevice d,void *data)
+{
+    (void)d;struct inline_job *job=data;++inline_launches;
+    for(unsigned round=0;round<4;++round) for(unsigned i=0;i<INLINE_RESULTS;++i) {
+        if(inline_fault==3) continue; /* An untouched result must never pass. */
+        uint32_t value=job->input[round][i%job->word_count]*3u+(i^0x13579bdfu);
+        if(inline_fault==1) value^=1;
+        memcpy(job->data+INLINE_OFFSET+round*INLINE_STRIDE+i*4,&value,4);
+    }
+    if(inline_fault==2) job->data[INLINE_OFFSET-1]^=1;
+    return VK_SUCCESS;
+}
+static VkResult inline_poll(VkDevice d,void *data,uint64_t *serial)
+{ (void)d;*serial=((struct inline_job *)data)->serial;return VK_SUCCESS; }
+static void check_inline_compute_witness(VkDevice d)
+{
+    size_t bytes;uint32_t *words=read_file("build/test-shaders/inline_witness.spv",&bytes);assert(words);
+    struct ps5vk_queue_backend saved=d->submit_backend;
+    struct ps5vk_progress progress=d->progress;
+    d->inline_uniform_block_enabled=VK_TRUE;
+    d->submit_backend=(struct ps5vk_queue_backend){inline_prepare,inline_launch,inline_poll,witness_release};
+    d->progress=(struct ps5vk_progress){NULL,ps5vk_queue_poll,witness_clock,witness_pause};
+    VkQueue queue;vkGetDeviceQueue(d,0,0,&queue);
+    unsigned pipelines=d->pipeline_objects,descriptors=d->descriptor_objects;
+    for(unsigned boundary=0;boundary<3;++boundary) {
+        if(boundary) { free(words);words=read_file(boundary==1?"build/test-shaders/inline_boundary.spv":"build/test-shaders/inline_split.spv",&bytes);assert(words); }
+        for(inline_fault=0;inline_fault<4;++inline_fault) {
+            inline_launches=0;VkBool32 pending=VK_TRUE;struct inline_compute_result observed;
+            VkResult r=boundary?inline_compute_witness_mode(d,queue,words,bytes,&pending,&observed,boundary):
+                inline_compute_witness(d,queue,words,bytes,&pending,&observed);
+            if(r!=(inline_fault?VK_ERROR_UNKNOWN:VK_SUCCESS)) fprintf(stderr,"inline fault=%u result=%d step=%s\n",inline_fault,r,observed.step);
+            assert(r==(inline_fault?VK_ERROR_UNKNOWN:VK_SUCCESS) && !pending && inline_launches==1);
+            assert(observed.mismatches==((inline_fault==1 || inline_fault==3)?1024u:0u));
+            assert(observed.guards==(inline_fault==2));
+            assert(d->pipeline_objects==pipelines && d->descriptor_objects==descriptors &&
+                !d->buffers && !d->memories && !d->command_pools && !d->fences && !d->lifetime_errors);
+        }
+    }
+    d->inline_uniform_block_enabled=VK_FALSE;d->submit_backend=saved;d->progress=progress;free(words);
+    puts("SDK inline compute witness: pass (real compiler, synthetic queue, four update routes at280/1024 bytes, three oracle faults; no GPU)");
+}
+
+#include "../examples/dxvk_render_witness/subgroup_compute.h"
+struct subgroup_job { uint64_t serial; unsigned char *data; uint32_t total; };
+static unsigned subgroup_fault, subgroup_launches;
+static VkResult subgroup_prepare(VkDevice device,const struct ps5vk_submission *s,void **out)
+{
+    assert(s->count==1 && s->buffers[0]->operation_count==3);
+    const struct ps5vk_operation *ops=s->buffers[0]->operations;
+    assert(ops[0].type==PS5VK_BARRIER && ops[2].type==PS5VK_BARRIER);
+    assert(ops[0].src_stage==VK_PIPELINE_STAGE_HOST_BIT && ops[0].dst_stage==VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    assert(ops[0].src_access==VK_ACCESS_HOST_WRITE_BIT && ops[0].dst_access==VK_ACCESS_SHADER_WRITE_BIT);
+    assert(ops[2].src_stage==VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT && ops[2].dst_stage==VK_PIPELINE_STAGE_HOST_BIT);
+    assert(ops[2].src_access==VK_ACCESS_SHADER_WRITE_BIT && ops[2].dst_access==VK_ACCESS_HOST_READ_BIT);
+    const struct ps5vk_operation *op=&ops[1];
+    assert(op->type==PS5VK_DISPATCH && op->groups[0]==2 && op->groups[1]==1 && op->groups[2]==1);
+    assert(op->pipeline->program.code_words && op->pipeline->program.wave_size==32);
+    const uint32_t *dim=op->pipeline->program.local_size;
+    struct subgroup_job *job=calloc(1,sizeof(*job));assert(job);
+    job->serial=s->serial;job->total=dim[0]*dim[1]*dim[2];
+    VkDescriptorSet set=op->sets[0];assert(set && set->buffers[0].offset==256 && set->buffers[0].range==job->total*64);
+    void *address;VkDeviceSize size;
+    assert(ps5vk_buffer_span(device,set->buffers[0].buffer,0,VK_WHOLE_SIZE,&address,&size)==VK_SUCCESS);
+    assert(size>=job->total*64+512);job->data=address;*out=job;return VK_SUCCESS;
+}
+static VkResult subgroup_launch(VkDevice d,void *data)
+{
+    (void)d;struct subgroup_job *job=data;++subgroup_launches;
+    /* Derive each synthetic wave separately; do not call the witness oracle. */
+    for(unsigned wg=0;wg<2;++wg) for(unsigned start=0;start<job->total;start+=32) {
+        unsigned active=job->total-start;if(active>32)active=32;
+        uint32_t mask=0;for(unsigned lane=0;lane<active;++lane)mask|=UINT32_C(1)<<lane;
+        for(unsigned lane=0;lane<active;++lane) {
+            uint32_t values[8]={32,lane,start/32,(job->total+31)/32,active,mask,1,start+lane};
+            if(subgroup_fault==1)values[4]--;
+            if(subgroup_fault==2)values[5]^=1;
+            if(subgroup_fault==3)values[6]=2;
+            if(subgroup_fault==4)values[1]^=1;
+            if(subgroup_fault!=6)memcpy(job->data+256+(wg*job->total+start+lane)*32,values,32);
+        }
+    }
+    if(subgroup_fault==5)job->data[255]^=1;
+    return VK_SUCCESS;
+}
+static VkResult subgroup_poll(VkDevice d,void *data,uint64_t *serial)
+{(void)d;*serial=((struct subgroup_job*)data)->serial;return VK_SUCCESS;}
+static void check_subgroup_compute_witness(VkDevice d)
+{
+    struct ps5vk_queue_backend saved=d->submit_backend;struct ps5vk_progress progress=d->progress;
+    uint32_t platform_saved=d->physical->platform.supported_features_t09;
+    d->physical->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    d->subgroup_size_control_enabled=d->compute_full_subgroups_enabled=VK_TRUE;
+    d->submit_backend=(struct ps5vk_queue_backend){subgroup_prepare,subgroup_launch,subgroup_poll,witness_release};
+    d->progress=(struct ps5vk_progress){NULL,ps5vk_queue_poll,witness_clock,witness_pause};
+    VkQueue queue;vkGetDeviceQueue(d,0,0,&queue);
+    const uint32_t shapes[][3]={{32,3,1},{64,2,1},{32,2,2},{1024,1,1},{33,1,1},{1,1,1}};
+    unsigned pipelines=d->pipeline_objects,descriptors=d->descriptor_objects;
+    for(unsigned shape=0;shape<6;++shape) {
+        char path[160];snprintf(path,sizeof(path),"build/test-shaders/subgroup_full_%u.spv",shape);
+        size_t bytes;uint32_t *words=read_file(path,&bytes);assert(words);
+        struct subgroup_compute_case config={{shapes[shape][0],shapes[shape][1],shapes[shape][2]},
+            shape<4?VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT:0,shape%2};
+        if(shape==0 || shape==2)config.flags|=VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT;
+        unsigned total=shapes[shape][0]*shapes[shape][1]*shapes[shape][2];
+        for(subgroup_fault=0;subgroup_fault<7;++subgroup_fault) {
+            subgroup_launches=0;VkBool32 pending=VK_TRUE;struct subgroup_compute_result observed;
+            VkResult r=subgroup_compute_witness(d,queue,words,bytes,&config,&pending,&observed);
+            if(r!=(subgroup_fault?VK_ERROR_UNKNOWN:VK_SUCCESS))fprintf(stderr,"subgroup shape=%u fault=%u result=%d step=%s\n",shape,subgroup_fault,r,observed.step);
+            assert(r==(subgroup_fault?VK_ERROR_UNKNOWN:VK_SUCCESS) && !pending && subgroup_launches==1);
+            assert(observed.outputs==total*16 && observed.guards==(subgroup_fault==5));
+            assert(observed.mismatches==(subgroup_fault==6?total*16:subgroup_fault && subgroup_fault<5?total*2:0));
+            assert(d->pipeline_objects==pipelines && d->descriptor_objects==descriptors && !d->buffers && !d->memories && !d->command_pools && !d->fences && !d->lifetime_errors);
+        }
+        free(words);
+    }
+    d->physical->platform.supported_features_t09=platform_saved;
+    d->subgroup_size_control_enabled=d->compute_full_subgroups_enabled=VK_FALSE;
+    d->submit_backend=saved;d->progress=progress;
+    puts("SDK subgroup helper: six shapes, six fault classes, real compiler and synthetic queue passed; no GPU evidence");
 }
 
 int main(void)
@@ -122,6 +564,9 @@ int main(void)
             .pName = "main"
         }
     };
+
+    cache_control(device, &cpci);
+    subgroup_stage_cache(device, &cpci);
 
     /* 1. Cold compile: pipeline 1 invokes compiler */
     VkPipeline pipeline1;
@@ -282,6 +727,10 @@ int main(void)
         assert(unknown_bit == VK_NULL_HANDLE);
         device->enabled_features = 0;
     }
+
+    check_compute_execution_witness(device);
+    check_inline_compute_witness(device);
+    check_subgroup_compute_witness(device);
 
     /* Teardown */
     vkDestroyPipeline(device, pipeline3, NULL);

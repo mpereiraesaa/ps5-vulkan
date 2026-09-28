@@ -1,0 +1,17 @@
+#version 450
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std140) uniform First { uvec4 words[16]; } first;
+layout(set=0,binding=1,std140) uniform Second { uvec4 words[16]; } second;
+layout(set=0,binding=2,std140) uniform Third { uvec4 words[16]; } third;
+layout(set=0,binding=3,std140) uniform Fourth { uvec4 words[16]; } fourth;
+layout(set=0,binding=4,std430) buffer Output { uint words[]; } outputData;
+void main() {
+    uint i=gl_GlobalInvocationID.x;
+    uint j=i%64u;
+    uint value;
+    if(i<64u) value=first.words[j/4u][j%4u];
+    else if(i<128u) value=second.words[j/4u][j%4u];
+    else if(i<192u) value=third.words[j/4u][j%4u];
+    else value=fourth.words[j/4u][j%4u];
+    outputData.words[i]=value*3u+(i^0x13579bdfu);
+}

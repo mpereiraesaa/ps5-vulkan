@@ -8,8 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_dxvk_mutable_view_witness import (  # noqa: E402
-    PIXELS, PROFILE, SWITCH, data_header, min_differing, srgb_decode_code, srgb_exact,
-    texels)
+    PIXELS, PROFILE, SWITCH, data_header, expected_unorm, min_differing,
+    srgb_decode_code, srgb_exact, target_srgb_exact, target_unorm, texels)
 from run_dxvk_mutable_view_witness import fnv1a, verify  # noqa: E402
 
 
@@ -53,6 +53,28 @@ def receipt_for(log):
 
 
 class MutableViewWitness(unittest.TestCase):
+    def test_bgra_oracle_swaps_rgb_and_forces_only_unorm_alpha(self):
+        source = texels()
+        unorm = expected_unorm(True)
+        srgb = srgb_exact(True)
+        self.assertEqual(unorm[:4], bytes((source[2], source[1], source[0], 255)))
+        self.assertEqual(srgb[3::4], source[3::4])
+        self.assertEqual(target_unorm(True)[:4], bytes((source[0], source[1], source[2], 255)))
+        self.assertEqual(target_srgb_exact(True)[3::4], source[3::4])
+        self.assertEqual(min_differing(True), 756)
+        self.assertIn("mutable_view_expected_unorm[]", data_header(True))
+
+    def test_bgra_verifier_checks_the_distinct_unorm_digest(self):
+        log = fixture_log().replace(
+            f"digest_unorm={fnv1a(texels()):08x}".encode(),
+            f"digest_unorm={fnv1a(target_unorm(True)):08x}".encode())
+        artifact = fixture_artifact(
+            profile="dxvk-bgra-view-public-sdk-witness",
+            srgb_exact_sha256=hashlib.sha256(target_srgb_exact(True)).hexdigest())
+        self.assertTrue(verify(log, receipt_for(log), artifact, True)["strict_verified"])
+        with self.assertRaises(ValueError):
+            verify(fixture_log(), receipt_for(fixture_log()), artifact, True)
+
     def test_oracle_is_the_exact_srgb_decode(self):
         self.assertEqual([srgb_decode_code(c) for c in (0, 1, 10, 64, 128, 188, 254, 255)],
                          [0, 0, 1, 13, 55, 128, 253, 255])

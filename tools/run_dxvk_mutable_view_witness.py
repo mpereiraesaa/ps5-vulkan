@@ -11,7 +11,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_dxvk_mutable_view_witness import (  # noqa: E402
-    EXTENT, PIXELS, PROFILE, SWITCH, min_differing, srgb_exact, texels)
+    EXTENT, PIXELS, PROFILE, SWITCH, min_differing, target_srgb_exact,
+    target_unorm, texels)
 from run_consumer import close_and_confirm, control, running, wait_for_log  # noqa: E402
 
 START = re.compile(r"DXVK_MUTABLE_VIEW_WITNESS_START extent=(\d+) flags2_spec=(\d+) "
@@ -36,12 +37,14 @@ def fnv1a(payload: bytes) -> int:
     return digest
 
 
-def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
-    if (artifact.get("profile") != PROFILE or artifact.get("extent") != EXTENT or
+def verify(log: bytes, receipt: dict, artifact: dict, bgra: bool = False) -> dict:
+    profile = "dxvk-bgra-view-public-sdk-witness" if bgra else PROFILE
+    if (artifact.get("profile") != profile or artifact.get("extent") != EXTENT or
             artifact.get("diagnostic_switch") != SWITCH or
-            artifact.get("min_differing") != min_differing() or
+            artifact.get("min_differing") != min_differing(bgra) or
             artifact.get("texels_sha256") != hashlib.sha256(texels()).hexdigest() or
-            artifact.get("srgb_exact_sha256") != hashlib.sha256(srgb_exact()).hexdigest()):
+            artifact.get("srgb_exact_sha256") !=
+            hashlib.sha256(target_srgb_exact(bgra)).hexdigest()):
         raise ValueError("unexpected mutable-view witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or
             receipt.get("title") != "PPSA99994" or
@@ -70,8 +73,9 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     (count, unorm_mismatches, native, over_one, exact, alpha, differing,
      digest_unorm, digest_srgb, digest_native) = results[0]
     if (int(count) != PIXELS * 4 or int(unorm_mismatches) or int(native) or
-            int(over_one) or int(alpha) or int(differing) < min_differing() or
-            int(digest_unorm, 16) != fnv1a(texels()) or digest_srgb != digest_native):
+            int(over_one) or int(alpha) or int(differing) < min_differing(bgra) or
+            int(digest_unorm, 16) != fnv1a(target_unorm(bgra)) or
+            digest_srgb != digest_native):
         raise ValueError("mutable-view readback failed its oracle")
     if retired[0] != "clean":
         raise ValueError("witness resources were not retired")
@@ -102,12 +106,13 @@ def main() -> int:
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=120.0)
+    parser.add_argument("--bgra", action="store_true")
     args = parser.parse_args()
     if running(args.host) != "none":
         raise RuntimeError("refusing to launch while a title is active")
     artifact = json.loads(args.artifact.read_text())
     eboot = args.dist / "eboot.bin"
-    if (artifact.get("profile") != PROFILE or
+    if (artifact.get("profile") != ("dxvk-bgra-view-public-sdk-witness" if args.bgra else PROFILE) or
             hashlib.sha256(eboot.read_bytes()).hexdigest() != artifact.get("eboot_sha256")):
         raise RuntimeError("artifact identity mismatch")
     known = {path.name for path in args.runs_dir.glob("*_PPSA99994_ps5vk_*.log")}
@@ -119,7 +124,7 @@ def main() -> int:
         launched = True
         log_path = wait_for_log(args.runs_dir, known, args.timeout)
         receipt = json.loads(log_path.with_suffix(".json").read_text())
-        result = verify(log_path.read_bytes(), receipt, artifact)
+        result = verify(log_path.read_bytes(), receipt, artifact, args.bgra)
         result["source_log"] = str(log_path)
     finally:
         lifecycle_ok = (close_and_confirm(args.host) if launched else

@@ -32,6 +32,104 @@ def load_gate():
 
 
 class UpstreamSelectionTests(unittest.TestCase):
+    def test_t08_size_control_diagnostics_include_real_stage_flags(self):
+        source = (UPSTREAM / "external/vulkancts/modules/vulkan/subgroups/"
+                  "vktSubgroupsSizeControlTests.cpp")
+        text = source.read_text()
+        names = self.gate._subgroup_size_leaf_names(text)
+        selected = [d for d in self.current_manifest["diagnostics"] if d["category"] in
+                    ("t08-subgroup-size-control-pending", "t08-compute-full-subgroups-pending")]
+        self.assertEqual(6, len(selected))
+        self.assertTrue({d["path"] for d in selected} <= names)
+        self.assertFalse({d["path"] for d in selected} &
+                         {c["path"] for c in self.current_manifest["cases"]})
+        flagged = [d for d in selected if d["path"].endswith("_flags_spirv16")]
+        self.assertEqual(2, len(flagged))
+        self.assertTrue(all("SPIR-V:1.6" in d["features_required"] for d in flagged))
+        full = [d for d in selected if d["category"] == "t08-compute-full-subgroups-pending"]
+        self.assertEqual(1, len(full))
+        self.assertTrue({"computeFullSubgroups", "subgroup:BALLOT"} <=
+                        set(full[0]["features_required"]))
+        self.assertEqual(set(), self.gate._subgroup_size_leaf_names(
+            text.replace('{true, true, "_flags_spirv16"}',
+                         '{false, true, "_flags_spirv16"}')))
+
+    def test_t08_subgroup_diagnostics_follow_pinned_compute_factories(self):
+        pending = [d for d in self.current_manifest["diagnostics"]
+                   if d["category"] in (
+                       "t08-subgroup-dynamic-id-pending",
+                       "t08-subgroup-extended-int16-pending",
+                       "t08-subgroup-extended-float16-pending",
+                       "t08-subgroup-extended-int64-pending")]
+        self.assertEqual(5, len(pending))
+        self.assertFalse({d["path"] for d in pending} &
+                         {c["path"] for c in self.current_manifest["cases"]})
+        modules = {
+            "ballot_broadcast": "vktSubgroupsBallotBroadcastTests.cpp",
+            "arithmetic": "vktSubgroupsArithmeticTests.cpp",
+        }
+        for family, filename in modules.items():
+            source = (UPSTREAM / "external/vulkancts/modules/vulkan/subgroups" /
+                      filename)
+            names = self.gate._subgroup_compute_leaf_names(source.read_text(), family)
+            selected = [d for d in pending if f".subgroups.{family}." in d["path"]]
+            self.assertTrue(selected)
+            self.assertTrue({d["path"] for d in selected} <= names)
+            self.assertFalse(any("invented" in name for name in names))
+            self.assertEqual(set(), self.gate._subgroup_compute_leaf_names(
+                source.read_text().replace("addFunctionCaseWithPrograms", "registerNothing"),
+                family))
+
+    def test_cache_control_leaves_are_original_and_unpromoted(self):
+        manifest = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        source = ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp"
+        text = source.read_text()
+        paths = self.gate._pipeline_cache_control_leaf_paths(text)
+        self.assertEqual(16, len(paths))  # Excludes maintenance5's separate initializer form.
+        selected = [c for c in manifest["diagnostics"] if c["category"] == "pipeline-cache-control-pending"]
+        self.assertEqual(8, len(selected))
+        self.assertTrue(all(c["path"] in paths and c["expected_status"] == "Pass" for c in selected))
+        self.assertTrue(all("compute_pipelines" in c["path"] for c in selected))
+        self.assertFalse(any(c["path"] in paths for c in manifest["cases"]))
+        self.assertFalse(self.gate._pipeline_cache_control_leaf_paths(text.replace("TEST_CASES[]", "TABLE[]")))
+        self.assertNotIn("dEQP-VK.pipeline.creation_cache_control.compute_pipelines.invented", paths)
+
+    def test_cache_control_graphics_restart_precondition_is_not_bypassed(self):
+        source = ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp"
+        text = source.read_text()
+        assembly = text.split("static constexpr auto IA_STATE =", 1)[1].split("};", 1)[0]
+        self.assertIn("VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST", assembly)
+        self.assertIn("VK_TRUE", assembly)
+        support = text.split("void checkSupport(", 1)[1].split("float randomFloat()", 1)[0]
+        self.assertNotIn("primitiveTopologyListRestart", support)
+        manifest = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        self.assertFalse(any("creation_cache_control.graphics_pipelines" in c["path"]
+                             for c in manifest["cases"] + manifest["diagnostics"]))
+
+    def test_zero_initialize_measurement_leaves_are_original_and_unpromoted(self):
+        module = UPSTREAM / "external/vulkancts/modules/vulkan/compute/vktComputeZeroInitializeWorkgroupMemoryTests.cpp"
+        if not module.is_file():
+            self.skipTest("pinned CTS checkout unavailable")
+        text = module.read_text()
+        paths = self.gate._zero_initialize_leaf_paths(text)
+        pending = [c for c in self.current_manifest["diagnostics"]
+                   if c["category"] == "zero-initialize-workgroup-pending"]
+        self.assertEqual(42, len(pending))
+        self.assertTrue({c["path"] for c in pending} <= paths)
+        self.assertFalse({c["path"] for c in pending} & {c["path"] for c in self.current_manifest["cases"]})
+        self.assertNotIn("dEQP-VK.compute.zero_initialize_workgroup_memory.specialize_workgroup.9_1_1", paths)
+        self.assertNotIn("dEQP-VK.compute.zero_initialize_workgroup_memory.composites.999", paths)
+        self.assertIn('context.requireDeviceFunctionality("VK_KHR_zero_initialize_workgroup_memory")', text)
+        self.assertIn("maxComputeWorkGroupInvocations", text)
+        excluded = [c for c in self.current_manifest["diagnostics"]
+                    if c["category"] == "zero-initialize-repeat-precondition"]
+        self.assertEqual(4, len(excluded))
+        self.assertTrue(all(c["expected_status"] == "NotSupported" for c in excluded))
+        self.assertIn("MemoryRequirement::HostVisible | MemoryRequirement::Cached", text)
+        self.assertRegex(text, r"uint32_t xSize, uint32_t repeat,\s+uint32_t odd")
+        self.assertIn("x, odd, repeat, computePipelineConstructionType", text)
+        self.assertIn("for (uint32_t r = 0; r < m_repeat; ++r)", text)
+
     @classmethod
     def setUpClass(cls):
         cls.gate = load_gate()
@@ -96,10 +194,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # to acceptance. T07 adds 322 original BC, gather, precise-query and
         # cube-array cases. T09 adds 50 original timeline-semaphore,
         # renderpass2 write-mask and D32_SFLOAT_S8_UINT stencil/depth leaves
-        # (combined and separate-layouts); the 66 remaining diagnostics record
-        # refusals and gaps. `leaves` counts every
+        # (combined and separate-layouts); the 357 diagnostics record
+        # refusals, gaps and unmeasured zero-initialization and integer-dot cases. `leaves` counts every
         # attachment_write_mask leaf the pinned factory generates.
-        self.assertEqual((879, 66, 48),
+        self.assertEqual((879, 357, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]

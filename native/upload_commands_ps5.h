@@ -270,7 +270,10 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
                  op->src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
                  op->dst_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) ||
-                ((!color || b->image==color) && ps5vk_color_discard_barrier(b)) ||
+                ((!color || b->image==color) &&
+                 !(b->image->info.format == VK_FORMAT_B8G8R8A8_UNORM &&
+                   ps5vk_tiled_2d_sampled_color_image(b->image)) &&
+                 ps5vk_color_discard_barrier(b)) ||
                 ((!color || b->image==color) && ps5vk_color_readback_reuse_barrier(b)) ||
                 /* The pinned multisample leaves' own first-use transition: the
                  * multisampled colour image and the single-sample attachments
@@ -289,12 +292,17 @@ static inline VkResult ps5vk_upload_commands(VkDevice d,
                  b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
                  op->src_stage==VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT &&
                  op->dst_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
-                 (ps5vk_colour_readback_image(b->image) ||
+                 ((ps5vk_colour_readback_image(b->image) &&
+                   !(b->image->info.format == VK_FORMAT_B8G8R8A8_UNORM &&
+                     ps5vk_tiled_2d_sampled_color_image(b->image))) ||
                   (b->image->info.samples!=VK_SAMPLE_COUNT_1_BIT &&
                    ps5vk_multisampled_color_usage(b->image->info.usage)))) ||
                 ps5vk_array_color_barrier(b) ||
                 ps5vk_bgra8_transfer_barrier(b) ||
+                ps5vk_bgra8_readback_barrier(b,op->src_stage,op->dst_stage) ||
+                ps5vk_dxvk_bgra8_initial_color_barrier(b,op->src_stage,op->dst_stage) ||
                 ps5vk_bgra8_present_barrier(b) ||
+                ps5vk_dxvk_tiled_backbuffer_barrier(b,op->src_stage,op->dst_stage) ||
                 (ps5vk_tiled_cube_sampled_image(b->image) &&
                  b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
                  b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&

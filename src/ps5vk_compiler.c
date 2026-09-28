@@ -265,10 +265,14 @@ static VkResult runtime_compile_compute_features(
                 switch (sig->type[b]) {
                 case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_STORAGE_BUFFER;break;
+                /* Inline storage is delivered as one UBO record followed by
+                 * its owned bytes; the shader uses the ordinary UBO lowering. */
+                case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: type=PSBC_DESCRIPTOR_UNIFORM_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: type=PSBC_DESCRIPTOR_UNIFORM_TEXEL_BUFFER;break;
                 case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: type=PSBC_DESCRIPTOR_STORAGE_IMAGE;break;
+                case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: type=PSBC_DESCRIPTOR_COMBINED_IMAGE_SAMPLER;break;
                 /* DXVK's DXBC forms: a separate S# and T# the shader combines
                  * with OpSampledImage, and a typed UAV buffer. */
                 case VK_DESCRIPTOR_TYPE_SAMPLER: type=PSBC_DESCRIPTOR_SAMPLER;break;

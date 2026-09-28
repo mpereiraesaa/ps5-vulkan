@@ -1,14 +1,237 @@
 # DXVK v2.6.2 runtime backlog
 
-The objective is to build and run our pinned DXVK v2.6.2 D3D11/DXGI stack on
-PS5 through ps5vk, create a feature-level 11_0 device, render and read back a
-representative workload, and close and relaunch cleanly. Work follows the next
-observed refusal in that path. A tranche number, profile score, Vulkan version
+The end goal is to run D3D8, D3D9, D3D10 and D3D11 applications in Prospero Win
+through pinned DXVK v2.6.2 and ps5vk. The current native D3D11/DXGI executable
+is a checkpoint toward that goal: it creates a feature-level 11_0 device,
+renders and reads back a representative offscreen workload, and closes cleanly.
+Work follows the next observed refusal in each real application path. A tranche
+number, profile score, Vulkan version
 label or missing CTS leaf is **not** permission to stop implementing a needed
 dependency. The 15-tranche assignment in
 `conformance_inventory/dxvk_v262_backlog.json` remains an inventory of the
 original 61 blockers, not a serial work schedule or the acceptance test for
 DXVK execution.
+
+## End-to-end frontend acceptance
+
+The frontend milestone requires the matching DXVK 2.6.2 PE modules to load in
+Prospero Win, reach ps5vk through its Vulkan bridge, render a deterministic
+frame, present it, and close and relaunch without leaked ownership. Use an
+application or focused consumer for each API, and retain the exact DLL,
+Prospero Win, ps5vk and native payload identities with the result.
+
+| Application API | DXVK modules in its path | Current evidence | Next executable proof |
+| --- | --- | --- | --- |
+| D3D8 | `d3d8.dll`, `d3d9.dll` | x64 and x86 PE controls completed two GPU-backed presentations on the latest diagnostic SDK | Verify pixels |
+| D3D9 | `d3d9.dll` | x64 and x86 PE controls completed two GPU-backed presentations on the latest diagnostic SDK | Verify pixels |
+| D3D10 | `d3d10core.dll`, `d3d11.dll`, `dxgi.dll` | x64 and x86 PE controls completed two GPU-backed presentations across diagnostic SDKs | Recheck x64 on the latest SDK; verify pixels |
+| D3D11 | `d3d11.dll`, `dxgi.dll` | x64 and x86 PE controls completed two GPU-backed presentations across diagnostic SDKs | Recheck both architectures on the latest SDK; verify pixels and x86 mapping |
+
+The module lists identify DXVK's side of each path; Prospero Win also needs a
+working PE loader/import path and Vulkan bridge for the selected architecture.
+The pinned `d3d10core.dll` exports `D3D10CoreCreateDevice`, which takes a DXGI
+factory and adapter; it does not export the application-level
+`D3D10CreateDevice`. D3D10 applications therefore also need a working
+`d3d10.dll` API wrapper before that DXVK module can be exercised.
+Neither a static eboot link nor a host presentation run proves that contract.
+The matrix below tracks Vulkan feature evidence, not PE loading or per-API game
+compatibility. Focused CTS is useful when it diagnoses a real dependency; full
+CTS acceptance and 62/62 are not frontend release gates.
+
+### Offline PE dependency checkpoint (2026-09-28)
+
+All five x64 PE modules built from the pinned, clean DXVK 2.6.2 commit with its
+unmodified Windows Meson targets and the local MinGW cross-compiler. The
+ignored `build/dxvk-pe-x64/inventory.json` records their full SHA-256 hashes,
+sizes, architecture and static import modules. This is a build/import inventory,
+not PE execution or proof that Prospero Win can load them. Reproduce the build
+with the pinned source checkout (`DXVK_DIR`) and its `build-win64.txt` cross
+file:
+
+```sh
+meson setup build/dxvk-pe-x64 "$DXVK_DIR" --cross-file "$DXVK_DIR/build-win64.txt" --wrap-mode=nodownload -Dbuildtype=release
+ninja -C build/dxvk-pe-x64 -j 8 src/dxgi/dxgi.dll src/d3d11/d3d11.dll src/d3d10/d3d10core.dll src/d3d9/d3d9.dll src/d3d8/d3d8.dll
+```
+
+| PE module | SHA-256 of this build |
+| --- | --- |
+| `dxgi.dll` | `1925aa0196ee108b2bcc3ad07646ef81d178ace60688abb200f6bcf8ec98ccc6` |
+| `d3d11.dll` | `ac4e32181df36444ed2fa55c1694876c83adaed620820b7a292c97082abb91fd` |
+| `d3d10core.dll` | `57c8557522babc750a97ed5b3ec851e85fc2c207b67f3e8a4f1d46506be69903` |
+| `d3d9.dll` | `1e5cee2ff035139dc42a92c161394295f02d13bd0323dba9c90ec201f4be441e` |
+| `d3d8.dll` | `3fdf76908e3fd784a84152ca0d4e77a2a7544a72e9df70fe976de23d3634eab6` |
+
+The actual static import chain is `d3d8.dll` → `d3d9.dll`, and
+`d3d10core.dll` → `d3d11.dll` → `dxgi.dll`. `d3d9.dll` and `dxgi.dll` have no
+other DXVK DLL in their static import table. Across the modules, the external
+PE imports are from `ADVAPI32.dll`, `GDI32.dll`, `KERNEL32.dll`, `msvcrt.dll`,
+`SETUPAPI.dll` and `USER32.dll`. The pinned DXVK source loads
+`winevulkan.dll` or `vulkan-1.dll` dynamically and resolves
+`vkGetInstanceProcAddr`; a static import listing alone would miss that bridge.
+The immediate integration contract is therefore PE module override/search,
+these imports and Win32 WSI, followed by a working Vulkan entrypoint into
+ps5vk. The x64 build does not cover 32-bit applications.
+
+The same clean pinned source also built all five **x86 PE32** modules with
+`build-win32.txt`. The ignored `build/dxvk-pe-x86/inventory.json` records their
+architecture, import tables, sizes and hashes. The DXVK-to-DXVK dependency
+chains and the set of external import modules match x64. Both builds export
+the expected `Direct3DCreate8`, `Direct3DCreate9`, `D3D10CoreCreateDevice`,
+`D3D11CreateDevice` and `CreateDXGIFactory` entrypoints. Build them separately:
+
+```sh
+meson setup build/dxvk-pe-x86 "$DXVK_DIR" --cross-file "$DXVK_DIR/build-win32.txt" --wrap-mode=nodownload -Dbuildtype=release
+ninja -C build/dxvk-pe-x86 -j 8 src/dxgi/dxgi.dll src/d3d11/d3d11.dll src/d3d10/d3d10core.dll src/d3d9/d3d9.dll src/d3d8/d3d8.dll
+```
+
+| x86 PE module | SHA-256 of this build |
+| --- | --- |
+| `dxgi.dll` | `1d1a7ff491489e70899a8051d1f46b1f8959e47f40227f59f381a674cd2131be` |
+| `d3d11.dll` | `98fe2ceeabcdd7f8ea278d4422e5894605b8ad66a4040fe18f6f103c719e0edc` |
+| `d3d10core.dll` | `cd08d010eb3037709c1e1ce68c660387a49c388476870073522010c73cafcb47` |
+| `d3d9.dll` | `71e5313ada3e8fb69bb5de44e10935def2d6281cd9e6a1909eb77064fe6e72d1` |
+| `d3d8.dll` | `00432312177f0a8871be9fbf5c5b11df63b78dfb98281cd3652bbd0a8f56d434` |
+
+PE32 execution still requires the matching x86 calling conventions, loader,
+Win32 services and Vulkan bridge inside Prospero Win. These binaries have not
+been loaded or executed there; compiling both architectures is only dependency
+preparation.
+
+### Four-frontend native host control (2026-09-28)
+
+The same pinned DXVK 2.6.2 source also built its five native Linux libraries
+with SDL2 WSI enabled. The four controls in
+`examples/dxvk_host_frontends/` each created a 64×64 device/swapchain, cleared
+its backbuffer and returned success from `Present` on the **host Vulkan
+driver**. D3D11 selected FL 11_0. D3D10 used `D3D10CoreCreateDevice` with a
+DXGI factory/adapter, so this control does not test the application-level
+`d3d10.dll` wrapper. The ignored
+`build/dxvk-host-frontends/receipt.json` binds the successful markers to the
+five library hashes and four executable/source hashes; logs remain beside it.
+The controls do not compare presented pixels and do not exercise PE loading,
+Prospero Win or ps5vk on PS5.
+
+With `DXVK_DIR` pointing at the clean pinned source, reproduce the native
+build and controls:
+
+```sh
+meson setup build/dxvk-native-all "$DXVK_DIR" --wrap-mode=nodownload -Dbuildtype=release -Dnative_sdl2=enabled -Dnative_sdl3=disabled -Dnative_glfw=disabled -Denable_d3d8=true -Denable_d3d9=true -Denable_d3d10=true -Denable_d3d11=true -Denable_dxgi=true
+ninja -C build/dxvk-native-all -j 8 src/dxgi/libdxvk_dxgi.so.0.20602 src/d3d11/libdxvk_d3d11.so.0.20602 src/d3d10/libdxvk_d3d10core.so.0.20602 src/d3d9/libdxvk_d3d9.so.0.20602 src/d3d8/libdxvk_d3d8.so.0.20602
+python3 tools/run_dxvk_host_frontends.py --dxvk-dir "$DXVK_DIR"
+```
+
+### PS5 ABI cross-link of all five native modules (2026-09-28)
+
+`tools/build_dxvk_ps5_cross_probe.py` cross-compiled 223 units from that same
+pinned source for the PS5 toolchain and linked all five native DXVK libraries
+with the PS5 WSI adapter. It checked the D3D8 → D3D9 and D3D10 → D3D11 →
+DXGI ELF dependencies as well as complete links. The ignored
+`build/dxvk-ps5-cross-probe/receipt.json` records these artifact hashes:
+
+| PS5 cross-linked module | SHA-256 |
+| --- | --- |
+| DXGI | `58d93013638da3e20e4b4ef2cafe882e4b62232f46f67cf343e128ed050b7b76` |
+| D3D11 | `7ba72f19613935a504112c2a8f0f2673daf0a08a1d07c80b7274bb563c5957ad` |
+| D3D10 core | `8945dce5422dc19e1c3d183a9e2034618277b48698295da0df7b3e464c5238a6` |
+| D3D9 | `06949af32de02dc148bb4146f8b16fb847a72d5605b3551b229f2f2245da6a0a` |
+| D3D8 | `1dff82848a49d47a88e9767eda9aeedede9cdf48dfaf7fef5291e73575e29748` |
+
+Reproduce with the configured native Meson build above and `DXVK_DIR` at the
+pinned source:
+
+```sh
+python3 tools/build_dxvk_ps5_cross_probe.py --dxvk-dir "$DXVK_DIR" --build-dir build/dxvk-native-all --jobs 8
+```
+
+These are cross-link witnesses, not PE DLLs, deployable payloads or a console
+run. The next runtime proof still needs each frontend through Prospero Win's
+PE and Vulkan bridge, followed by a presented frame on PS5.
+
+### PS5 WSI variant of the DXVK PE DLLs (2026-09-28)
+
+The unmodified Windows DXVK build asks for `VK_KHR_win32_surface` and resolves
+`vkCreateWin32SurfaceKHR`. ps5vk's measured presentation route instead uses
+`VK_KHR_display` and `vkCreateDisplayPlaneSurfaceKHR`. The reproducible
+`tools/build_dxvk_ps5_pe.py` build starts from the pinned DXVK commit in an
+ignored local clone, adds this repository's PS5 WSI adapter to DXVK's WSI
+source list, selects that adapter instead of Win32 WSI, and makes it the
+Windows build's default. The original pinned checkout stays unchanged. These
+DLLs are therefore **DXVK 2.6.2 with a PS5 WSI overlay**, not unmodified DXVK.
+
+All five DLLs built for both PE32+ x64 and PE32 x86. The builder checks the
+binary format and each frontend's exported entrypoint; DXGI and D3D9 contain
+the `Ps5WSI` bootstrap and no `Win32WSI` bootstrap symbol. The ignored
+`build/dxvk-pe-ps5-wsi/receipt.json` binds the base commit, submodule pins,
+overlay hashes and output hashes. Its module SHA-256 values are:
+
+| DLL | x64 | x86 |
+| --- | --- | --- |
+| `dxgi.dll` | `18c3da23192db68fbdb0fc24bd13444bb1e39430ced1a2bbffb75c988ec01e9e` | `964bf6ed1413dc7756d5aa08606cf0759e85ca216807dee2144f653e7e9a74de` |
+| `d3d11.dll` | `5416488d0f4edc4a267747579ba23ca5fcd33aa532ab154f2b6162a17fa6653b` | `2fb66f7f14b5999557207bd127e47c71f82539b73309be01c11057bb46ace0ca` |
+| `d3d10core.dll` | `5d62ef4ab23f1b0009a7c22c5fc891d30ccbef146277cc7daaad0ff72d858c79` | `fe78abb6d4b8073544436c3a056fae4bde1051ccdabf329ae1b46cc67fcf5524` |
+| `d3d9.dll` | `32851711f54c66aa971179a574b020ffd27cb2f883dd85fd593a8a2a84b89326` | `f042cd22ffac7460f83725c7ce7087d0447c1bda82c57d65b6ff8ad477b33864` |
+| `d3d8.dll` | `0f8b59d91878b3e4bcbf30d02f13a00f5ee85b6a0ce85583d8dd4268c7ecc04f` | `61b9d35f7411961269d30fa32386e4660ed197404936e8f4893475cef39851d5` |
+
+With `DXVK_DIR` pointing to the clean pinned source and Meson available on
+`PATH`, rebuild both architectures offline:
+
+```sh
+python3 tools/build_dxvk_ps5_pe.py --dxvk-dir "$DXVK_DIR" --arch both --jobs 8
+```
+
+This removes the Win32 surface request from the selected DXVK WSI path. It
+does **not** make the DLLs executable in Prospero Win by itself: DXVK still
+loads `winevulkan.dll` or `vulkan-1.dll` and needs a working Vulkan entrypoint
+bridge to ps5vk, Wine's PE imports and the D3D10 API wrapper. No console
+render or presentation is claimed for these DLLs.
+
+### PE application controls for the four APIs (2026-09-28)
+
+`examples/dxvk_pe_frontends/` contains one small PE consumer per API. Each
+opens a fixed 1920×1080 window, creates the D3D device and swapchain, clears
+two frames to distinct colours, calls `Present` twice, prints a stage/result
+marker, and releases its objects. D3D10 enters through the application-facing
+`D3D10CreateDeviceAndSwapChain` wrapper; that wrapper must reach DXVK's
+`d3d10core.dll` in Prospero Win. The other controls import their matching
+DXVK entry DLLs directly.
+
+For a Wine bridge that exposes Win32 WSI to PE clients and maps it to the PS5
+display plane internally, use the unmodified DXVK DLL builds and regenerate
+all eight x64/x86 controls with a matching receipt:
+
+```sh
+python3 tools/build_dxvk_pe_frontends.py --dll-variant unmodified
+```
+
+This writes `build/dxvk-pe-frontends-unmodified/receipt.json`; the existing
+PS5-display-overlay route remains available with `--dll-variant ps5-wsi` and
+its separate `build/dxvk-pe-frontends/receipt.json`. Each receipt records its
+DLL variant, each executable's SHA-256, source hash, PE imports, the full
+runtime DXVK DLL chain's hashes, and `executed: false`. The builder verifies
+all five DLL hashes against the selected build inventory before linking and
+never mixes x64 with x86. The controls are
+ready as inputs to a Prospero Win run; they do not establish that Wine loads
+the DLL chain, reaches ps5vk, or presents correct pixels on PS5. The first
+runtime sequence should be x64 D3D11, D3D9, D3D8 and D3D10, followed by x86
+once the 32-bit Vulkan bridge is known to work. Capture the first failed stage
+and verify the two displayed colours independently of the `Present` return.
+All four controls request the same centre RGB sequence: frame 0
+`(28, 76, 132)` / `#1C4C84`, then frame 1 `(132, 76, 28)` / `#844C1C`.
+The receipt records this nominal pixel oracle; it is not pixel evidence.
+Compare RGB only because the D3D8/9 X8 backbuffer does not define alpha.
+If using compressed Remote Play video as the independent observation, allow
+for compression error and verify both the colour order and a clean relaunch.
+
+### Native display WSI hardware checkpoint (2026-09-28)
+
+The pinned DXVK display adapter, linked into a public-SDK native witness, created
+a display-plane surface and presented three bounded BGRA8 swapchain frames on
+PS5. The strict verifier accepted frame/image order 0–1–0, matching native
+completion events and clean retirement. Eboot, adapter and log hashes plus the
+run identity are in [VALIDATION.md](../VALIDATION.md#native-dxvk-display-adapter-wsi-witness-2026-09-28).
+The previous eboot was restored and the console released. This closes the
+native WSI uncertainty for that artifact; it is not a PE DXVK or Prospero Win
+run and does not verify displayed pixel colours independently.
 
 ## Current integration target (2026-09-26)
 
@@ -31,10 +254,25 @@ axis is the current native probe (device API 1.3.0, 33 device extensions,
 Before the Vulkan 1.3 integration the ledger read 41/62 on a Vulkan 1.0
 probe; that probe is archived, not relabelled. Geometry, tessellation,
 draw parameters and `maxBufferSize` now carry admitted native receipts.
-`maintenance4` is queried true but stays blocked on its two refused shapes
-(below) and on a direct witness of its memory-requirement queries.
+`maintenance4` is queried true but stays blocked on native evidence for its
+memory-query, specialization and
+relaxed graphics-interface routes. Host tests cover scalar/vector expressions,
+nested aggregate extraction and insertion, 8/16/32-bit integer-width conversions,
+and wider producer vectors; the 33-case original CTS measurement selection is prepared for native execution.
 `apiVersion` stays blocked: the pinned profile requires 1.3.204 including the
 patch level; the device reports 1.3.0, which DXVK's own device filter accepts.
+
+The integrated inline-uniform diagnostic candidate passed its six SDK stage
+witnesses twice, but both complete 881-case CTS runs passed 880 cases and failed
+`dEQP-VK.info.device_mandatory_features`. The repeated CTS report names nine
+Vulkan 1.3 requirements still reported false: `computeFullSubgroups`,
+`pipelineCreationCacheControl`, `privateData`, `robustImageAccess`,
+`shaderIntegerDotProduct`, `shaderSubgroupExtendedTypes`,
+`shaderZeroInitializeWorkgroupMemory`, `subgroupBroadcastDynamicId`, and
+`subgroupSizeControl`. `privateData` is outside the 62-row DXVK profile, so even
+a future 62/62 ledger would not by itself clear this CTS failure. The inline
+rows remain blocked pending a passing combined acceptance run; the diagnostic
+witness results do not change the official 45/62 score.
 
 The shipping public routes already include the T01–T07 work: draw parameters;
 multiview; indirect/indexed draws; geometry,
@@ -57,6 +295,13 @@ stopped at missing `VK_KHR_surface`; that is historical, not the current
 refusal. Native surface/swapchain acquisition, submission and presentation
 have since passed their bounded witnesses. Both instance and device now use
 the experimental Vulkan 1.3 negotiation path described above.
+
+The offline `run_dxvk_ps5vk_host_bootstrap.py` control now reaches ps5vk's
+host `vkGetInstanceProcAddr`, then SDL2 WSI cannot obtain the Linux window
+surface extensions it expects. That host-only refusal is not a PS5 WSI or
+DXVK device-capability failure. The PS5 native acceptance payload below uses
+the PS5 WSI adapter instead; its present path still needs validation together
+with each frontend in Prospero Win.
 
 ## Checkpoint: diagnostic render on PS5 (2026-09-25)
 
@@ -158,9 +403,10 @@ identified separately from changes to rendering or feature negotiation.
    failing Vulkan call and requested shape. Complete it even if outside the
    old tranche labels; add a fast host regression and one bounded native
    witness. A known outstanding shape is stream output without a fragment
-   stage. Maintenance4 still rejects compound LocalSizeId specialization
-   expressions and wider producer/narrower consumer varying vectors. These
-   are explicit profile limits, not reasons to restore the old 1.0 gate.
+   stage. Maintenance4's scalar/vector and aggregate expressions, integer-width
+   conversions and relaxed producer/consumer
+   vector matching have host coverage; native execution remains pending.
+   These are explicit profile limits, not reasons to restore the old 1.0 gate.
 3. **Connect the rendered workload to presentation.** The offscreen D3D11
    pixel oracle and the native swapchain witnesses are separate results.
    Combine them into acquire/draw/present/readback/teardown with the actual
@@ -176,6 +422,128 @@ before fixing an independently reproducible DXVK refusal. Integrate small
 PRs serially from current `main`; prefer roughly 3–6 files when a slice can
 be split honestly. Keep partial support private or default-off until its
 public query and native behavior agree.
+
+## Offline presentation candidate (2026-09-27)
+
+The native builder accepts `--present` for a separate `unmodified-present`
+artifact. It uses the original pinned DXVK libraries and the ordinary SDK,
+creates a two-buffer 1920x1080 DXGI flip-discard swapchain, renders three
+frames and calls `Present(1, 0)` for each. The top-left 64x64 region is copied
+to staging **before** each Present and checked against the shader oracle.
+The clear marker changes on every frame; stale readback, missing or duplicate
+frames, a non-S_OK Present (including occlusion), and surviving swapchain,
+device or context references fail the presentation verifier.
+
+The host DXVK run on 2026-09-27 returned S_OK for all three frames, with zero
+mismatches over 4096 pixels per frame and checksums `6e17a4c5`, `8052d0c5`
+and `c0bc44c5`. Swapchain, device and context final reference counts were zero.
+The host executable SHA-256 was
+`a36abd1891d95a1d025fb6d2c0e68873e30669c7367a841ce00e35285b1f1048`;
+the generated host receipt also identifies the linked DXVK libraries.
+
+This is preparation for a native test, not evidence of PS5 presentation or
+external scanout. The 64x64 readback does not validate every display pixel or
+DXVK's final presentation blit. The historical offscreen artifact and its
+checksum remain a separate workload. Missing EDID retains its original DXVK
+error log, but the exact documented SDR-default fallback is not classified as
+a rendering refusal; other errors remain refusal candidates.
+
+The first native presentation candidate reached D3D11 FL 11_0 device creation
+but failed during DXGI swapchain creation at a valid pixel-coordinate sampler
+request (`vkCreateSampler`, `unnormalizedCoordinates=1`). The exact artifact,
+refusal and run are in [VALIDATION.md](../VALIDATION.md#native-dxvk-presentation-candidate-sampler-refusal-2026-09-28).
+The driver now encodes the GFX10 S# unnormalized-coordinate bit for that
+bounded sampler form, with a host contract. A second hardware artifact passed
+swapchain creation, draw and copy, then refused DXVK's colour-attachment to
+shader-read barrier while mapping the readback. The source now records the
+measured barrier and provides a tiled 2D sampled-colour descriptor with host
+tests. The third native artifact passed the render-to-sample handover and
+refused the following shader-read to transfer-source transition. That exact
+barrier has a host recorder test and is accepted by the next source slice;
+the fourth native artifact confirmed it passed. That run then refused two
+return-to-sampling barriers on the same DXVK backbuffer. The host recorder
+accepts their exact measured forms in the next slice. The fifth clean artifact
+recorded all four transitions but refused transfer-destination to shader-read
+at the native upload prelude, so the first-frame pixel oracle failed and no
+frame passed. A host regression reproduces the prelude refusal; recorder and
+prelude now share one bounded barrier predicate. Hardware confirmation remains
+pending. The sixth clean artifact confirmed those barriers reached the native
+readback postlude, where the sampled backbuffer's shader-read handover was
+refused before the first frame could pass. A host regression now covers that
+postlude route using the same bounded predicate; hardware retest is pending.
+The seventh clean artifact passed the first frame's 4,096-pixel oracle and
+`Present`, then refused a BGRA8 colour-attachment-to-present release in the
+second frame's native postlude. The recorder and native executor now use the
+same bounded display-ownership predicate. Two clean hardware runs of the next commit,
+`6a6033a8`, each passed all three 4,096-pixel frame oracles, three `Present`
+calls and complete resource retirement. This is native DXVK acceptance; PE DLL
+execution through Prospero Win still needs its separate BGRA8 mutable-backbuffer
+route and end-to-end oracles. The accepted driver gives all four unmodified x64
+PE frontends the same BGRA8 format-query refusal. The candidate
+series completes two GPU-backed presentations for D3D8, D3D9, D3D10 and
+D3D11 on both x64 and x86, with matching video-presentation events. The exact
+SDK SHA-256 `fc0db3420999d847b4beed1af4498cea1c5f2b9c727dae78552fe8d1e0b705d2`
+covers D3D8/9 on both architectures and D3D10 x86; the earlier
+D3D10 x64 and D3D11 x64/x86 controls need rechecking on that combined hash.
+The D3D9 path also executes the batched
+three-backbuffer barriers and clears, then samples its X8R8G8B8 backbuffer
+through a BGRA8 view with alpha mapped to constant one. Recorder,
+native-prelude and descriptor host tests cover these measured forms. The x86
+clear-only controls made no actual `vkMapMemory` call, so the below-4-GiB
+mapping contract remains untested in PE. A separate native ps5vk witness
+did map four staging buffers, and every returned pointer lay above 4 GiB
+(run `20260928T222814633Z_PPSA99994_ps5vk_0x4ccb41f4e72f`, eboot SHA-256
+`5ed4b4d6ae96371e4038f51fe7a147e2e29f5e03e24c1b12443bdb7d2eea4ba3`).
+The pinned Wine x86 `vkMapMemory` thunk narrows the native pointer to 32 bits,
+so this placement needs an explicit low-address mapping or bridge strategy
+before x86 mapped-memory workloads can be accepted. A separate 64-KiB
+native direct-memory probe accepted a sub-4-GiB address hint and returned a
+low mapping with clean unmap/release (run
+`20260928T223440455Z_PPSA99994_ps5vk_0x4d2516632588`). A candidate
+ps5vk backend now creates a low CPU alias on `vkMapMemory` while retaining
+the GPU's original mapping; four alias creations and the strict three-draw
+BGRA8 GPU pixel oracle passed on hardware (run
+`20260928T224222797Z_PPSA99994_ps5vk_0x4d90bbabf3aa`, eboot SHA-256
+`de8facae41b015062bfbea2d6011788908c1da6db0525e4a4061e3cc9a7c3d40`).
+These tests do not cover the Prospero Win process's occupied x86 address
+space. An independent PE pixel
+oracle is still
+required for every frontend. A separate public-SDK BGRA8 mutable-view witness
+on this SDK passed an independent 1024-byte GPU pixel oracle for BGRA channel
+order and constant-one alpha, plus an SRGB-view comparison with a separate
+SRGB image (run `20260928T213847455Z_PPSA99994_ps5vk_0x4a186adc718d`, eboot
+SHA-256 `de37dd7888434b77a064eda5c3adcbce78475990bec20a362d9b02f9987ba502`).
+That qualifies the BGRA8 sampled/filter rows in the format ledger; it is not
+a PE backbuffer readback. The accepted-readiness score stays **45/62**.
+The final diagnostic-free SDK archive (`178d8a82cd94a80a2007e658c9605eeafdfd78e833d0b44c811259c22e4f21e6`)
+also passed a stronger 16x16 witness that rendered into BGRA8 and read all
+1024 native BGRA bytes back after each of three GPU draws. The UNORM output
+had zero differences, and the mutable SRGB view matched its independent
+SRGB-image control within one code of the calculated decode (run
+`20260928T220803680Z_PPSA99994_ps5vk_0x4bb1508aa63e`, eboot SHA-256
+`5835a88a298dcb4ea49443adfb07411ecc08d659715dca65860151b6d3df9b58`).
+This proves the BGRA8 readback format role on hardware, not PE backbuffer pixels.
+
+With the pinned DXVK checkout and its SDL2 native Meson build available:
+
+```sh
+python3 tools/build_dxvk_ps5_native.py --host-only --present
+python3 tools/build_dxvk_ps5_native.py --variant unmodified --present
+```
+
+`--host-only` does not build or run a PS5 payload. It writes the host executable,
+stdout/stderr and `receipt.json` under `build/dxvk-ps5-native/host-present`.
+The native command only builds; its artifact and package are under
+`build/dxvk-ps5-native/unmodified-present`. Neither command deploys anything.
+Use `--dxvk-dir` and `--build-dir` to select an existing local pinned build.
+The untracked dependency checkout and compiler archives must match their pins.
+
+The native run tool has `--require-presentation`, which requires the matching
+presentation artifact, strict Vulkan 1.3 acceptance, all three frame oracles,
+successful Present calls and clean title closure. Native acceptance still needs
+a clean source build, artifact identity, firmware record and bounded relaunch
+on hardware. No native acceptance or profile-matrix promotion is claimed by
+this candidate.
 
 ## What remains in the old profile inventory
 
@@ -203,6 +571,23 @@ DXVK-used defect should be diagnosed and fixed; a missing, unmapped or unrun
 leaf is not a reason to pause. Do not erase or relabel existing CTS failures.
 General Vulkan conformance, whole-suite CTS and certification are outside the
 current goal.
+
+For `robustImageAccess`, the pinned original image-robustness factory is not
+registered in the PS5 CTS package. Registering it alone would not make a
+measurement executable: `vktRobustnessExtsTests.cpp` creates its output image
+with `STORAGE|TRANSFER_SRC|TRANSFER_DST`, adding `SAMPLED` when the format
+reports sampling; it gives the tested image both transfer roles too. The
+shipping image-usage gate in `src/texture_format.c` admits the R32_UINT storage
+image only as `STORAGE|TRANSFER_SRC|TRANSFER_DST`, while R32_UINT reports a
+sampled role, so the original output image asks for an unsupported four-role
+combination. Other currently reported storage formats do not provide an
+alternative admitted output-image path. Thus the first obstacle is image
+creation, before any out-of-bounds shader read can be measured. The local
+integer-coordinate witnesses are narrower diagnostics and cannot substitute
+for an accepted original CTS leaf. Next: implement and host-test the exact
+combined usage and transfer path, register a bounded original selection,
+then measure the API query, shader result and repeat acceptance on hardware
+before changing this row's verdict.
 
 ## Validation and closure for each runtime slice
 

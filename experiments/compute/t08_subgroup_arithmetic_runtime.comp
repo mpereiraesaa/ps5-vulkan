@@ -1,0 +1,32 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+layout(local_size_x=64) in;
+layout(set=0, binding=0, std430) buffer Results { uint values[]; } data;
+
+void main()
+{
+    uint value = (gl_SubgroupInvocationID & 1u) + 1u;
+    uint base = gl_GlobalInvocationID.x * 21u;
+    data.values[base + 0u] = subgroupAdd(value);
+    data.values[base + 1u] = subgroupMul(value);
+    data.values[base + 2u] = subgroupMin(value);
+    data.values[base + 3u] = subgroupMax(value);
+    data.values[base + 4u] = subgroupAnd(value);
+    data.values[base + 5u] = subgroupOr(value);
+    data.values[base + 6u] = subgroupXor(value);
+    data.values[base + 7u] = subgroupInclusiveAdd(value);
+    data.values[base + 8u] = subgroupInclusiveMul(value);
+    data.values[base + 9u] = subgroupInclusiveMin(value);
+    data.values[base + 10u] = subgroupInclusiveMax(value);
+    data.values[base + 11u] = subgroupInclusiveAnd(value);
+    data.values[base + 12u] = subgroupInclusiveOr(value);
+    data.values[base + 13u] = subgroupInclusiveXor(value);
+    data.values[base + 14u] = subgroupExclusiveAdd(value);
+    data.values[base + 15u] = subgroupExclusiveMul(value);
+    data.values[base + 16u] = subgroupExclusiveMin(value);
+    data.values[base + 17u] = subgroupExclusiveMax(value);
+    data.values[base + 18u] = subgroupExclusiveAnd(value);
+    data.values[base + 19u] = subgroupExclusiveOr(value);
+    data.values[base + 20u] = subgroupExclusiveXor(value);
+}

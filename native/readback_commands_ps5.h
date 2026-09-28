@@ -292,12 +292,13 @@ static inline VkResult ps5vk_readback_commands(VkDevice d,
     uint64_t plane=(uint64_t)i->extent.width*i->extent.height;
     if(!i->arrayLayers || plane>SIZE_MAX/4/i->arrayLayers)READBACK_REFUSE(5);
     uint64_t pixels=plane*i->arrayLayers;
-    /* A colour readback reads a 32-bit-per-texel surface: the normalized
-     * attachment this profile has always read back, and - only in the build
-     * that serves it - the integer one its independentBlend oracle uses. The
-     * bytes are tiled by the same 64KB_R_X equation either way. */
+    /* A colour readback reads a 32-bit-per-texel surface. RGBA8, BGRA8 and
+     * the bounded integer targets share the 64KB_R_X address equation; the
+     * copy preserves their native byte order. */
     if(!(depth_source ? i->format==VK_FORMAT_D32_SFLOAT :
           (i->format==VK_FORMAT_R8G8B8A8_UNORM ||
+           (i->format==VK_FORMAT_B8G8R8A8_UNORM &&
+            ps5vk_bgra8_colour_readback_image(image)) ||
            ps5vk_color_target_integer_served(i->format))) ||
        i->samples!=VK_SAMPLE_COUNT_1_BIT ||
        i->mipLevels!=1 || (i->arrayLayers!=1 && !ps5vk_array_color_image(image)) || i->extent.depth!=1 ||
@@ -531,8 +532,10 @@ _Static_assert((int)PS5VK_MAX_READBACK_REGIONS >= (int)PS5VK_MAX_COLOR_ATTACHMEN
 static inline int ps5vk_readback_region_image(VkImage image)
 {
     return image && (ps5vk_colour_transfer_image(image) ||
+        ps5vk_tiled_2d_sampled_color_image(image) ||
         ps5vk_basic_colour_readback_image(image) || ps5vk_array_color_image(image)) &&
         (image->info.format == VK_FORMAT_R8G8B8A8_UNORM ||
+         image->info.format == VK_FORMAT_B8G8R8A8_UNORM ||
          ps5vk_color_target_integer_served(image->info.format)) &&
         image->info.mipLevels == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
         image->info.extent.depth == 1 && image->info.arrayLayers &&
@@ -576,8 +579,10 @@ static inline VkResult ps5vk_readback_regions_commands(VkDevice d,
                 b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             const int handback = b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
                 (b->newLayout == home || b->newLayout == VK_IMAGE_LAYOUT_GENERAL);
+            const int sampled = ps5vk_dxvk_tiled_backbuffer_barrier(b,
+                op->src_stage, op->dst_stage);
             if (!ps5vk_readback_region_image(b->image) || b->image->device != d ||
-                (!handover && !handback) ||
+                (!handover && !handback && !sampled) ||
                 ps5vk_layout_transition(&updated, b->image, b->oldLayout, b->newLayout) != VK_SUCCESS)
                 REGIONS_REFUSE(42);
             continue;

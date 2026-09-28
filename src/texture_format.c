@@ -226,10 +226,18 @@ static const struct ps5vk_texture_format formats[] = {
     BC(VK_FORMAT_BC6H_SFLOAT_BLOCK, 180, 16, 3),
     BC(VK_FORMAT_BC7_UNORM_BLOCK, 181, 16, 4),
     BC(VK_FORMAT_BC7_SRGB_BLOCK, 182, 16, 4),
-    /* VideoOut target and vertex input; deliberately not sampled. */
-    /* VideoOut colour target. Its transfer-destination role writes the same
-     * tiled surface through whole-image clear or checked pixel scatter. */
-    BUFFER(VK_FORMAT_B8G8R8A8_UNORM, CAP_COLOR | CAP_DST | CAP_VERTEX),
+    /* DXVK's mutable BGRA8 backbuffer reuses the 8_8_8_8 UNORM/SRGB image
+     * encodings. Its B,G,R,A bytes need Z,Y,X,W completion to return Vulkan
+     * R,G,B,A; both views address the same texel footprint. A public-SDK
+     * witness reads back BGRA8 render-target bytes after sampling UNORM,
+     * mutable SRGB and constant-one-alpha views on hardware. */
+    {VK_FORMAT_B8G8R8A8_UNORM, 4, UINT32_C(0x03800000), {6,5,4,7},
+     CAP_COLOR | CAP_COLOR_READBACK | CAP_SRC | CAP_DST | CAP_SAMP | CAP_LINEAR | CAP_VERTEX,
+     CAP_COLOR | CAP_COLOR_READBACK | CAP_SRC | CAP_DST | CAP_SAMP | CAP_LINEAR | CAP_VERTEX,
+     GPL | PACK, 1, 1, 4},
+    {VK_FORMAT_B8G8R8A8_SRGB, 4, UINT32_C(0x08200000), {6,5,4,7},
+     CAP_SAMP | CAP_LINEAR | CAP_DST, CAP_SAMP | CAP_LINEAR | CAP_DST,
+     GPL | PACK, 1, 1, 4},
     /* 64KB_Z_X depth target. TRANSFER_DST is the whole-subresource clear:
      * vkCmdClearDepthStencilImage writes one uniform 32-bit word over the
      * entire surface, which is tiling-invariant. TRANSFER_SRC is the whole
@@ -533,14 +541,16 @@ VkBool32 ps5vk_texture_format_image_usage(VkFormat format, VkImageUsageFlags usa
  * image data-format field and nothing else: the two rows must share the texel
  * block (so every layout, copy and footprint computed from either format is
  * byte-identical) and both must carry a sampled-image encoding whose selectors
- * are the same. The only family served is RGBA8 UNORM <-> SRGB: the 0x038 and
- * 0x082 words address the same 32-bit texel and differ only in the sRGB
- * decode. B8G8R8A8_SRGB has no row in this table, so a BGRA8 image is never
- * mutable here; every other compatible-class pair stays refused until it has
- * its own encoding and evidence. Which view USAGE a reinterpreted format
- * serves is still decided by that format's own witnessed capabilities. */
+ * are the same. RGBA8 and BGRA8 each have a separate UNORM <-> SRGB family:
+ * the 0x038 and 0x082 words address the same 32-bit texel and differ only in
+ * sRGB decode. A cross-family view remains refused because its component
+ * selectors differ. Which view USAGE a reinterpreted format serves is still
+ * decided by that format's own capabilities. */
 static const VkFormat rgba8_view_family[] = {
     VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB,
+};
+static const VkFormat bgra8_view_family[] = {
+    VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB,
 };
 
 static VkBool32 in_rgba8_view_family(VkFormat format)
@@ -549,10 +559,17 @@ static VkBool32 in_rgba8_view_family(VkFormat format)
         if (rgba8_view_family[i] == format) return VK_TRUE;
     return VK_FALSE;
 }
+static VkBool32 in_bgra8_view_family(VkFormat format)
+{
+    for (unsigned i = 0; i < sizeof(bgra8_view_family) / sizeof(bgra8_view_family[0]); ++i)
+        if (bgra8_view_family[i] == format) return VK_TRUE;
+    return VK_FALSE;
+}
 
 VkBool32 ps5vk_texture_format_mutable(VkFormat format)
 {
-    return in_rgba8_view_family(format) && ps5vk_texture_format_lookup(format) != 0;
+    return (in_rgba8_view_family(format) || in_bgra8_view_family(format)) &&
+        ps5vk_texture_format_lookup(format) != 0;
 }
 
 VkBool32 ps5vk_texture_format_view_compatible(VkFormat image_format, VkFormat view_format)
@@ -561,7 +578,8 @@ VkBool32 ps5vk_texture_format_view_compatible(VkFormat image_format, VkFormat vi
     const struct ps5vk_texture_format *view = ps5vk_texture_format_lookup(view_format);
     if (!image || !view) return VK_FALSE;
     if (image_format == view_format) return VK_TRUE;
-    return in_rgba8_view_family(image_format) && in_rgba8_view_family(view_format) &&
+    return ((in_rgba8_view_family(image_format) && in_rgba8_view_family(view_format)) ||
+            (in_bgra8_view_family(image_format) && in_bgra8_view_family(view_format))) &&
         image->bytes_per_texel == view->bytes_per_texel &&
         image->bytes_per_block == view->bytes_per_block &&
         image->block_width == view->block_width &&

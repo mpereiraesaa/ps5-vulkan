@@ -15,9 +15,11 @@ class SubgroupFactory(unittest.TestCase):
         manifest = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
         self.assertIn("vkt::subgroups::createSubgroupsBallotBroadcastTests(m_testCtx)", package)
         self.assertIn("vkt::subgroups::createSubgroupsArithmeticTests(m_testCtx)", package)
+        self.assertIn("vkt::subgroups::createSubgroupsSizeControlTests(m_testCtx)", package)
         self.assertIn('new tcu::TestCaseGroup(m_testCtx, "subgroups")', package)
         for name in ("vktSubgroupsBallotBroadcastTests.cpp",
-                     "vktSubgroupsArithmeticTests.cpp", "vktSubgroupsScanHelpers.cpp",
+                     "vktSubgroupsArithmeticTests.cpp", "vktSubgroupsSizeControlTests.cpp",
+                     "vktSubgroupsScanHelpers.cpp",
                      "vktSubgroupsTestsUtils.cpp"):
             self.assertIn(f'"external/vulkancts/modules/vulkan/subgroups/{name}"', build)
         if CTS.is_dir():

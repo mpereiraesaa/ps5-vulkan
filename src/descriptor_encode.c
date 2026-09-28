@@ -154,7 +154,7 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
     for (uint32_t i = 0; i < program->descriptor_count; ++i) {
         const struct ps5vk_program_descriptor *p = &program->descriptors[i];
         if (p->set != set_index) continue;
-        const uint32_t record_dwords = ps5vk_compute_record_dwords(p->type);
+        const uint32_t record_dwords = ps5vk_descriptor_span_dwords(&set->signature, p->binding, p->type);
         if (p->binding >= PS5VK_MAX_BINDINGS || !record_dwords || p->table_dword % 4 ||
             capacity_dwords < record_dwords || p->table_dword > capacity_dwords - record_dwords)
             goto fail;
@@ -162,7 +162,8 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
             if (program->descriptors[j].set == set_index &&
                 ((program->descriptors[j].table_dword < p->table_dword + record_dwords &&
                   p->table_dword < program->descriptors[j].table_dword +
-                    ps5vk_compute_record_dwords(program->descriptors[j].type)) ||
+                    ps5vk_descriptor_span_dwords(&set->signature, program->descriptors[j].binding,
+                        program->descriptors[j].type)) ||
                  (program->descriptors[j].binding == p->binding &&
                   program->descriptors[j].element == p->element)))
                 goto fail;
@@ -171,6 +172,12 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
         if (binding->count <= p->element || index >= PS5VK_MAX_DESCRIPTORS ||
             !set->defined[index] || set->signature.type[p->binding] != p->type)
             goto fail;
+        if (p->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+            if (p->element || ps5vk_inline_uniform_descriptor(device, set, p->binding,
+                    p->table_dword, table, scratch, capacity_dwords) != VK_SUCCESS) goto fail;
+            if (extent < p->table_dword + record_dwords) extent = p->table_dword + record_dwords;
+            continue;
+        }
         if (p->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
             const VkDescriptorImageInfo *info = &set->images[index];
             if (!info->imageView && !set->image_resources[index] &&
@@ -213,6 +220,27 @@ VkResult ps5vk_descriptor_encode(VkDevice device,
             if (!sampler || sampler->device != device) goto fail;
             memcpy(scratch + p->table_dword, sampler->words, sizeof(sampler->words));
             if (extent < p->table_dword + 4) extent = p->table_dword + 4;
+            continue;
+        }
+        if (p->type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+            /* Canonical combined record: eight image words, four sampler words. */
+            const VkDescriptorImageInfo *info = &set->images[index];
+            if (!info->imageView && !set->image_resources[index] &&
+                (device->enabled_features_t09 & PS5VK_T09_FEATURE_NULL_DESCRIPTOR)) {
+                if (!info->sampler || info->sampler->device != device) goto fail;
+                ps5vk_null_descriptor_words(scratch + p->table_dword, 8);
+                memcpy(scratch + p->table_dword + 8, info->sampler->words,
+                    sizeof(info->sampler->words));
+                if (extent < p->table_dword + 12) extent = p->table_dword + 12;
+                continue;
+            }
+            if (!info->imageView || set->image_resources[index] != info->imageView->image ||
+                (info->imageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                 info->imageLayout != VK_IMAGE_LAYOUT_GENERAL) ||
+                ps5vk_texture_descriptor(device, info->imageView, info->sampler,
+                    scratch + p->table_dword) != VK_SUCCESS)
+                goto fail;
+            if (extent < p->table_dword + 12) extent = p->table_dword + 12;
             continue;
         }
         if (p->type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) {
