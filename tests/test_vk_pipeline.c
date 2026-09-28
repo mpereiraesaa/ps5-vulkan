@@ -535,6 +535,28 @@ static void unadvertised_int16_gate(void)
     vkDestroyShaderModule(&device, module, NULL);
     assert(!device.pipeline_objects && !device.descriptor_objects);
 }
+static void unadvertised_wide_type_gate(void)
+{
+    uint32_t words[18];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[5] = (2u << 16) | 17u;
+    memcpy(words + 7, module_a + 5, 11 * sizeof(uint32_t));
+    VkShaderModuleCreateInfo shader_info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    struct VkDevice_T device = {0};
+    VkShaderModule module = VK_NULL_HANDLE;
+    for (unsigned cap = 9u; cap <= 11u; cap += 2u) {
+        words[6] = cap;
+        assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+               VK_ERROR_FEATURE_NOT_PRESENT && !module);
+        device.platform_features = PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
+        assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+        vkDestroyShaderModule(&device, module, NULL);
+        module = VK_NULL_HANDLE;
+        device.platform_features = 0;
+    }
+    assert(!device.pipeline_objects);
+}
 static void subgroup_stage_contract(void)
 {
     const uint32_t shapes[][3]={{64,1,1},{16,2,1},{1,32,1},{32,3,1},{32,32,1},{1024,1,1},{33,1,1}};
@@ -635,5 +657,6 @@ int main(void)
     int8_compute_probe_gate();
     diagnostic_compute_broadcast_gate(); diagnostic_compute_iadd_gate();
     unadvertised_int16_gate();
+    unadvertised_wide_type_gate();
     puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
 }

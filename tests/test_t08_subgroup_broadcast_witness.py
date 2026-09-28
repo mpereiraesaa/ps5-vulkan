@@ -19,7 +19,8 @@ from build_t08_subgroup_broadcast_witness import checked_spirv, diagnostic_envir
 def profile(operation):
     return tessellation_build_profile({
         "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation in ("broadcast", "ballot") else "0",
-        "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in ("iadd", "iadd_int8", "iadd_int16") else "0",
+        "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in
+        ("iadd", "iadd_int8", "iadd_int16", "iadd_int64", "fadd_float16") else "0",
         "PS5VK_SHADER_INT8_DIAGNOSTIC": "1" if operation == "iadd_int8" else "0",
         "PS5VK_SHADER_INT16_DIAGNOSTIC": "1" if operation == "iadd_int16" else "0"})
 
@@ -267,6 +268,46 @@ class SubgroupWitnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "subgroup data"):
             verify(wrong, dict(receipt, sha256=hashlib.sha256(wrong).hexdigest()),
                    artifact)
+
+    @unittest.skipUnless(shutil.which("glslangValidator"), "glslangValidator unavailable")
+    def test_wide_type_arithmetic_contracts(self):
+        for operation, shader_name, capability in (
+                ("iadd_int64", "int64_iadd", 11),
+                ("fadd_float16", "float16_fadd", 9)):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
+                binary = Path(directory) / "wide.spv"
+                subprocess.run(["glslangValidator", "-V", "--target-env", "vulkan1.2",
+                                str(ROOT / f"experiments/compute/t08_subgroup_{shader_name}_runtime.comp"),
+                                "-o", str(binary)], check=True, capture_output=True)
+                payload = binary.read_bytes()
+                checked_spirv(payload, operation)
+                words = list(struct.unpack(f"<{len(payload) // 4}I", payload))
+                offset = 5
+                while offset < len(words):
+                    size, opcode = words[offset] >> 16, words[offset] & 0xffff
+                    if opcode == 17 and words[offset + 1] == capability:
+                        words[offset + 1] = 1
+                        break
+                    offset += size
+                else:
+                    self.fail("wide shader capability missing")
+                with self.assertRaisesRegex(ValueError, operation):
+                    checked_spirv(struct.pack(f"<{len(words)}I", *words), operation)
+                digest = expected_digest(operation)
+                mark = {"iadd_int64": "T08_SUBGROUP_IADD_INT64",
+                        "fadd_float16": "T08_SUBGROUP_FADD_FLOAT16"}[operation]
+                log = (f"{mark}_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.3 public=off\n"
+                       f"{mark}_RESULT outputs=128 mismatches=0 guards=0 "
+                       f"digest={digest:08x} fence=complete\n"
+                       f"{mark}_RETIRED resources=clean\n").encode()
+                receipt = dict(self.receipt, sha256=hashlib.sha256(log).hexdigest())
+                artifact = dict(self.artifact,
+                                profile=f"t08-subgroup-{operation}-diagnostic-witness",
+                                operation=operation, build_profile=profile(operation))
+                self.assertEqual(verify(log, receipt, artifact)["digest"], f"{digest:08x}")
+                bad = log.replace(b"guards=0", b"guards=1")
+                with self.assertRaisesRegex(ValueError, "subgroup data"):
+                    verify(bad, dict(receipt, sha256=hashlib.sha256(bad).hexdigest()), artifact)
 
 
 if __name__ == "__main__":

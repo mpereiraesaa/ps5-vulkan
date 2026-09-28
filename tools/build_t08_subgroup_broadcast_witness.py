@@ -29,7 +29,8 @@ def diagnostic_environment(source: dict, sdk: Path, operation: str) -> dict:
         environment.pop(name, None)
     environment.update(PS5_PAYLOAD_SDK=str(sdk),
         PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC="1" if operation in ("broadcast", "ballot") else "0",
-        PS5VK_SUBGROUP_IADD_DIAGNOSTIC="1" if operation in ("iadd", "iadd_int8", "iadd_int16") else "0",
+        PS5VK_SUBGROUP_IADD_DIAGNOSTIC="1" if operation in
+        ("iadd", "iadd_int8", "iadd_int16", "iadd_int64", "fadd_float16") else "0",
         PS5VK_SHADER_INT8_DIAGNOSTIC="1" if operation == "iadd_int8" else "0",
         PS5VK_SHADER_INT16_DIAGNOSTIC="1" if operation == "iadd_int16" else "0")
     return environment
@@ -48,6 +49,9 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
     has_int16_type = False
     signed_int16_types = set()
     int16_iadd_result_type = None
+    signed_int64_types = set()
+    float16_types = set()
+    wide_result_type = None
     storage_variables = set()
     access_bases = {}
     load_pointers = {}
@@ -69,6 +73,10 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
             has_int16_type = True
             if operands[2] == 1:
                 signed_int16_types.add(operands[0])
+        elif opcode == 21 and size == 4 and operands[1] == 64 and operands[2] == 1:
+            signed_int64_types.add(operands[0])
+        elif opcode == 22 and size == 3 and operands[1] == 16:  # OpTypeFloat 16
+            float16_types.add(operands[0])
         elif opcode == 59 and size >= 4 and operands[2] == 12:  # OpVariable StorageBuffer
             storage_variables.add(operands[1])
         elif opcode in (65, 66) and size >= 4:  # OpAccessChain / OpInBoundsAccessChain
@@ -81,11 +89,14 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
             broadcast_source_id = operands[4]
         elif opcode == 349 and size == 6:  # OpGroupNonUniformIAdd
             int16_iadd_result_type = operands[0]
+            wide_result_type = operands[0]
+        elif opcode == 350 and size == 6:  # OpGroupNonUniformFAdd
+            wide_result_type = operands[0]
         if 333 <= opcode <= 366:
             subgroup_ops.append(opcode)
         index += size
     expected_capabilities = {61, 64 if operation in ("broadcast", "ballot") else 63}
-    expected_opcode = 337 if operation == "broadcast" else 349
+    expected_opcode = 337 if operation == "broadcast" else 350 if operation == "fadd_float16" else 349
     operations_match = (sorted(subgroup_ops) ==
                         [337, 338, 339, 340, 341, 342, 342, 342, 343, 344]
                         if operation == "ballot" else subgroup_ops == [expected_opcode])
@@ -95,7 +106,11 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
             (operation == "iadd_int8") != (39 in capabilities and has_int8_type) or
             (operation == "iadd_int16") !=
             (22 in capabilities and has_int16_type and
-             int16_iadd_result_type in signed_int16_types)):
+             int16_iadd_result_type in signed_int16_types) or
+            (operation == "iadd_int64") !=
+            (11 in capabilities and wide_result_type in signed_int64_types) or
+            (operation == "fadd_float16") !=
+            (9 in capabilities and wide_result_type in float16_types)):
         raise ValueError(f"shader lacks compute GroupNonUniform{operation} contract")
     def storage_pointer(pointer: int, seen: set[int]) -> bool:
         if pointer in seen:
@@ -124,7 +139,7 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--operation", choices=("broadcast", "ballot", "iadd", "iadd_int8", "iadd_int16"),
+    parser.add_argument("--operation", choices=("broadcast", "ballot", "iadd", "iadd_int8", "iadd_int16", "iadd_int64", "fadd_float16"),
                         default="broadcast")
     operation = parser.parse_args().operation
     if operation == "iadd_int8" and not (
@@ -154,7 +169,8 @@ def main() -> None:
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
 
-    shader_name = {"iadd_int8": "int8_iadd", "iadd_int16": "int16_iadd"}.get(operation, operation)
+    shader_name = {"iadd_int8": "int8_iadd", "iadd_int16": "int16_iadd",
+                   "iadd_int64": "int64_iadd", "fadd_float16": "float16_fadd"}.get(operation, operation)
     shader_source = ROOT / f"experiments/compute/t08_subgroup_{shader_name}_runtime.comp"
     shader_file = build / f"{operation}.spv"
     run(glslang, "-V", "--target-env", "vulkan1.2", str(shader_source),
@@ -180,6 +196,10 @@ def main() -> None:
           if operation == "iadd_int8" else []),
         *(["-DT08_SUBGROUP_IADD_INT16_WITNESS=1"]
           if operation == "iadd_int16" else []),
+        *(["-DT08_SUBGROUP_IADD_INT64_WITNESS=1"]
+          if operation == "iadd_int64" else []),
+        *(["-DT08_SUBGROUP_FADD_FLOAT16_WITNESS=1"]
+          if operation == "fadd_float16" else []),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger), "-c", str(source), "-o", str(obj), env=sdk_env)
     dependencies = dep.read_text()
@@ -221,11 +241,15 @@ def main() -> None:
                             "ballot": "UP9000-PPSA99994_00-PS5VKSGBA0000001",
                             "iadd": "UP9000-PPSA99994_00-PS5VKSGIA0000001",
                             "iadd_int8": "UP9000-PPSA99994_00-PS5VKS8IA0000001",
-                            "iadd_int16": "UP9000-PPSA99994_00-PS5VKS16A0000001"}[operation])
+                            "iadd_int16": "UP9000-PPSA99994_00-PS5VKS16A0000001",
+                            "iadd_int64": "UP9000-PPSA99994_00-PS5VKS64A0000001",
+                            "fadd_float16": "UP9000-PPSA99994_00-PS5VKF16A0000001"}[operation])
     title_operation = {"broadcast": "Broadcast", "ballot": "Ballot",
                        "iadd": "IAdd",
                        "iadd_int8": "Int8 IAdd",
-                       "iadd_int16": "Int16 IAdd"}[operation]
+                       "iadd_int16": "Int16 IAdd",
+                       "iadd_int64": "Int64 IAdd",
+                       "fadd_float16": "Float16 FAdd"}[operation]
     param["localizedParameters"]["en-US"]["titleName"] = (
         f"PS5 Vulkan Subgroup {title_operation} Witness")
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")

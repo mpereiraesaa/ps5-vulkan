@@ -18,7 +18,7 @@ SOURCE_LANES = [7, 19, 31, 1]
 
 
 def expected_digest(operation: str = "broadcast") -> int:
-    if operation not in ("broadcast", "ballot", "iadd", "iadd_int8", "iadd_int16"):
+    if operation not in ("broadcast", "ballot", "iadd", "iadd_int8", "iadd_int16", "iadd_int64", "fadd_float16"):
         raise ValueError("unknown subgroup operation")
     digest = 2166136261
     for index in range(128):
@@ -31,6 +31,10 @@ def expected_digest(operation: str = "broadcast") -> int:
             value = (32 * SOURCE_LANES[subgroup] * 97 + 496 * 13) & 0xffff
             if value >= 0x8000:
                 value = (value - 0x10000) & 0xffffffff
+        elif operation == "iadd_int64":
+            value = 32 * SOURCE_LANES[subgroup]
+        elif operation == "fadd_float16":
+            value = 32 * SOURCE_LANES[subgroup] + 24
         elif operation == "ballot":
             lane = index % 32
             value = (0 if lane & 1 else 3) | (16 << 2) | (((lane + 2) // 2) << 7) | (
@@ -47,10 +51,11 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     operation = artifact.get("operation")
     expected_profile = tessellation_build_profile({
         "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation in ("broadcast", "ballot") else "0",
-        "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in ("iadd", "iadd_int8", "iadd_int16") else "0",
+        "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in
+        ("iadd", "iadd_int8", "iadd_int16", "iadd_int64", "fadd_float16") else "0",
         "PS5VK_SHADER_INT8_DIAGNOSTIC": "1" if operation == "iadd_int8" else "0",
         "PS5VK_SHADER_INT16_DIAGNOSTIC": "1" if operation == "iadd_int16" else "0"})
-    if (operation not in ("broadcast", "ballot", "iadd", "iadd_int8", "iadd_int16") or
+    if (operation not in ("broadcast", "ballot", "iadd", "iadd_int8", "iadd_int16", "iadd_int64", "fadd_float16") or
             artifact.get("profile") !=
             f"t08-subgroup-{operation}-diagnostic-witness" or
             artifact.get("outputs") != 128 or
@@ -75,7 +80,9 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
             "ballot": "T08_SUBGROUP_BALLOT",
             "iadd": "T08_SUBGROUP_IADD",
             "iadd_int8": "T08_SUBGROUP_IADD_INT8",
-            "iadd_int16": "T08_SUBGROUP_IADD_INT16"}[operation]
+            "iadd_int16": "T08_SUBGROUP_IADD_INT16",
+            "iadd_int64": "T08_SUBGROUP_IADD_INT64",
+            "fadd_float16": "T08_SUBGROUP_FADD_FLOAT16"}[operation]
     starts = re.findall(mark + r"_START subgroups=(\d+) outputs=(\d+) "
                         r"ids=([\d,]+) api=([\d.]+) public=(\w+)", text)
     results = re.findall(mark + r"_RESULT outputs=(\d+) "
@@ -110,7 +117,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--operation", choices=("broadcast", "ballot", "iadd", "iadd_int8", "iadd_int16"),
+    parser.add_argument("--operation", choices=("broadcast", "ballot", "iadd", "iadd_int8", "iadd_int16", "iadd_int64", "fadd_float16"),
                         default="broadcast")
     parser.add_argument("--host", required=True)
     parser.add_argument("--runs-dir", type=Path, required=True)

@@ -98,6 +98,15 @@ static int declares_int16_capability(const uint32_t *words, size_t count)
             return 1;
     return 0;
 }
+static int declares_private_wide_type(const uint32_t *words, size_t count)
+{
+    for (size_t at = 5; at < count; at += words[at] >> 16)
+        if ((words[at] & 0xffffu) == 17u &&
+            (words[at] >> 16) == 2u &&
+            (words[at + 1] == 9u || words[at + 1] == 11u))
+            return 1;
+    return 0;
+}
 VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
                             const char *name, uint32_t *out)
 {
@@ -861,6 +870,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
      * either pipeline frontend can accept it. */
     if (!(d->enabled_features & PS5VK_FEATURE_SHADER_INT16) &&
         declares_int16_capability(info->pCode, info->codeSize / 4))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    /* Float16 and Int64 have no truthful public feature opt-in yet. Keep
+     * their modules confined to the private arithmetic measurement build. */
+    if (!(d->platform_features & PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE) &&
+        declares_private_wide_type(info->pCode, info->codeSize / 4))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Applies before either pipeline frontend or any cache can see a module. */
     if (!(d->enabled_features_v13 & PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT) &&

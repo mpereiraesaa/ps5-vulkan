@@ -8,6 +8,20 @@
 #define WITNESS_RESULT "T08_SUBGROUP_BALLOT_RESULT"
 #define WITNESS_RETIRED "T08_SUBGROUP_BALLOT_RETIRED"
 #define WITNESS_FAILURE "T08_SUBGROUP_BALLOT_FAILURE"
+#elif defined(T08_SUBGROUP_IADD_INT64_WITNESS)
+#include "t08_subgroup_iadd_int64_shader.h"
+#define WITNESS_SPIRV t08_subgroup_iadd_int64_spirv
+#define WITNESS_START "T08_SUBGROUP_IADD_INT64_START"
+#define WITNESS_RESULT "T08_SUBGROUP_IADD_INT64_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_IADD_INT64_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_IADD_INT64_FAILURE"
+#elif defined(T08_SUBGROUP_FADD_FLOAT16_WITNESS)
+#include "t08_subgroup_fadd_float16_shader.h"
+#define WITNESS_SPIRV t08_subgroup_fadd_float16_spirv
+#define WITNESS_START "T08_SUBGROUP_FADD_FLOAT16_START"
+#define WITNESS_RESULT "T08_SUBGROUP_FADD_FLOAT16_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_FADD_FLOAT16_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_FADD_FLOAT16_FAILURE"
 #elif defined(T08_SUBGROUP_IADD_INT16_WITNESS)
 #include "t08_subgroup_iadd_int16_shader.h"
 #define WITNESS_SPIRV t08_subgroup_iadd_int16_spirv
@@ -104,6 +118,8 @@ static int witness(void)
     REQUIRE(!subgroup_features.shaderSubgroupExtendedTypes &&
             !subgroup_features.subgroupBroadcastDynamicId,
             "diagnostic subgroup features remain unadvertised");
+    REQUIRE(!features.features.shaderInt64 && !subgroup_features.shaderFloat16,
+            "wide shader types remain unadvertised");
     float priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -266,7 +282,11 @@ static int witness(void)
         guards += words[i] != sentinel;
     for (uint32_t i = 0; i < OUTPUTS; ++i) {
         uint32_t subgroup = i / 32;
-#if defined(T08_SUBGROUP_IADD_INT16_WITNESS)
+#if defined(T08_SUBGROUP_IADD_INT64_WITNESS)
+        uint32_t expected = 32u * source_lanes[subgroup];
+#elif defined(T08_SUBGROUP_FADD_FLOAT16_WITNESS)
+        uint32_t expected = 32u * source_lanes[subgroup] + 24u;
+#elif defined(T08_SUBGROUP_IADD_INT16_WITNESS)
         uint32_t total = 32u * source_lanes[subgroup] * 97u + 496u * 13u;
         int32_t signed_value = (int32_t)(total & 0xffffu);
         if (signed_value >= 0x8000) signed_value -= 0x10000;
