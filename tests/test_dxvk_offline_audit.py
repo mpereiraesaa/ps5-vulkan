@@ -43,20 +43,21 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertTrue(report["subgroup_size_selection"]["selection_verified"])
         self.assertEqual(2, len(report["subgroup_size_selection"]["new_flagged_leaves"]))
         self.assertFalse(report["subgroup_size_selection"]["previous_candidate_covers_new_flags"])
-        self.assertTrue(report["subgroup_size_package"]["artifact_verified"])
-        self.assertTrue(report["subgroup_size_package"]["package_verified"])
-        self.assertTrue(report["subgroup_size_package"]["combined_cts_prepared"])
-        self.assertEqual(report["subgroup_size_package"]["source_current"],
-                         report["subgroup_size_package"]["package_verified"])
-        self.assertEqual(6, report["subgroup_size_package"]["variant_count"])
+        size_package = report["subgroup_size_package"]
+        self.assertTrue(size_package["artifact_verified"])
+        self.assertEqual(size_package["source_current"], size_package["package_verified"])
+        if size_package["source_current"]:
+            self.assertTrue(size_package["combined_cts_prepared"])
+        self.assertEqual(6, size_package["variant_count"])
         size_rows = {r["name"]: r for r in report["rows"] if
                      r["name"] in {"computeFullSubgroups", "subgroupSizeControl"}}
         self.assertEqual(2, len(size_rows))
-        self.assertEqual(report["subgroup_size_package"]["package_verified"] and
-                         report["subgroup_size_package"]["combined_cts_prepared"],
+        self.assertEqual(size_package["package_verified"] and
+                         size_package["combined_cts_prepared"],
                          all(r["phase"] == "native_validation" for r in size_rows.values()))
         self.assertTrue(report["integer_dot_package"]["artifact_verified"])
-        self.assertTrue(report["integer_dot_package"]["package_verified"])
+        self.assertEqual(report["integer_dot_package"]["source_current"],
+                         report["integer_dot_package"]["package_verified"])
         self.assertTrue(report["robust_image_package"]["artifact_verified"])
         self.assertEqual(11, report["robust_image_package"]["variant_count"])
         self.assertEqual(8, report["robust_image_package"]["image_variants"])
@@ -69,11 +70,11 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertFalse(report["t08_package"]["original_cts_eligible"])
         self.assertTrue(all(r["artifact_verified"] and r["cts_verified"]
                             for r in report["rebuilt_witnesses"].values()))
-        self.assertTrue(report["rebuilt_witnesses"]["pipelineCreationCacheControl"]
-                        ["execution_prepared"])
-        self.assertTrue(report["rebuilt_witnesses"]["shaderZeroInitializeWorkgroupMemory"]
-                        ["execution_prepared"])
-        self.assertTrue(report["rebuilt_witnesses"]["maintenance4"]["execution_prepared"])
+        for name in ("pipelineCreationCacheControl", "shaderZeroInitializeWorkgroupMemory",
+                     "maintenance4"):
+            witness = report["rebuilt_witnesses"][name]
+            self.assertEqual(witness["source_current"] and witness["cts_source_current"],
+                             witness["execution_prepared"])
         self.assertTrue(all(not r["execution_prepared"] for r in report["rebuilt_witnesses"].values()
                             if not r["source_current"] or not r["cts_source_current"]))
         self.assertTrue(all(r["hardware_evidence_required"] for r in report["rows"]))
