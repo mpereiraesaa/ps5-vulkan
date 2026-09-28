@@ -211,6 +211,17 @@ runtime sequence should be x64 D3D11, D3D9, D3D8 and D3D10, followed by x86
 once the 32-bit Vulkan bridge is known to work. Capture the first failed stage
 and verify the two displayed colours independently of the `Present` return.
 
+### Native display WSI hardware checkpoint (2026-09-28)
+
+The pinned DXVK display adapter, linked into a public-SDK native witness, created
+a display-plane surface and presented three bounded BGRA8 swapchain frames on
+PS5. The strict verifier accepted frame/image order 0–1–0, matching native
+completion events and clean retirement. Eboot, adapter and log hashes plus the
+run identity are in [VALIDATION.md](../VALIDATION.md#native-dxvk-display-adapter-wsi-witness-2026-09-28).
+The previous eboot was restored and the console released. This closes the
+native WSI uncertainty for that artifact; it is not a PE DXVK or Prospero Win
+run and does not verify displayed pixel colours independently.
+
 ## Current integration target (2026-09-26)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,

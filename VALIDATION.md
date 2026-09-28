@@ -53,6 +53,30 @@ onscreen DXVK presentation, all Vulkan 1.3 contracts or conformance. General
 core coverage remains a separate audit. Implemented command/feature paths and
 remaining resource limits are listed in [API.md](API.md).
 
+## Native DXVK display-adapter WSI witness (2026-09-28)
+
+An isolated public-SDK payload linked the PS5 display adapter from pinned
+DXVK 2.6.2 (`9d6f54a1ade20d1d27dd421024717a636f3d8c68`) to the ordinary
+ps5vk SDK built from `d3d8a0f4`. The adapter created a Vulkan display-plane
+surface, and the payload created the fixed two-image BGRA8 FIFO swapchain.
+It acquired, cleared, submitted, fenced and presented three frames in image
+order 0, 1, 0. The native presentation backend matched all three completion
+events; the last registration retired during close. The application closed
+cleanly and the previous eboot was restored. The console's previously
+owner-reported firmware was 12.02; this run did not query firmware again.
+
+- Witness eboot SHA-256: `9f3d0ec9f0ee999d9bec9d19d9ad3ba33980d4109763b96574c523aa7229782f`.
+- Adapter source SHA-256: `d96b3f9eae40d687dc828e98d587d49d7294fa1564d8e2072d7d8de40e7c4deb`.
+- Run: `20260928T165939465Z_PPSA99994_ps5vk_0x3add0685e2bd`; log SHA-256:
+  `7d042cd36df1168115baea69f919d5444c8377650a3c59cfa737ad0de05069a0`.
+- `tools/run_wsi_native_witness.py` returned `strict_verified=true` and
+  `lifecycle_ok=true`; after restoration, the console was idle with no claim.
+
+This validates the adapter and bounded ps5vk presentation path on hardware.
+It does not load a DXVK PE DLL, traverse Prospero Win's Vulkan bridge, or
+compare the displayed pixels with an independent visual oracle. Those are
+still required for D3D8/9/10/11 frontend acceptance.
+
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 
 The public capability probe was rebuilt from clean `main` (`aa7f36e8`) with
