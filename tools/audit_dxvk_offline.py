@@ -212,9 +212,36 @@ def audit_subgroup_size_package(root: Path) -> dict:
     source_current = source_unchanged(root, record["source_commit"],
         ["src", "native", "include", "examples", "experiments", "cts", "tools/build_sdk.py",
          "tools/build_upstream_cts.py", "tools/build_subgroup_size_witness.py"], profiles)
+    combined = record.get("combined_cts", {})
+    combined_dist = root / combined.get("candidate", "") / "PPSA99994"
+    combined_eboot = combined_dist / "eboot.bin"
+    combined_manifest = combined_dist / "build_manifest.json"
+    required_switches = {"PS5VK_SUBGROUP_SIZE_DIAGNOSTIC",
+                         "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC",
+                         "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
+                         "PS5VK_SHADER_INT16_DIAGNOSTIC"}
+    combined_prepared = False
+    if combined_eboot.is_file() and combined_manifest.is_file():
+        packaged = json.loads(combined_manifest.read_text())
+        profile = packaged["tessellation_build_profile"]
+        combined_prepared = (
+            hashlib.sha256(combined_eboot.read_bytes()).hexdigest() == combined.get("eboot_sha256") and
+            hashlib.sha256(combined_manifest.read_bytes()).hexdigest() == combined.get("build_manifest_sha256") and
+            packaged["eboot_sha256"] == combined.get("eboot_sha256") and
+            packaged["selection_hash"] == combined.get("selection_hash") == selection_hash(selection["cases"]) and
+            packaged["selected_cases"] == paths and
+            packaged["measurement"] == selection["measurement"] and
+            packaged["measurement"]["moved"] == combined.get("moved") == 6 and
+            set(combined.get("required_switches", [])) == required_switches and
+            all(profile["switches"].get(switch) == "1" for switch in required_switches) and
+            source_unchanged(root, combined["source_commit"],
+                ["src", "native", "include", "examples", "experiments", "cts", "tools/build_sdk.py",
+                 "tools/build_upstream_cts.py"], [profile]))
     return {"package_verified": valid and source_current, "artifact_verified": valid,
             "source_current": source_current, "variant_count": len(variants),
-            "cts_eboot_sha256": cts["eboot_sha256"]}
+            "cts_eboot_sha256": cts["eboot_sha256"],
+            "combined_cts_prepared": combined_prepared,
+            "combined_cts_eboot_sha256": combined.get("eboot_sha256")}
 
 
 def audit_integer_dot_package(root: Path) -> dict:
