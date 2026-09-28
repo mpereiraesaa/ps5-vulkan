@@ -38,7 +38,17 @@
 
 enum { EXTENT = 16, PIXELS = EXTENT * EXTENT, BYTES = PIXELS * 4, DRAWS = 3 };
 static const uint64_t fence_timeout = UINT64_C(300000000);
+#if defined(PS5VK_BGRA_WITNESS)
+static const VkFormat family[2] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB};
+static const VkFormat target_format = VK_FORMAT_B8G8R8A8_UNORM;
+static const VkFormat target_srgb_format = VK_FORMAT_B8G8R8A8_SRGB;
+#else
 static const VkFormat family[2] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB};
+static const VkFormat target_format = VK_FORMAT_R8G8B8A8_UNORM;
+static const VkFormat target_srgb_format = VK_FORMAT_R8G8B8A8_SRGB;
+#endif
+static const VkFormat target_family[2] = {VK_FORMAT_R8G8B8A8_UNORM,
+                                           VK_FORMAT_R8G8B8A8_SRGB};
 static const VkImageUsageFlags rt_usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 static const VkImageUsageFlags texture_usage = VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -61,7 +71,8 @@ static VkResult make_image(VkDevice device, VkFormat format, VkImageUsageFlags u
 {
     VkImageFormatListCreateInfo list = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO,
-        .viewFormatCount = 2, .pViewFormats = family};
+        .viewFormatCount = 2,
+        .pViewFormats = format == VK_FORMAT_R8G8B8A8_UNORM ? target_family : family};
     VkImageCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = mutable_format ? &list : NULL,
@@ -89,11 +100,15 @@ static void destroy_image(VkDevice device, struct image *image)
     memset(image, 0, sizeof(*image));
 }
 
-static VkResult make_view(VkDevice device, VkImage image, VkFormat format, VkImageView *out)
+static VkResult make_view(VkDevice device, VkImage image, VkFormat format,
+                          VkBool32 alpha_one, VkImageView *out)
 {
     VkImageViewCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = format,
+        .components = alpha_one ? (VkComponentMapping){VK_COMPONENT_SWIZZLE_R,
+            VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_ONE} :
+            (VkComponentMapping){0},
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
     };
     return vkCreateImageView(device, &info, NULL, out);
@@ -181,8 +196,8 @@ static int run_witness(void)
     REQUIRE(count == 1 && physical, "one physical device");
 
     /* Both routes must be enumerated before they are used. */
-    VkExtensionProperties extensions[32];
-    uint32_t extension_count = 32;
+    VkExtensionProperties extensions[128];
+    uint32_t extension_count = 128;
     TRY(vkEnumerateDeviceExtensionProperties(physical, NULL, &extension_count, extensions));
     uint32_t flags2_spec = 0, list_spec = 0;
     for (uint32_t n = 0; n < extension_count; ++n) {
@@ -203,7 +218,7 @@ static int run_witness(void)
     }
     VkPhysicalDeviceImageFormatInfo2 query = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
-        .format = VK_FORMAT_R8G8B8A8_UNORM, .type = VK_IMAGE_TYPE_2D,
+        .format = target_format, .type = VK_IMAGE_TYPE_2D,
         .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = rt_usage,
         .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT};
     VkImageFormatProperties2 limits = {.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2};
@@ -240,18 +255,24 @@ static int run_witness(void)
     vkGetDeviceQueue(device, 0, 0, &queue);
     REQUIRE(queue, "queue exists");
 
-    TRY(make_image(device, VK_FORMAT_R8G8B8A8_UNORM, rt_usage, VK_TRUE, &target));
-    TRY(make_image(device, VK_FORMAT_R8G8B8A8_UNORM, texture_usage, VK_TRUE, &mutable_texture));
-    TRY(make_image(device, VK_FORMAT_R8G8B8A8_SRGB, texture_usage, VK_FALSE, &srgb_texture));
-    TRY(make_view(device, target.image, VK_FORMAT_R8G8B8A8_UNORM, &target_view));
-    const VkResult refused = make_view(device, target.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                       &refused_view);
+    TRY(make_image(device, target_format, rt_usage, VK_TRUE, &target));
+    TRY(make_image(device, family[0], texture_usage, VK_TRUE, &mutable_texture));
+    TRY(make_image(device, family[1], texture_usage, VK_FALSE, &srgb_texture));
+    TRY(make_view(device, target.image, target_format, VK_FALSE, &target_view));
+    const VkResult refused = make_view(device, target.image, target_srgb_format,
+                                       VK_FALSE, &refused_view);
     ps5log_printf(PS5LOG_MARK, "DXVK_MUTABLE_VIEW_WITNESS_REFUSAL view=target_srgb result=%d",
                   (int)refused);
     REQUIRE(refused != VK_SUCCESS, "SRGB colour-attachment view refused");
-    TRY(make_view(device, mutable_texture.image, VK_FORMAT_R8G8B8A8_UNORM, &sampled_views[0]));
-    TRY(make_view(device, mutable_texture.image, VK_FORMAT_R8G8B8A8_SRGB, &sampled_views[1]));
-    TRY(make_view(device, srgb_texture.image, VK_FORMAT_R8G8B8A8_SRGB, &sampled_views[2]));
+    TRY(make_view(device, mutable_texture.image, family[0],
+#if defined(PS5VK_BGRA_WITNESS)
+                  VK_TRUE,
+#else
+                  VK_FALSE,
+#endif
+                  &sampled_views[0]));
+    TRY(make_view(device, mutable_texture.image, family[1], VK_FALSE, &sampled_views[1]));
+    TRY(make_view(device, srgb_texture.image, family[1], VK_FALSE, &sampled_views[2]));
 
     TRY(make_buffer(device, BYTES, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &upload,
                     &upload_memory, &upload_bytes));
@@ -298,7 +319,7 @@ static int run_witness(void)
         vkUpdateDescriptorSets(device, 1, &write, 0, NULL);
     }
 
-    VkAttachmentDescription attachment = {.format = VK_FORMAT_R8G8B8A8_UNORM,
+    VkAttachmentDescription attachment = {.format = target_format,
         .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -440,12 +461,12 @@ static int run_witness(void)
     uint32_t unorm_mismatches = 0, native_mismatches = 0, over_one = 0, exact = 0;
     uint32_t alpha_mismatches = 0, differing = 0;
     for (uint32_t i = 0; i < BYTES; ++i) {
-        unorm_mismatches += out[0][i] != mutable_view_texels[i];
+        unorm_mismatches += out[0][i] != mutable_view_expected_unorm[i];
         native_mismatches += out[1][i] != out[2][i];
         const int error = (int)out[1][i] - (int)mutable_view_srgb_exact[i];
         over_one += error < -1 || error > 1;
         exact += !error;
-        if ((i & 3u) == 3u) alpha_mismatches += out[1][i] != mutable_view_texels[i];
+        if ((i & 3u) == 3u) alpha_mismatches += out[1][i] != mutable_view_srgb_exact[i];
         else differing += out[1][i] != out[0][i];
     }
     const uint32_t digests[DRAWS] = {digest_bytes(out[0], BYTES), digest_bytes(out[1], BYTES),

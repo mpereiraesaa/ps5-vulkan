@@ -262,6 +262,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
     const int array_color=ps5vk_array_color_image(image);
     if(!d->graphics_enabled || !ps5vk_buffer_usage(d,destination,VK_BUFFER_USAGE_TRANSFER_DST_BIT) ||
         (image->info.format!=VK_FORMAT_R8G8B8A8_UNORM &&
+         image->info.format!=VK_FORMAT_B8G8R8A8_UNORM &&
          !ps5vk_color_target_integer_served(image->info.format)) || image->info.mipLevels!=1 ||
         (!array_color && image->info.arrayLayers!=1) || image->info.extent.depth!=1 ||
         (image->info.usage&(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT))!=
@@ -281,9 +282,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer c,VkImage imag
         (!array_color &&
          (image->info.usage&VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) ||
         (!array_color && (image->info.usage&VK_IMAGE_USAGE_SAMPLED_BIT) &&
-         !ps5vk_colour_transfer_image(image)) ||
+         !ps5vk_colour_transfer_image(image) &&
+         !ps5vk_bgra8_colour_readback_image(image) &&
+         !ps5vk_tiled_2d_sampled_color_image(image)) ||
         (!array_color && (image->info.usage&VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
-         !ps5vk_colour_transfer_image(image))) {invalid(c);return;}
+         !ps5vk_colour_transfer_image(image) &&
+         !ps5vk_bgra8_colour_readback_image(image) &&
+         !ps5vk_tiled_2d_sampled_color_image(image))) {invalid(c);return;}
     /* DXVK262-T10: each region is a rectangle of any layer range at mip 0,
      * written at a texel-aligned buffer offset with any row length and image
      * height at least its extent (src/readback_region.h), the shape a D3D11

@@ -180,8 +180,64 @@ console idle.
   `0f21b3d654db2d0d441dfbd8793378d8bba1df625df5faf67e41066029fe9985`.
 
 A host regression reproduces the exact display release and now passes through
-a shared recorder/native predicate. Hardware confirmation of frames two and
-three remains pending.
+a shared recorder/native predicate. Two clean hardware runs of ps5vk
+`6a6033a8` then passed strict native DXVK 2.6.2 D3D11/DXGI presentation:
+three frames per run, 4,096 readback pixels per frame with zero mismatches,
+checksums `6e17a4c5`, `8052d0c5`, `c0bc44c5`, successful `Present` for each,
+and zero final swapchain, device and context references. Neither run reported a
+Vulkan refusal, crash or suspected GPU hang. The wrapper restored the prior
+payload and the console was idle with no claim after each run.
+
+- Accepted candidate eboot SHA-256: `99a08de014872f8e391ee1ba8d7ccc655fc8f7c40137d700d21416c520a243b1`.
+- Runs: `20260928T190358419Z_PPSA99994_ps5vk_0x41a5ad1bf860` (log SHA-256
+  `424a377957ce87a59976bb7830357c35bb0c071e97272ca8b85b3ceeef05e2ac`)
+  and `20260928T190426485Z_PPSA99994_ps5vk_0x41ac35ff49d3` (log SHA-256
+  `e52c8e8702732dd44f9d7d2a25e5fabcc089ebd4ae1c60ed96e2f59a5bbc5c4d`).
+
+This proves the native SDK-linked DXVK presentation workload. It does not load
+PE DLLs through Prospero Win or verify every external scanout pixel. Separate
+Prospero Win integration runs report that all four unmodified x64 PE frontends
+reach ps5vk, while the accepted driver stops at the BGRA8 mutable-backbuffer
+format query. This change carries the bounded BGRA8
+image, barrier, clear-only pass and sampled-view routes. The D3D8, D3D9,
+D3D10 and D3D11 PE controls on both x64 and x86 each completed two successful
+`Present` calls with matching GPU completion and video-presentation events.
+The exact SDK SHA-256 `fc0db3420999d847b4beed1af4498cea1c5f2b9c727dae78552fe8d1e0b705d2`
+covers D3D8/9 on both architectures and D3D10 x86;
+the earlier D3D10 x64 and D3D11 x64/x86 controls need rechecking on that
+combined hash. D3D9 additionally exercised a
+two-command-buffer transfer batch, its colour clear and a sampled BGRA8 view
+with constant-one alpha. The x86 clear-only controls made no actual
+`vkMapMemory` call, leaving the below-4-GiB mapping question untested. An
+independent PE backbuffer or scanout pixel oracle remains pending for every
+frontend.
+
+A separate public-SDK BGRA8 mutable-view witness on that exact SDK read back
+three 16x16 GPU draws. Its UNORM view with constant-one alpha had zero byte
+differences against a channel-swapped reference; its SRGB mutable view matched
+the independent SRGB-image control and stayed within one output code of the
+calculated SRGB decode, with clean resource retirement. Witness eboot SHA-256:
+`de37dd7888434b77a064eda5c3adcbce78475990bec20a362d9b02f9987ba502`;
+run `20260928T213847455Z_PPSA99994_ps5vk_0x4a186adc718d`, log SHA-256
+`a4e3ab214ee0512f3f70e61e9bd336850ab99ccd7eed8c8aa2277a8deb0aba6e`.
+The BGRA8 sampled/filter format roles are now in the format ledger; the DXVK
+readiness score remains **45/62**. This witness does not read PE backbuffers
+or prove x86 address placement.
+
+The final diagnostic-free SDK archive SHA-256
+`178d8a82cd94a80a2007e658c9605eeafdfd78e833d0b44c811259c22e4f21e6`
+then passed the stronger variant with the render target itself BGRA8. Three
+draws each completed GPU colour readback of 1024 native BGRA bytes; the
+constant-one-alpha UNORM output had zero differences and the mutable SRGB
+output matched its separate SRGB-image control, with no output outside one
+code of the calculated decode. Eboot SHA-256
+`5835a88a298dcb4ea49443adfb07411ecc08d659715dca65860151b6d3df9b58`;
+run `20260928T220803680Z_PPSA99994_ps5vk_0x4bb1508aa63e`, log SHA-256
+`7b6544578c7210f8644a08822e7beb03dbf1cd4d71be231bd9ecd74cae25f6c7`.
+The strict verifier reported `lifecycle_ok=true`; the prior payload was
+restored and the console released. This directly witnesses the advertised
+BGRA8 colour-readback role, while the PE framebuffers remain separately
+unread.
 
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 
@@ -2147,8 +2203,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
-the code path that enforces them, 151 mandatory format-feature cells satisfied
-with 511 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 155 mandatory format-feature cells satisfied
+with 507 documented per-format blockers, 60 format-query consistency
 checks, and eighteen shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.

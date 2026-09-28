@@ -37,8 +37,8 @@ enum ps5vk_image_domain {
 };
 enum ps5vk_image_domain ps5vk_image_domain(const struct ps5vk_operation *operation);
 
-/* VideoOut's BGRA8 transfer destination uses the tiled colour footprint,
- * whether or not it also declares colour-attachment usage. */
+/* BGRA8 transfer destinations use the tiled colour footprint, including
+ * DXVK's sampled, rendered and readback-capable backbuffer. */
 static inline VkBool32 ps5vk_bgra8_transfer_target(VkImage image)
 {
     const VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
@@ -49,7 +49,8 @@ static inline VkBool32 ps5vk_bgra8_transfer_target(VkImage image)
         image->info.extent.depth == 1 && image->info.mipLevels == 1 &&
         image->info.arrayLayers == 1 && image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
         (image->info.usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
-         image->info.usage == usage);
+         image->info.usage == usage ||
+         ps5vk_tiled_2d_sampled_color_image(image));
 }
 
 /* One colour subresource copied from a linear buffer into the tiled target.

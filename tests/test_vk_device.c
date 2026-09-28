@@ -350,10 +350,18 @@ static void lifecycle(void)
      * three happy paths. Mixed executable/non-executable roles must fail. */
     for(unsigned usage=0;usage<256;++usage) {
         assert(!!ps5vk_graphics_image_usage(VK_FORMAT_B8G8R8A8_UNORM,usage)==
-            (usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
+            (usage==VK_IMAGE_USAGE_SAMPLED_BIT ||
+             usage==(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==VK_IMAGE_USAGE_TRANSFER_SRC_BIT ||
              usage==VK_IMAGE_USAGE_TRANSFER_DST_BIT ||
-             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                      VK_IMAGE_USAGE_TRANSFER_DST_BIT)));
+             usage==(VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_DST_BIT) ||
+             usage==(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)));
         /* D32 also has a separate bounded sampled-depth role for Dref gather.
          * The depth attachment forms remain tiled, and transfer source never
          * appears without the attachment. */
@@ -462,9 +470,12 @@ static void lifecycle(void)
                 image_formats[f]==VK_FORMAT_D32_SFLOAT &&
                 (usage==VK_IMAGE_USAGE_SAMPLED_BIT ||
                  usage==(VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT));
+            const VkBool32 bgra_tiled = f==0 &&
+                ((usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) ||
+                 usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             assert(result==VK_SUCCESS &&
                 ip.maxExtent.width==(storage_image_shape?8u:
-                    bounded_d32_sampled?64u:(f==0?16383u:16384u)));
+                    bounded_d32_sampled?64u:(bgra_tiled?16383u:16384u)));
             assert(ip.maxExtent.height==ip.maxExtent.width && ip.maxExtent.depth==1);
             /* D32 sampling has its own bounded descriptor profile; other D32
              * roles use the tiled depth attachment and readback surface. */
@@ -583,7 +594,8 @@ static void lifecycle(void)
                 !memcmp(&ip, &zero_ip, sizeof(ip)));
         }
     }
-    const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
+    const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB,
+        VK_FORMAT_R8G8B8A8_UNORM,
         VK_FORMAT_D32_SFLOAT, VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM,
         VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D24_UNORM_S8_UINT,
         VK_FORMAT_R8_SNORM,VK_FORMAT_R8G8_SNORM,VK_FORMAT_R8G8B8A8_SNORM,
@@ -616,8 +628,8 @@ static void lifecycle(void)
                 optimal_bits|=VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
         }
         if(formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
-            optimal_bits=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+            optimal_bits|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         else if(formats[n]==VK_FORMAT_R8G8B8A8_UNORM)
             /* DXVK262-T06: the blend bit joins the advertised role, because
              * the upstream blend family gates every leaf on it and all 98
@@ -758,8 +770,8 @@ static void lifecycle(void)
                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
                 VK_FORMAT_FEATURE_BLIT_DST_BIT;
         else if(vertex_formats[n]==VK_FORMAT_B8G8R8A8_UNORM)
-            expected_optimal=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+            expected_optimal|=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
         assert(fp.optimalTilingFeatures==expected_optimal);
         assert(ps5vk_vertex_format_size(vertex_formats[n])==(n<12?4*((n%4)+1):4));
         VkResult image_result=vkGetPhysicalDeviceImageFormatProperties(p,vertex_formats[n],

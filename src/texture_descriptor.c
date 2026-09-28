@@ -136,7 +136,10 @@ static VkResult image_resource_words(VkDevice d,VkImageView view,uint32_t out[8]
     words[0]=(uint32_t)(address>>8);
     words[1]=(uint32_t)(address>>40)|format->descriptor_format_word|((width&3u)<<30);
     words[2]=(width>>2)|((image->info.extent.height-1)<<14)|(1u<<31);
-    words[3]=ps5vk_texture_format_dst_sel(format)|type_word|
+    uint32_t selectors=ps5vk_texture_format_dst_sel(format);
+    if(view->components.a==VK_COMPONENT_SWIZZLE_ONE)
+        selectors=(selectors & ~(7u<<9)) | (1u<<9);
+    words[3]=selectors|type_word|
         (view->range.baseMipLevel<<12)|
         ((view->range.baseMipLevel+view->range.levelCount-1)<<16);
     if(tiled_cube || tiled_2d)words[3]|=UINT32_C(0x01b00000);

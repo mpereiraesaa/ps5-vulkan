@@ -12,8 +12,7 @@
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCreateInfo *info,
     const VkAllocationCallbacks *allocator, VkImageView *out)
 {
-    /* The image is NOT dereferenced here: this marker runs before the call's
-     * own validation, so it may only read the create-info the caller supplied. */
+    /* The image is not dereferenced before its own validation. */
     VIEW_MARK("PS5VK_IMAGE_VIEW format=%u type=%u",
         info ? (unsigned)info->format : 0u,
         info ? (unsigned)info->viewType : 0u);
@@ -89,10 +88,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
                 return VK_ERROR_FEATURE_NOT_PRESENT;
     }
     const VkComponentMapping *c = &info->components;
+    /* D3D9 X8R8G8B8 presents a mutable BGRA8 image with constant-one alpha.
+     * Its sampled descriptor encodes that selector; no other non-identity
+     * remap is admitted by this bounded view profile. */
+    const VkBool32 xrgb_alpha_one =
+        image->info.format == VK_FORMAT_B8G8R8A8_UNORM &&
+        info->format == VK_FORMAT_B8G8R8A8_UNORM &&
+        info->viewType == VK_IMAGE_VIEW_TYPE_2D &&
+        ((view_usage ? view_usage : image->info.usage) & VK_IMAGE_USAGE_SAMPLED_BIT) &&
+        c->a == VK_COMPONENT_SWIZZLE_ONE;
     if ((c->r != VK_COMPONENT_SWIZZLE_IDENTITY && c->r != VK_COMPONENT_SWIZZLE_R) ||
         (c->g != VK_COMPONENT_SWIZZLE_IDENTITY && c->g != VK_COMPONENT_SWIZZLE_G) ||
         (c->b != VK_COMPONENT_SWIZZLE_IDENTITY && c->b != VK_COMPONENT_SWIZZLE_B) ||
-        (c->a != VK_COMPONENT_SWIZZLE_IDENTITY && c->a != VK_COMPONENT_SWIZZLE_A))
+        (c->a != VK_COMPONENT_SWIZZLE_IDENTITY && c->a != VK_COMPONENT_SWIZZLE_A &&
+         !xrgb_alpha_one))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     VkImageSubresourceRange range = info->subresourceRange;
     /* A view names every aspect its format has. For a combined depth/stencil
@@ -163,6 +172,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImageView(VkDevice d, const VkImageViewCr
     view->device = d; view->allocator = saved; view->custom_allocator = custom;
     view->image = image; view->view_type=info->viewType;
     view->format = info->format; view->range = range;
+    view->components = *c;
     view->usage = view_usage;
     ++image->views; ++d->graphics_objects; *out = view;
     return VK_SUCCESS;

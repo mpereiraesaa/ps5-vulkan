@@ -22,10 +22,10 @@ Prospero Win, ps5vk and native payload identities with the result.
 
 | Application API | DXVK modules in its path | Current evidence | Next executable proof |
 | --- | --- | --- | --- |
-| D3D8 | `d3d8.dll`, `d3d9.dll` | No Prospero Win DXVK run | Load both modules and render/present a D3D8 frame |
-| D3D9 | `d3d9.dll` | No Prospero Win DXVK run | Load the module and render/present a D3D9 frame |
-| D3D10 | `d3d10core.dll`, `d3d11.dll`, `dxgi.dll` | No Prospero Win DXVK run | Resolve the D3D10 API wrapper and render/present a D3D10 frame |
-| D3D11 | `d3d11.dll`, `dxgi.dll` | Static native offscreen render only | Load PE modules in Prospero Win and render/present a D3D11 frame |
+| D3D8 | `d3d8.dll`, `d3d9.dll` | x64 and x86 PE controls completed two GPU-backed presentations on the latest diagnostic SDK | Verify pixels |
+| D3D9 | `d3d9.dll` | x64 and x86 PE controls completed two GPU-backed presentations on the latest diagnostic SDK | Verify pixels |
+| D3D10 | `d3d10core.dll`, `d3d11.dll`, `dxgi.dll` | x64 and x86 PE controls completed two GPU-backed presentations across diagnostic SDKs | Recheck x64 on the latest SDK; verify pixels |
+| D3D11 | `d3d11.dll`, `dxgi.dll` | x64 and x86 PE controls completed two GPU-backed presentations across diagnostic SDKs | Recheck both architectures on the latest SDK; verify pixels and x86 mapping |
 
 The module lists identify DXVK's side of each path; Prospero Win also needs a
 working PE loader/import path and Vulkan bridge for the selected architecture.
@@ -474,8 +474,38 @@ postlude route using the same bounded predicate; hardware retest is pending.
 The seventh clean artifact passed the first frame's 4,096-pixel oracle and
 `Present`, then refused a BGRA8 colour-attachment-to-present release in the
 second frame's native postlude. The recorder and native executor now use the
-same bounded display-ownership predicate. Three-frame acceptance still needs
-hardware confirmation.
+same bounded display-ownership predicate. Two clean hardware runs of the next commit,
+`6a6033a8`, each passed all three 4,096-pixel frame oracles, three `Present`
+calls and complete resource retirement. This is native DXVK acceptance; PE DLL
+execution through Prospero Win still needs its separate BGRA8 mutable-backbuffer
+route and end-to-end oracles. The accepted driver gives all four unmodified x64
+PE frontends the same BGRA8 format-query refusal. The candidate
+series completes two GPU-backed presentations for D3D8, D3D9, D3D10 and
+D3D11 on both x64 and x86, with matching video-presentation events. The exact
+SDK SHA-256 `fc0db3420999d847b4beed1af4498cea1c5f2b9c727dae78552fe8d1e0b705d2`
+covers D3D8/9 on both architectures and D3D10 x86; the earlier
+D3D10 x64 and D3D11 x64/x86 controls need rechecking on that combined hash.
+The D3D9 path also executes the batched
+three-backbuffer barriers and clears, then samples its X8R8G8B8 backbuffer
+through a BGRA8 view with alpha mapped to constant one. Recorder,
+native-prelude and descriptor host tests cover these measured forms. The x86
+clear-only controls made no actual `vkMapMemory` call, so the below-4-GiB
+mapping range remains untested. An independent PE pixel oracle is still
+required for every frontend. A separate public-SDK BGRA8 mutable-view witness
+on this SDK passed an independent 1024-byte GPU pixel oracle for BGRA channel
+order and constant-one alpha, plus an SRGB-view comparison with a separate
+SRGB image (run `20260928T213847455Z_PPSA99994_ps5vk_0x4a186adc718d`, eboot
+SHA-256 `de37dd7888434b77a064eda5c3adcbce78475990bec20a362d9b02f9987ba502`).
+That qualifies the BGRA8 sampled/filter rows in the format ledger; it is not
+a PE backbuffer readback. The accepted-readiness score stays **45/62**.
+The final diagnostic-free SDK archive (`178d8a82cd94a80a2007e658c9605eeafdfd78e833d0b44c811259c22e4f21e6`)
+also passed a stronger 16x16 witness that rendered into BGRA8 and read all
+1024 native BGRA bytes back after each of three GPU draws. The UNORM output
+had zero differences, and the mutable SRGB view matched its independent
+SRGB-image control within one code of the calculated decode (run
+`20260928T220803680Z_PPSA99994_ps5vk_0x4bb1508aa63e`, eboot SHA-256
+`5835a88a298dcb4ea49443adfb07411ecc08d659715dca65860151b6d3df9b58`).
+This proves the BGRA8 readback format role on hardware, not PE backbuffer pixels.
 
 With the pinned DXVK checkout and its SDL2 native Meson build available:
 

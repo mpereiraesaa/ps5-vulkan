@@ -1,4 +1,5 @@
 #include "vk_queue.h"
+#include "dxvk_clear_pass.h"
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
@@ -259,10 +260,81 @@ static void imageless_two_view_clear_recording(void)
     }
     vkDestroyCommandPool(&d, pool, NULL);
 }
+static void dxvk_bgra8_clear_only_submit(void)
+{
+    struct fixture f = {0};
+    struct VkDevice_T d = {.graphics_enabled = VK_TRUE,
+        .graphics_submit_enabled = VK_TRUE,
+        .max_allocation = 4096, .noncoherent_atom = 1,
+        .memory = {.allocate = memory_allocate, .release = memory_release,
+                   .flush = memory_sync, .invalidate = memory_sync},
+        .progress = {&f, ps5vk_queue_poll, clock_ns, pause_wait},
+        .submit_backend = {prepare, launch, poll_backend, release}};
+    d.queue.device = &d; d.queue.next_serial = 1;
+    VkMemoryAllocateInfo allocation = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = 256, .memoryTypeIndex = 0};
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    assert(vkAllocateMemory(&d, &allocation, NULL, &memory) == VK_SUCCESS);
+    struct VkImage_T image = {.device = &d, .memory = memory,
+        .requirements = {.size = 256},
+        .info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_B8G8R8A8_UNORM,
+            .extent = {64, 64, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT}};
+    d.images = &image;
+    struct VkImageView_T view = {.device = &d, .image = &image,
+        .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    VkAttachmentDescription attachment = {.format = VK_FORMAT_B8G8R8A8_UNORM,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    struct ps5vk_subpass subpass = {.color_count = 1,
+        .color = {{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},
+        .depth = {.attachment = VK_ATTACHMENT_UNUSED}};
+    struct VkRenderPass_T pass = {.device = &d, .attachment_count = 1,
+        .subpass_count = 1, .attachments = &attachment, .subpasses = &subpass};
+    struct VkFramebuffer_T fb = {.device = &d, .width = 64, .height = 64,
+        .attachment_count = 1, .color_count = 1, .attachments = {&view},
+        .color_attachments = {0}};
+    struct VkCommandPool_T pool = {.device = &d};
+    struct VkCommandBuffer_T command = {.pool = &pool, .state = PS5VK_EXECUTABLE,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .operation_count = 2};
+    command.operations[0] = (struct ps5vk_operation){.type = PS5VK_BEGIN_RENDER_PASS,
+        .render_pass = &pass, .framebuffer = &fb,
+        .render_pass_contents = VK_SUBPASS_CONTENTS_INLINE,
+        .render_area = {{0, 0}, {64, 64}}, .clear_count = 1};
+    command.operations[0].clears[0].color.float32[0] = 28.0f / 255.0f;
+    command.operations[0].clears[0].color.float32[1] = 76.0f / 255.0f;
+    command.operations[0].clears[0].color.float32[2] = 132.0f / 255.0f;
+    command.operations[0].clears[0].color.float32[3] = 1.0f;
+    command.operations[1] = (struct ps5vk_operation){.type = PS5VK_END_RENDER_PASS,
+        .render_pass = &pass, .framebuffer = &fb};
+    VkCommandBuffer cb = &command;
+    VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1, .pCommandBuffers = &cb};
+    assert(ps5vk_dxvk_bgra8_clear_only_pass(&command.operations[0]));
+    assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_SUCCESS);
+    assert(f.prepares == 1 && f.launches == 1);
+    assert(vkQueueWaitIdle(&d.queue) == VK_SUCCESS);
+    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    assert(!ps5vk_dxvk_bgra8_clear_only_pass(&command.operations[0]));
+    assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN);
+    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    command.operations[0].render_area.extent.width = 32;
+    assert(vkQueueSubmit(&d.queue, 1, &submit, NULL) == VK_ERROR_UNKNOWN);
+    assert(f.prepares == 1);
+    d.images = NULL; image.memory = VK_NULL_HANDLE;
+    vkFreeMemory(&d, memory, NULL);
+}
 int main(void)
 {
     submit2_dxvk_shape();
     imageless_two_view_clear_recording();
+    dxvk_bgra8_clear_only_submit();
     struct fixture f = {0};
     struct VkDevice_T d = {.progress = {&f, ps5vk_queue_poll, clock_ns, pause_wait},
         .submit_backend = {prepare, launch, poll_backend, release}};

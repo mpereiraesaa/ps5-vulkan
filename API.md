@@ -347,7 +347,7 @@ stays refused before any state is mutated. `linearTilingFeatures` and
 `vkGetPhysicalDeviceImageFormatProperties` report exactly this one shape and
 nothing else.
 
-The public table has 40 filterable sampled formats. Nearest and linear sampling
+The public table has 42 filterable sampled formats. Nearest and linear sampling
 have native deterministic readback evidence for the
 original 24 filterable formats. The sixteen BC formats have original CTS
 sampling coverage and focused native filtering witnesses. 20 additional signed and unsigned

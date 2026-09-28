@@ -98,7 +98,10 @@ static void report_physical_device_contract(VkInstance instance,
             bgra.bufferFeatures == VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT &&
             bgra.optimalTilingFeatures ==
                 (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT) &&
+                 VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) &&
             /* RGBA8 is the one format with a linear-tiling role: the pinned
              * upstream draw module's host-readback staging image, whose only
              * usage is a transfer destination. */

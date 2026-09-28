@@ -1361,7 +1361,7 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_HOST_BIT |
         VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT |
         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
@@ -1380,6 +1380,9 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
          * dependency the compute scope alone can carry is left to it. */
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    /* DXVK D3D9's BGRA8 backbuffer hand-over names geometry among several
+     * potential shader readers. This stage is implemented by the graphics
+     * profile; the queue's conservative cache dependency orders it. */
     /* INDEX_READ, UNIFORM_READ and INPUT_ATTACHMENT_READ are accesses this
      * profile really serves in a graphics command: the promoted index path
      * reads the index buffer, descriptors feed uniform buffers to the vertex
@@ -1532,9 +1535,13 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
         src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
         dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     if(ps5vk_dxvk_tiled_backbuffer_barrier(b,src_stage,dst_stage))return 1;
+    if(ps5vk_bgra8_readback_barrier(b,src_stage,dst_stage))return 1;
     if(ps5vk_d32_gather_image(image))return ps5vk_d32_gather_barrier(b);
     if(ps5vk_bgra8_transfer_target(image))return
-        ps5vk_bgra8_transfer_barrier(b) || ps5vk_color_discard_barrier(b);
+        ps5vk_bgra8_transfer_barrier(b) ||
+        (ps5vk_tiled_2d_sampled_color_image(image) ?
+         ps5vk_dxvk_bgra8_initial_color_barrier(b,src_stage,dst_stage) :
+         ps5vk_color_discard_barrier(b));
     if(ps5vk_array_color_image(image))return ps5vk_array_color_barrier(b);
     if(ps5vk_bc_linear_image(image) || ps5vk_rgba_linear_image(image))
         return ps5vk_linear_image_barrier(b);
@@ -1742,7 +1749,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer c, VkPipelineSta
         VkImageSubresourceRange resolved;
         if(!c->pool->device->graphics_enabled ||
             b->sType!=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER || b->pNext ||
-            !transform_feedback_scope(c,src,b->srcAccessMask) || !transform_feedback_scope(c,dst,b->dstAccessMask) ||
+            !transform_feedback_scope(c,src,b->srcAccessMask) ||
+            !transform_feedback_scope(c,dst,b->dstAccessMask) ||
             b->srcQueueFamilyIndex!=b->dstQueueFamilyIndex ||
             (b->srcQueueFamilyIndex!=0 && b->srcQueueFamilyIndex!=VK_QUEUE_FAMILY_IGNORED) ||
             !image || image->device!=c->pool->device) {invalid(c);return;}

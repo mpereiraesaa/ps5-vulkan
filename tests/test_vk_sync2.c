@@ -184,23 +184,22 @@ static void dxvk_first_frame(struct fixture *f)
            c.operations[0].src_access == 0 && c.operations[0].dst_access == A1(TRANSFER_WRITE));
 
     /* InitBuffer hand-over: TRANSFER_DST -> COLOR_ATTACHMENT, src
-     * TRANSFER/TRANSFER_WRITE, dst 0x1400/0x1980. DXVK's destination names
-     * TRANSFER_WRITE, which the Vulkan 1.0 hand-over profile does not order
-     * for an attachment, so the converted barrier is refused... */
+     * TRANSFER/TRANSFER_WRITE, dst 0x1400/0x1980. The bounded hand-over
+     * profile permits DXVK's full later-access scope, including a transfer
+     * write when the same image is subsequently used as a copy destination. */
     b = image_barrier(f->image, DST, ATT, S2(TRANSFER), A2(TRANSFER_WRITE),
                       DXVK_RT_STAGES, DXVK_RT_ACCESS);
     vkCmdPipelineBarrier2KHR(&c, &dep);
-    assert(c.state == PS5VK_INVALID && c.operation_count == 1);
-    /* ...and without it the same conversion records the hand-over. */
+    assert(c.state == PS5VK_RECORDING && c.operation_count == 2);
+    assert(c.operations[1].dst_access == (A1(COLOR_ATTACHMENT_READ) |
+        A1(COLOR_ATTACHMENT_WRITE) | A1(TRANSFER_READ) | A1(TRANSFER_WRITE)));
+    /* An unrelated write remains outside that hand-over scope. */
     recording(&c, &f->pool);
-    b.dstAccessMask = DXVK_RT_ACCESS & ~A2(TRANSFER_WRITE);
+    b.dstAccessMask = DXVK_RT_ACCESS | A2(HOST_WRITE);
     vkCmdPipelineBarrier2KHR(&c, &dep);
-    assert(c.state == PS5VK_RECORDING && c.operation_count == 1);
-    assert(c.operations[0].src_stage == S1(TRANSFER) &&
-           c.operations[0].dst_stage == (S1(COLOR_ATTACHMENT_OUTPUT) | S1(TRANSFER)) &&
-           c.operations[0].src_access == A1(TRANSFER_WRITE) &&
-           c.operations[0].dst_access == (A1(COLOR_ATTACHMENT_READ) |
-               A1(COLOR_ATTACHMENT_WRITE) | A1(TRANSFER_READ)));
+    assert(c.state == PS5VK_INVALID && c.operation_count == 0);
+    recording(&c, &f->pool);
+    b.dstAccessMask = DXVK_RT_ACCESS;
 
     /* Exec: discard into the attachment layout, src COLOR_OUTPUT/NONE. */
     recording(&c, &f->pool);
@@ -231,15 +230,16 @@ static void dxvk_first_frame(struct fixture *f)
            c.operations[2].dst_stage == S1(TRANSFER) &&
            c.operations[2].image_barrier.newLayout == SRC);
 
-    /* ...while DXVK's own form names src TRANSFER/NONE, relying on the
-     * global publication just before it. The conversion is exact, and the
-     * Vulkan 1.0 profile refuses a layout transition without the producer's
-     * write, so the command buffer is invalidated rather than guessed. */
+    /* DXVK's own form names src TRANSFER/NONE, relying on the preceding
+     * global publication. The bounded readback dependency now admits that
+     * layout hand-over for an image with both colour and transfer roles. */
     recording(&c, &f->pool);
     b = image_barrier(f->image, ATT, SRC, S2(TRANSFER), VK_ACCESS_2_NONE,
                       S2(TRANSFER), A2(TRANSFER_READ));
     vkCmdPipelineBarrier2KHR(&c, &dep);
-    assert(c.state == PS5VK_INVALID && !c.operation_count);
+    assert(c.state == PS5VK_RECORDING && c.operation_count == 1 &&
+           c.operations[0].type == PS5VK_IMAGE_BARRIER &&
+           c.operations[0].image_barrier.newLayout == SRC);
 
     /* The final dependency, exactly as DXVK records it: a global
      * TRANSFER_WRITE publication to 0x5880/0x3860 plus the image hand-back
@@ -267,12 +267,13 @@ static void dxvk_first_frame(struct fixture *f)
                list[1].image.dstAccessMask == 0x1980u && !list[1].image.srcAccessMask);
         free(list);
     }
-    /* With DXVK's src NONE the Vulkan 1.0 image profile still refuses the
-     * hand-back; with the readback's read it records publication then image,
-     * both under the union stages. */
+    /* DXVK's src NONE hand-back follows the global publication and is now
+     * admitted. A direct readback-source access also remains valid. */
     recording(&c, &f->pool);
     vkCmdPipelineBarrier2KHR(&c, &last);
-    assert(c.state == PS5VK_INVALID && !c.operation_count);
+    assert(c.state == PS5VK_RECORDING && c.operation_count == 2 &&
+           c.operations[0].type == PS5VK_BARRIER &&
+           c.operations[1].type == PS5VK_IMAGE_BARRIER);
     recording(&c, &f->pool);
     back.srcAccessMask = A2(TRANSFER_READ);
     back.dstStageMask = S2(COLOR_ATTACHMENT_OUTPUT);
@@ -409,6 +410,87 @@ static void feature_gate(struct fixture *f)
     f->d.enabled_features_t09 = PS5VK_T09_FEATURE_SYNCHRONIZATION2;
 }
 
+static void dxvk_d3d9_backbuffer_batch(struct fixture *f)
+{
+    /* D3D9 creates three mutable BGRA8 backbuffers before its first clear.
+     * Its InitBarriers stream may batch the three undefined-to-transfer
+     * transitions; validate the complete dependency atomically. */
+    VkImageCreateInfo info = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_B8G8R8A8_UNORM,
+        .extent = {64, 64, 1}, .mipLevels = 1, .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+    VkImage images[3] = {0};
+    VkDeviceMemory memories[3] = {0};
+    VkImageMemoryBarrier2 barriers[3];
+    for (unsigned i = 0; i < 3; ++i) {
+        assert(vkCreateImage(&f->d, &info, NULL, &images[i]) == VK_SUCCESS);
+        memories[i] = memory(&f->d, 65536);
+        assert(vkBindImageMemory(&f->d, images[i], memories[i], 0) == VK_SUCCESS);
+        barriers[i] = image_barrier(images[i], VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_NONE,
+            VK_ACCESS_2_NONE, S2(TRANSFER), A2(TRANSFER_WRITE));
+    }
+    VkDependencyInfo dependency = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 3, .pImageMemoryBarriers = barriers};
+    struct VkCommandBuffer_T command;
+    recording(&command, &f->pool);
+    vkCmdPipelineBarrier2KHR(&command, &dependency);
+    assert(command.state == PS5VK_RECORDING && command.operation_count == 3);
+    for (unsigned i = 0; i < 3; ++i) {
+        assert(command.operations[i].type == PS5VK_IMAGE_BARRIER);
+        assert(command.operations[i].image_barrier.image == images[i]);
+    }
+    /* The measured D3D9 hand-over batches three TRANSFER_DST -> SHADER_READ
+     * barriers. Its destination is DXVK's broad potential-reader scope:
+     * vertex, geometry, fragment, colour, compute and transfer. */
+    const VkPipelineStageFlags2 readers = S2(VERTEX_SHADER) | S2(GEOMETRY_SHADER) |
+        S2(FRAGMENT_SHADER) | S2(COLOR_ATTACHMENT_OUTPUT) |
+        S2(COMPUTE_SHADER) | S2(TRANSFER);
+    const VkAccessFlags2 accesses = A2(SHADER_READ) |
+        A2(COLOR_ATTACHMENT_READ) | A2(COLOR_ATTACHMENT_WRITE) |
+        A2(TRANSFER_READ) | A2(TRANSFER_WRITE);
+    for (unsigned i = 0; i < 3; ++i)
+        barriers[i] = image_barrier(images[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, S2(TRANSFER),
+            A2(TRANSFER_WRITE), readers, accesses);
+    recording(&command, &f->pool);
+    vkCmdPipelineBarrier2KHR(&command, &dependency);
+    assert(command.state == PS5VK_RECORDING && command.operation_count == 3);
+    for (unsigned i = 0; i < 3; ++i) {
+        assert(command.operations[i].image_barrier.oldLayout ==
+               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        assert(command.operations[i].image_barrier.newLayout ==
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        assert(command.operations[i].dst_stage == (VkPipelineStageFlags)readers);
+        assert(command.operations[i].dst_access == (VkAccessFlags)accesses);
+    }
+    /* The next measured D3D9 transition publishes a rendered BGRA8 target
+     * to the same reader scope. Keep it admitted at record as well as native
+     * preparation. */
+    barriers[0] = image_barrier(images[0], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, S2(COLOR_ATTACHMENT_OUTPUT),
+        A2(COLOR_ATTACHMENT_WRITE), readers, accesses);
+    dependency.imageMemoryBarrierCount = 1;
+    recording(&command, &f->pool);
+    vkCmdPipelineBarrier2KHR(&command, &dependency);
+    assert(command.state == PS5VK_RECORDING && command.operation_count == 1);
+    assert(command.operations[0].src_stage == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+    assert(command.operations[0].dst_stage == (VkPipelineStageFlags)readers);
+    dependency.imageMemoryBarrierCount = 3;
+    recording(&command, &f->pool);
+    barriers[2].srcQueueFamilyIndex = 1;
+    vkCmdPipelineBarrier2KHR(&command, &dependency);
+    assert(command.state == PS5VK_INVALID && command.operation_count == 0);
+    for (unsigned i = 0; i < 3; ++i) {
+        vkDestroyImage(&f->d, images[i], NULL);
+        vkFreeMemory(&f->d, memories[i], NULL);
+    }
+}
+
 int main(void)
 {
     conversion();
@@ -436,6 +518,7 @@ int main(void)
     f.pool = (struct VkCommandPool_T){.device = &f.d};
 
     dxvk_first_frame(&f);
+    dxvk_d3d9_backbuffer_batch(&f);
     events_and_timestamps(&f);
     feature_gate(&f);
 
