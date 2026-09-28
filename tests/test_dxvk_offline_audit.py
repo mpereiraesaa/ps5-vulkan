@@ -27,7 +27,7 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertTrue(report["subgroup_size_selection"]["selection_verified"])
         self.assertEqual(2, len(report["subgroup_size_selection"]["new_flagged_leaves"]))
         self.assertFalse(report["subgroup_size_selection"]["previous_candidate_covers_new_flags"])
-        self.assertEqual(9, sum(r["phase"] == "native_validation" for r in report["rows"]))
+        self.assertEqual(10, sum(r["phase"] == "native_validation" for r in report["rows"]))
         self.assertTrue(all(r["execution_prepared"] and r["cts_verified"]
                             for r in report["rebuilt_witnesses"].values()))
         self.assertTrue(all(r["hardware_evidence_required"] for r in report["rows"]))

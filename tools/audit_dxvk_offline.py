@@ -30,15 +30,16 @@ OFFLINE = {
     "subgroupBroadcastDynamicId": "Prove runtime-selected Broadcast ID and complete BALLOT reporting.",
     "subgroupSizeControl": "Package the flagged size-control CTS selection and establish stage bounds.",
     "computeFullSubgroups": "Complete truthful BALLOT reporting and package the flagged full-subgroup CTS case.",
-    "maintenance4": "Prepare current-source numerical/interface delivery evidence and rebuild CTS candidate.",
     "robustImageAccess": "Admit the original CTS combined image usage and register its factory.",
     "shaderIntegerDotProduct": "Complete the integrated original-CTS and graphics numerical delivery candidate.",
 }
 REBUILD = {
+    "maintenance4": "Run three SDK witnesses and 33 original CTS leaves, then canonical acceptance.",
     "pipelineCreationCacheControl": "Run the rebuilt SDK witness and eight original CTS leaves, then canonical acceptance.",
     "shaderZeroInitializeWorkgroupMemory": "Run the rebuilt SDK witness and 42 original CTS leaves, then canonical acceptance.",
 }
 REBUILT_WITNESSES = {
+    "maintenance4": Path("build/offline-dxvk-profile/maintenance4-cts/rebuild-e8318a25.json"),
     "pipelineCreationCacheControl": Path("build/offline-dxvk-profile/cache-control/rebuild-a355320b.json"),
     "shaderZeroInitializeWorkgroupMemory": Path("build/offline-dxvk-profile/zero-initialize-witness/rebuild-a355320b.json"),
 }
@@ -115,6 +116,23 @@ def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
         hashlib.sha256(artifact_path.read_bytes()).hexdigest() == record["artifact_sha256"] and
         hashlib.sha256(eboot_path.read_bytes()).hexdigest() == record["eboot_sha256"] and
         artifact.get("eboot_sha256") == record["eboot_sha256"])
+    additional_verified = True
+    for extra in record.get("additional_witnesses", []):
+        extra_dist = root / extra["candidate"]
+        extra_artifact = extra_dist / "artifact.json"
+        extra_eboot = extra_dist / "PPSA99994/eboot.bin"
+        if not extra_artifact.is_file() or not extra_eboot.is_file():
+            additional_verified = False
+            break
+        data = json.loads(extra_artifact.read_text())
+        additional_verified = (
+            hashlib.sha256(extra_artifact.read_bytes()).hexdigest() == extra["artifact_sha256"] and
+            hashlib.sha256(extra_eboot.read_bytes()).hexdigest() == extra["eboot_sha256"] and
+            data.get("eboot_sha256") == extra["eboot_sha256"] and
+            all(data.get(key) == extra[key] for key in
+                ("local_x", "specialization", "expected_digest", "spirv_sha256")))
+        if not additional_verified:
+            break
     source_current = subprocess.run(
         ["git", "diff", "--quiet", record["source_commit"], "--", "src", "native", "include",
          "examples", "experiments", "tools/build_sdk.py", "tools/build_dxvk_render_witness.py",
@@ -140,18 +158,21 @@ def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
             build.get("selected_cases") == selected and
             build.get("measurement") == selection.get("measurement") and
             build["measurement"]["moved"] == cts.get("moved") and
-            build["tessellation_build_profile"]["switches"].get(cts.get("diagnostic_switch")) == "1" and
+            (build["tessellation_build_profile"]["switches"].get(cts["diagnostic_switch"]) == "1"
+             if cts.get("diagnostic_switch") else
+             build["tessellation_build_profile"]["experimental"] is False) and
             selection["cases"][:len(frozen["cases"])] == frozen["cases"] and
             selection["measurement"]["base_selection_hash"] == selection_hash(frozen["cases"]))
         cts_source_current = subprocess.run(
             ["git", "diff", "--quiet", cts["source_commit"], "--", "src", "native", "include",
              "cts", "tools/build_sdk.py", "tools/build_upstream_cts.py"],
             cwd=root, check=False, capture_output=True).returncode == 0
-    return {"artifact_verified": artifact_verified, "source_current": source_current,
+    return {"artifact_verified": artifact_verified, "additional_witnesses_verified": additional_verified,
+            "source_current": source_current,
             "source_commit": record["source_commit"], "eboot_sha256": record["eboot_sha256"],
             "cts_verified": cts_verified, "cts_source_current": cts_source_current,
             "cts_eboot_sha256": cts.get("eboot_sha256"),
-            "execution_prepared": artifact_verified and source_current and
+            "execution_prepared": artifact_verified and additional_verified and source_current and
                                   cts_verified and cts_source_current}
 
 
