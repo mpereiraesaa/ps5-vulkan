@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build bounded SDK compute Broadcast or IAdd diagnostic witnesses."""
+"""Build bounded SDK compute BALLOT-family or IAdd diagnostic witnesses."""
 
 import argparse
 import hashlib
@@ -28,7 +28,7 @@ def diagnostic_environment(source: dict, sdk: Path, operation: str) -> dict:
     for name in tessellation_build_profile({})["switches"]:
         environment.pop(name, None)
     environment.update(PS5_PAYLOAD_SDK=str(sdk),
-        PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC="1" if operation == "broadcast" else "0",
+        PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC="1" if operation in ("broadcast", "ballot") else "0",
         PS5VK_SUBGROUP_IADD_DIAGNOSTIC="1" if operation in ("iadd", "iadd_int8") else "0",
         PS5VK_SHADER_INT8_DIAGNOSTIC="1" if operation == "iadd_int8" else "0")
     return environment
@@ -74,10 +74,13 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
         if 333 <= opcode <= 366:
             subgroup_ops.append(opcode)
         index += size
-    expected_capabilities = {61, 64 if operation == "broadcast" else 63}
+    expected_capabilities = {61, 64 if operation in ("broadcast", "ballot") else 63}
     expected_opcode = 337 if operation == "broadcast" else 349
+    operations_match = (sorted(subgroup_ops) ==
+                        [337, 338, 339, 340, 341, 342, 342, 342, 343, 344]
+                        if operation == "ballot" else subgroup_ops == [expected_opcode])
     if (not expected_capabilities.issubset(capabilities) or
-            subgroup_ops != [expected_opcode] or
+            not operations_match or
             entry_models != [5] or
             (operation == "iadd_int8") != (39 in capabilities and has_int8_type)):
         raise ValueError(f"shader lacks compute GroupNonUniform{operation} contract")
@@ -100,7 +103,7 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
         stores = store_values.get(pointer, [])
         return bool(stores) and all(storage_value(item, seen | {value}) for item in stores)
 
-    if operation == "broadcast" and (words[1] < 0x00010500 or
+    if operation in ("broadcast", "ballot") and (words[1] < 0x00010500 or
                                      broadcast_source_id is None or
                                      not storage_value(broadcast_source_id, set())):
         raise ValueError("Broadcast witness requires SPIR-V 1.5 and a storage-buffer-sourced ID")
@@ -108,7 +111,7 @@ def checked_spirv(payload: bytes, operation: str = "broadcast") -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--operation", choices=("broadcast", "iadd", "iadd_int8"),
+    parser.add_argument("--operation", choices=("broadcast", "ballot", "iadd", "iadd_int8"),
                         default="broadcast")
     operation = parser.parse_args().operation
     if operation == "iadd_int8" and not (
@@ -153,6 +156,7 @@ def main() -> None:
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
         "-MD", "-MP", "-MF", str(dep),
+        *(["-DT08_SUBGROUP_BALLOT_WITNESS=1"] if operation == "ballot" else []),
         *(["-DT08_SUBGROUP_IADD_WITNESS=1"] if operation == "iadd" else []),
         *(["-DT08_SUBGROUP_IADD_INT8_WITNESS=1"]
           if operation == "iadd_int8" else []),
@@ -194,9 +198,11 @@ def main() -> None:
     param = json.loads((lab / "projects/ps5-agc-gears/sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
                  contentId={"broadcast": "UP9000-PPSA99994_00-PS5VKSGRT0000001",
+                            "ballot": "UP9000-PPSA99994_00-PS5VKSGBA0000001",
                             "iadd": "UP9000-PPSA99994_00-PS5VKSGIA0000001",
                             "iadd_int8": "UP9000-PPSA99994_00-PS5VKS8IA0000001"}[operation])
-    title_operation = {"broadcast": "Broadcast", "iadd": "IAdd",
+    title_operation = {"broadcast": "Broadcast", "ballot": "Ballot",
+                       "iadd": "IAdd",
                        "iadd_int8": "Int8 IAdd"}[operation]
     param["localizedParameters"]["en-US"]["titleName"] = (
         f"PS5 Vulkan Subgroup {title_operation} Witness")

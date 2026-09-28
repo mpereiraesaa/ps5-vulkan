@@ -18,12 +18,31 @@ from build_t08_subgroup_broadcast_witness import checked_spirv, diagnostic_envir
 
 def profile(operation):
     return tessellation_build_profile({
-        "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation == "broadcast" else "0",
+        "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation in ("broadcast", "ballot") else "0",
         "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in ("iadd", "iadd_int8") else "0",
         "PS5VK_SHADER_INT8_DIAGNOSTIC": "1" if operation == "iadd_int8" else "0"})
 
 
 class SubgroupWitnessTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("glslangValidator"), "glslangValidator unavailable")
+    def test_ballot_witness_retains_every_operation_and_runtime_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shader = Path(directory) / "ballot.spv"
+            subprocess.run(["glslangValidator", "-V", "--target-env", "vulkan1.2",
+                            str(ROOT / "experiments/compute/t08_subgroup_ballot_runtime.comp"),
+                            "-o", str(shader)], check=True, capture_output=True)
+            words = list(struct.unpack(f"<{shader.stat().st_size // 4}I", shader.read_bytes()))
+        checked_spirv(struct.pack(f"<{len(words)}I", *words), "ballot")
+        offset = 5
+        while offset < len(words):
+            size, opcode = words[offset] >> 16, words[offset] & 0xffff
+            if opcode == 343:  # OpGroupNonUniformBallotFindLSB
+                words[offset] = (size << 16) | 345  # Shuffle is not the ballot contract.
+                break
+            offset += size
+        with self.assertRaisesRegex(ValueError, "BALLOT|ballot"):
+            checked_spirv(struct.pack(f"<{len(words)}I", *words), "ballot")
+
     def test_builder_removes_unrelated_diagnostic_switches(self):
         environment = diagnostic_environment({"PS5VK_INLINE_UNIFORM_DIAGNOSTIC": "1",
             "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1", "TASK_SENTINEL": "kept"},
@@ -165,6 +184,26 @@ class SubgroupWitnessTests(unittest.TestCase):
             verify(log, receipt, dict(artifact,
                                      profile="t08-subgroup-broadcast-diagnostic-witness",
                                      operation="broadcast"))
+
+    def test_all_ballot_operations_exact_readback_contract(self):
+        digest = expected_digest("ballot")
+        log = (
+            b"T08_SUBGROUP_BALLOT_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.3 public=off\n"
+            + ("T08_SUBGROUP_BALLOT_RESULT outputs=128 mismatches=0 guards=0 "
+               f"digest={digest:08x} fence=complete\n").encode()
+            + b"T08_SUBGROUP_BALLOT_RETIRED resources=clean\n"
+        )
+        receipt = dict(self.receipt, sha256=hashlib.sha256(log).hexdigest())
+        artifact = dict(self.artifact,
+                        profile="t08-subgroup-ballot-diagnostic-witness",
+                        operation="ballot", build_profile=profile("ballot"))
+        self.assertEqual(verify(log, receipt, artifact)["digest"], f"{digest:08x}")
+        for bad in (log.replace(b"guards=0", b"guards=1"),
+                    log.replace(b"fence=complete", b"fence=timeout"),
+                    log.replace(f"digest={digest:08x}".encode(), b"digest=00000000"),
+                    log + b"T08_SUBGROUP_BALLOT_RETIRED resources=clean\n"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                verify(bad, dict(receipt, sha256=hashlib.sha256(bad).hexdigest()), artifact)
 
     def test_int8_iadd_wraparound_contract(self):
         digest = expected_digest("iadd_int8")

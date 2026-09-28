@@ -24,10 +24,10 @@ static int module_valid(const uint32_t *words, size_t count)
     }
     return 1;
 }
-/* The shipping Vulkan 1.0 profile reports no subgroup stages or operations.
- * Private compute-only builds admit only independently selected Broadcast and
- * IAdd diagnostics. Each operation needs its own SPIR-V capability; no public
- * subgroup operation or feature follows from either internal switch. */
+/* The shipping Vulkan 1.3 profile reports compute BASIC only. Private
+ * compute-only builds may admit BALLOT-family and IAdd diagnostics. Each
+ * operation needs its own SPIR-V capability; neither internal switch implies
+ * a public subgroup operation or Vulkan 1.2 feature. */
 static int subgroup_module_unsupported(const uint32_t *words, size_t count,
                                        uint32_t platform_features,
                                        uint32_t platform_features_t09)
@@ -40,7 +40,7 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
         !!(platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE);
     const int iadd_compute =
         !!(platform_features & PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE);
-    int basic = 0, ballot = 0, arithmetic = 0, broadcast = 0, iadd = 0;
+    int basic = 0, ballot = 0, arithmetic = 0, ballot_op = 0, iadd = 0;
     int compute_entry = 0;
     int other_entry = 0, subgroup = 0;
     for (size_t at = 5; at < count; at += words[at] >> 16) {
@@ -69,14 +69,14 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
             opcode == 5296u) {
             subgroup = 1;
             if (opcode == 333u && basic_compute) continue;
-            if (opcode == 337u && broadcast_compute) broadcast = 1;
+            if (opcode >= 337u && opcode <= 344u && broadcast_compute) ballot_op = 1;
             else if (opcode == 349u && iadd_compute) iadd = 1;
             else return 1;
         }
     }
     return subgroup && (!basic || !compute_entry || other_entry ||
-                        (!broadcast && !iadd && !(basic_compute && !ballot && !arithmetic)) ||
-                        (broadcast != ballot) ||
+                        (!ballot_op && !iadd && !(basic_compute && !ballot && !arithmetic)) ||
+                        (ballot_op != ballot) ||
                         (iadd != arithmetic));
 }
 static int declares_integer_dot(const uint32_t *words, size_t count)

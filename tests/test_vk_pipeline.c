@@ -374,6 +374,14 @@ static void diagnostic_compute_broadcast_gate(void)
     vkDestroyPipeline(&device, pipeline, NULL);
     vkDestroyShaderModule(&device, module, NULL);
 
+    /* The private compute gate admits the complete BALLOT opcode family;
+     * the public supportedOperations bit remains independent and off. */
+    for (uint32_t opcode = 337u; opcode <= 344u; ++opcode) {
+        words[20] = (5u << 16) | opcode;
+        assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+        vkDestroyShaderModule(&device, module, NULL);
+        module = VK_NULL_HANDLE;
+    }
     words[20] = (5u << 16) | 345u; /* Shuffle is outside the measured slice. */
     assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
            VK_ERROR_FEATURE_NOT_PRESENT && !module);

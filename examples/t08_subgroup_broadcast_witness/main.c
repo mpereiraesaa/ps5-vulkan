@@ -1,7 +1,14 @@
 #define _DEFAULT_SOURCE 1
 #include <ps5vk/ps5vk.h>
 #include "ps5log.h"
-#if defined(T08_SUBGROUP_IADD_INT8_WITNESS)
+#if defined(T08_SUBGROUP_BALLOT_WITNESS)
+#include "t08_subgroup_ballot_shader.h"
+#define WITNESS_SPIRV t08_subgroup_ballot_spirv
+#define WITNESS_START "T08_SUBGROUP_BALLOT_START"
+#define WITNESS_RESULT "T08_SUBGROUP_BALLOT_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_BALLOT_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_BALLOT_FAILURE"
+#elif defined(T08_SUBGROUP_IADD_INT8_WITNESS)
 #include "t08_subgroup_iadd_int8_shader.h"
 #define WITNESS_SPIRV t08_subgroup_iadd_int8_spirv
 #define WITNESS_START "T08_SUBGROUP_IADD_INT8_START"
@@ -256,6 +263,12 @@ static int witness(void)
         uint32_t expected = (32u * source_lanes[subgroup] + 496u) & 0xffu;
 #elif defined(T08_SUBGROUP_IADD_WITNESS)
         uint32_t expected = 32u * source_lanes[subgroup] + 496u;
+#elif defined(T08_SUBGROUP_BALLOT_WITNESS)
+        uint32_t lane = i % 32u;
+        uint32_t expected = ((lane & 1u) ? 0u : 3u) |
+            (16u << 2u) | (((lane + 2u) / 2u) << 7u) |
+            (((lane + 1u) / 2u) << 12u) | (1u << 17u) | (1u << 18u) |
+            (source_lanes[subgroup] << 24u);
 #else
         uint32_t expected = (subgroup / 2) * 1000u +
                             (subgroup % 2) * 100u + source_lanes[subgroup];

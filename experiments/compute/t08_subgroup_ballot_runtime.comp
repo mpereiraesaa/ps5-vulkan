@@ -1,0 +1,27 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_ballot : require
+layout(local_size_x=64) in;
+layout(set=0, binding=0, std430) buffer Words { uint words[]; } data;
+
+void main()
+{
+    uint global = gl_GlobalInvocationID.x;
+    uint lane = gl_SubgroupInvocationID;
+    uint subgroup = global / 32u;
+    uvec4 mask = subgroupBallot((lane & 1u) == 0u);
+    bool inverse = subgroupInverseBallot(mask);
+    bool extracted = subgroupBallotBitExtract(mask, lane);
+    uint count = subgroupBallotBitCount(mask);
+    uint inclusive = subgroupBallotInclusiveBitCount(mask);
+    uint exclusive = subgroupBallotExclusiveBitCount(mask);
+    uint first = subgroupBroadcastFirst(lane);
+    uint source = data.words[subgroup];
+    uint selected = subgroupBroadcast(lane, source);
+    uint result = (inverse ? 1u : 0u) | (extracted ? 2u : 0u) |
+        (count << 2u) | (inclusive << 7u) | (exclusive << 12u) |
+        ((subgroupBallotFindLSB(mask) == 0u ? 1u : 0u) << 17u) |
+        ((subgroupBallotFindMSB(mask) == 30u ? 1u : 0u) << 18u) |
+        (first << 19u) | (selected << 24u);
+    data.words[16u + global] = result;
+}

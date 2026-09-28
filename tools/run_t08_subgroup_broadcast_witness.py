@@ -18,7 +18,7 @@ SOURCE_LANES = [7, 19, 31, 1]
 
 
 def expected_digest(operation: str = "broadcast") -> int:
-    if operation not in ("broadcast", "iadd", "iadd_int8"):
+    if operation not in ("broadcast", "ballot", "iadd", "iadd_int8"):
         raise ValueError("unknown subgroup operation")
     digest = 2166136261
     for index in range(128):
@@ -27,6 +27,11 @@ def expected_digest(operation: str = "broadcast") -> int:
             value = 32 * SOURCE_LANES[subgroup] + 496
         elif operation == "iadd_int8":
             value = (32 * SOURCE_LANES[subgroup] + 496) & 0xff
+        elif operation == "ballot":
+            lane = index % 32
+            value = (0 if lane & 1 else 3) | (16 << 2) | (((lane + 2) // 2) << 7) | (
+                ((lane + 1) // 2) << 12) | (1 << 17) | (1 << 18) | (
+                SOURCE_LANES[subgroup] << 24)
         else:
             value = ((subgroup // 2) * 1000 + (subgroup % 2) * 100 +
                      SOURCE_LANES[subgroup])
@@ -37,10 +42,10 @@ def expected_digest(operation: str = "broadcast") -> int:
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     operation = artifact.get("operation")
     expected_profile = tessellation_build_profile({
-        "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation == "broadcast" else "0",
+        "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation in ("broadcast", "ballot") else "0",
         "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in ("iadd", "iadd_int8") else "0",
         "PS5VK_SHADER_INT8_DIAGNOSTIC": "1" if operation == "iadd_int8" else "0"})
-    if (operation not in ("broadcast", "iadd", "iadd_int8") or
+    if (operation not in ("broadcast", "ballot", "iadd", "iadd_int8") or
             artifact.get("profile") !=
             f"t08-subgroup-{operation}-diagnostic-witness" or
             artifact.get("outputs") != 128 or
@@ -62,6 +67,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
         raise ValueError("incomplete or corrupt witness receipt")
     text = log.decode("utf-8", errors="replace")
     mark = {"broadcast": "T08_SUBGROUP",
+            "ballot": "T08_SUBGROUP_BALLOT",
             "iadd": "T08_SUBGROUP_IADD",
             "iadd_int8": "T08_SUBGROUP_IADD_INT8"}[operation]
     starts = re.findall(mark + r"_START subgroups=(\d+) outputs=(\d+) "
@@ -98,7 +104,7 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--operation", choices=("broadcast", "iadd", "iadd_int8"),
+    parser.add_argument("--operation", choices=("broadcast", "ballot", "iadd", "iadd_int8"),
                         default="broadcast")
     parser.add_argument("--host", required=True)
     parser.add_argument("--runs-dir", type=Path, required=True)
