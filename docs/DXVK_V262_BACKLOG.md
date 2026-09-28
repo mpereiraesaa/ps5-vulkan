@@ -467,7 +467,10 @@ recorded all four transitions but refused transfer-destination to shader-read
 at the native upload prelude, so the first-frame pixel oracle failed and no
 frame passed. A host regression reproduces the prelude refusal; recorder and
 prelude now share one bounded barrier predicate. Hardware confirmation remains
-pending.
+pending. The sixth clean artifact confirmed those barriers reached the native
+readback postlude, where the sampled backbuffer's shader-read handover was
+refused before the first frame could pass. A host regression now covers that
+postlude route using the same bounded predicate; hardware retest is pending.
 
 With the pinned DXVK checkout and its SDL2 native Meson build available:
 

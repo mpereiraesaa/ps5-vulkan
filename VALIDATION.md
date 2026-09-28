@@ -150,8 +150,22 @@ presentation frame or pixel oracle passed.
   `6f578f34f14b24b79abdb558b4b9a89ca430ffa3fde224f4e6c5213a87f33c2a`.
 
 A host regression now reproduces all four measured barriers at the native
-upload prelude, which shares a bounded predicate with the recorder. Hardware
-validation of that source slice is pending.
+upload prelude, which shares a bounded predicate with the recorder. The sixth
+clean artifact, ps5vk `f961e749`, confirmed the upload prelude accepted them.
+The next refusal occurred in the general readback postlude planner (`site=42`),
+which had no shader-read handover shape for the sampled backbuffer. The backend
+reported `VK_ERROR_DEVICE_LOST`, first-frame readback had 4,096/4,096
+mismatches, and shutdown raised signal 6. The log places the refusal in
+software preparation before submission; physical GPU hang is not established.
+The wrapper restored the previous payload and the console was idle afterward.
+
+- Sixth candidate eboot SHA-256: `44a2cecd7e98c2fa0f4ac3fb3e861612c5070dd0479741907c28a082cecbf3e8`.
+- Run: `20260928T184233607Z_PPSA99994_ps5vk_0x407a89638442`; log SHA-256:
+  `5a347b18561ae40b3660b00ebcdfb9d4edcc5335d5cab66b1048edf0d102d67b`.
+
+A host regression reproduces the postlude's sampled-backbuffer handover and
+handback. The planner now uses the same bounded predicate as the recorder and
+upload prelude; hardware confirmation is pending.
 
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 

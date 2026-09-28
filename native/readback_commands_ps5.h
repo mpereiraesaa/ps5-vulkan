@@ -576,8 +576,10 @@ static inline VkResult ps5vk_readback_regions_commands(VkDevice d,
                 b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             const int handback = b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
                 (b->newLayout == home || b->newLayout == VK_IMAGE_LAYOUT_GENERAL);
+            const int sampled = ps5vk_dxvk_tiled_backbuffer_barrier(b,
+                op->src_stage, op->dst_stage);
             if (!ps5vk_readback_region_image(b->image) || b->image->device != d ||
-                (!handover && !handback) ||
+                (!handover && !handback && !sampled) ||
                 ps5vk_layout_transition(&updated, b->image, b->oldLayout, b->newLayout) != VK_SUCCESS)
                 REGIONS_REFUSE(42);
             continue;

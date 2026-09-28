@@ -1970,6 +1970,20 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 ps5log_printf(PS5LOG_INFO,
                     "PS5VK_GRAPHICS_READBACK_REGIONS_REFUSED serial=%llu site=%u operations=%u",
                     (unsigned long long)j->serial,regions_site,postlude_count);
+                for(unsigned k=0;k<postlude_count;++k) {
+                    const struct ps5vk_operation *op=&postlude[k];
+                    if(op->type!=PS5VK_IMAGE_BARRIER)continue;
+                    VkImage image=op->image_barrier.image;
+                    ps5log_printf(PS5LOG_INFO,
+                        "PS5VK_GRAPHICS_READBACK_POSTLUDE_OP index=%u image=%p layout=%u/%u stages=%08x/%08x access=%08x/%08x format=%u usage=%08x",
+                        k,(void *)image,(unsigned)op->image_barrier.oldLayout,
+                        (unsigned)op->image_barrier.newLayout,
+                        (unsigned)op->src_stage,(unsigned)op->dst_stage,
+                        (unsigned)op->image_barrier.srcAccessMask,
+                        (unsigned)op->image_barrier.dstAccessMask,
+                        image?(unsigned)image->info.format:0u,
+                        image?(unsigned)image->info.usage:0u);
+                }
                 draw_site=40;goto fail;
             }
             j->readback.count=regions.count;
