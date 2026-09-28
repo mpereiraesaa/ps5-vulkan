@@ -1,14 +1,38 @@
 # DXVK v2.6.2 runtime backlog
 
-The objective is to build and run our pinned DXVK v2.6.2 D3D11/DXGI stack on
-PS5 through ps5vk, create a feature-level 11_0 device, render and read back a
-representative workload, and close and relaunch cleanly. Work follows the next
-observed refusal in that path. A tranche number, profile score, Vulkan version
+The end goal is to run D3D8, D3D9, D3D10 and D3D11 applications in Prospero Win
+through pinned DXVK v2.6.2 and ps5vk. The current native D3D11/DXGI executable
+is a checkpoint toward that goal: it creates a feature-level 11_0 device,
+renders and reads back a representative offscreen workload, and closes cleanly.
+Work follows the next observed refusal in each real application path. A tranche
+number, profile score, Vulkan version
 label or missing CTS leaf is **not** permission to stop implementing a needed
 dependency. The 15-tranche assignment in
 `conformance_inventory/dxvk_v262_backlog.json` remains an inventory of the
 original 61 blockers, not a serial work schedule or the acceptance test for
 DXVK execution.
+
+## End-to-end frontend acceptance
+
+The frontend milestone requires the matching DXVK 2.6.2 PE modules to load in
+Prospero Win, reach ps5vk through its Vulkan bridge, render a deterministic
+frame, present it, and close and relaunch without leaked ownership. Use an
+application or focused consumer for each API, and retain the exact DLL,
+Prospero Win, ps5vk and native payload identities with the result.
+
+| Application API | DXVK modules in its path | Current evidence | Next executable proof |
+| --- | --- | --- | --- |
+| D3D8 | `d3d8.dll`, `d3d9.dll` | No Prospero Win DXVK run | Load both modules and render/present a D3D8 frame |
+| D3D9 | `d3d9.dll` | No Prospero Win DXVK run | Load the module and render/present a D3D9 frame |
+| D3D10 | `d3d10core.dll`, `d3d11.dll`, `dxgi.dll` | No Prospero Win DXVK run | Resolve the D3D10 module path and render/present a D3D10 frame |
+| D3D11 | `d3d11.dll`, `dxgi.dll` | Static native offscreen render only | Load PE modules in Prospero Win and render/present a D3D11 frame |
+
+The module lists identify DXVK's side of each path; Prospero Win also needs a
+working PE loader/import path and Vulkan bridge for the selected architecture.
+Neither a static eboot link nor a host presentation run proves that contract.
+The matrix below tracks Vulkan feature evidence, not PE loading or per-API game
+compatibility. Focused CTS is useful when it diagnoses a real dependency; full
+CTS acceptance and 62/62 are not frontend release gates.
 
 ## Current integration target (2026-09-26)
 

@@ -55,6 +55,10 @@ Host CI alone does not establish hardware correctness.
 
 ## Current runtime milestone
 
+The target is DXVK 2.6.2 D3D8, D3D9, D3D10 and D3D11 applications running in
+Prospero Win on ps5vk. Each API still needs a PE-DLL load, rendered and
+presented frame, and clean relaunch in that environment.
+
 The Vulkan 1.3 route exposes promoted feature queries and commands directly,
 including synchronization2, dynamic rendering and maintenance4. The pinned
 DXVK 2.6.2 D3D11/DXGI workload no longer needs the old version-filter bypass,
