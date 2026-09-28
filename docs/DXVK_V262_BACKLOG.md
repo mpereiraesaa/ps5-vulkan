@@ -22,6 +22,15 @@ belongs to the [artifact-bound native receipt](../VALIDATION.md#experimental-vul
 not to an assumption based on the version label. This does not claim universal
 game support, a presented DXVK frame, or Vulkan conformance.
 
+The current backbuffer candidate covers bounded tiled colour handovers,
+BGRA8 readback and display release. Its SDK BGRA8 GPU oracle, pinned native
+DXVK D3D11 offscreen oracle and three-frame public-SDK WSI control passed on
+the same source; their artifact-bound receipts are in
+[VALIDATION.md](../VALIDATION.md#dxvk-backbuffer-and-bgra8-runtime-path-2026-09-29).
+An x64/x86 Prospero Win PE presentation run and an x86 guest `vkMapMemory`
+call remain the integration tests for this path. These execution changes do
+not alter the 45/62 requirement ledger.
+
 ## Profile ledger on the Vulkan 1.3 probe
 
 `tools/check_dxvk_profile.py --check` reports **45/62 ready, 17 blockers**.

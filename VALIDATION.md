@@ -53,6 +53,43 @@ The previous payload was restored and the console released. A 32-bit
 Prospero Win PE still needs its own `vkMapMemory` test: this run does not
 establish low-address availability inside the Wine process.
 
+## DXVK backbuffer and BGRA8 runtime path (2026-09-29)
+
+The main-based candidate at `832a936c` adds the bounded tiled-colour
+render-to-sample and transfer handovers at recording, native upload and
+readback planning; BGRA8 colour targets, constant-one-alpha sampled views,
+readback and display release use the same candidate. `make check` passed and
+the DXVK requirement ledger remains **45/62 ready with 17 blockers**. The
+format-reporting matrix and its documented counts were refreshed separately
+from the DXVK requirement score.
+
+The ordinary public-SDK BGRA8 witness on SDK archive SHA-256
+`5592cc0ee2a1754783391926cf838c340b414926ec094b0a383d1ae064ab4836`
+passed its strict three-draw GPU readback oracle, including UNORM/SRGB view
+differences, and retired its resources cleanly. Eboot SHA-256
+`2ae85f8181254fc7ed2c5a83aaa0581dd1acfedfd12460fb5aad3eb667f2f2df`,
+run `20260928T234649921Z_PPSA99994_ps5vk_0x51151b241c0c`, log SHA-256
+`e28ea9cf87bcb87c0f9757b6c71b4ee76e68e1050afae16a940d5ab7d3467070`.
+
+Pinned DXVK 2.6.2, with its D3D11 code and feature-level checks intact,
+then passed the strict native Vulkan 1.3 offscreen oracle on the same source:
+4096/4096 pixels matched, checksum `6e17a4c5`, with no driver refusal,
+suspected GPU hang or dirty shutdown. Eboot SHA-256
+`5744d4c2741b26589846466acbcc83f13c29c68a25be89e8eeb93bb1bfdf9612`,
+run `20260928T234813652Z_PPSA99994_ps5vk_0x512899cc7be9`, log SHA-256
+`96210ff13712164deab3dcb42b479b72263fefa0ec99ae4978c2838a40a06cc7`.
+The separate public-SDK WSI control presented three ordered frames with image
+reuse `[0, 1, 0]` and strict lifecycle verification: eboot SHA-256
+`2f945cfe35d8596b8c6b8b9c9a886f6a0a536d9021f79d7931364b326c5e4114`,
+run `20260928T235014824Z_PPSA99994_ps5vk_0x5144d01e128a`, log SHA-256
+`b41e0af34908b96472699008c71aa407d4e3617c0ea548e904c0d45a9d0e1929`.
+Each test restored the previous payload and released the console.
+
+These controls verify their exact native workloads, not the full PE DXVK
+backbuffer path in Prospero Win. That path still needs a same-build x64/x86
+PE presentation run with an independent framebuffer oracle; x86 also needs
+an actual guest `vkMapMemory` call.
+
 ## Experimental Vulkan 1.3 native DXVK
 
 On 2026-09-26, pinned DXVK 2.6.2 (`9d6f54a1ade20d1d27dd421024717a636f3d8c68`)
