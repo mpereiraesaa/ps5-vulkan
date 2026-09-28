@@ -109,8 +109,20 @@ original project payload was restored.
 
 The next source slice records that exact render-to-sample dependency and
 encodes the single-layer tiled colour resource for sampling, with host
-barrier and descriptor tests. Native presentation still needs a fresh run
-against this slice.
+barrier and descriptor tests. A third clean artifact from `f717681f` confirmed
+that the render-to-sample barrier passed. The next refusal was the same
+backbuffer's shader-read to transfer-source transition while DXVK mapped its
+staging readback; `vkEndCommandBuffer` returned `VK_ERROR_UNKNOWN`. No frame or
+pixel oracle passed; lifecycle remained clean and the previous payload was
+restored.
+
+- Third candidate eboot SHA-256: `01d54afa7c1094c6f5f822ddb73b0ae864cfb48c79ceb2da5067ef1a7c7ac750`.
+- Run: `20260928T180117531Z_PPSA99994_ps5vk_0x3e3a09ab7d41`; log SHA-256:
+  `5007bd4f8ac1a2a965fc4f09060f9239b511250f9a26908f6df06f1c23bd5cdc`.
+
+The host recorder now accepts that measured transition and logs image role,
+layout and access details at any subsequent barrier refusal. It has not yet
+been rerun on hardware.
 
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 

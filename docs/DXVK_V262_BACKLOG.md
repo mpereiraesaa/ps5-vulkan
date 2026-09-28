@@ -457,8 +457,10 @@ bounded sampler form, with a host contract. A second hardware artifact passed
 swapchain creation, draw and copy, then refused DXVK's colour-attachment to
 shader-read barrier while mapping the readback. The source now records the
 measured barrier and provides a tiled 2D sampled-colour descriptor with host
-tests; hardware presentation and the pixel oracle remain to be retested on
-that newer artifact.
+tests. The third native artifact passed the render-to-sample handover and
+refused the following shader-read to transfer-source transition. That exact
+barrier has a host recorder test and is accepted by the next source slice;
+hardware presentation and the pixel oracle remain to be retested.
 
 With the pinned DXVK checkout and its SDL2 native Meson build available:
 
