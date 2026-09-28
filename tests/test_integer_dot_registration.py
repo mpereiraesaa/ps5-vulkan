@@ -12,6 +12,7 @@ import unittest
 
 from tools.check_upstream_selection import _integer_dot_32_leaf_factories
 from tools.check_dxvk_profile import implemented_device_extensions
+from tools.make_measurement_manifest import build_measurement_manifest, selection_hash
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = "vktSpvAsmIntegerDotProductTests"
@@ -51,6 +52,24 @@ class IntegerDotSourceSelection(unittest.TestCase):
         for leaf in ("opsdotkhr.all_ss_v5i32_out32", "opsdotkhr.all_ss_v4i16_out32",
                      "opsdotkhr.all_packed_ss_v4i8_out8", "opudotkhr.limits_uu_v4i32_out32"):
             self.assertNotIn(prefix + leaf, found)
+
+    def test_frozen_diagnostics_derive_a_224_case_measurement(self):
+        found = _integer_dot_32_leaf_factories(SOURCE.read_text())
+        frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        pending = [d for d in frozen["diagnostics"]
+                   if d["category"] == "integer-dot-product-pending"]
+        self.assertEqual(set(found), {d["path"] for d in pending})
+        self.assertEqual(224, len(pending))
+        self.assertTrue(all(d["expected_status"] == "Pass" and
+                            set(d["features_required"]) ==
+                            {"VK_KHR_shader_integer_dot_product", "shaderIntegerDotProduct"}
+                            for d in pending))
+        derived = build_measurement_manifest(frozen, {"integer-dot-product-pending"})
+        self.assertEqual(224, derived["measurement"]["moved"])
+        self.assertEqual(1103, len(derived["cases"]))
+        self.assertEqual(frozen["cases"], derived["cases"][:879])
+        self.assertEqual(selection_hash(frozen["cases"]),
+                         derived["measurement"]["base_selection_hash"])
 
     def test_compute_only_window_and_registration_failures(self):
         source = SOURCE.read_text()

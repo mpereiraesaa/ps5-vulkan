@@ -90,7 +90,7 @@ class MeasurementManifestTests(unittest.TestCase):
         self.assertEqual(8, derived["measurement"]["moved"])
         self.assertEqual(887, len(derived["cases"]))
         self.assertEqual(frozen["cases"], derived["cases"][:879])
-        self.assertEqual(114, len(derived["diagnostics"]))
+        self.assertEqual(338, len(derived["diagnostics"]))
 
     def test_inline_uniform_measurement_selects_original_limit_oracles(self):
         frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
@@ -109,7 +109,7 @@ class MeasurementManifestTests(unittest.TestCase):
         self.assertEqual(42, derived["measurement"]["moved"])
         self.assertEqual(921, len(derived["cases"]))
         self.assertEqual(frozen["cases"], derived["cases"][:879])
-        self.assertEqual(80, len(derived["diagnostics"]))
+        self.assertEqual(304, len(derived["diagnostics"]))
         self.assertTrue(all(c["measurement_origin"] == "diagnostic:zero-initialize-workgroup-pending"
                             for c in derived["cases"][879:]))
 
@@ -122,7 +122,7 @@ class MeasurementManifestTests(unittest.TestCase):
                     if c["category"] == "t08-buffer-device-address-base"]
         self.assertEqual(expected, {c["path"] for c in selected})
         self.assertEqual(879, len(frozen["cases"]))
-        self.assertEqual(122, len(frozen["diagnostics"]))
+        self.assertEqual(346, len(frozen["diagnostics"]))
         self.assertEqual("31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28",
                          selection_hash(frozen["cases"]))
         self.assertFalse(expected & {d["path"] for d in frozen["diagnostics"]})
