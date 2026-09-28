@@ -2852,8 +2852,14 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:shaderSubgroupExtendedTypes",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "Vulkan 1.2 and KHR query/opt-in contracts are implemented but default off. Host compiler probes cover bounded subgroup type and operation variants, and the original CTS compute leaves are selected only as diagnostics. Not implemented yet: complete BALLOT and ARITHMETIC operations over every advertised type, then validate the platform feature and native CTS execution.",
+        "refs": [
+          "src/vk_core_version.c",
+          "src/vk_device.c",
+          "src/vk_pipeline.c",
+          "tests/test_t08_subgroup_contract.py",
+          "tests/test_vk_core_version.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -2894,8 +2900,14 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId",
       "implementation": {
-        "detail": "The public query reports False; no reviewed implementation of this requirement exists.",
-        "refs": [],
+        "detail": "Vulkan 1.2 query/opt-in and nonconstant-ID module admission contracts are implemented but default off. The original runtime-ID Broadcast CTS leaf is a diagnostic, not acceptance evidence. Not implemented yet: prove runtime-selected Broadcast ID on the GPU with complete BALLOT operation reporting and unchanged native CTS.",
+        "refs": [
+          "cts/upstream/manifest.json",
+          "src/vk_core_version.c",
+          "src/vk_internal.h",
+          "src/vk_pipeline.c",
+          "tests/test_vk_pipeline.c"
+        ],
         "state": "missing"
       },
       "kind": "feature",
@@ -3588,13 +3600,15 @@
       "expected": true,
       "id": "feature:VkPhysicalDeviceVulkan13Features:shaderZeroInitializeWorkgroupMemory",
       "implementation": {
-        "detail": "KHR and Vulkan 1.3 query/opt-in contracts exist behind an unreported platform capability. Module admission requires opt-in and a matching OpConstantNull initializer. The pinned host compiler emits zero stores and an additional workgroup barrier before application shared-memory access; a control shader without the initializer omits both. Compiler regression covers a 2048-byte shared array and checks allocation. Not implemented yet: SDK-linked delivery witness and native execution remain pending; the shipping platform does not advertise this capability.",
+        "detail": "KHR and Vulkan 1.3 query/opt-in contracts exist behind an unreported platform capability. Module admission requires opt-in and a matching OpConstantNull initializer. The pinned host compiler emits zero stores and an additional workgroup barrier before application shared-memory access; a control shader without the initializer omits both. Compiler regression covers a 2048-byte shared array and checks allocation. An SDK-linked delivery witness and strict host verifier are prepared. Not implemented yet: native execution remains pending; the shipping platform does not advertise this capability.",
         "refs": [
+          "examples/zero_initialize_witness/main.c",
           "src/vk_core_version.c",
           "src/vk_device.c",
           "src/vk_pipeline.c",
           "tests/test_runtime_compiler.c",
-          "tests/test_vk_core_version.c"
+          "tests/test_vk_core_version.c",
+          "tests/test_zero_initialize_witness.py"
         ],
         "state": "missing"
       },

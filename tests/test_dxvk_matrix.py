@@ -23,6 +23,19 @@ matrix = load_tool("check_dxvk_profile")
 
 
 class DxvkMatrixTests(unittest.TestCase):
+    def test_offline_subgroup_and_zero_initialize_work_remains_blocked(self):
+        rows = {row["name"]: row for row in matrix.generate()["requirements"]}
+        for name, evidence in (
+                ("shaderSubgroupExtendedTypes", "original CTS compute leaves"),
+                ("subgroupBroadcastDynamicId", "runtime-ID Broadcast CTS"),
+                ("shaderZeroInitializeWorkgroupMemory", "SDK-linked delivery witness")):
+            with self.subTest(name=name):
+                row = rows[name]
+                self.assertEqual("blocker", row["verdict"])
+                self.assertEqual("missing", row["implementation"]["state"])
+                self.assertIn(evidence, row["implementation"]["detail"])
+                self.assertNotEqual("native-evidence", row["native"]["state"])
+
     def test_integer_dot_api_is_not_shipping_without_platform_bit(self):
         extension = "VK_KHR_shader_integer_dot_product"
         self.assertNotIn(extension, matrix.implemented_device_extensions())

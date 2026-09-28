@@ -147,6 +147,34 @@ DIAGNOSTIC_IMPLEMENTATIONS = {
 # `gaps` names required semantics the driver does not implement yet; a row with
 # a gap stays missing however its query reads.
 CORE_IMPLEMENTATIONS = {
+    "feature:VkPhysicalDeviceVulkan12Features:shaderSubgroupExtendedTypes": {
+        "citations": (
+            ("src/vk_core_version.c", "out->shaderSubgroupExtendedTypes ="),
+            ("src/vk_device.c", "saw_subgroup_extended_types = VK_TRUE"),
+            ("src/vk_pipeline.c", "ps5vk_subgroup_public_bits("),
+            ("tests/test_vk_core_version.c", "core.shaderSubgroupExtendedTypes"),
+            ("tests/test_t08_subgroup_contract.py", "test_full_subgroup_occupancy_shader_compiles_with_basic_only"),
+        ),
+        "detail": ("Vulkan 1.2 and KHR query/opt-in contracts are implemented but default off. "
+                   "Host compiler probes cover bounded subgroup type and operation variants, "
+                   "and the original CTS compute leaves are selected only as diagnostics."),
+        "gaps": ("complete BALLOT and ARITHMETIC operations over every advertised type, "
+                 "then validate the platform feature and native CTS execution",),
+    },
+    "feature:VkPhysicalDeviceVulkan12Features:subgroupBroadcastDynamicId": {
+        "citations": (
+            ("src/vk_core_version.c", "out->subgroupBroadcastDynamicId ="),
+            ("src/vk_internal.h", "PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID"),
+            ("src/vk_pipeline.c", "d->enabled_features_v13 & PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID"),
+            ("tests/test_vk_pipeline.c", "subgroup_dynamic_id_gate"),
+            ("cts/upstream/manifest.json", "subgroupbroadcast_nonconst_uint"),
+        ),
+        "detail": ("Vulkan 1.2 query/opt-in and nonconstant-ID module admission contracts "
+                   "are implemented but default off. The original runtime-ID Broadcast CTS "
+                   "leaf is a diagnostic, not acceptance evidence."),
+        "gaps": ("prove runtime-selected Broadcast ID on the GPU with complete BALLOT "
+                 "operation reporting and unchanged native CTS",),
+    },
     "feature:VkPhysicalDeviceVulkan13Features:pipelineCreationCacheControl": {
         "citations": (
             ("src/vk_device.c", "PS5VK_T09_FEATURE_PIPELINE_CREATION_CACHE_CONTROL"),
@@ -207,15 +235,18 @@ CORE_IMPLEMENTATIONS = {
             ("src/vk_pipeline.c", "static VkResult workgroup_initializers"),
             ("tests/test_vk_core_version.c", "zero_initialize_negotiation"),
             ("tests/test_runtime_compiler.c", "zero_initialize_workgroup"),
+            ("examples/zero_initialize_witness/main.c", "zero_initialize_compute_witness"),
+            ("tests/test_zero_initialize_witness.py", "zero_initialize_check"),
         ),
         "detail": ("KHR and Vulkan 1.3 query/opt-in contracts exist behind an unreported "
                    "platform capability. Module admission requires opt-in and a matching "
                    "OpConstantNull initializer. The pinned host compiler emits zero stores "
                    "and an additional workgroup barrier before application shared-memory "
                    "access; a control shader without the initializer omits both. "
-                   "Compiler regression covers a 2048-byte shared array and checks allocation."),
-        "gaps": ("SDK-linked delivery witness and native execution remain pending; "
-                 "the shipping platform does not advertise this capability",),
+                   "Compiler regression covers a 2048-byte shared array and checks allocation. "
+                   "An SDK-linked delivery witness and strict host verifier are prepared."),
+        "gaps": ("native execution remains pending; the shipping platform does not "
+                 "advertise this capability",),
     },
     "feature:VkPhysicalDeviceVulkan13Features:maintenance4": {
         "citations": (
