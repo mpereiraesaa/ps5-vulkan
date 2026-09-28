@@ -104,6 +104,7 @@ static int front_facing_clockwise(uint32_t first, float vx, float vy, float vw, 
 /* The expected image: the clear, the gradient quad, and each marker quad the
  * back-face cull keeps, placed by the flipped viewport's row mapping. */
 static void expected_image(uint32_t *image, float vx, float vy, float vw, float vh,
+    VkBool32 cull_back,
     uint32_t *visible_marker, uint32_t *marker_top)
 {
     for (uint32_t y = 0; y < EXTENT; ++y)
@@ -113,7 +114,7 @@ static void expected_image(uint32_t *image, float vx, float vy, float vw, float 
     *visible_marker = 0; *marker_top = UINT32_MAX;
     for (uint32_t q = 1; q <= 2; ++q) {
         /* Both triangles of a quad share its winding. */
-        if (!front_facing_clockwise(q * 6u, vx, vy, vw, vh)) continue;
+        if (cull_back && !front_facing_clockwise(q * 6u, vx, vy, vw, vh)) continue;
         float y0n = q == 1u ? -1.0f : 0.0f, y1n = q == 1u ? 0.0f : 1.0f;
         float y0 = vy + vh * 0.5f + vh * 0.5f * y0n, y1 = vy + vh * 0.5f + vh * 0.5f * y1n;
         const uint32_t top = (uint32_t)(y0 < y1 ? y0 : y1), bottom = (uint32_t)(y0 < y1 ? y1 : y0);
@@ -582,7 +583,15 @@ static int run_witness(void)
 #ifdef PS5VK_CACHE_CONTROL_WITNESS
     vkCmdEndQuery(command, queries, 0);
 #endif
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+    /* The tessellator supplies the triangles' domain winding. Both marker
+     * patches are observed with the same facing, so this variant tests its
+     * stage descriptors with culling disabled; the ordinary witness retains
+     * the DXVK dynamic-cull oracle. */
+    set_cull(command, VK_CULL_MODE_NONE);
+#else
     set_cull(command, VK_CULL_MODE_BACK_BIT);
+#endif
     vkCmdDraw(command, 6, 1, 6, 0);
     vkCmdDraw(command, 6, 1, 12, 0);
 #ifdef PS5VK_CACHE_CONTROL_WITNESS
@@ -658,6 +667,11 @@ static int run_witness(void)
     TRY(vkInvalidateMappedMemoryRanges(device, 1, &range));
 
     expected_image(expected, viewport.x, viewport.y, viewport.width, viewport.height,
+#if PS5VK_INLINE_GRAPHICS_STAGE == 2 || PS5VK_INLINE_GRAPHICS_STAGE == 4
+        VK_FALSE,
+#else
+        VK_TRUE,
+#endif
         &visible, &marker_top);
     full_mismatches = sub_mismatches = sentinel_mismatches = 0;
     for (uint32_t y = 0; y < EXTENT; ++y)

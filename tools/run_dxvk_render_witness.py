@@ -65,13 +65,13 @@ def front_facing_clockwise(first: int, viewport=VIEWPORT) -> bool:
     return area < 0.0
 
 
-def expected_image(viewport=VIEWPORT) -> tuple[list[int], int, int]:
+def expected_image(viewport=VIEWPORT, *, tessellation=False) -> tuple[list[int], int, int]:
     image = [rgba(4 * x, 4 * y, 64, 255) if x < 48 else rgba(255, 0, 0, 255)
              for y in range(EXTENT) for x in range(EXTENT)]
     visible, top_row = 0, None
     vx, vy, vw, vh = viewport
     for q, color in ((1, rgba(0, 255, 0, 255)), (2, rgba(0, 0, 255, 255))):
-        if not front_facing_clockwise(q * 6, viewport):
+        if not tessellation and not front_facing_clockwise(q * 6, viewport):
             continue
         y0n, y1n = (-1.0, 0.0) if q == 1 else (0.0, 1.0)
         rows = sorted((vy + vh / 2 + vh / 2 * y0n, vy + vh / 2 + vh / 2 * y1n))
@@ -83,8 +83,8 @@ def expected_image(viewport=VIEWPORT) -> tuple[list[int], int, int]:
     return image, visible, top_row if top_row is not None else 0xffffffff
 
 
-def expected_digest() -> str:
-    image, _, _ = expected_image()
+def expected_digest(*, tessellation=False) -> str:
+    image, _, _ = expected_image(tessellation=tessellation)
     return f"{fnv(b''.join(v.to_bytes(4, 'little') for v in image)):08x}"
 
 
@@ -140,12 +140,13 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
                         r"visible_markers=([0-9a-f]+) marker_top=(\d+) digest=([0-9a-f]{8}) "
                         r"submissions=(\d+) fence=(\w+)", text)
     retired = re.findall(r"DXVK_RENDER_WITNESS_RETIRED resources=(\w+)", text)
-    image, visible, top_row = expected_image()
+    tessellation = inline_variant and artifact["inline_graphics_stage"] in ("tess_control", "tess_evaluation")
+    image, visible, top_row = expected_image(tessellation=tessellation)
     if (len(start) != 1 or len(result) != 1 or len(samples) != 1 or len(retired) != 1 or
             start[0] != (str(EXTENT), "1", "1") or steps != ["0"] or
             [int(s, 16) for s in samples[0]] != [image[y * EXTENT + x] for x, y in SAMPLE_POINTS] or
             result[0] != (str(EXTENT), "0", "0", "0", f"{visible:x}", str(top_row),
-                          expected_digest(), "1", "complete") or
+                          expected_digest(tessellation=tessellation), "1", "complete") or
             retired[0] != "clean" or
             text.index("DXVK_RENDER_WITNESS_START") >= text.index("DXVK_RENDER_WITNESS_RESULT") or
             text.index("DXVK_RENDER_WITNESS_RESULT") >= text.index("DXVK_RENDER_WITNESS_RETIRED") or

@@ -16,8 +16,8 @@ ARTIFACT = dict(profile="dxvk-render-public-sdk-witness", extent=64, format="R8G
 
 
 def fixture_log(*, features=(1, 1), mismatches=(0, 0, 0), visible=None, top=None,
-                digest=None, samples=None, retired=True, failure=False):
-    image, expected_visible, expected_top = expected_image()
+                digest=None, samples=None, retired=True, failure=False, tessellation=False):
+    image, expected_visible, expected_top = expected_image(tessellation=tessellation)
     samples = samples or [image[y * EXTENT + x] for x, y in SAMPLE_POINTS]
     lines = ["DXVK_RENDER_WITNESS_START extent=64 dynamicRendering=%d extendedDynamicState=%d"
              % features,
@@ -29,7 +29,7 @@ def fixture_log(*, features=(1, 1), mismatches=(0, 0, 0), visible=None, top=None
              "submissions=1 fence=complete" % (
                  *mismatches, expected_visible if visible is None else visible,
                  expected_top if top is None else top,
-                 expected_digest() if digest is None else digest)]
+                 expected_digest(tessellation=tessellation) if digest is None else digest)]
     if failure:
         lines.append("DXVK_RENDER_WITNESS_FAILURE result=-3 step=vkQueueSubmit")
     if retired:
@@ -61,6 +61,13 @@ class ExpectedImage(unittest.TestCase):
         image, _, _ = expected_image()
         self.assertEqual(image[5 * EXTENT + 7], rgba(28, 20, 64, 255))
         self.assertEqual(image[63 * EXTENT + 47], rgba(188, 252, 64, 255))
+
+    def test_tessellation_oracle_keeps_both_markers_without_culling(self):
+        image, visible, top = expected_image(tessellation=True)
+        self.assertEqual((visible, top), (6, 0))
+        self.assertEqual(image[0 * EXTENT + 48], rgba(0, 0, 255, 255))
+        self.assertEqual(image[63 * EXTENT + 63], rgba(0, 255, 0, 255))
+        self.assertNotEqual(expected_digest(tessellation=True), expected_digest())
 
 
 class Verify(unittest.TestCase):
@@ -191,8 +198,8 @@ class InlineVerify(unittest.TestCase):
     graphics = "DXVK_INLINE_WITNESS_GRAPHICS stage=small blocks=2 bytes=24\n"
     split = boundary.replace("WITNESS_BOUNDARY blocks=4", "WITNESS_SPLIT sets=4 blocks=4")
 
-    def log(self, compute=None):
-        return fixture_log().replace(b"DXVK_RENDER_WITNESS_STEP",
+    def log(self, compute=None, tessellation=False):
+        return fixture_log(tessellation=tessellation).replace(b"DXVK_RENDER_WITNESS_STEP",
             ((self.compute if compute is None else compute) + self.boundary + self.split + self.graphics).encode() + b"DXVK_RENDER_WITNESS_STEP")
 
     def test_exact_inline_result(self):
@@ -243,9 +250,14 @@ class InlineVerify(unittest.TestCase):
     def test_graphics_boundary_stage_and_capacity(self):
         for stage in ("vertex", "fragment", "geometry", "tess_control", "tess_evaluation"):
             marker=f"DXVK_INLINE_WITNESS_GRAPHICS stage={stage} blocks=4 bytes=1024\n"
-            log=self.log().replace(self.graphics.encode(),marker.encode())
+            is_tess = stage in ("tess_control", "tess_evaluation")
+            log=self.log(tessellation=is_tess).replace(self.graphics.encode(),marker.encode())
             artifact=dict(self.artifact,inline_graphics_stage=stage)
             self.assertTrue(verify(log,receipt(log),artifact)["strict_verified"])
+            if is_tess:
+                wrong_oracle = self.log().replace(self.graphics.encode(), marker.encode())
+                with self.assertRaises(ValueError):
+                    verify(wrong_oracle, receipt(wrong_oracle), artifact)
             for bad in ("",marker*2,marker.replace("blocks=4","blocks=2"),
                         marker.replace("bytes=1024","bytes=24"),
                         marker.replace(stage,"fragment" if stage=="vertex" else "vertex")):
