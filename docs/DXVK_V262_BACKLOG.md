@@ -147,6 +147,44 @@ These are cross-link witnesses, not PE DLLs, deployable payloads or a console
 run. The next runtime proof still needs each frontend through Prospero Win's
 PE and Vulkan bridge, followed by a presented frame on PS5.
 
+### PS5 WSI variant of the DXVK PE DLLs (2026-09-28)
+
+The unmodified Windows DXVK build asks for `VK_KHR_win32_surface` and resolves
+`vkCreateWin32SurfaceKHR`. ps5vk's measured presentation route instead uses
+`VK_KHR_display` and `vkCreateDisplayPlaneSurfaceKHR`. The reproducible
+`tools/build_dxvk_ps5_pe.py` build starts from the pinned DXVK commit in an
+ignored local clone, adds this repository's PS5 WSI adapter to DXVK's WSI
+source list, selects that adapter instead of Win32 WSI, and makes it the
+Windows build's default. The original pinned checkout stays unchanged. These
+DLLs are therefore **DXVK 2.6.2 with a PS5 WSI overlay**, not unmodified DXVK.
+
+All five DLLs built for both PE32+ x64 and PE32 x86. The builder checks the
+binary format and each frontend's exported entrypoint; DXGI and D3D9 contain
+the `Ps5WSI` bootstrap and no `Win32WSI` bootstrap symbol. The ignored
+`build/dxvk-pe-ps5-wsi/receipt.json` binds the base commit, submodule pins,
+overlay hashes and output hashes. Its module SHA-256 values are:
+
+| DLL | x64 | x86 |
+| --- | --- | --- |
+| `dxgi.dll` | `18c3da23192db68fbdb0fc24bd13444bb1e39430ced1a2bbffb75c988ec01e9e` | `964bf6ed1413dc7756d5aa08606cf0759e85ca216807dee2144f653e7e9a74de` |
+| `d3d11.dll` | `5416488d0f4edc4a267747579ba23ca5fcd33aa532ab154f2b6162a17fa6653b` | `2fb66f7f14b5999557207bd127e47c71f82539b73309be01c11057bb46ace0ca` |
+| `d3d10core.dll` | `5d62ef4ab23f1b0009a7c22c5fc891d30ccbef146277cc7daaad0ff72d858c79` | `fe78abb6d4b8073544436c3a056fae4bde1051ccdabf329ae1b46cc67fcf5524` |
+| `d3d9.dll` | `32851711f54c66aa971179a574b020ffd27cb2f883dd85fd593a8a2a84b89326` | `f042cd22ffac7460f83725c7ce7087d0447c1bda82c57d65b6ff8ad477b33864` |
+| `d3d8.dll` | `0f8b59d91878b3e4bcbf30d02f13a00f5ee85b6a0ce85583d8dd4268c7ecc04f` | `61b9d35f7411961269d30fa32386e4660ed197404936e8f4893475cef39851d5` |
+
+With `DXVK_DIR` pointing to the clean pinned source and Meson available on
+`PATH`, rebuild both architectures offline:
+
+```sh
+python3 tools/build_dxvk_ps5_pe.py --dxvk-dir "$DXVK_DIR" --arch both --jobs 8
+```
+
+This removes the Win32 surface request from the selected DXVK WSI path. It
+does **not** make the DLLs executable in Prospero Win by itself: DXVK still
+loads `winevulkan.dll` or `vulkan-1.dll` and needs a working Vulkan entrypoint
+bridge to ps5vk, Wine's PE imports and the D3D10 API wrapper. No console
+render or presentation is claimed for these DLLs.
+
 ## Current integration target (2026-09-26)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,
