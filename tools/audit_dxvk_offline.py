@@ -50,6 +50,58 @@ REBUILT_WITNESSES = {
 }
 POLICY = {"apiVersion": "Keep the truthful reported version until the required patch-level conformance is proven."}
 EXPECTED = INLINE | set(OFFLINE) | set(REBUILD) | set(POLICY)
+T08_COMBINED_SWITCHES = (
+    "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC",
+    "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
+    "PS5VK_SHADER_INT16_DIAGNOSTIC",
+)
+
+
+def combined_t08_is_off(profile: dict) -> bool:
+    switches = profile["switches"]
+    return not all(switches.get(name) == "1" for name in T08_COMBINED_SWITCHES)
+
+
+def artifact_profile(artifact: dict) -> dict:
+    if "build_profile" in artifact:
+        return artifact["build_profile"]
+    switch = artifact.get("diagnostic_switch")
+    return {"switches": {switch: "1"} if switch else {}}
+
+
+def source_unchanged(root: Path, commit: str, paths: list[str], profiles: list[dict]) -> bool:
+    """Accept only the added default-off T08 block when every artifact excludes it."""
+    result = subprocess.run(["git", "diff", "--name-only", commit, "--", *paths],
+                            cwd=root, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        return False
+    changed = set(result.stdout.splitlines())
+    if not changed:
+        return True
+    if changed != {"native/platform_ps5.c"} or not all(map(combined_t08_is_off, profiles)):
+        return False
+    old = subprocess.run(["git", "show", f"{commit}:native/platform_ps5.c"],
+                         cwd=root, check=False, capture_output=True, text=True)
+    if old.returncode != 0:
+        return False
+    current = (root / "native/platform_ps5.c").read_text()
+    start = current.find("#if defined(PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC) && "
+                         "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC && \\\n")
+    if start < 0:
+        return False
+    end = current.find("#endif\n", start)
+    if end < 0:
+        return False
+    end += len("#endif\n")
+    block = current[start:end]
+    if ("#else" in block or not all(name in block for name in T08_COMBINED_SWITCHES) or
+            not all(name in block for name in (
+                "PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE",
+                "PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE",
+                "PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES",
+                "PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID"))):
+        return False
+    return current[:start] + current[end:] == old.stdout
 
 
 def selection_hash(cases: list[dict]) -> str:
@@ -116,6 +168,7 @@ def audit_subgroup_size_package(root: Path) -> dict:
     valid = (record.get("native_executed") is False and
              len(variants) == len(CASES) and
              {item["case"] for item in variants} == set(CASES))
+    profiles = []
     for item in variants:
         candidate = root / item["candidate"]
         artifact_path = candidate / "artifact.json"
@@ -124,6 +177,7 @@ def audit_subgroup_size_package(root: Path) -> dict:
             valid = False
             break
         artifact = json.loads(artifact_path.read_text())
+        profiles.append(artifact_profile(artifact))
         valid = valid and (
             hashlib.sha256(artifact_path.read_bytes()).hexdigest() == item["artifact_sha256"] and
             hashlib.sha256(eboot_path.read_bytes()).hexdigest() == item["eboot_sha256"] and
@@ -139,6 +193,7 @@ def audit_subgroup_size_package(root: Path) -> dict:
     if not cts_eboot.is_file() or not cts_manifest.is_file() or not selection_path.is_file():
         return {"package_verified": False}
     build = json.loads(cts_manifest.read_text())
+    profiles.append(build["tessellation_build_profile"])
     selection = json.loads(selection_path.read_text())
     frozen = json.loads((root / "cts/upstream/manifest.json").read_text())
     paths = [case["path"] for case in selection["cases"]]
@@ -154,11 +209,9 @@ def audit_subgroup_size_package(root: Path) -> dict:
         selection["cases"][:len(frozen["cases"])] == frozen["cases"] and
         sum(path.endswith("_flags_spirv16") for path in moved) == 2 and
         build["tessellation_build_profile"]["switches"].get(cts["diagnostic_switch"]) == "1")
-    source_current = subprocess.run(
-        ["git", "diff", "--quiet", record["source_commit"], "--", "src", "native", "include",
-         "examples", "experiments", "cts", "tools/build_sdk.py", "tools/build_upstream_cts.py",
-         "tools/build_subgroup_size_witness.py"],
-        cwd=root, check=False, capture_output=True).returncode == 0
+    source_current = source_unchanged(root, record["source_commit"],
+        ["src", "native", "include", "examples", "experiments", "cts", "tools/build_sdk.py",
+         "tools/build_upstream_cts.py", "tools/build_subgroup_size_witness.py"], profiles)
     return {"package_verified": valid and source_current, "artifact_verified": valid,
             "source_current": source_current, "variant_count": len(variants),
             "cts_eboot_sha256": cts["eboot_sha256"]}
@@ -174,6 +227,7 @@ def audit_integer_dot_package(root: Path) -> dict:
     record = json.loads(path.read_text())
     valid = record.get("native_executed") is False
     totals = {}
+    profiles = []
     for kind, expected in (("compute", {(case,) for case in CASES}),
                            ("graphics", {(case, graph) for case in CASES for graph in GRAPHS})):
         inventory_path = root / record[f"{kind}_inventory"]
@@ -198,6 +252,7 @@ def audit_integer_dot_package(root: Path) -> dict:
                 valid = False
                 break
             artifact = json.loads(artifact_path.read_text())
+            profiles.append(artifact_profile(artifact))
             valid = valid and (
                 hashlib.sha256(artifact_path.read_bytes()).hexdigest() == item["artifact_sha256"] and
                 hashlib.sha256(eboot_path.read_bytes()).hexdigest() == item["eboot_sha256"] and
@@ -216,6 +271,7 @@ def audit_integer_dot_package(root: Path) -> dict:
     if not eboot.is_file() or not build_path.is_file() or not selection_path.is_file():
         return {"package_verified": False}
     build = json.loads(build_path.read_text())
+    profiles.append(build["tessellation_build_profile"])
     selection = json.loads(selection_path.read_text())
     frozen = json.loads((root / "cts/upstream/manifest.json").read_text())
     paths = [case["path"] for case in selection["cases"]]
@@ -231,12 +287,11 @@ def audit_integer_dot_package(root: Path) -> dict:
         selection["cases"][:len(frozen["cases"])] == frozen["cases"] and
         selection["measurement"]["base_selection_hash"] == selection_hash(frozen["cases"]) and
         build["tessellation_build_profile"]["switches"].get(cts["diagnostic_switch"]) == "1")
-    source_current = subprocess.run(
-        ["git", "diff", "--quiet", record["source_commit"], "--", "src", "native", "include",
-         "examples", "experiments", "cts", "tools/build_sdk.py", "tools/build_upstream_cts.py",
-         "tools/build_integer_dot_witness.py", "tools/build_integer_dot_graphics_witness.py",
-         "tools/integer_dot_spirv.py", "tools/integer_dot_vectors.py"],
-        cwd=root, check=False, capture_output=True).returncode == 0
+    source_current = source_unchanged(root, record["source_commit"],
+        ["src", "native", "include", "examples", "experiments", "cts", "tools/build_sdk.py",
+         "tools/build_upstream_cts.py", "tools/build_integer_dot_witness.py",
+         "tools/build_integer_dot_graphics_witness.py", "tools/integer_dot_spirv.py",
+         "tools/integer_dot_vectors.py"], profiles)
     return {"package_verified": valid and source_current, "artifact_verified": valid,
             "source_current": source_current, "variants": totals,
             "cts_eboot_sha256": cts["eboot_sha256"]}
@@ -252,6 +307,7 @@ def audit_t08_package(root: Path) -> dict:
     witnesses = record["witnesses"]
     valid = (record.get("native_executed") is False and len(witnesses) == 8 and
              {item["operation"] for item in witnesses} == expected)
+    profiles = []
     for item in witnesses:
         artifact_path = root / item["candidate"] / "artifact.json"
         eboot_path = root / item["candidate"] / "PPSA99994/eboot.bin"
@@ -259,6 +315,7 @@ def audit_t08_package(root: Path) -> dict:
             valid = False
             break
         artifact = json.loads(artifact_path.read_text())
+        profiles.append(artifact_profile(artifact))
         operation = item["operation"]
         switches = artifact["build_profile"]["switches"]
         family = ("PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC" if operation in ("ballot", "broadcast")
@@ -294,11 +351,10 @@ def audit_t08_package(root: Path) -> dict:
         selection["measurement"]["moved"] == 5 and
         selection["measurement"]["selection_hash"] == selection_hash(selection["cases"]) and
         record["original_cts_eligible_on_current_report"] is False)
-    source_current = subprocess.run(
-        ["git", "diff", "--quiet", record["source_commit"], "--", "src", "native", "include",
-         "examples", "experiments", "tools/build_sdk.py", "tools/build_t08_subgroup_broadcast_witness.py",
-         "tools/build_t08_subgroup_arithmetic_witness.py", "tests/t08_compile_probe.c"],
-        cwd=root, check=False, capture_output=True).returncode == 0
+    source_current = source_unchanged(root, record["source_commit"],
+        ["src", "native", "include", "examples", "experiments", "tools/build_sdk.py",
+         "tools/build_t08_subgroup_broadcast_witness.py",
+         "tools/build_t08_subgroup_arithmetic_witness.py", "tests/t08_compile_probe.c"], profiles)
     return {"witnesses_verified": valid and source_current,
             "compiler_census_verified": compiler_verified, "cts_selection_verified": selection_verified,
             "source_current": source_current, "witness_count": len(witnesses),
@@ -316,6 +372,7 @@ def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
     if not artifact_path.is_file() or not eboot_path.is_file():
         return {"artifact_verified": False, "source_current": False}
     artifact = json.loads(artifact_path.read_text())
+    profiles = [artifact_profile(artifact)]
     artifact_verified = (
         record.get("native_executed") is False and
         hashlib.sha256(artifact_path.read_bytes()).hexdigest() == record["artifact_sha256"] and
@@ -330,6 +387,7 @@ def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
             additional_verified = False
             break
         data = json.loads(extra_artifact.read_text())
+        profiles.append(artifact_profile(data))
         additional_verified = (
             hashlib.sha256(extra_artifact.read_bytes()).hexdigest() == extra["artifact_sha256"] and
             hashlib.sha256(extra_eboot.read_bytes()).hexdigest() == extra["eboot_sha256"] and
@@ -338,11 +396,10 @@ def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
                 ("local_x", "specialization", "expected_digest", "spirv_sha256")))
         if not additional_verified:
             break
-    source_current = subprocess.run(
-        ["git", "diff", "--quiet", record["source_commit"], "--", "src", "native", "include",
-         "examples", "experiments", "tools/build_sdk.py", "tools/build_dxvk_render_witness.py",
-         "tools/build_zero_initialize_witness.py", "tools/build_integer_dot_witness.py"],
-        cwd=root, check=False, capture_output=True).returncode == 0
+    source_current = source_unchanged(root, record["source_commit"],
+        ["src", "native", "include", "examples", "experiments", "tools/build_sdk.py",
+         "tools/build_dxvk_render_witness.py", "tools/build_zero_initialize_witness.py",
+         "tools/build_integer_dot_witness.py"], profiles)
     cts = record.get("cts", {})
     cts_dist = root / cts.get("candidate", "") / "PPSA99994"
     cts_eboot = cts_dist / "eboot.bin"
@@ -352,6 +409,7 @@ def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
     cts_source_current = False
     if cts_eboot.is_file() and cts_manifest.is_file() and selection_path.is_file():
         build = json.loads(cts_manifest.read_text())
+        cts_profiles = [build["tessellation_build_profile"]]
         selection = json.loads(selection_path.read_text())
         frozen = json.loads((root / "cts/upstream/manifest.json").read_text())
         selected = [case["path"] for case in selection["cases"]]
@@ -368,10 +426,9 @@ def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
              build["tessellation_build_profile"]["experimental"] is False) and
             selection["cases"][:len(frozen["cases"])] == frozen["cases"] and
             selection["measurement"]["base_selection_hash"] == selection_hash(frozen["cases"]))
-        cts_source_current = subprocess.run(
-            ["git", "diff", "--quiet", cts["source_commit"], "--", "src", "native", "include",
-             "cts", "tools/build_sdk.py", "tools/build_upstream_cts.py"],
-            cwd=root, check=False, capture_output=True).returncode == 0
+        cts_source_current = source_unchanged(root, cts["source_commit"],
+            ["src", "native", "include", "cts", "tools/build_sdk.py",
+             "tools/build_upstream_cts.py"], cts_profiles)
     return {"artifact_verified": artifact_verified, "additional_witnesses_verified": additional_verified,
             "source_current": source_current,
             "source_commit": record["source_commit"], "eboot_sha256": record["eboot_sha256"],

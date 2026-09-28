@@ -453,6 +453,18 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * witness checked all 896 outputs. VkPhysicalDeviceSubgroupProperties
      * reports exactly this: size 32, the compute stage, the BASIC operation. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+#if defined(PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC) && PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC && \
+    defined(PS5VK_SUBGROUP_IADD_DIAGNOSTIC) && PS5VK_SUBGROUP_IADD_DIAGNOSTIC && \
+    defined(PS5VK_SHADER_INT16_DIAGNOSTIC) && PS5VK_SHADER_INT16_DIAGNOSTIC
+    /* Combined original-CTS measurement only. Each operation bit is a claim
+     * over an entire family, so it remains absent from the ordinary build.
+     * The compute witnesses and host compiler census prepare this experiment;
+     * neither establishes GPU results or public feature conformance. */
+    platform->supported_features_v13 |= PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+        PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE |
+        PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES |
+        PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+#endif
 #if defined(PS5VK_SHADER_INT8_DIAGNOSTIC) && PS5VK_SHADER_INT8_DIAGNOSTIC
     /* Compiler-only probe; public shaderInt8 and subgroup features stay false. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_INT8_COMPUTE;
