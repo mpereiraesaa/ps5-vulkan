@@ -21,6 +21,7 @@
 #include "color_clear.h"
 #include "color_detile.h"
 #include "attachment_ops.h"
+#include "dxvk_clear_pass.h"
 #include "ps5_platform.h"
 #include "ps5_agc_driver.h"
 #include "submit_suspend_ps5.h"
@@ -171,11 +172,12 @@ static int draw_has_work(const struct ps5vk_operation *op)
 }
 /* Uploads, layout transitions and readback need not share a submission with a
  * draw. Reuse the render prelude/postlude and exact GPU completion protocol. */
-static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
-    VkCommandBuffer cb,unsigned first,unsigned count,void **out)
+static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,void **out)
 {
     unsigned readback=0,readback_site=0;
-    if(!count)return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkCommandBuffer cb=s->buffers[0];
+    unsigned first=ps5vk_submission_first_operation(s,0);
+    unsigned count=ps5vk_submission_operation_count(s,0);
     struct graphics_job *j=calloc(1,sizeof(*j));
     if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial;
@@ -184,6 +186,30 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
     if(rc==VK_ERROR_DEVICE_LOST)retain("upload-command-create");
     if(rc!=VK_SUCCESS)goto fail;
     uint32_t *cursor=j->chain.cursor,*end=j->chain.end;
+    if(s->count>1) {
+        /* DXVK batches its backbuffer initialization as two transfer-only
+         * command buffers: barriers, then clears and handovers. Keep their
+         * recorded order and one tentative layout transaction, and publish
+         * one completion label for the whole submission. Readbacks still use
+         * the separately validated single-buffer path below. */
+        unsigned total=0;
+        for(unsigned buffer=0;buffer<s->count;++buffer) {
+            VkCommandBuffer listed=s->buffers[buffer];
+            const unsigned listed_first=ps5vk_submission_first_operation(s,buffer);
+            const unsigned listed_count=ps5vk_submission_operation_count(s,buffer);
+            for(unsigned i=0;i<listed_count;++i)
+                if(listed->operations[listed_first+i].type==PS5VK_COPY_IMAGE_BUFFER) {
+                    rc=VK_ERROR_FEATURE_NOT_PRESENT;
+                    goto fail;
+                }
+            rc=ps5vk_upload_commands(d,listed->operations+listed_first,listed_count,
+                NULL,&j->layouts,&cursor,end,cache);
+            if(rc!=VK_SUCCESS)goto fail;
+            total+=listed_count;
+        }
+        count=total;
+        goto prepared;
+    }
     unsigned copies=0;
     for(unsigned i=0;i<count;++i)
         copies+=cb->operations[first+i].type==PS5VK_COPY_IMAGE_BUFFER;
@@ -257,6 +283,7 @@ static VkResult prepare_transfer(VkDevice d,const struct ps5vk_submission *s,
         }
     }
     if(rc!=VK_SUCCESS)goto fail;
+prepared:
     j->chain.cursor=cursor;
     rc=ps5vk_draw_batch_close(&j->chain);
     if(rc!=VK_SUCCESS)goto fail;
@@ -578,13 +605,10 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 pass_buffer=i;
             }
     }
-    /* No render pass anywhere in the submission: a transfer-only segment
-     * names one buffer, which the transfer path owns end to end. */
+    /* No render pass anywhere in the submission: transfer-only buffers share
+     * one command stream and layout transaction in their submitted order. */
     if(pass_buffer==s->count) {
-        if(s->count!=1)return VK_ERROR_FEATURE_NOT_PRESENT;
-        return prepare_transfer(d,s,s->buffers[0],
-            ps5vk_submission_first_operation(s,0),
-            ps5vk_submission_operation_count(s,0),out);
+        return prepare_transfer(d,s,out);
     }
     VkCommandBuffer cb=s->buffers[pass_buffer];
     uint32_t range_first=ps5vk_submission_first_operation(s,pass_buffer);
@@ -601,13 +625,14 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     }
     unsigned last=first+1;
     while(last<range_end && cb->operations[last].type!=PS5VK_END_RENDER_PASS)++last;
-    /* last<first+2 is a pass with no work between begin and end. Recording
-     * already refuses that shape, so this is a defence in depth on the
-     * immutable record rather than a boundary a caller can reach: nothing is
-     * accepted at record time and rejected here. */
-    if(first>=range_end || last>=range_end || last<first+2)
+    if(first>=range_end || last>=range_end)
         {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
     const struct ps5vk_operation *begin=&cb->operations[first]; VkRenderPass pass=begin->render_pass;
+    /* A clear-only DXVK pass has no draw body: loadOp=CLEAR is its work. The
+     * same bounded shape is checked at submit and before native preparation. */
+    const int clear_only=last==first+1 && ps5vk_dxvk_bgra8_clear_only_pass(begin);
+    if(last==first+1 && !clear_only)
+        {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
     /* Execute the shared-role profile: ordered subpasses using the
      * same color/depth attachments and layouts. Wider graphs, or graphs that
      * would need attachment rebinding/layout changes, remain fail-closed. */
@@ -863,10 +888,10 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
     }
     /* Every named buffer must have been consumed by a name in this pass, and
      * the pass must actually carry work: naming only empty secondaries expands
-     * to no draws at all, which is the zero-body shape recording already
-     * refuses. Defence in depth behind that check and the submission-time one,
-     * on the immutable record this backend is handed. */
-    if(next_buffer!=s->count || !body_count){rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
+     * to no draws at all. Only the exact BGRA8 loadOp clear above may have a
+     * zero-operation body; check the immutable record again at this boundary. */
+    if(next_buffer!=s->count || (!body_count && !clear_only))
+        {rc=VK_ERROR_FEATURE_NOT_PRESENT;site_report=__LINE__;goto fail;}
     j=calloc(1,sizeof(*j)); if(!j)return VK_ERROR_OUT_OF_HOST_MEMORY;
     j->serial=s->serial;
     /* The image the prelude and postlude act on. A depth-only pass has no
@@ -1963,6 +1988,20 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
                 ps5log_printf(PS5LOG_INFO,
                     "PS5VK_GRAPHICS_READBACK_REGIONS_REFUSED serial=%llu site=%u operations=%u",
                     (unsigned long long)j->serial,regions_site,postlude_count);
+                for(unsigned k=0;k<postlude_count;++k) {
+                    const struct ps5vk_operation *op=&postlude[k];
+                    if(op->type!=PS5VK_IMAGE_BARRIER)continue;
+                    VkImage image=op->image_barrier.image;
+                    ps5log_printf(PS5LOG_INFO,
+                        "PS5VK_GRAPHICS_READBACK_POSTLUDE_OP index=%u image=%p layout=%u/%u stages=%08x/%08x access=%08x/%08x format=%u usage=%08x",
+                        k,(void *)image,(unsigned)op->image_barrier.oldLayout,
+                        (unsigned)op->image_barrier.newLayout,
+                        (unsigned)op->src_stage,(unsigned)op->dst_stage,
+                        (unsigned)op->image_barrier.srcAccessMask,
+                        (unsigned)op->image_barrier.dstAccessMask,
+                        image?(unsigned)image->info.format:0u,
+                        image?(unsigned)image->info.usage:0u);
+                }
                 draw_site=40;goto fail;
             }
             j->readback.count=regions.count;

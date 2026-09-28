@@ -20,6 +20,7 @@
 #include "bc_blit_decode.h"
 #include "depth_detile.h"
 #include "color_detile.h"
+#include "color_barrier.h"
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
@@ -1141,13 +1142,67 @@ static void bgra_tiled_transfer_destination(void)
 {
     const VkImageUsageFlags target_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
         VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    const VkImageUsageFlags dxvk_usage = target_usage |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     const VkImageUsageFlags subsets[] = {
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         target_usage};
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM, 0));
-    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         target_usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM, dxvk_usage));
+    VkImage dxvk_backbuffer = make_image_extent(VK_FORMAT_B8G8R8A8_UNORM,
+        dxvk_usage, 16, 8, NULL);
+    assert(ps5vk_tiled_2d_sampled_color_image(dxvk_backbuffer));
+    assert(ps5vk_bgra8_transfer_target(dxvk_backbuffer));
+    VkImageMemoryBarrier first_color = transfer_barrier(dxvk_backbuffer,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+    VkCommandBuffer color_command = begin();
+    vkCmdPipelineBarrier(color_command, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL,
+        1, &first_color);
+    assert(vkEndCommandBuffer(color_command) == VK_SUCCESS);
+    VkImageMemoryBarrier first_transfer = transfer_barrier(dxvk_backbuffer,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        0, VK_ACCESS_TRANSFER_WRITE_BIT);
+    VkCommandBuffer transfer_command = begin();
+    vkCmdPipelineBarrier(transfer_command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &first_transfer);
+    assert(vkEndCommandBuffer(transfer_command) == VK_SUCCESS);
+    VkCommandBuffer wrong_stage = begin();
+    vkCmdPipelineBarrier(wrong_stage, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL,
+        1, &first_color);
+    assert(wrong_stage->state == PS5VK_INVALID);
+    VkCommandBuffer initial_commands[] = {color_command, transfer_command, wrong_stage};
+    vkFreeCommandBuffers(device, pool, 3, initial_commands);
+    const VkImageUsageFlags readback_usage = target_usage |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    VkImage readback_target = make_image_extent(VK_FORMAT_B8G8R8A8_UNORM,
+        readback_usage, 16, 8, NULL);
+    VkImageMemoryBarrier handover = transfer_barrier(readback_target,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    assert(ps5vk_bgra8_readback_barrier(&handover,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT));
+    VkCommandBuffer readback_command = begin();
+    vkCmdPipelineBarrier(readback_command,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &handover);
+    assert(vkEndCommandBuffer(readback_command) == VK_SUCCESS);
+    VkCommandBuffer foreign_scope = begin();
+    vkCmdPipelineBarrier(foreign_scope,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &handover);
+    assert(foreign_scope->state == PS5VK_INVALID);
+    VkCommandBuffer readback_commands[] = {readback_command, foreign_scope};
+    vkFreeCommandBuffers(device, pool, 2, readback_commands);
+    vkDestroyImage(device, readback_target, NULL);
+    vkDestroyImage(device, dxvk_backbuffer, NULL);
     for (size_t i = 0; i < sizeof(subsets) / sizeof(subsets[0]); ++i) {
         VkImageFormatProperties properties;
         assert(ps5vk_graphics_image_properties(VK_FORMAT_B8G8R8A8_UNORM,

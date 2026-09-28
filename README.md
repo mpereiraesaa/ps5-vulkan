@@ -33,7 +33,7 @@ formats and resource limits are documented in [API.md](API.md).
 - **Pixels and textures:** independent and dual-source blending, fragment
   storage writes/atomics, 2x/4x colour multisampling with per-sample shading and
   resolve, cube arrays, bounded BC textures, depth sampling and extended gather.
-  The ledger records 61 sampled texture formats: 40 filterable rows and
+  The ledger records 63 sampled texture formats: 42 filterable rows and
   20 integer rows restricted to nearest filtering.
 - **Compute and shaders:** runtime SPIR-V compilation through pinned PSBC/ACO,
   shader/pipeline caches, up to four compute descriptor sets, push and

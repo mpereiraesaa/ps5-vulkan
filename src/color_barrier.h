@@ -130,6 +130,19 @@ static inline int ps5vk_color_discard_barrier(const VkImageMemoryBarrier *b)
         b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
         !b->srcAccessMask && !(b->dstAccessMask & ~allowed);
 }
+/* The first x64 PE DXVK backbuffer use is a colour-output scoped discard,
+ * not a TOP_OF_PIPE acquire. Keep the recorder and native prelude on this
+ * exact mutable BGRA8 four-role image transition. */
+static inline int ps5vk_dxvk_bgra8_initial_color_barrier(const VkImageMemoryBarrier *b,
+    VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage)
+{
+    return b && ps5vk_tiled_2d_sampled_color_image(b->image) &&
+        b->image->info.format == VK_FORMAT_B8G8R8A8_UNORM &&
+        ps5vk_color_discard_barrier(b) &&
+        b->dstAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+        src_stage == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+        dst_stage == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+}
 /* Return a completed readback target to rendering. The queue orders jobs and
  * the native prelude acquires caches; layout tracking still checks oldLayout.
  * This is not a discard: preserve image contents until the next render pass. */
@@ -142,6 +155,20 @@ static inline int ps5vk_color_readback_reuse_barrier(const VkImageMemoryBarrier 
         b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
         b->srcAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
         b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+}
+
+/* A BGRA8 attachment's exact handover to a full-surface buffer readback.
+ * The copy preserves its BGRA byte order; no format conversion is implied. */
+static inline int ps5vk_bgra8_readback_barrier(const VkImageMemoryBarrier *b,
+    VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage)
+{
+    return b && ps5vk_bgra8_colour_readback_image(b->image) &&
+        b->oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+        b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+        b->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+        b->dstAccessMask == VK_ACCESS_TRANSFER_READ_BIT &&
+        src_stage == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+        dst_stage == VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 /* The original precise-occlusion case renders into a 128x128 RGBA8 target in
@@ -166,5 +193,50 @@ static inline int ps5vk_precise_query_colour_barrier(const VkImageMemoryBarrier 
             b->dstAccessMask == VK_ACCESS_TRANSFER_READ_BIT &&
             src_stage == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
             dst_stage == VK_PIPELINE_STAGE_TRANSFER_BIT);
+}
+/* DXVK 2.6.2's tiled RGBA8 backbuffer is rendered, sampled and copied in
+ * separate submissions. The recorder and native upload prelude must accept
+ * the same measured layout transitions, or submit fails after record succeeds.
+ * The queue serializes jobs and the prelude performs a conservative acquire;
+ * the empty source scopes here follow DXVK's preceding global dependency. */
+static inline int ps5vk_dxvk_tiled_backbuffer_barrier(const VkImageMemoryBarrier *b,
+    VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage)
+{
+    if(!b || !ps5vk_tiled_2d_sampled_color_image(b->image))return 0;
+    const VkAccessFlags next=VK_ACCESS_SHADER_READ_BIT |
+        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+        VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    const VkPipelineStageFlags stages=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+    const VkPipelineStageFlags d3d9_stages=stages |
+        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+        VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT |
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    return (b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+            b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+            b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+            b->dstAccessMask==next &&
+            src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+            (dst_stage==stages ||
+             (b->image->info.format==VK_FORMAT_B8G8R8A8_UNORM &&
+              dst_stage==d3d9_stages))) ||
+           (b->oldLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+            b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+            !b->srcAccessMask && b->dstAccessMask==VK_ACCESS_TRANSFER_READ_BIT &&
+            src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+            dst_stage==VK_PIPELINE_STAGE_TRANSFER_BIT) ||
+           (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+            b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+            b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT &&
+            b->dstAccessMask==next && src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+            (dst_stage==stages ||
+             (b->image->info.format==VK_FORMAT_B8G8R8A8_UNORM &&
+              dst_stage==d3d9_stages))) ||
+           (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+            b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+            !b->srcAccessMask && b->dstAccessMask==next &&
+            src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+            dst_stage==(VkPipelineStageFlags)(stages |
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT));
 }
 #endif

@@ -7,6 +7,7 @@ witness negotiates them through the public API. It is the regression witness
 for the promoted routes, so it selects no measurement switch."""
 
 import hashlib
+import argparse
 import json
 import os
 from pathlib import Path
@@ -48,19 +49,43 @@ def srgb_decode_code(code: int) -> int:
     return int(linear * 255.0 + 0.5)
 
 
-def srgb_exact() -> bytes:
+def expected_unorm(bgra: bool = False) -> bytes:
+    source = texels()
+    return bytes(255 if bgra and index % 4 == 3 else
+                 source[(index & ~3) + (2 - index % 4 if bgra and index % 4 in (0, 2)
+                                           else index % 4)]
+                 for index in range(len(source)))
+
+
+def target_unorm(bgra: bool = False) -> bytes:
+    if not bgra:
+        return texels()
+    return bytes(255 if index % 4 == 3 else value
+                 for index, value in enumerate(texels()))
+
+
+def srgb_exact(bgra: bool = False) -> bytes:
     """The exact result of sampling texels() through an SRGB view and
     writing it to an RGBA8 UNORM target: RGB decoded, alpha unchanged."""
-    source = texels()
-    return bytes(value if index % 4 == 3 else srgb_decode_code(value)
+    source = expected_unorm(bgra) if bgra else texels()
+    original = texels()
+    return bytes((original[index] if bgra else value) if index % 4 == 3
+                 else srgb_decode_code(value)
                  for index, value in enumerate(source))
 
 
-def min_differing() -> int:
+def target_srgb_exact(bgra: bool = False) -> bytes:
+    if not bgra:
+        return srgb_exact()
+    return bytes(value if index % 4 == 3 else srgb_decode_code(value)
+                 for index, value in enumerate(texels()))
+
+
+def min_differing(bgra: bool = False) -> int:
     """RGB bytes whose SRGB read must differ from the UNORM read even at the
     witness's one-code tolerance: the exact decode is at least two codes
     away from the raw byte."""
-    source = texels()
+    source = expected_unorm(bgra) if bgra else texels()
     return sum(1 for index, value in enumerate(source)
                if index % 4 != 3 and abs(srgb_decode_code(value) - value) >= 2)
 
@@ -91,10 +116,11 @@ def c_bytes(name: str, payload: bytes) -> str:
     return f"static const uint8_t {name}[] = {{\n    " + ",\n    ".join(rows) + "\n};\n"
 
 
-def data_header() -> str:
+def data_header(bgra: bool = False) -> str:
     return ("#include <stdint.h>\n" + c_bytes("mutable_view_texels", texels()) +
-            c_bytes("mutable_view_srgb_exact", srgb_exact()) +
-            f"#define MUTABLE_VIEW_MIN_DIFFERING {min_differing()}u\n")
+            c_bytes("mutable_view_expected_unorm", target_unorm(bgra)) +
+            c_bytes("mutable_view_srgb_exact", target_srgb_exact(bgra)) +
+            f"#define MUTABLE_VIEW_MIN_DIFFERING {min_differing(bgra)}u\n")
 
 
 def run(*command: str, env: dict | None = None) -> None:
@@ -102,6 +128,12 @@ def run(*command: str, env: dict | None = None) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bgra", action="store_true",
+                        help="measure BGRA UNORM/SRGB sampling and constant-one alpha")
+    parser.add_argument("--reuse-sdk", action="store_true",
+                        help="link the already staged SDK without rebuilding it")
+    args = parser.parse_args()
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
@@ -112,7 +144,8 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    build = ROOT / "build/dxvk-mutable-view-witness"
+    build = ROOT / ("build/dxvk-bgra-view-witness" if args.bgra else
+                    "build/dxvk-mutable-view-witness")
     dist = build / "dist/PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
@@ -128,16 +161,20 @@ def main() -> None:
         shader_hashes[name] = hashlib.sha256(payload).hexdigest()
     (build / "dxvk_mutable_view_shaders.h").write_text(
         "#include <stdint.h>\n" + "\n".join(arrays), encoding="utf-8")
-    (build / "dxvk_mutable_view_data.h").write_text(data_header(), encoding="utf-8")
+    (build / "dxvk_mutable_view_data.h").write_text(data_header(args.bgra), encoding="utf-8")
 
     sdk_env = dict(os.environ, PS5_PAYLOAD_SDK=str(sdk), **({SWITCH: "1"} if SWITCH else {}))
-    run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
+    if not args.reuse_sdk:
+        run(sys.executable, str(ROOT / "tools/build_sdk.py"), env=sdk_env)
     staged = ROOT / "dist-sdk"
+    if not (staged / "lib/libps5vk.a").is_file():
+        raise RuntimeError("staged SDK is missing")
     source = ROOT / "examples/dxvk_mutable_view_witness/main.c"
     obj = build / "main.o"
     dep = build / "main.d"
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
+        *(["-DPS5VK_BGRA_WITNESS=1"] if args.bgra else []),
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger), "-c", str(source), "-o", str(obj), env=sdk_env)
@@ -174,26 +211,30 @@ def main() -> None:
     run(str(builder), "self", "--sign", "--in", str(eboot_elf), "--out",
         str(eboot), "--magic", "0x1D3D154F")
     # Leave the ordinary staged SDK behind for every other consumer.
-    run(sys.executable, str(ROOT / "tools/build_sdk.py"),
-        env=dict(os.environ, PS5_PAYLOAD_SDK=str(sdk)))
+    if not args.reuse_sdk:
+        run(sys.executable, str(ROOT / "tools/build_sdk.py"),
+            env=dict(os.environ, PS5_PAYLOAD_SDK=str(sdk)))
 
     param = json.loads((lab / "projects/ps5-agc-gears/sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
                  contentId="UP9000-PPSA99994_00-PS5VKMUTVIEW0001")
-    param["localizedParameters"]["en-US"]["titleName"] = "PS5 Vulkan Mutable View Witness"
+    param["localizedParameters"]["en-US"]["titleName"] = (
+        "PS5 Vulkan BGRA View Witness" if args.bgra else "PS5 Vulkan Mutable View Witness")
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
     shutil.copyfile(foundation / "sce_sys/icon0.png", dist / "sce_sys/icon0.png")
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": PROFILE, "extent": EXTENT, "diagnostic_switch": SWITCH,
-        "min_differing": min_differing(),
+        "profile": "dxvk-bgra-view-public-sdk-witness" if args.bgra else PROFILE,
+        "extent": EXTENT, "diagnostic_switch": SWITCH,
+        "min_differing": min_differing(args.bgra),
         "texels_sha256": hashlib.sha256(texels()).hexdigest(),
-        "srgb_exact_sha256": hashlib.sha256(srgb_exact()).hexdigest(),
+        "srgb_exact_sha256": hashlib.sha256(target_srgb_exact(args.bgra)).hexdigest(),
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "libps5vk_sha256": hashlib.sha256((staged / "lib/libps5vk.a").read_bytes()).hexdigest(),
     }
     artifact_path = dist.parent / "artifact.json"
     artifact_path.write_text(json.dumps(artifact, indent=2) + "\n")

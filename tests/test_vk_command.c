@@ -1189,21 +1189,47 @@ static void image_barriers(void)
     b.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     b.subresourceRange.levelCount=1;
     b.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT |
+    const VkAccessFlags dxvk_future_access=VK_ACCESS_SHADER_READ_BIT |
         VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
         VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    const VkPipelineStageFlags dxvk_future_stages=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+    b.dstAccessMask=dxvk_future_access;
     assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        dxvk_future_stages,
         0,0,NULL,0,NULL,1,&b);
     assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+    b.oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    b.srcAccessMask=0;
+    b.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&b);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==2);
+    b.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    b.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+    b.dstAccessMask=dxvk_future_access;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TRANSFER_BIT,dxvk_future_stages,
+        0,0,NULL,0,NULL,1,&b);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==3);
+    b.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    b.srcAccessMask=0;
+    const VkPipelineStageFlags dxvk_host_stages=dxvk_future_stages |
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_TRANSFER_BIT,dxvk_host_stages,
+        0,0,NULL,0,NULL,1,&b);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==4);
     assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+    b.oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    b.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    b.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    b.dstAccessMask=dxvk_future_access;
     image.info.usage &= ~VK_IMAGE_USAGE_SAMPLED_BIT;
     assert(vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        dxvk_future_stages,
         0,0,NULL,0,NULL,1,&b);
     assert(c->state==PS5VK_INVALID);
     vkDestroyCommandPool(&d,p,NULL);

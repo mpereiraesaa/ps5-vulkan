@@ -103,9 +103,8 @@ static inline struct ps5vk_vertex_format ps5vk_vertex_format_info(VkFormat forma
 static inline uint32_t ps5vk_vertex_format_size(VkFormat format)
 { return ps5vk_vertex_format_info(format).bytes; }
 
-/* Native executable image roles. RGBA8 is a bounded off-screen color target
- * with transfer-source readback, a sampled/upload target, and a pure
- * transfer role; BGRA8 remains the VideoOut target. */
+/* Native executable image roles. RGBA8 and BGRA8 have bounded colour-target,
+ * sampled and readback paths; BGRA8 also serves native presentation. */
 static inline int ps5vk_graphics_image_usage(VkFormat format, VkImageUsageFlags usage)
 {
     /* The exact accepted combinations come from the witnessed capability rows:

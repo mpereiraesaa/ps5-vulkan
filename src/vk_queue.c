@@ -9,6 +9,7 @@
 #define QUEUE_DIAG(...) ((void)0)
 #endif
 #include "vk_image_transfer.h"
+#include "dxvk_clear_pass.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -425,6 +426,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
            (c->usage & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)))) return 0;
     VkRenderPass active = NULL;
     VkFramebuffer framebuffer = NULL;
+    const struct ps5vk_operation *begin_op = NULL;
     /* Contents mode of the active pass, read back from the immutable record
      * rather than from recording state. */
     VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE;
@@ -468,6 +470,7 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     return 0;
                 if (op->subpass) return 0;
                 active = op->render_pass; framebuffer = op->framebuffer;
+                begin_op = op;
                 contents = op->render_pass_contents;
                 subpass = 0;
                 pass_work = 0;
@@ -505,7 +508,8 @@ static int command_valid(VkDevice d, VkCommandBuffer c)
                     subpass = op->subpass;
                     contents = op->render_pass_contents;
                 } else {
-                    if (!pass_work || xfb_active) return 0;
+                    if ((!pass_work && !ps5vk_dxvk_bgra8_clear_only_pass(begin_op)) ||
+                        xfb_active) return 0;
                     /* A pass must end at its last subpass; ending earlier
                      * would drop the subpasses never entered. */
                     if (op->subpass != subpass ||

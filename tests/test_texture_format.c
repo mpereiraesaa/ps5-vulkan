@@ -523,8 +523,16 @@ int main(void)
     ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_UNORM, &properties);
     assert(properties.optimalTilingFeatures ==
         (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                               VK_FORMAT_FEATURE_TRANSFER_DST_BIT));
+                               VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                               VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                               VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                               VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT));
     assert(properties.bufferFeatures == (VkFormatFeatureFlags)VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+    ps5vk_texture_format_properties(VK_FORMAT_B8G8R8A8_SRGB, &properties);
+    assert(properties.optimalTilingFeatures ==
+        (VkFormatFeatureFlags)(VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                               VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                               VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT));
     /* The depth target advertises the transfer destination the whole-subresource
      * vkCmdClearDepthStencilImage consumes, and the transfer source its
      * readback consumes now that SW_64K_Z_X pixel addressing exists
@@ -618,7 +626,8 @@ int main(void)
     const VkFormat all_formats[] = {
         VK_FORMAT_R8_UNORM, VK_FORMAT_R8_SNORM, VK_FORMAT_R8G8_UNORM, VK_FORMAT_R8G8_SNORM,
         VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SNORM, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+        VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB,
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32,
         VK_FORMAT_A8B8G8R8_SNORM_PACK32, VK_FORMAT_A8B8G8R8_SRGB_PACK32,
         VK_FORMAT_A8B8G8R8_UINT_PACK32, VK_FORMAT_A8B8G8R8_SINT_PACK32,
         VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
@@ -688,7 +697,7 @@ int main(void)
 
     /* --- unknown formats are rejected, not defaulted ---------------------- */
     const VkFormat unknown[] = {
-        VK_FORMAT_UNDEFINED, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8_USCALED,
+        VK_FORMAT_UNDEFINED, VK_FORMAT_R8_USCALED,
         VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_R8G8B8_UNORM,
         VK_FORMAT_R8G8_USCALED, VK_FORMAT_R16G16_SSCALED,
     };
@@ -727,17 +736,20 @@ int main(void)
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8_UNORM,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-    /* BGRA8's display-compatible tiled image serves each nonempty subset of
-     * colour attachment and transfer destination; it has no sampled/readback role. */
+    /* DXVK's BGRA8 backbuffer adds sampling and readback to the tiled colour
+     * target. The four-role shape is the one the mutable swapchain requests. */
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT));
-    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
-    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_SRGB,
         VK_IMAGE_USAGE_SAMPLED_BIT));
     /* D32 is a depth/stencil attachment, optionally clearable. */
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_D32_SFLOAT,
@@ -785,9 +797,8 @@ int main(void)
     assert(ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
-    /* The combination is the readback row's alone: the other colour format
-     * keeps refusing it, so no second format silently gains a destination. */
-    assert(!ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
+    /* Both normalized eight-bit colour formats now have this target shape. */
+    assert(ps5vk_texture_format_image_usage(VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
         VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     assert(!ps5vk_texture_format_image_usage(VK_FORMAT_R8G8B8A8_UNORM,

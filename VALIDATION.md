@@ -2039,8 +2039,8 @@ public query paths rather than from a copied table:
 Result on the shipped profiles: 138 mandatory limits satisfied, 60 documented
 blockers (real frontend restrictions, not inflated), 656 limits not applicable
 to a Vulkan 1.0 `VkPhysicalDeviceLimits`, all 118 feature rows consistent with
-the code path that enforces them, 151 mandatory format-feature cells satisfied
-with 511 documented per-format blockers, 60 format-query consistency
+the code path that enforces them, 155 mandatory format-feature cells satisfied
+with 507 documented per-format blockers, 60 format-query consistency
 checks, and eighteen shader-capability rows satisfied with two precision rows
 recorded as not-audited because the compiler's per-mode behaviour is not
 measured.
