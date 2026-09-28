@@ -103,6 +103,49 @@ static int declares_int16_capability(const uint32_t *words, size_t count)
             return 1;
     return 0;
 }
+/* Group operations on 8/16/64-bit integers or 16-bit floats need the
+ * extended-types opt-in in addition to their scalar shader feature. A module
+ * may declare Int16 for unrelated instructions, so inspect the operation's
+ * scalar or vector result type rather than the module-wide capabilities. */
+static int subgroup_extended_result_type(const uint32_t *words, size_t count,
+                                         uint32_t type_id)
+{
+    for (unsigned depth = 0; depth < 2; ++depth) {
+        uint32_t component = 0;
+        for (size_t at = 5; at < count; at += words[at] >> 16) {
+            const uint32_t opcode = words[at] & 0xffffu;
+            const uint32_t length = words[at] >> 16;
+            if (length < 3u || words[at + 1] != type_id) continue;
+            if (opcode == 21u && length == 4u)
+                return words[at + 2] == 8u || words[at + 2] == 16u ||
+                       words[at + 2] == 64u;
+            if (opcode == 22u && length == 3u)
+                return words[at + 2] == 16u;
+            if (opcode == 23u && length == 4u) component = words[at + 2];
+        }
+        if (!component || component == type_id) return 0;
+        type_id = component;
+    }
+    return 0;
+}
+static int subgroup_extended_without_optin(const uint32_t *words, size_t count,
+                                           uint32_t enabled_v13,
+                                           uint32_t private_features)
+{
+    if (enabled_v13 & PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES) return 0;
+    for (size_t at = 5; at < count; at += words[at] >> 16) {
+        const uint32_t opcode = words[at] & 0xffffu;
+        const uint32_t length = words[at] >> 16;
+        const int ballot = opcode >= 337u && opcode <= 344u;
+        const int arithmetic = opcode >= 349u && opcode <= 361u;
+        if ((!ballot && !arithmetic) || length < 3u ||
+            (ballot && (private_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE)) ||
+            (arithmetic && (private_features & PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE)))
+            continue;
+        if (subgroup_extended_result_type(words, count, words[at + 1])) return 1;
+    }
+    return 0;
+}
 static int declares_private_wide_type(const uint32_t *words, size_t count)
 {
     for (size_t at = 5; at < count; at += words[at] >> 16)
@@ -891,6 +934,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
                                     d->physical->platform.supported_features_t09 : 0u,
                                     d->physical ?
                                     d->physical->platform.supported_features_v13 : 0u))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (subgroup_extended_without_optin(info->pCode, info->codeSize / 4,
+                                        d->enabled_features_v13,
+                                        d->platform_features))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!(d->platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE) &&
         !(d->enabled_features_v13 & PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID) &&

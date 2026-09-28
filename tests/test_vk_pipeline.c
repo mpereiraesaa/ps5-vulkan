@@ -565,6 +565,55 @@ static void subgroup_dynamic_id_gate(void)
     vkDestroyShaderModule(&device, module, NULL);
     assert(!device.pipeline_objects);
 }
+static void subgroup_extended_type_gate(void)
+{
+    uint32_t words[] = {
+        0x07230203, 0x10300, 0, 16, 0,
+        (2u << 16) | 17u, 61u, /* GroupNonUniform */
+        (2u << 16) | 17u, 63u, /* GroupNonUniformArithmetic */
+        (2u << 16) | 17u, 22u, /* Int16 */
+        (5u << 16) | 15u, 5u, 1u, 0x6e69616du, 0,
+        (4u << 16) | 21u, 2u, 16u, 1u, /* signed 16-bit scalar */
+        (4u << 16) | 23u, 3u, 2u, 2u, /* vector of two int16 */
+        (4u << 16) | 21u, 4u, 32u, 1u, /* 32-bit control */
+        (6u << 16) | 349u, 2u, 7u, 8u, 0u, 9u, /* IAdd */
+    };
+    const size_t result_type = sizeof(words) / sizeof(words[0]) - 5u;
+    struct VkPhysicalDevice_T physical = {0};
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    physical.platform.supported_features =
+        PS5VK_FEATURE_SHADER_INT16 | PS5VK_FEATURE_STORAGE_BUFFER_16BIT;
+    physical.platform.supported_features_v13 =
+        PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+        PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE |
+        PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
+    struct VkDevice_T device = {.physical = &physical,
+        .enabled_features = PS5VK_FEATURE_SHADER_INT16};
+    VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.enabled_features_v13 = PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL); module = VK_NULL_HANDLE;
+    words[result_type] = 3u; /* Vector result needs the same opt-in. */
+    device.enabled_features_v13 = 0;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.enabled_features_v13 = PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL); module = VK_NULL_HANDLE;
+    words[result_type] = 4u; /* Unrelated Int16 declaration does not gate IAdd32. */
+    device.enabled_features_v13 = 0;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL); module = VK_NULL_HANDLE;
+    words[result_type] = 2u;
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects);
+}
 static void unadvertised_int16_gate(void)
 {
     uint32_t words[18];
@@ -720,6 +769,7 @@ int main(void)
     int8_compute_probe_gate();
     diagnostic_compute_broadcast_gate(); diagnostic_compute_iadd_gate();
     subgroup_dynamic_id_gate();
+    subgroup_extended_type_gate();
     unadvertised_int16_gate();
     unadvertised_wide_type_gate();
     puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");
