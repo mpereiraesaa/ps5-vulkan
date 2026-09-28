@@ -58,7 +58,8 @@ def build_case(case, sdk, clang_wrapper, lab, sdk_env):
 
 
 def build_payload(build, source, helper, header_name, header_text, contract,
-                  sdk, clang_wrapper, lab, sdk_env, title):
+                  sdk, clang_wrapper, lab, sdk_env, title,
+                  content_id='UP9000-PPSA99994_00-PS5VKDOT00000001'):
     """Shared SDK compile/link/package route for owned integer-dot witnesses."""
     foundation = lab / 'third_party/ps5-native-app-boilerplate'
     builder = foundation / 'build/host/ps5-native-tool'
@@ -110,7 +111,7 @@ def build_payload(build, source, helper, header_name, header_text, contract,
 
     param = json.loads((lab / "projects/ps5-agc-gears/sce_sys/param.json").read_text())
     param.update(titleId="PPSA99994", conceptId="99994",
-                 contentId="UP9000-PPSA99994_00-PS5VKDOT00000001")
+                 contentId=content_id)
     param["localizedParameters"]["en-US"]["titleName"] = title
     (dist / "sce_sys/param.json").write_text(json.dumps(param, indent=2) + "\n")
     shutil.copyfile(foundation / "runtime/libc.prx", dist / "sce_module/libc.prx")
