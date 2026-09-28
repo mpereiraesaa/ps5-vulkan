@@ -16,7 +16,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 MATRIX = Path("conformance_inventory/dxvk_v262_matrix.json")
-INLINE_PLAN = Path("build/offline-dxvk-profile/inline-v7/hardware-validation-plan-da16c00e.json")
+INLINE_PLAN = Path("build/offline-dxvk-profile/inline-integrated-d0d08ac0/hardware-validation-plan.json")
 SIZE_MEASUREMENT = Path("build/offline-dxvk-profile/subgroup-size-cts/measurement-current.json")
 SIZE_PREVIOUS = Path("build/offline-dxvk-profile/subgroup-size-cts/candidate-7e69fbb1/PPSA99994/cases.txt")
 SIZE_PACKAGE = Path("build/offline-dxvk-profile/subgroup-size-cts/rebuild-cb372781.json")
@@ -131,11 +131,77 @@ def audit_inline(plan: dict, root: Path) -> dict:
     cts = next(g for g in plan["order"] if g["gate"] == "original_cts_limits")
     selection_file = candidate_file(root, cts["candidate"], "selection_hash.txt")
     selected = selection_file.read_text().strip() if selection_file else None
+    source_current = bool(plan.get("rebuild_commit")) and source_unchanged(
+        root, plan["rebuild_commit"],
+        ["src", "native", "include", "examples", "experiments", "cts",
+         "tools/build_sdk.py", "tools/build_dxvk_render_witness.py",
+         "tools/build_dxvk_ps5_cross_probe.py"], [])
+    native_evidence_verified = audit_inline_native_evidence(plan, root)
     return {"checks": checks, "checked_eboots": len(checks),
             "cts_selection_hash_matches": selected == cts["selection_hash"],
+            "source_current": source_current,
+            "native_executed": native_evidence_verified,
+            "native_evidence_verified": native_evidence_verified,
             "execution_prepared": (len(checks) == 8 and all(c["hash_matches"] for c in checks)
                                    and selected == cts["selection_hash"]
-                                   and plan.get("native_executed") is False)}
+                                   and source_current
+                                   and isinstance(plan.get("native_executed"), bool))}
+
+
+def audit_inline_native_evidence(plan: dict, root: Path) -> bool:
+    """Verify the bounded native receipts without treating the CTS fail as Pass."""
+    if plan.get("native_executed") is not True:
+        return False
+    evidence = plan.get("native_evidence", {})
+
+    def receipt(path: str | None) -> dict | None:
+        if not path:
+            return None
+        file = root / path
+        try:
+            return json.loads(file.read_text())
+        except (OSError, ValueError):
+            return None
+
+    probe = receipt(evidence.get("probe"))
+    probe_gate, witness_gate, cts_gate = plan["order"][:3]
+    if not probe or not probe.get("strict_verified") or \
+            probe.get("artifact_eboot_sha256") != probe_gate["eboot_sha256"]:
+        return False
+    from tools.run_dxvk_render_witness import expected_digest
+    for candidate in witness_gate["candidates"]:
+        stage = candidate["stage"]
+        paths = evidence.get("witness_repetitions", {}).get(stage, [])
+        if len(paths) != 2:
+            return False
+        runs = [receipt(path) for path in paths]
+        if any(not run or not run.get("strict_verified") or not run.get("lifecycle_ok") or
+               run.get("eboot_sha256") != candidate["eboot_sha256"] or
+               run.get("mismatches") != [0, 0, 0] or
+               run.get("digest") != expected_digest(tessellation=stage.startswith("tess-"))
+               for run in runs):
+            return False
+        if len({run["run_id"] for run in runs}) != 2:
+            return False
+    paths = evidence.get("cts_repetitions", [])
+    if len(paths) != 2:
+        return False
+    runs = [receipt(path) for path in paths]
+    moved = set(cts_gate["leaves"])
+    for run in runs:
+        if not run or not run.get("lifecycle_ok") or run.get("total_expected") != 881 or \
+                run.get("total_reported") != 881 or run.get("pass_count") != 880 or \
+                run.get("fail_count") != 1 or run.get("missing") or run.get("unexpected") or \
+                run.get("duplicates") or run.get("expected_identity") != {
+                    "selection_hash": cts_gate["selection_hash"],
+                    "eboot_sha256": cts_gate["eboot_sha256"]}:
+            return False
+        cases = {case["case_path"]: case["status"] for case in run["case_results"]}
+        if any(cases.get(path) != "Pass" for path in moved) or \
+                {path for path, status in cases.items() if status != "Pass"} != {
+                    "dEQP-VK.info.device_mandatory_features"}:
+            return False
+    return runs[0]["source_log"] != runs[1]["source_log"]
 
 
 def audit_size_selection(root: Path) -> dict:

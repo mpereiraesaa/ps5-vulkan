@@ -4,6 +4,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from pathlib import Path
 
@@ -27,7 +28,11 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertEqual(17, len(report["rows"]))
         self.assertEqual(17, len({r["id"] for r in report["rows"]}))
         self.assertEqual(8, report["inline_plan"]["checked_eboots"])
-        self.assertTrue(report["inline_plan"]["execution_prepared"])
+        self.assertTrue(all(check["hash_matches"] for check in report["inline_plan"]["checks"]))
+        self.assertEqual(report["inline_plan"]["source_current"],
+                         report["inline_plan"]["execution_prepared"])
+        if report["inline_plan"]["native_executed"]:
+            self.assertTrue(report["inline_plan"]["native_evidence_verified"])
         self.assertTrue(report["subgroup_size_selection"]["selection_verified"])
         self.assertEqual(2, len(report["subgroup_size_selection"]["new_flagged_leaves"]))
         self.assertFalse(report["subgroup_size_selection"]["previous_candidate_covers_new_flags"])
@@ -135,14 +140,22 @@ class DxvkOfflineAuditTests(unittest.TestCase):
                               "eboot_sha256": hashlib.sha256(payload).hexdigest()})
             (root / "candidate-7" / "PPSA99994" / "selection_hash.txt").write_text("selected\n")
             gates[-1]["selection_hash"] = "selected"
-            plan = {"order": gates, "native_executed": False}
-            self.assertTrue(audit_inline(plan, root)["execution_prepared"])
+            plan = {"order": gates, "native_executed": False, "rebuild_commit": "tested"}
+            with patch("tools.audit_dxvk_offline.source_unchanged", return_value=True):
+                self.assertTrue(audit_inline(plan, root)["execution_prepared"])
+                executed = dict(plan, native_executed=True)
+                self.assertTrue(audit_inline(executed, root)["execution_prepared"])
+                self.assertFalse(audit_inline(executed, root)["native_executed"])
+            self.assertFalse(audit_inline({"order": gates, "native_executed": False}, root)
+                             ["execution_prepared"])
             altered = copy.deepcopy(plan)
             altered["order"][0]["eboot_sha256"] = "0" * 64
-            self.assertFalse(audit_inline(altered, root)["execution_prepared"])
+            with patch("tools.audit_dxvk_offline.source_unchanged", return_value=True):
+                self.assertFalse(audit_inline(altered, root)["execution_prepared"])
             altered = copy.deepcopy(plan)
             altered["order"][-1]["selection_hash"] = "wrong"
-            self.assertFalse(audit_inline(altered, root)["execution_prepared"])
+            with patch("tools.audit_dxvk_offline.source_unchanged", return_value=True):
+                self.assertFalse(audit_inline(altered, root)["execution_prepared"])
 
     def test_blocker_mapping_fails_closed_if_matrix_changes(self):
         matrix = json.loads((ROOT / "conformance_inventory/dxvk_v262_matrix.json").read_text())
