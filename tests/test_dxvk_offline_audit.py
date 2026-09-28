@@ -49,6 +49,9 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertTrue(report["t08_package"]["compiler_census_verified"])
         self.assertTrue(report["t08_package"]["cts_selection_verified"])
         self.assertTrue(report["t08_package"]["diagnostic_cts_prepared"])
+        self.assertTrue(report["t08_package"]["eligible_cts_prepared"])
+        self.assertTrue(report["t08_package"]["eligibility_gate_source_verified"])
+        self.assertEqual(2, len(report["t08_package"]["excluded_format_gates"]))
         self.assertFalse(report["t08_package"]["original_cts_eligible"])
         self.assertTrue(all(r["execution_prepared"] and r["cts_verified"]
                             for r in report["rebuilt_witnesses"].values()))

@@ -464,6 +464,53 @@ def audit_t08_package(root: Path) -> dict:
             source_unchanged(root, cts["source_commit"],
                 ["src", "native", "include", "cts", "tools/build_sdk.py",
                  "tools/build_upstream_cts.py"], [build["tessellation_build_profile"]]))
+    eligible = record.get("eligible_cts", {})
+    eligible_dist = root / eligible.get("candidate", "") / "PPSA99994"
+    eligible_eboot = eligible_dist / "eboot.bin"
+    eligible_manifest = eligible_dist / "build_manifest.json"
+    eligible_selection = root / eligible.get("selection_manifest", "")
+    expected_eligible = {
+        "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_nonconst_uint",
+        "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_uint16_t",
+        "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int16_t",
+    }
+    expected_excluded = {
+        "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_float16_t": "shaderFloat16 unreported",
+        "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int64_t": "shaderInt64 unreported",
+    }
+    format_source = (root / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                     "vulkan/subgroups/vktSubgroupsTestsUtils.cpp").read_text()
+    eligibility_gate_source_verified = all(gate in format_source for gate in (
+        "return shaderSubgroupExtendedTypes && shaderInt16 && storageBuffer16BitAccess;",
+        "return shaderSubgroupExtendedTypes && shaderFloat16 && storageBuffer16BitAccess;",
+        "return shaderSubgroupExtendedTypes && shaderInt64;"))
+    eligible_cts_prepared = False
+    if eligible_eboot.is_file() and eligible_manifest.is_file() and eligible_selection.is_file():
+        selected = json.loads(eligible_selection.read_text())
+        packaged = json.loads(eligible_manifest.read_text())
+        selected_paths = [case["path"] for case in selected["cases"]]
+        moved_paths = selected_paths[len(frozen["cases"]):]
+        profile = packaged["tessellation_build_profile"]
+        eligible_cts_prepared = (
+            eligibility_gate_source_verified and
+            hashlib.sha256(eligible_eboot.read_bytes()).hexdigest() == eligible.get("eboot_sha256") and
+            hashlib.sha256(eligible_manifest.read_bytes()).hexdigest() == eligible.get("build_manifest_sha256") and
+            packaged["eboot_sha256"] == eligible.get("eboot_sha256") and
+            packaged["selection_hash"] == eligible.get("selection_hash") == selection_hash(selected["cases"]) and
+            packaged["selected_cases"] == selected_paths and
+            packaged["measurement"] == selected["measurement"] and
+            packaged["measurement"]["moved"] == eligible.get("moved") == 3 and
+            selected["cases"][:len(frozen["cases"])] == frozen["cases"] and
+            set(moved_paths) == expected_eligible and
+            {case["path"] for case in selection["cases"][len(frozen["cases"]):]} ==
+                expected_eligible | set(expected_excluded) and
+            eligible.get("excluded_from_earlier_selection") == expected_excluded and
+            set(eligible.get("required_switches", [])) == set(T08_COMBINED_SWITCHES) and
+            {name for name, value in profile["switches"].items() if value == "1"} ==
+                set(T08_COMBINED_SWITCHES) and
+            source_unchanged(root, eligible["source_commit"],
+                ["src", "native", "include", "cts", "tools/build_sdk.py",
+                 "tools/build_upstream_cts.py"], [profile]))
     source_current = source_unchanged(root, record["source_commit"],
         ["src", "native", "include", "examples", "experiments", "tools/build_sdk.py",
          "tools/build_t08_subgroup_broadcast_witness.py",
@@ -472,6 +519,10 @@ def audit_t08_package(root: Path) -> dict:
             "compiler_census_verified": compiler_verified, "cts_selection_verified": selection_verified,
             "diagnostic_cts_prepared": diagnostic_cts_prepared,
             "diagnostic_cts_eboot_sha256": cts.get("eboot_sha256"),
+            "eligible_cts_prepared": eligible_cts_prepared,
+            "eligible_cts_eboot_sha256": eligible.get("eboot_sha256"),
+            "eligibility_gate_source_verified": eligibility_gate_source_verified,
+            "excluded_format_gates": expected_excluded,
             "source_current": source_current, "witness_count": len(witnesses),
             "original_cts_eligible": False}
 
