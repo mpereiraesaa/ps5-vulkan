@@ -6,7 +6,7 @@
 #include <cstdio>
 
 int main() {
-  HWND window = pe_window(L"DXVK 2.6.2 D3D10 / PS5 WSI");
+  HWND window = pe_window(L"DXVK 2.6.2 D3D10 / Prospero Win");
   if (!window) return 2;
   DXGI_SWAP_CHAIN_DESC desc = {};
   desc.BufferDesc.Width = PE_WIDTH;
@@ -32,8 +32,10 @@ int main() {
       backbuffer, nullptr, &view) : buffer;
   HRESULT present[2] = {target, target};
   if (SUCCEEDED(target) && view) {
-    const float colors[2][4] = {{0.1f, 0.3f, 0.5f, 1.0f},
-                                {0.5f, 0.3f, 0.1f, 1.0f}};
+    const float colors[2][4] = {{28.0f / 255.0f, 76.0f / 255.0f,
+                                 132.0f / 255.0f, 1.0f},
+                                {132.0f / 255.0f, 76.0f / 255.0f,
+                                 28.0f / 255.0f, 1.0f}};
     for (int frame = 0; frame < 2; ++frame) {
       device->ClearRenderTargetView(view, colors[frame]);
       present[frame] = swapchain->Present(1, 0);

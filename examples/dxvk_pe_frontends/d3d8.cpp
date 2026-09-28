@@ -5,7 +5,7 @@
 #include <cstdio>
 
 int main() {
-  HWND window = pe_window(L"DXVK 2.6.2 D3D8 / PS5 WSI");
+  HWND window = pe_window(L"DXVK 2.6.2 D3D8 / Prospero Win");
   if (!window) return 2;
   IDirect3D8* api = Direct3DCreate8(D3D_SDK_VERSION);
   if (!api) { DestroyWindow(window); return 3; }

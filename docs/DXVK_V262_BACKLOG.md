@@ -215,6 +215,12 @@ the DLL chain, reaches ps5vk, or presents correct pixels on PS5. The first
 runtime sequence should be x64 D3D11, D3D9, D3D8 and D3D10, followed by x86
 once the 32-bit Vulkan bridge is known to work. Capture the first failed stage
 and verify the two displayed colours independently of the `Present` return.
+All four controls request the same centre RGB sequence: frame 0
+`(28, 76, 132)` / `#1C4C84`, then frame 1 `(132, 76, 28)` / `#844C1C`.
+The receipt records this nominal pixel oracle; it is not pixel evidence.
+Compare RGB only because the D3D8/9 X8 backbuffer does not define alpha.
+If using compressed Remote Play video as the independent observation, allow
+for compression error and verify both the colour order and a clean relaunch.
 
 ### Native display WSI hardware checkpoint (2026-09-28)
 
@@ -441,6 +447,14 @@ DXVK's final presentation blit. The historical offscreen artifact and its
 checksum remain a separate workload. Missing EDID retains its original DXVK
 error log, but the exact documented SDR-default fallback is not classified as
 a rendering refusal; other errors remain refusal candidates.
+
+The first native presentation candidate reached D3D11 FL 11_0 device creation
+but failed during DXGI swapchain creation at a valid pixel-coordinate sampler
+request (`vkCreateSampler`, `unnormalizedCoordinates=1`). The exact artifact,
+refusal and run are in [VALIDATION.md](../VALIDATION.md#native-dxvk-presentation-candidate-sampler-refusal-2026-09-28).
+The driver now encodes the GFX10 S# unnormalized-coordinate bit for that
+bounded sampler form, with a host contract; hardware presentation and the
+pixel oracle remain to be retested on the new artifact.
 
 With the pinned DXVK checkout and its SDL2 native Meson build available:
 

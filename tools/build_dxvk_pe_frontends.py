@@ -166,6 +166,7 @@ def main() -> int:
                    "dll_variant": args.dll_variant,
                    "dxvk_commit": pinned,
                    "window_source_sha256": sha256(SOURCE / "window.h"),
+                   "expected_center_rgb": [[28, 76, 132], [132, 76, 28]],
                    "architectures": outputs,
                    "scope": "PE application binaries only; no Prospero Win or PS5 execution"}
         if adapter_sha256:

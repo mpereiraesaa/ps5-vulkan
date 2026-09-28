@@ -62,7 +62,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
      * approximate sampling behavior. */
     if(!d->graphics_enabled || info->pNext || unsupported_flags || info->anisotropyEnable ||
         (info->compareEnable && (!compare_allowed || info->minLod < 0)) ||
-        info->unnormalizedCoordinates ||
         !(info->mipLodBias>=-(float)PS5VK_MAX_SAMPLER_LOD_BIAS &&
           info->mipLodBias<=(float)PS5VK_MAX_SAMPLER_LOD_BIAS) ||
         !(info->minLod>=-FLT_MAX && info->minLod<=FLT_MAX &&
@@ -73,6 +72,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
     int u=address_mode(info->addressModeU),v=address_mode(info->addressModeV),w=address_mode(info->addressModeW);
     int border=border_color(info->borderColor);
     if(u<0 || v<0 || w<0 || border<0)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(info->unnormalizedCoordinates &&
+       (info->magFilter!=info->minFilter ||
+        info->mipmapMode!=VK_SAMPLER_MIPMAP_MODE_NEAREST ||
+        (u!=2 && u!=6) || (v!=2 && v!=6) || (w!=2 && w!=6) ||
+        info->minLod!=0.0f || info->maxLod!=0.0f || info->compareEnable))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
     if((u==3 || v==3 || w==3) &&
        !(d->enabled_features_t09 & PS5VK_T09_FEATURE_SAMPLER_MIRROR_CLAMP_TO_EDGE))
         return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -87,7 +92,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(VkDevice d,const VkSamplerCreateI
     if(custom)s->allocator=saved;
     /* Public GFX10 S#: CLAMP_X/Y/Z and XY_MAG/MIN_FILTER. Same fields as
      * Xash3D's ps5_gfx1013_build_ssharp, with independent axis/filter inputs. */
-    s->words[0]=(uint32_t)u|((uint32_t)v<<3)|((uint32_t)w<<6);
+    s->words[0]=(uint32_t)u|((uint32_t)v<<3)|((uint32_t)w<<6)|
+        ((uint32_t)!!info->unnormalizedCoordinates<<15);
     if(info->compareEnable)
         s->words[0]|=((uint32_t)info->compareOp&7u)<<12;
     s->words[1]=unsigned_lod(info->minLod)|(unsigned_lod(info->maxLod)<<12);

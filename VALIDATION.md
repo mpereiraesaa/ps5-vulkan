@@ -77,6 +77,26 @@ It does not load a DXVK PE DLL, traverse Prospero Win's Vulkan bridge, or
 compare the displayed pixels with an independent visual oracle. Those are
 still required for D3D8/9/10/11 frontend acceptance.
 
+## Native DXVK presentation candidate: sampler refusal (2026-09-28)
+
+The separate pinned DXVK 2.6.2 D3D11/DXGI presentation payload, built against
+ordinary ps5vk `c65dcd2d`, created a feature-level 11_0 device and context.
+Swapchain creation then stopped at a pixel-coordinate sampler request:
+`vkCreateSampler` returned `VK_ERROR_FEATURE_NOT_PRESENT` with linear min/mag,
+nearest mip, clamp-to-border on all axes and
+`unnormalizedCoordinates=VK_TRUE`. The runner classified the result
+`incomplete`; no frame or pixel oracle was observed. It recorded no crash or
+suspected GPU hang, and the original project payload was restored.
+
+- Candidate eboot SHA-256: `b1c25f8cae6a93f998b2d91cd7f4bcc4a0c4e8c3a7ef009aaf85c286124fdc6e`.
+- Run: `20260928T173253093Z_PPSA99994_ps5vk_0x3cad32c5a047`; log SHA-256:
+  `e71d9d4ece14349c34a1aff56fc5ff123e202e3d9ca795ad5caed696ee9f8c74`.
+
+The sampler implementation now encodes GFX10 S# `FORCE_UNNORMALIZED` for
+Vulkan-valid pixel-coordinate samplers, and a host contract reproduces the
+DXVK call. This source change still needs a fresh native presentation run;
+the failed artifact above contains the earlier implementation.
+
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 
 The public capability probe was rebuilt from clean `main` (`aa7f36e8`) with
