@@ -66,6 +66,11 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertFalse(report["t08_package"]["original_cts_eligible"])
         self.assertTrue(all(r["artifact_verified"] and r["cts_verified"]
                             for r in report["rebuilt_witnesses"].values()))
+        self.assertTrue(report["rebuilt_witnesses"]["pipelineCreationCacheControl"]
+                        ["execution_prepared"])
+        self.assertTrue(report["rebuilt_witnesses"]["shaderZeroInitializeWorkgroupMemory"]
+                        ["execution_prepared"])
+        self.assertTrue(report["rebuilt_witnesses"]["maintenance4"]["execution_prepared"])
         self.assertTrue(all(not r["execution_prepared"] for r in report["rebuilt_witnesses"].values()
                             if not r["source_current"] or not r["cts_source_current"]))
         self.assertTrue(all(r["hardware_evidence_required"] for r in report["rows"]))

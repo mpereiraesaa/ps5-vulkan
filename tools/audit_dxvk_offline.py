@@ -46,9 +46,9 @@ REBUILD = {
     "shaderZeroInitializeWorkgroupMemory": "Run the rebuilt SDK witness and 42 original CTS leaves, then canonical acceptance.",
 }
 REBUILT_WITNESSES = {
-    "maintenance4": Path("build/offline-dxvk-profile/maintenance4-cts/rebuild-e8318a25.json"),
-    "pipelineCreationCacheControl": Path("build/offline-dxvk-profile/cache-control/rebuild-a355320b.json"),
-    "shaderZeroInitializeWorkgroupMemory": Path("build/offline-dxvk-profile/zero-initialize-witness/rebuild-a355320b.json"),
+    "maintenance4": Path("build/offline-dxvk-profile/maintenance4-cts/rebuild-e3bae4a0.json"),
+    "pipelineCreationCacheControl": Path("build/offline-dxvk-profile/cache-control/rebuild-e3bae4a0.json"),
+    "shaderZeroInitializeWorkgroupMemory": Path("build/offline-dxvk-profile/zero-initialize-witness/rebuild-e3bae4a0.json"),
 }
 POLICY = {"apiVersion": "Keep the truthful reported version until the required patch-level conformance is proven."}
 EXPECTED = INLINE | set(OFFLINE) | set(REBUILD) | set(POLICY)
