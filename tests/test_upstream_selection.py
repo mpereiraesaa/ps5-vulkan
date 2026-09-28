@@ -32,9 +32,35 @@ def load_gate():
 
 
 class UpstreamSelectionTests(unittest.TestCase):
+    def test_t08_size_control_diagnostics_include_real_stage_flags(self):
+        source = (UPSTREAM / "external/vulkancts/modules/vulkan/subgroups/"
+                  "vktSubgroupsSizeControlTests.cpp")
+        text = source.read_text()
+        names = self.gate._subgroup_size_leaf_names(text)
+        selected = [d for d in self.current_manifest["diagnostics"] if d["category"] in
+                    ("t08-subgroup-size-control-pending", "t08-compute-full-subgroups-pending")]
+        self.assertEqual(6, len(selected))
+        self.assertTrue({d["path"] for d in selected} <= names)
+        self.assertFalse({d["path"] for d in selected} &
+                         {c["path"] for c in self.current_manifest["cases"]})
+        flagged = [d for d in selected if d["path"].endswith("_flags_spirv16")]
+        self.assertEqual(2, len(flagged))
+        self.assertTrue(all("SPIR-V:1.6" in d["features_required"] for d in flagged))
+        full = [d for d in selected if d["category"] == "t08-compute-full-subgroups-pending"]
+        self.assertEqual(1, len(full))
+        self.assertTrue({"computeFullSubgroups", "subgroup:BALLOT"} <=
+                        set(full[0]["features_required"]))
+        self.assertEqual(set(), self.gate._subgroup_size_leaf_names(
+            text.replace('{true, true, "_flags_spirv16"}',
+                         '{false, true, "_flags_spirv16"}')))
+
     def test_t08_subgroup_diagnostics_follow_pinned_compute_factories(self):
         pending = [d for d in self.current_manifest["diagnostics"]
-                   if d["category"].startswith("t08-subgroup-")]
+                   if d["category"] in (
+                       "t08-subgroup-dynamic-id-pending",
+                       "t08-subgroup-extended-int16-pending",
+                       "t08-subgroup-extended-float16-pending",
+                       "t08-subgroup-extended-int64-pending")]
         self.assertEqual(5, len(pending))
         self.assertFalse({d["path"] for d in pending} &
                          {c["path"] for c in self.current_manifest["cases"]})
@@ -168,10 +194,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # to acceptance. T07 adds 322 original BC, gather, precise-query and
         # cube-array cases. T09 adds 50 original timeline-semaphore,
         # renderpass2 write-mask and D32_SFLOAT_S8_UINT stencil/depth leaves
-        # (combined and separate-layouts); the 351 diagnostics record
+        # (combined and separate-layouts); the 357 diagnostics record
         # refusals, gaps and unmeasured zero-initialization and integer-dot cases. `leaves` counts every
         # attachment_write_mask leaf the pinned factory generates.
-        self.assertEqual((879, 351, 48),
+        self.assertEqual((879, 357, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]

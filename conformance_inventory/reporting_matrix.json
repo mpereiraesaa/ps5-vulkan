@@ -1232,7 +1232,13 @@
       "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_uint16_t",
       "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int16_t",
       "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_float16_t",
-      "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int64_t"
+      "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int64_t",
+      "dEQP-VK.subgroups.size_control.generic.subgroup_size_properties",
+      "dEQP-VK.subgroups.size_control.compute.allow_varying_subgroup_size",
+      "dEQP-VK.subgroups.size_control.compute.allow_varying_subgroup_size_flags_spirv16",
+      "dEQP-VK.subgroups.size_control.compute.required_subgroup_size_min",
+      "dEQP-VK.subgroups.size_control.compute.required_subgroup_size_max",
+      "dEQP-VK.subgroups.size_control.compute.require_full_subgroups_flags_spirv16"
     ],
     "manifest": "cts/upstream/manifest.json",
     "note": "Only original upstream cases whose prerequisites the reported profile satisfies belong here; anything else stays a diagnostic."

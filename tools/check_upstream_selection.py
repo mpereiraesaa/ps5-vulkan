@@ -432,6 +432,34 @@ def _subgroup_compute_leaf_names(text: str, family: str) -> set[str]:
             for op in operations for fmt in formats}
 
 
+@_memoized
+def _subgroup_size_leaf_names(text: str) -> set[str]:
+    """Derive size-control leaves from the pinned factory's registrations."""
+    match = re.search(r"createSubgroupsSizeControlTests\(TestContext &testCtx\)", text)
+    if not match:
+        return set()
+    factory = _source_function_at_line(text, text.count("\n", 0, match.start()) + 1)
+    if (not factory or
+            'new TestCaseGroup(testCtx, "size_control")' not in factory or
+            "VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT" not in factory or
+            "VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT" not in factory or
+            not re.search(r'\{true,\s*true,\s*"_flags_spirv16"\}', factory) or
+            "params.flagsEnabled ? flagsVary : 0u" not in factory or
+            "params.flagsEnabled ? flagsFull : 0u" not in factory):
+        return set()
+    params = re.search(r"const TestParams testParams\[\] = \{(.*?)\};", factory)
+    postfixes = (set(re.findall(r'\{(?:true|false),\s*(?:true|false),\s*"([^"]*)"\}',
+                                 params.group(1))) if params else set())
+    names = set()
+    for leaf, suffix in re.findall(
+            r'computeGroup\.get\(\),\s*"([a-z_]+)"(\s*\+\s*params\.postfix)?', factory):
+        for postfix in postfixes if suffix else ("",):
+            names.add(f"dEQP-VK.subgroups.size_control.compute.{leaf}{postfix}")
+    for leaf in re.findall(r'genericGroup\.get\(\),\s*"([a-z_]+)"', factory):
+        names.add(f"dEQP-VK.subgroups.size_control.generic.{leaf}")
+    return names
+
+
 def _multisample_factory(text: str) -> str:
     """Return the body of the pinned multisample factory.
 
@@ -2189,6 +2217,21 @@ def main() -> int:
                     "vkt::compute::createZeroInitializeWorkgroupMemoryTests(" not in integration_text or
                     "vktComputeZeroInitializeWorkgroupMemoryTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
                 failures.append(f"{path}: not produced by the registered zero-initialize factory")
+            continue
+
+        if case.get("category") in ("t08-subgroup-size-control-pending",
+                                    "t08-compute-full-subgroups-pending"):
+            if (source_path.name != "vktSubgroupsSizeControlTests.cpp" or
+                    path not in _subgroup_size_leaf_names(text) or
+                    "vkt::subgroups::createSubgroupsSizeControlTests(" not in integration_text or
+                    source_path.name not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by the registered pinned size-control factory")
+            required = set(case.get("features_required", []))
+            if (case["category"] == "t08-compute-full-subgroups-pending" and
+                    not {"computeFullSubgroups", "subgroup:BALLOT", "subgroupSizeControl"} <= required):
+                failures.append(f"{path}: full-subgroup CTS prerequisites are not declared")
+            if (path.endswith("_flags_spirv16") and "SPIR-V:1.6" not in required):
+                failures.append(f"{path}: flagged SPIR-V 1.6 variant is not declared")
             continue
 
         if case.get("category", "").startswith("t08-subgroup-"):

@@ -12577,6 +12577,80 @@
         "subgroup:ARITHMETIC"
       ],
       "rationale": "UNMEASURED: original 64-bit integer arithmetic reduction oracle; native lane semantics and CTS acceptance remain unverified."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.generic.subgroup_size_properties",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1109",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroup:compute"
+      ],
+      "rationale": "UNMEASURED: original subgroup size property sanity oracle; the diagnostic build must report a truthful fixed wave32 range."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.allow_varying_subgroup_size",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1126",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroup:compute"
+      ],
+      "rationale": "UNMEASURED: original no-flag compute control case; paired with the flagged SPIR-V 1.6 variant below so the measurement cannot be mistaken for varying-size coverage."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.allow_varying_subgroup_size_flags_spirv16",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1126",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroupSizeControl",
+        "subgroup:compute",
+        "SPIR-V:1.6"
+      ],
+      "rationale": "UNMEASURED: original compute oracle that actually sets ALLOW_VARYING_SUBGROUP_SIZE; host admission alone cannot prove GPU execution."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.required_subgroup_size_min",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1263",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroupSizeControl",
+        "subgroup:compute"
+      ],
+      "rationale": "UNMEASURED: original required-minimum subgroup-size compute oracle; a fixed wave32 implementation must produce the reported size."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.required_subgroup_size_max",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1236",
+      "category": "t08-subgroup-size-control-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroupSizeControl",
+        "subgroup:compute"
+      ],
+      "rationale": "UNMEASURED: original required-maximum subgroup-size compute oracle; a fixed wave32 implementation must produce the reported size."
+    },
+    {
+      "path": "dEQP-VK.subgroups.size_control.compute.require_full_subgroups_flags_spirv16",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsSizeControlTests.cpp:1170",
+      "category": "t08-compute-full-subgroups-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "VK_EXT_subgroup_size_control",
+        "subgroupSizeControl",
+        "computeFullSubgroups",
+        "subgroup:compute",
+        "subgroup:BALLOT",
+        "SPIR-V:1.6"
+      ],
+      "rationale": "UNMEASURED: original compute oracle sets REQUIRE_FULL_SUBGROUPS and ALLOW_VARYING_SUBGROUP_SIZE; CTS also requires BALLOT, so the size-only diagnostic build cannot make this leaf applicable."
     }
   ]
 }
