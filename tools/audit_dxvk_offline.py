@@ -567,6 +567,9 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
     inline = audit_inline(inline_plan, root)
     size = audit_size_selection(root)
     subgroup_package = audit_subgroup_size_package(root)
+    size_execution_prepared = (size["selection_verified"] and
+                               subgroup_package.get("package_verified", False) and
+                               subgroup_package.get("combined_cts_prepared", False))
     integer_dot_package = audit_integer_dot_package(root)
     robust_image_package = audit_robust_image_package(root)
     t08_package = audit_t08_package(root)
@@ -579,9 +582,14 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
             phase = "native_validation" if inline["execution_prepared"] else "offline_rebuild"
             next_action = "Execute the eight-gate inline validation plan, then promote only verified rows."
         elif name in OFFLINE:
-            phase = ("native_validation" if name == "shaderIntegerDotProduct" and
-                     integer_dot_package.get("package_verified") else "offline_work")
-            next_action = OFFLINE[name]
+            if name in {"subgroupSizeControl", "computeFullSubgroups"} and size_execution_prepared:
+                phase = "native_validation"
+                next_action = ("Run six occupancy witnesses and the combined six-leaf original CTS "
+                               "selection, then canonical acceptance.")
+            else:
+                phase = ("native_validation" if name == "shaderIntegerDotProduct" and
+                         integer_dot_package.get("package_verified") else "offline_work")
+                next_action = OFFLINE[name]
         elif name in REBUILD:
             phase = "native_validation" if rebuilt[name].get("execution_prepared") else "offline_rebuild"
             next_action = REBUILD[name]
