@@ -120,6 +120,33 @@ ninja -C build/dxvk-native-all -j 8 src/dxgi/libdxvk_dxgi.so.0.20602 src/d3d11/l
 python3 tools/run_dxvk_host_frontends.py --dxvk-dir "$DXVK_DIR"
 ```
 
+### PS5 ABI cross-link of all five native modules (2026-09-28)
+
+`tools/build_dxvk_ps5_cross_probe.py` cross-compiled 223 units from that same
+pinned source for the PS5 toolchain and linked all five native DXVK libraries
+with the PS5 WSI adapter. It checked the D3D8 → D3D9 and D3D10 → D3D11 →
+DXGI ELF dependencies as well as complete links. The ignored
+`build/dxvk-ps5-cross-probe/receipt.json` records these artifact hashes:
+
+| PS5 cross-linked module | SHA-256 |
+| --- | --- |
+| DXGI | `58d93013638da3e20e4b4ef2cafe882e4b62232f46f67cf343e128ed050b7b76` |
+| D3D11 | `7ba72f19613935a504112c2a8f0f2673daf0a08a1d07c80b7274bb563c5957ad` |
+| D3D10 core | `8945dce5422dc19e1c3d183a9e2034618277b48698295da0df7b3e464c5238a6` |
+| D3D9 | `06949af32de02dc148bb4146f8b16fb847a72d5605b3551b229f2f2245da6a0a` |
+| D3D8 | `1dff82848a49d47a88e9767eda9aeedede9cdf48dfaf7fef5291e73575e29748` |
+
+Reproduce with the configured native Meson build above and `DXVK_DIR` at the
+pinned source:
+
+```sh
+python3 tools/build_dxvk_ps5_cross_probe.py --dxvk-dir "$DXVK_DIR" --build-dir build/dxvk-native-all --jobs 8
+```
+
+These are cross-link witnesses, not PE DLLs, deployable payloads or a console
+run. The next runtime proof still needs each frontend through Prospero Win's
+PE and Vulkan bridge, followed by a presented frame on PS5.
+
 ## Current integration target (2026-09-26)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,
