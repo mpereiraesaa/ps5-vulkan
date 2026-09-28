@@ -195,16 +195,21 @@ marker, and releases its objects. D3D10 enters through the application-facing
 `d3d10core.dll` in Prospero Win. The other controls import their matching
 DXVK entry DLLs directly.
 
-With the overlaid DLL build above available, regenerate all eight x64/x86
-executables and their hash/import receipt offline:
+For a Wine bridge that exposes Win32 WSI to PE clients and maps it to the PS5
+display plane internally, use the unmodified DXVK DLL builds and regenerate
+all eight x64/x86 controls with a matching receipt:
 
 ```sh
-python3 tools/build_dxvk_pe_frontends.py
+python3 tools/build_dxvk_pe_frontends.py --dll-variant unmodified
 ```
 
-`build/dxvk-pe-frontends/receipt.json` records each executable's SHA-256,
-source hash, PE imports, the linked DXVK DLL hashes, and `executed: false`.
-The builder verifies the overlaid DLL hashes before linking. The controls are
+This writes `build/dxvk-pe-frontends-unmodified/receipt.json`; the existing
+PS5-display-overlay route remains available with `--dll-variant ps5-wsi` and
+its separate `build/dxvk-pe-frontends/receipt.json`. Each receipt records its
+DLL variant, each executable's SHA-256, source hash, PE imports, the full
+runtime DXVK DLL chain's hashes, and `executed: false`. The builder verifies
+all five DLL hashes against the selected build inventory before linking and
+never mixes x64 with x86. The controls are
 ready as inputs to a Prospero Win run; they do not establish that Wine loads
 the DLL chain, reaches ps5vk, or presents correct pixels on PS5. The first
 runtime sequence should be x64 D3D11, D3D9, D3D8 and D3D10, followed by x86
