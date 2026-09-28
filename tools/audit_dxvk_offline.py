@@ -20,6 +20,7 @@ INLINE_PLAN = Path("build/offline-dxvk-profile/inline-v7/hardware-validation-pla
 SIZE_MEASUREMENT = Path("build/offline-dxvk-profile/subgroup-size-cts/measurement-current.json")
 SIZE_PREVIOUS = Path("build/offline-dxvk-profile/subgroup-size-cts/candidate-7e69fbb1/PPSA99994/cases.txt")
 SIZE_PACKAGE = Path("build/offline-dxvk-profile/subgroup-size-cts/rebuild-cb372781.json")
+DOT_PACKAGE = Path("build/offline-dxvk-profile/integer-dot/current-c78057db/package.json")
 DEFAULT_OUT = Path("build/offline-dxvk-profile/audit-17/current.json")
 
 INLINE = {
@@ -34,7 +35,7 @@ OFFLINE = {
     "subgroupSizeControl": "Package the flagged size-control CTS selection and establish stage bounds.",
     "computeFullSubgroups": "Complete truthful BALLOT reporting and package the flagged full-subgroup CTS case.",
     "robustImageAccess": "Admit the original CTS combined image usage and register its factory.",
-    "shaderIntegerDotProduct": "Complete the integrated original-CTS and graphics numerical delivery candidate.",
+    "shaderIntegerDotProduct": "Run 42 compute and 252 graphics numerical witnesses, then 224 original CTS leaves and review public scope.",
 }
 REBUILD = {
     "maintenance4": "Run three SDK witnesses and 33 original CTS leaves, then canonical acceptance.",
@@ -162,6 +163,84 @@ def audit_subgroup_size_package(root: Path) -> dict:
             "cts_eboot_sha256": cts["eboot_sha256"]}
 
 
+def audit_integer_dot_package(root: Path) -> dict:
+    from tools.integer_dot_graphics_witness import GRAPHS
+    from tools.verify_integer_dot_witness import CASES
+
+    path = root / DOT_PACKAGE
+    if not path.is_file():
+        return {"package_verified": False}
+    record = json.loads(path.read_text())
+    valid = record.get("native_executed") is False
+    totals = {}
+    for kind, expected in (("compute", {(case,) for case in CASES}),
+                           ("graphics", {(case, graph) for case in CASES for graph in GRAPHS})):
+        inventory_path = root / record[f"{kind}_inventory"]
+        if not inventory_path.is_file():
+            return {"package_verified": False}
+        valid = valid and hashlib.sha256(inventory_path.read_bytes()).hexdigest() == record[f"{kind}_inventory_sha256"]
+        inventory = json.loads(inventory_path.read_text())
+        entries = inventory["cases"]
+        observed = {(item["case"], item["graph"]) if kind == "graphics" else (item["case"],)
+                    for item in entries}
+        valid = valid and (inventory["source_commit"] == record["source_commit"] and
+                           inventory["native_executed"] is False and
+                           len(entries) == len(expected) and observed == expected)
+        totals[kind] = len(entries)
+        for item in entries:
+            candidate = root / Path(record[f"{kind}_inventory"]).parent / item["case"]
+            if kind == "graphics":
+                candidate /= item["graph"]
+            artifact_path = candidate / "artifact.json"
+            eboot_path = candidate / "PPSA99994/eboot.bin"
+            if not artifact_path.is_file() or not eboot_path.is_file():
+                valid = False
+                break
+            artifact = json.loads(artifact_path.read_text())
+            valid = valid and (
+                hashlib.sha256(artifact_path.read_bytes()).hexdigest() == item["artifact_sha256"] and
+                hashlib.sha256(eboot_path.read_bytes()).hexdigest() == item["eboot_sha256"] and
+                artifact.get("eboot_sha256") == item["eboot_sha256"] and
+                artifact.get("case") == item["case"] and
+                (kind != "graphics" or artifact.get("graph") == item["graph"]) and
+                artifact.get("native_executed") is False and
+                artifact["build_profile"]["switches"].get("PS5VK_INTEGER_DOT_DIAGNOSTIC") == "1")
+        if not valid:
+            break
+    cts = record["cts"]
+    cts_dist = root / cts["candidate"] / "PPSA99994"
+    eboot = cts_dist / "eboot.bin"
+    build_path = cts_dist / "build_manifest.json"
+    selection_path = root / cts["selection_manifest"]
+    if not eboot.is_file() or not build_path.is_file() or not selection_path.is_file():
+        return {"package_verified": False}
+    build = json.loads(build_path.read_text())
+    selection = json.loads(selection_path.read_text())
+    frozen = json.loads((root / "cts/upstream/manifest.json").read_text())
+    paths = [case["path"] for case in selection["cases"]]
+    valid = valid and (
+        hashlib.sha256(eboot.read_bytes()).hexdigest() == cts["eboot_sha256"] and
+        hashlib.sha256(build_path.read_bytes()).hexdigest() == cts["build_manifest_sha256"] and
+        build["eboot_sha256"] == cts["eboot_sha256"] and
+        build["selection_hash"] == cts["selection_hash"] == selection_hash(selection["cases"]) and
+        build["selected_cases"] == paths and
+        build["measurement"] == selection["measurement"] and
+        build["measurement"]["moved"] == cts["moved"] == 224 and
+        build["measurement"]["categories"] == ["integer-dot-product-pending"] and
+        selection["cases"][:len(frozen["cases"])] == frozen["cases"] and
+        selection["measurement"]["base_selection_hash"] == selection_hash(frozen["cases"]) and
+        build["tessellation_build_profile"]["switches"].get(cts["diagnostic_switch"]) == "1")
+    source_current = subprocess.run(
+        ["git", "diff", "--quiet", record["source_commit"], "--", "src", "native", "include",
+         "examples", "experiments", "cts", "tools/build_sdk.py", "tools/build_upstream_cts.py",
+         "tools/build_integer_dot_witness.py", "tools/build_integer_dot_graphics_witness.py",
+         "tools/integer_dot_spirv.py", "tools/integer_dot_vectors.py"],
+        cwd=root, check=False, capture_output=True).returncode == 0
+    return {"package_verified": valid and source_current, "artifact_verified": valid,
+            "source_current": source_current, "variants": totals,
+            "cts_eboot_sha256": cts["eboot_sha256"]}
+
+
 def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
     path = root / record_path
     if not path.is_file():
@@ -252,6 +331,7 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
     inline = audit_inline(inline_plan, root)
     size = audit_size_selection(root)
     subgroup_package = audit_subgroup_size_package(root)
+    integer_dot_package = audit_integer_dot_package(root)
     rebuilt = {name: audit_rebuilt_witness(root, path)
                for name, path in REBUILT_WITNESSES.items()}
     rows = []
@@ -261,7 +341,9 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
             phase = "native_validation" if inline["execution_prepared"] else "offline_rebuild"
             next_action = "Execute the eight-gate inline validation plan, then promote only verified rows."
         elif name in OFFLINE:
-            phase, next_action = "offline_work", OFFLINE[name]
+            phase = ("native_validation" if name == "shaderIntegerDotProduct" and
+                     integer_dot_package.get("package_verified") else "offline_work")
+            next_action = OFFLINE[name]
         elif name in REBUILD:
             phase = "native_validation" if rebuilt[name].get("execution_prepared") else "offline_rebuild"
             next_action = REBUILD[name]
@@ -275,7 +357,8 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
     return {"schema": "ps5vk-dxvk-offline-audit/1", "matrix": str(MATRIX),
             "matrix_summary": matrix["summary"], "rows": rows,
             "inline_plan": inline, "subgroup_size_selection": size,
-            "subgroup_size_package": subgroup_package, "rebuilt_witnesses": rebuilt,
+            "subgroup_size_package": subgroup_package, "integer_dot_package": integer_dot_package,
+            "rebuilt_witnesses": rebuilt,
             "note": "Offline preparation only; no row is promoted by this audit."}
 
 

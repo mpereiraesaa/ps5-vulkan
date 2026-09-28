@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from tools.audit_dxvk_offline import (
-    ROOT, INLINE_PLAN, REBUILT_WITNESSES, SIZE_MEASUREMENT, SIZE_PACKAGE, SIZE_PREVIOUS,
+    ROOT, DOT_PACKAGE, INLINE_PLAN, REBUILT_WITNESSES, SIZE_MEASUREMENT, SIZE_PACKAGE, SIZE_PREVIOUS,
     audit_inline, audit_rebuilt_witness, build_audit, selection_hash,
 )
 
@@ -16,7 +16,7 @@ from tools.audit_dxvk_offline import (
 class DxvkOfflineAuditTests(unittest.TestCase):
     def test_current_audit_covers_all_17_and_checks_the_inline_artifacts(self):
         if not all((ROOT / path).is_file() for path in
-                   (INLINE_PLAN, SIZE_MEASUREMENT, SIZE_PACKAGE, SIZE_PREVIOUS,
+                   (DOT_PACKAGE, INLINE_PLAN, SIZE_MEASUREMENT, SIZE_PACKAGE, SIZE_PREVIOUS,
                     *REBUILT_WITNESSES.values())):
             self.skipTest("local offline candidate artifacts unavailable")
         report = build_audit()
@@ -29,7 +29,9 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertFalse(report["subgroup_size_selection"]["previous_candidate_covers_new_flags"])
         self.assertTrue(report["subgroup_size_package"]["package_verified"])
         self.assertEqual(6, report["subgroup_size_package"]["variant_count"])
-        self.assertEqual(10, sum(r["phase"] == "native_validation" for r in report["rows"]))
+        self.assertEqual(11, sum(r["phase"] == "native_validation" for r in report["rows"]))
+        self.assertTrue(report["integer_dot_package"]["package_verified"])
+        self.assertEqual({"compute": 42, "graphics": 252}, report["integer_dot_package"]["variants"])
         self.assertTrue(all(r["execution_prepared"] and r["cts_verified"]
                             for r in report["rebuilt_witnesses"].values()))
         self.assertTrue(all(r["hardware_evidence_required"] for r in report["rows"]))
