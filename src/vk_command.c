@@ -1521,34 +1521,9 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
      * release may name MEMORY_READ at ALL_COMMANDS as DXVK does; the release
      * still requires an exact producer write and an image role it declared.
      * Stage/access compatibility is checked by the caller. */
-    if (image->swapchain_owned) {
-        const VkBool32 transfer = !!(usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-        const VkBool32 color = !!(usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-        const VkBool32 from_present = b->oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        const VkBool32 to_present = b->newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        if (from_present || to_present) {
-            if (from_present && !b->srcAccessMask &&
-                ((transfer && b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-                  b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT) ||
-                 (color && b->newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-                  b->dstAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) ||
-                 ((transfer || color) && b->newLayout == VK_IMAGE_LAYOUT_GENERAL &&
-                  (b->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT ||
-                   b->dstAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))))
-                return 1;
-            if (to_present && (b->dstAccessMask == 0 ||
-                               b->dstAccessMask == VK_ACCESS_MEMORY_READ_BIT) &&
-                ((transfer && b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-                  b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT) ||
-                 (color && b->oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
-                  b->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) ||
-                 ((transfer || color) && b->oldLayout == VK_IMAGE_LAYOUT_GENERAL &&
-                  (b->srcAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT ||
-                   b->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT))))
-                return 1;
-            return 0;
-        }
-    }
+    if (b->oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR ||
+        b->newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        return ps5vk_swapchain_present_barrier(b);
     if(ps5vk_tiled_cube_sampled_image(image))return
         b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
         b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&

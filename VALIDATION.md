@@ -165,7 +165,23 @@ The wrapper restored the previous payload and the console was idle afterward.
 
 A host regression reproduces the postlude's sampled-backbuffer handover and
 handback. The planner now uses the same bounded predicate as the recorder and
-upload prelude; hardware confirmation is pending.
+upload prelude. The seventh clean artifact, ps5vk `c8224bef`, completed the
+first native DXVK D3D11 frame: all 4,096 readback pixels matched the oracle,
+checksum `6e17a4c5`, and `Present` returned success. It is a one-frame result,
+not the required three-frame presentation acceptance. During the second frame,
+the native postlude refused a swapchain-owned BGRA8 colour-attachment-to-present
+release that recording had accepted; `vkQueueSubmit2` returned
+`VK_ERROR_FEATURE_NOT_PRESENT`. The run then aborted in `Map`, without a
+suspected GPU hang. The wrapper restored the previous payload and left the
+console idle.
+
+- Seventh candidate eboot SHA-256: `7afeaa19fe9c0981f8c4dad02664818723c537f42075787796bf5c07f29181c4`.
+- Run: `20260928T185324700Z_PPSA99994_ps5vk_0x4112211e471b`; log SHA-256:
+  `0f21b3d654db2d0d441dfbd8793378d8bba1df625df5faf67e41066029fe9985`.
+
+A host regression reproduces the exact display release and now passes through
+a shared recorder/native predicate. Hardware confirmation of frames two and
+three remains pending.
 
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 

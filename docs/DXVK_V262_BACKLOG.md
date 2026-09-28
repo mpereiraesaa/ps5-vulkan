@@ -471,6 +471,11 @@ pending. The sixth clean artifact confirmed those barriers reached the native
 readback postlude, where the sampled backbuffer's shader-read handover was
 refused before the first frame could pass. A host regression now covers that
 postlude route using the same bounded predicate; hardware retest is pending.
+The seventh clean artifact passed the first frame's 4,096-pixel oracle and
+`Present`, then refused a BGRA8 colour-attachment-to-present release in the
+second frame's native postlude. The recorder and native executor now use the
+same bounded display-ownership predicate. Three-frame acceptance still needs
+hardware confirmation.
 
 With the pinned DXVK checkout and its SDL2 native Meson build available:
 

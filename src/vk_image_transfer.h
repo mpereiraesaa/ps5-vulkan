@@ -99,23 +99,41 @@ static inline VkBool32 ps5vk_bgra8_transfer_barrier(const VkImageMemoryBarrier *
          b->srcAccessMask == color && b->dstAccessMask == transfer);
 }
 
-/* A software compositor imports an acquired swapchain image for a transfer
- * write and releases it back to the display. The frontend's CPU copy writes
- * the tiled scanout memory directly, so on the queue these are layout
- * bookkeeping plus the ordinary acquire: exactly the two present forms the
- * recorder accepts for a swapchain-owned transfer target (vk_command.c). */
+/* Display ownership transitions accepted at record and at native submission.
+ * DXVK may write a swapchain image either through a transfer or as a colour
+ * attachment; in both cases release requires that exact producer access.
+ * The native executor performs an acquire and tracks the new layout. */
+static inline VkBool32 ps5vk_swapchain_present_barrier(const VkImageMemoryBarrier *b)
+{
+    if (!b || !b->image || !b->image->swapchain_owned)
+        return VK_FALSE;
+    const VkImageUsageFlags usage=b->image->info.usage;
+    const VkBool32 transfer=(usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)!=0;
+    const VkBool32 color=(usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)!=0;
+    if (b->oldLayout==VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && !b->srcAccessMask)
+        return (transfer && b->newLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+               (color && b->newLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) ||
+               ((transfer || color) && b->newLayout==VK_IMAGE_LAYOUT_GENERAL &&
+                (b->dstAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT ||
+                 b->dstAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT));
+    if (b->newLayout==VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
+        (!b->dstAccessMask || b->dstAccessMask==VK_ACCESS_MEMORY_READ_BIT))
+        return (transfer && b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT) ||
+               (color && b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT) ||
+               ((transfer || color) && b->oldLayout==VK_IMAGE_LAYOUT_GENERAL &&
+                (b->srcAccessMask==VK_ACCESS_TRANSFER_WRITE_BIT ||
+                 b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT));
+    return VK_FALSE;
+}
+
 static inline VkBool32 ps5vk_bgra8_present_barrier(const VkImageMemoryBarrier *b)
 {
-    if (!b || !ps5vk_bgra8_transfer_target(b->image) || !b->image->swapchain_owned)
-        return VK_FALSE;
-    const VkAccessFlags transfer = VK_ACCESS_TRANSFER_WRITE_BIT;
-    return (b->oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
-            b->newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-            !b->srcAccessMask && b->dstAccessMask == transfer) ||
-        (b->oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-         b->newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
-         b->srcAccessMask == transfer &&
-         (!b->dstAccessMask || b->dstAccessMask == VK_ACCESS_MEMORY_READ_BIT));
+    return b && ps5vk_bgra8_transfer_target(b->image) &&
+        ps5vk_swapchain_present_barrier(b);
 }
 
 static inline VkBool32 ps5vk_d32_gather_barrier(const VkImageMemoryBarrier *b)

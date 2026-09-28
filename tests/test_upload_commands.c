@@ -641,6 +641,38 @@ int main(void)
             present_words+64,flush)!=VK_SUCCESS && at==present_words);
     }
     {
+        /* DXVK 2.6.2 renders directly into the colour-capable swapchain
+         * image. Frame two records COLOR_ATTACHMENT -> PRESENT with the
+         * attachment write and MEMORY_READ at ALL_COMMANDS; recording accepts
+         * this exact display release, so the native postlude must as well. */
+        struct VkImage_T scanout={0};
+        scanout.info=(VkImageCreateInfo){.imageType=VK_IMAGE_TYPE_2D,
+            .format=VK_FORMAT_B8G8R8A8_UNORM,.extent={1920,1080,1},.mipLevels=1,
+            .arrayLayers=1,.samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+            .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+        scanout.swapchain_owned=VK_TRUE;
+        scanout.layout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        struct ps5vk_operation release={.type=PS5VK_IMAGE_BARRIER,
+            .src_stage=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dst_stage=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            .image_barrier={.image=&scanout,
+                .oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .newLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                .srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                .dstAccessMask=VK_ACCESS_MEMORY_READ_BIT}};
+        uint32_t words[64]={0},*at=words;
+        struct ps5vk_layout_state layouts={0};
+        assert(ps5vk_upload_commands(&device,&release,1,NULL,&layouts,&at,
+            words+64,flush)==VK_SUCCESS);
+        assert(at-words==PS5VK_GRAPHICS_ACQUIRE_WORDS);
+        assert(ps5vk_layout_require(&layouts,&scanout,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)==VK_SUCCESS);
+        scanout.swapchain_owned=VK_FALSE;at=words;
+        layouts=(struct ps5vk_layout_state){0};
+        assert(ps5vk_upload_commands(&device,&release,1,NULL,&layouts,&at,
+            words+64,flush)==VK_ERROR_FEATURE_NOT_PRESENT && at==words);
+    }
+    {
         /* Native DXVK 2.6.2: the recorder accepted these transitions on its
          * rendered/sampled/transfer RGBA8 backbuffer. Each submission's
          * upload prelude must accept the same bounded transaction. */
