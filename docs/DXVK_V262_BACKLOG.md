@@ -254,6 +254,23 @@ leaf is not a reason to pause. Do not erase or relabel existing CTS failures.
 General Vulkan conformance, whole-suite CTS and certification are outside the
 current goal.
 
+For `robustImageAccess`, the pinned original image-robustness factory is not
+registered in the PS5 CTS package. Registering it alone would not make a
+measurement executable: `vktRobustnessExtsTests.cpp` creates its output image
+with `STORAGE|TRANSFER_SRC|TRANSFER_DST`, adding `SAMPLED` when the format
+reports sampling; it gives the tested image both transfer roles too. The
+shipping image-usage gate in `src/texture_format.c` admits the R32_UINT storage
+image only as `STORAGE|TRANSFER_SRC|TRANSFER_DST`, while R32_UINT reports a
+sampled role, so the original output image asks for an unsupported four-role
+combination. Other currently reported storage formats do not provide an
+alternative admitted output-image path. Thus the first obstacle is image
+creation, before any out-of-bounds shader read can be measured. The local
+integer-coordinate witnesses are narrower diagnostics and cannot substitute
+for an accepted original CTS leaf. Next: implement and host-test the exact
+combined usage and transfer path, register a bounded original selection,
+then measure the API query, shader result and repeat acceptance on hardware
+before changing this row's verdict.
+
 ## Validation and closure for each runtime slice
 
 * Reproduce the exact DXVK call sequence or resource shape in a fast host
