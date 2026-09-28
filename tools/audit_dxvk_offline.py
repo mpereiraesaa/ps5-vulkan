@@ -35,8 +35,8 @@ OFFLINE = {
     "shaderIntegerDotProduct": "Complete the integrated original-CTS and graphics numerical delivery candidate.",
 }
 REBUILD = {
-    "pipelineCreationCacheControl": "Run the rebuilt SDK witness and rebuild the original CTS candidate, then canonical acceptance.",
-    "shaderZeroInitializeWorkgroupMemory": "Run the rebuilt SDK witness and rebuild the original CTS candidate, then canonical acceptance.",
+    "pipelineCreationCacheControl": "Run the rebuilt SDK witness and eight original CTS leaves, then canonical acceptance.",
+    "shaderZeroInitializeWorkgroupMemory": "Run the rebuilt SDK witness and 42 original CTS leaves, then canonical acceptance.",
 }
 REBUILT_WITNESSES = {
     "pipelineCreationCacheControl": Path("build/offline-dxvk-profile/cache-control/rebuild-a355320b.json"),
@@ -120,9 +120,39 @@ def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
          "examples", "experiments", "tools/build_sdk.py", "tools/build_dxvk_render_witness.py",
          "tools/build_zero_initialize_witness.py", "tools/build_integer_dot_witness.py"],
         cwd=root, check=False, capture_output=True).returncode == 0
+    cts = record.get("cts", {})
+    cts_dist = root / cts.get("candidate", "") / "PPSA99994"
+    cts_eboot = cts_dist / "eboot.bin"
+    cts_manifest = cts_dist / "build_manifest.json"
+    selection_path = root / cts.get("selection_manifest", "")
+    cts_verified = False
+    cts_source_current = False
+    if cts_eboot.is_file() and cts_manifest.is_file() and selection_path.is_file():
+        build = json.loads(cts_manifest.read_text())
+        selection = json.loads(selection_path.read_text())
+        frozen = json.loads((root / "cts/upstream/manifest.json").read_text())
+        selected = [case["path"] for case in selection["cases"]]
+        cts_verified = (
+            hashlib.sha256(cts_eboot.read_bytes()).hexdigest() == cts.get("eboot_sha256") and
+            hashlib.sha256(cts_manifest.read_bytes()).hexdigest() == cts.get("build_manifest_sha256") and
+            build.get("eboot_sha256") == cts.get("eboot_sha256") and
+            build.get("selection_hash") == cts.get("selection_hash") == selection_hash(selection["cases"]) and
+            build.get("selected_cases") == selected and
+            build.get("measurement") == selection.get("measurement") and
+            build["measurement"]["moved"] == cts.get("moved") and
+            build["tessellation_build_profile"]["switches"].get(cts.get("diagnostic_switch")) == "1" and
+            selection["cases"][:len(frozen["cases"])] == frozen["cases"] and
+            selection["measurement"]["base_selection_hash"] == selection_hash(frozen["cases"]))
+        cts_source_current = subprocess.run(
+            ["git", "diff", "--quiet", cts["source_commit"], "--", "src", "native", "include",
+             "cts", "tools/build_sdk.py", "tools/build_upstream_cts.py"],
+            cwd=root, check=False, capture_output=True).returncode == 0
     return {"artifact_verified": artifact_verified, "source_current": source_current,
             "source_commit": record["source_commit"], "eboot_sha256": record["eboot_sha256"],
-            "execution_prepared": artifact_verified and source_current}
+            "cts_verified": cts_verified, "cts_source_current": cts_source_current,
+            "cts_eboot_sha256": cts.get("eboot_sha256"),
+            "execution_prepared": artifact_verified and source_current and
+                                  cts_verified and cts_source_current}
 
 
 def build_audit(root: Path = ROOT, matrix: dict | None = None,
@@ -149,7 +179,7 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
         elif name in OFFLINE:
             phase, next_action = "offline_work", OFFLINE[name]
         elif name in REBUILD:
-            phase = "native_validation_with_cts_rebuild" if rebuilt[name].get("execution_prepared") else "offline_rebuild"
+            phase = "native_validation" if rebuilt[name].get("execution_prepared") else "offline_rebuild"
             next_action = REBUILD[name]
         else:
             phase, next_action = "version_policy", POLICY[name]

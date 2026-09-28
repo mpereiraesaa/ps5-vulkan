@@ -9,7 +9,7 @@ from pathlib import Path
 
 from tools.audit_dxvk_offline import (
     ROOT, INLINE_PLAN, REBUILT_WITNESSES, SIZE_MEASUREMENT, SIZE_PREVIOUS,
-    audit_inline, audit_rebuilt_witness, build_audit,
+    audit_inline, audit_rebuilt_witness, build_audit, selection_hash,
 )
 
 
@@ -27,10 +27,9 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertTrue(report["subgroup_size_selection"]["selection_verified"])
         self.assertEqual(2, len(report["subgroup_size_selection"]["new_flagged_leaves"]))
         self.assertFalse(report["subgroup_size_selection"]["previous_candidate_covers_new_flags"])
-        self.assertEqual(7, sum(r["phase"] == "native_validation" for r in report["rows"]))
-        self.assertEqual(2, sum(r["phase"] == "native_validation_with_cts_rebuild"
-                                for r in report["rows"]))
-        self.assertTrue(all(r["execution_prepared"] for r in report["rebuilt_witnesses"].values()))
+        self.assertEqual(9, sum(r["phase"] == "native_validation" for r in report["rows"]))
+        self.assertTrue(all(r["execution_prepared"] and r["cts_verified"]
+                            for r in report["rebuilt_witnesses"].values()))
         self.assertTrue(all(r["hardware_evidence_required"] for r in report["rows"]))
 
     def test_rebuilt_witness_audit_fails_closed_on_corrupt_eboot(self):
@@ -50,6 +49,50 @@ class DxvkOfflineAuditTests(unittest.TestCase):
             self.assertTrue(audit_rebuilt_witness(root, Path("record.json"))["artifact_verified"])
             eboot_path.write_bytes(b"changed")
             self.assertFalse(audit_rebuilt_witness(root, Path("record.json"))["execution_prepared"])
+
+    def test_rebuilt_cts_requires_original_selection_and_diagnostic_switch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            witness = root / "candidate/PPSA99994"
+            witness.mkdir(parents=True)
+            witness_eboot = witness / "eboot.bin"
+            witness_eboot.write_bytes(b"witness")
+            witness_sha = hashlib.sha256(witness_eboot.read_bytes()).hexdigest()
+            witness_artifact = root / "candidate/artifact.json"
+            witness_artifact.write_text(json.dumps({"eboot_sha256": witness_sha}))
+            base_cases = [{"path": "base"}]
+            selected_cases = base_cases + [{"path": "original.cts.leaf"}]
+            (root / "cts/upstream").mkdir(parents=True)
+            (root / "cts/upstream/manifest.json").write_text(json.dumps({"cases": base_cases}))
+            measurement = {"base_selection_hash": selection_hash(base_cases),
+                           "selection_hash": selection_hash(selected_cases), "moved": 1}
+            selection = {"cases": selected_cases, "measurement": measurement}
+            (root / "selection.json").write_text(json.dumps(selection))
+            cts = root / "cts-candidate/PPSA99994"
+            cts.mkdir(parents=True)
+            cts_eboot = cts / "eboot.bin"
+            cts_eboot.write_bytes(b"cts")
+            cts_sha = hashlib.sha256(cts_eboot.read_bytes()).hexdigest()
+            build = {"eboot_sha256": cts_sha, "selection_hash": measurement["selection_hash"],
+                     "selected_cases": [case["path"] for case in selected_cases],
+                     "measurement": measurement,
+                     "tessellation_build_profile": {"switches": {"DIAGNOSTIC": "1"}}}
+            cts_manifest = cts / "build_manifest.json"
+            cts_manifest.write_text(json.dumps(build))
+            record = {"candidate": "candidate", "source_commit": "a355320b",
+                      "native_executed": False, "eboot_sha256": witness_sha,
+                      "artifact_sha256": hashlib.sha256(witness_artifact.read_bytes()).hexdigest(),
+                      "cts": {"source_commit": "cb5c36b6", "candidate": "cts-candidate",
+                              "eboot_sha256": cts_sha,
+                              "build_manifest_sha256": hashlib.sha256(cts_manifest.read_bytes()).hexdigest(),
+                              "selection_manifest": "selection.json",
+                              "selection_hash": measurement["selection_hash"],
+                              "diagnostic_switch": "DIAGNOSTIC", "moved": 1}}
+            (root / "record.json").write_text(json.dumps(record))
+            self.assertTrue(audit_rebuilt_witness(root, Path("record.json"))["cts_verified"])
+            record["cts"]["diagnostic_switch"] = "WRONG"
+            (root / "record.json").write_text(json.dumps(record))
+            self.assertFalse(audit_rebuilt_witness(root, Path("record.json"))["cts_verified"])
 
     def test_inline_audit_requires_all_eight_hashes_and_cts_selection(self):
         with tempfile.TemporaryDirectory() as directory:
