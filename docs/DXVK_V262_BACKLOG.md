@@ -39,6 +39,18 @@ and wider producer vectors; the 33-case original CTS measurement selection is pr
 `apiVersion` stays blocked: the pinned profile requires 1.3.204 including the
 patch level; the device reports 1.3.0, which DXVK's own device filter accepts.
 
+The integrated inline-uniform diagnostic candidate passed its six SDK stage
+witnesses twice, but both complete 881-case CTS runs passed 880 cases and failed
+`dEQP-VK.info.device_mandatory_features`. The repeated CTS report names nine
+Vulkan 1.3 requirements still reported false: `computeFullSubgroups`,
+`pipelineCreationCacheControl`, `privateData`, `robustImageAccess`,
+`shaderIntegerDotProduct`, `shaderSubgroupExtendedTypes`,
+`shaderZeroInitializeWorkgroupMemory`, `subgroupBroadcastDynamicId`, and
+`subgroupSizeControl`. `privateData` is outside the 62-row DXVK profile, so even
+a future 62/62 ledger would not by itself clear this CTS failure. The inline
+rows remain blocked pending a passing combined acceptance run; the diagnostic
+witness results do not change the official 45/62 score.
+
 The shipping public routes already include the T01–T07 work: draw parameters;
 multiview; indirect/indexed draws; geometry,
 tessellation and clip/cull distances; raster, blend and multisample features;

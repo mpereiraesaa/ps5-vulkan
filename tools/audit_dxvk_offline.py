@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -51,6 +52,7 @@ REBUILT_WITNESSES = {
 }
 POLICY = {"apiVersion": "Keep the truthful reported version until the required patch-level conformance is proven."}
 EXPECTED = INLINE | set(OFFLINE) | set(REBUILD) | set(POLICY)
+MANDATORY_MISSING = re.compile(r"Mandatory feature ([A-Za-z][A-Za-z0-9]*) not supported")
 T08_COMBINED_SWITCHES = (
     "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC",
     "PS5VK_SUBGROUP_IADD_DIAGNOSTIC",
@@ -118,6 +120,13 @@ def candidate_file(root: Path, candidate: str, filename: str) -> Path | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def missing_mandatory_features(qpa: Path) -> list[str] | None:
+    try:
+        return sorted(set(MANDATORY_MISSING.findall(qpa.read_text())))
+    except OSError:
+        return None
+
+
 def audit_inline(plan: dict, root: Path) -> dict:
     checks = []
     for gate in plan["order"]:
@@ -137,11 +146,22 @@ def audit_inline(plan: dict, root: Path) -> dict:
          "tools/build_sdk.py", "tools/build_dxvk_render_witness.py",
          "tools/build_dxvk_ps5_cross_probe.py"], [])
     native_evidence_verified = audit_inline_native_evidence(plan, root)
+    mandatory_gaps = []
+    if native_evidence_verified:
+        for receipt_path in plan.get("native_evidence", {}).get("cts_repetitions", []):
+            qpa = root / Path(receipt_path).with_suffix(".qpa")
+            mandatory_gaps.append(missing_mandatory_features(qpa))
+    repeated_mandatory_gap = (len(mandatory_gaps) == 2 and bool(mandatory_gaps[0]) and
+                              mandatory_gaps[0] == mandatory_gaps[1])
     return {"checks": checks, "checked_eboots": len(checks),
             "cts_selection_hash_matches": selected == cts["selection_hash"],
             "source_current": source_current,
             "native_executed": native_evidence_verified,
             "native_evidence_verified": native_evidence_verified,
+            "mandatory_gap_repeated": repeated_mandatory_gap,
+            "missing_mandatory_features": mandatory_gaps[0] if repeated_mandatory_gap else None,
+            # This receipt validator requires one CTS failure; it cannot certify acceptance.
+            "native_acceptance_complete": False,
             "execution_prepared": (len(checks) == 8 and all(c["hash_matches"] for c in checks)
                                    and selected == cts["selection_hash"]
                                    and source_current

@@ -12,7 +12,7 @@ from tools.audit_dxvk_offline import (
     ROOT, DOT_PACKAGE, INLINE_PLAN, REBUILT_WITNESSES, SIZE_MEASUREMENT, SIZE_PACKAGE, SIZE_PREVIOUS,
     T08_PACKAGE,
     ROBUST_IMAGE_PACKAGE,
-    audit_inline, audit_rebuilt_witness, build_audit, selection_hash,
+    audit_inline, audit_rebuilt_witness, build_audit, missing_mandatory_features, selection_hash,
 )
 
 
@@ -33,6 +33,13 @@ class DxvkOfflineAuditTests(unittest.TestCase):
                          report["inline_plan"]["execution_prepared"])
         if report["inline_plan"]["native_executed"]:
             self.assertTrue(report["inline_plan"]["native_evidence_verified"])
+            self.assertTrue(report["inline_plan"]["mandatory_gap_repeated"])
+            self.assertEqual({"computeFullSubgroups", "pipelineCreationCacheControl",
+                              "privateData", "robustImageAccess", "shaderIntegerDotProduct",
+                              "shaderSubgroupExtendedTypes", "shaderZeroInitializeWorkgroupMemory",
+                              "subgroupBroadcastDynamicId", "subgroupSizeControl"},
+                             set(report["inline_plan"]["missing_mandatory_features"]))
+        self.assertFalse(report["inline_plan"]["native_acceptance_complete"])
         self.assertTrue(report["subgroup_size_selection"]["selection_verified"])
         self.assertEqual(2, len(report["subgroup_size_selection"]["new_flagged_leaves"]))
         self.assertFalse(report["subgroup_size_selection"]["previous_candidate_covers_new_flags"])
@@ -80,6 +87,16 @@ class DxvkOfflineAuditTests(unittest.TestCase):
             self.assertTrue(audit_rebuilt_witness(root, Path("record.json"))["artifact_verified"])
             eboot_path.write_bytes(b"changed")
             self.assertFalse(audit_rebuilt_witness(root, Path("record.json"))["execution_prepared"])
+
+    def test_mandatory_gap_parser_deduplicates_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            qpa = Path(directory) / "result.qpa"
+            self.assertIsNone(missing_mandatory_features(qpa))
+            qpa.write_text("Mandatory feature privateData not supported\n"
+                           "Mandatory feature robustImageAccess not supported\n"
+                           "Mandatory feature privateData not supported\n")
+            self.assertEqual(["privateData", "robustImageAccess"],
+                             missing_mandatory_features(qpa))
 
     def test_rebuilt_cts_requires_original_selection_and_diagnostic_switch(self):
         with tempfile.TemporaryDirectory() as directory:
