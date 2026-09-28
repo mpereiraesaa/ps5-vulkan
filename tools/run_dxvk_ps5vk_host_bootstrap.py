@@ -20,7 +20,8 @@ import run_dxvk_host_smoke as smoke
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_REFUSAL = "Required Vulkan extension VK_KHR_surface not supported"
+EXPECTED_REFUSAL = "SDL2 WSI: Failed to get instance extension count. Vulkan is not loaded"
+LOADER_MARKER = "Vulkan: Found vkGetInstanceProcAddr in libvulkan.so"
 
 
 def host_sources() -> list[str]:
@@ -101,8 +102,8 @@ def main() -> int:
                 (match.group(1), match.group(3), match.group(4)) !=
                 ("80004005", "0", "0") or
                 EXPECTED_REFUSAL not in run.stderr or
-                "DxvkInstance: Required instance extensions not supported" not in run.stderr):
-            raise ValueError("DXVK did not stop at the expected ps5vk surface-extension boundary:\n" +
+                LOADER_MARKER not in run.stderr):
+            raise ValueError("DXVK did not stop at the expected host SDL2 WSI boundary:\n" +
                              (run.stderr + run.stdout)[-2000:])
         receipt = {
             "profile": "dxvk-v262-ps5vk-host-bootstrap",
@@ -114,7 +115,8 @@ def main() -> int:
                 ["git", "-C", str(ROOT), "rev-parse", "HEAD"]).stdout.strip(),
             "hresult": "0x" + match.group(1),
             "first_refusal": EXPECTED_REFUSAL,
-            "scope": "DXVK against ps5vk host source; no PS5 execution",
+            "boundary": "host SDL2 WSI cannot obtain Linux instance extensions from ps5vk",
+            "scope": "DXVK loaded ps5vk host Vulkan entrypoint; no PS5 execution or driver capability result",
         }
         print(json.dumps(receipt, indent=2, sort_keys=True))
         if args.output:

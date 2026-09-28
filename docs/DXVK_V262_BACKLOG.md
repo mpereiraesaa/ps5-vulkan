@@ -183,6 +183,13 @@ refusal. Native surface/swapchain acquisition, submission and presentation
 have since passed their bounded witnesses. Both instance and device now use
 the experimental Vulkan 1.3 negotiation path described above.
 
+The offline `run_dxvk_ps5vk_host_bootstrap.py` control now reaches ps5vk's
+host `vkGetInstanceProcAddr`, then SDL2 WSI cannot obtain the Linux window
+surface extensions it expects. That host-only refusal is not a PS5 WSI or
+DXVK device-capability failure. The PS5 native acceptance payload below uses
+the PS5 WSI adapter instead; its present path still needs validation together
+with each frontend in Prospero Win.
+
 ## Checkpoint: diagnostic render on PS5 (2026-09-25)
 
 Built from `main` at `9c133ef` with
