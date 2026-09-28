@@ -97,6 +97,29 @@ Win32 services and Vulkan bridge inside Prospero Win. These binaries have not
 been loaded or executed there; compiling both architectures is only dependency
 preparation.
 
+### Four-frontend native host control (2026-09-28)
+
+The same pinned DXVK 2.6.2 source also built its five native Linux libraries
+with SDL2 WSI enabled. The four controls in
+`examples/dxvk_host_frontends/` each created a 64×64 device/swapchain, cleared
+its backbuffer and returned success from `Present` on the **host Vulkan
+driver**. D3D11 selected FL 11_0. D3D10 used `D3D10CoreCreateDevice` with a
+DXGI factory/adapter, so this control does not test the application-level
+`d3d10.dll` wrapper. The ignored
+`build/dxvk-host-frontends/receipt.json` binds the successful markers to the
+five library hashes and four executable/source hashes; logs remain beside it.
+The controls do not compare presented pixels and do not exercise PE loading,
+Prospero Win or ps5vk on PS5.
+
+With `DXVK_DIR` pointing at the clean pinned source, reproduce the native
+build and controls:
+
+```sh
+meson setup build/dxvk-native-all "$DXVK_DIR" --wrap-mode=nodownload -Dbuildtype=release -Dnative_sdl2=enabled -Dnative_sdl3=disabled -Dnative_glfw=disabled -Denable_d3d8=true -Denable_d3d9=true -Denable_d3d10=true -Denable_d3d11=true -Denable_dxgi=true
+ninja -C build/dxvk-native-all -j 8 src/dxgi/libdxvk_dxgi.so.0.20602 src/d3d11/libdxvk_d3d11.so.0.20602 src/d3d10/libdxvk_d3d10core.so.0.20602 src/d3d9/libdxvk_d3d9.so.0.20602 src/d3d8/libdxvk_d3d8.so.0.20602
+python3 tools/run_dxvk_host_frontends.py --dxvk-dir "$DXVK_DIR"
+```
+
 ## Current integration target (2026-09-26)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,
