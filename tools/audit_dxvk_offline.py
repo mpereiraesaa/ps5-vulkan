@@ -22,6 +22,7 @@ SIZE_PREVIOUS = Path("build/offline-dxvk-profile/subgroup-size-cts/candidate-7e6
 SIZE_PACKAGE = Path("build/offline-dxvk-profile/subgroup-size-cts/rebuild-cb372781.json")
 DOT_PACKAGE = Path("build/offline-dxvk-profile/integer-dot/current-c78057db/package.json")
 T08_PACKAGE = Path("build/offline-dxvk-profile/t08-current-468c730b/package.json")
+ROBUST_IMAGE_PACKAGE = Path("build/offline-dxvk-profile/robust-image-current-3010012d/package.json")
 DEFAULT_OUT = Path("build/offline-dxvk-profile/audit-17/current.json")
 
 INLINE = {
@@ -170,6 +171,9 @@ def audit_subgroup_size_package(root: Path) -> dict:
              {item["case"] for item in variants} == set(CASES))
     profiles = []
     for item in variants:
+        if item["case"] not in CASES:
+            valid = False
+            break
         candidate = root / item["candidate"]
         artifact_path = candidate / "artifact.json"
         eboot_path = candidate / "PPSA99994/eboot.bin"
@@ -322,6 +326,67 @@ def audit_integer_dot_package(root: Path) -> dict:
     return {"package_verified": valid and source_current, "artifact_verified": valid,
             "source_current": source_current, "variants": totals,
             "cts_eboot_sha256": cts["eboot_sha256"]}
+
+
+def audit_robust_image_package(root: Path) -> dict:
+    from tools.build_upstream_cts import tessellation_build_profile
+    from tools.verify_robust_image_witness import CASES, fixture_contract
+
+    path = root / ROBUST_IMAGE_PACKAGE
+    if not path.is_file():
+        return {"package_verified": False}
+    record = json.loads(path.read_text())
+    archive = root / record["sdk_archive"]
+    if not archive.is_file():
+        return {"package_verified": False}
+    expected_profile = tessellation_build_profile({"PS5VK_IMAGE_ROBUSTNESS_DIAGNOSTIC": "1"})
+    variants = record["variants"]
+    valid = (record.get("native_executed") is False and
+             len(variants) == len(CASES) == 11 and
+             {item["case"] for item in variants} == set(CASES) and
+             hashlib.sha256(archive.read_bytes()).hexdigest() == record["sdk_archive_sha256"])
+    for item in variants:
+        if item["case"] not in CASES:
+            valid = False
+            break
+        candidate = root / item["candidate"]
+        artifact_path = candidate / "artifact.json"
+        eboot_path = candidate / "PPSA99994/eboot.bin"
+        header_path = candidate / "robust_image_fixture.h"
+        shader_path = candidate / "shader.spv"
+        source_path = candidate / "shader.comp"
+        if not all(path.is_file() for path in
+                   (artifact_path, eboot_path, header_path, shader_path, source_path)):
+            valid = False
+            break
+        artifact = json.loads(artifact_path.read_text())
+        contract = fixture_contract(item["case"])
+        valid = valid and (
+            hashlib.sha256(artifact_path.read_bytes()).hexdigest() == item["artifact_sha256"] and
+            hashlib.sha256(eboot_path.read_bytes()).hexdigest() == item["eboot_sha256"] and
+            artifact.get("eboot_sha256") == item["eboot_sha256"] and
+            artifact.get("sdk_sha256") == record["sdk_archive_sha256"] and
+            artifact.get("source_sha256") == hashlib.sha256(
+                (root / "examples/robust_image_witness/main.c").read_bytes()).hexdigest() and
+            artifact.get("helper_sha256") == hashlib.sha256(
+                (root / "examples/robust_image_witness/compute.h").read_bytes()).hexdigest() and
+            artifact.get("header_sha256") == hashlib.sha256(header_path.read_bytes()).hexdigest() and
+            artifact.get("shader_sha256") == hashlib.sha256(shader_path.read_bytes()).hexdigest() and
+            artifact.get("fixture_sha256", {}).get("shader_source") == hashlib.sha256(
+                source_path.read_bytes()).hexdigest() and
+            artifact.get("build_profile") == expected_profile and
+            artifact.get("native_executed") is False and
+            all(artifact.get(key) == value for key, value in contract.items()))
+    source_current = source_unchanged(root, record["source_commit"],
+        ["src", "native", "include", "examples/robust_image_witness",
+         "tools/build_sdk.py", "tools/build_robust_image_witness.py",
+         "tools/build_integer_dot_witness.py", "tools/robust_image_witness.py",
+         "tools/verify_robust_image_witness.py"], [expected_profile])
+    return {"package_verified": valid and source_current,
+            "artifact_verified": valid, "source_current": source_current,
+            "variant_count": len(variants),
+            "image_variants": sum(case.requirement == "robustImageAccess" for case in CASES.values()),
+            "original_cts_prepared": False}
 
 
 def audit_t08_package(root: Path) -> dict:
@@ -503,6 +568,7 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
     size = audit_size_selection(root)
     subgroup_package = audit_subgroup_size_package(root)
     integer_dot_package = audit_integer_dot_package(root)
+    robust_image_package = audit_robust_image_package(root)
     t08_package = audit_t08_package(root)
     rebuilt = {name: audit_rebuilt_witness(root, path)
                for name, path in REBUILT_WITNESSES.items()}
@@ -530,6 +596,7 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
             "matrix_summary": matrix["summary"], "rows": rows,
             "inline_plan": inline, "subgroup_size_selection": size,
             "subgroup_size_package": subgroup_package, "integer_dot_package": integer_dot_package,
+            "robust_image_package": robust_image_package,
             "t08_package": t08_package,
             "rebuilt_witnesses": rebuilt,
             "note": "Offline preparation only; no row is promoted by this audit."}

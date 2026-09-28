@@ -10,6 +10,7 @@ from pathlib import Path
 from tools.audit_dxvk_offline import (
     ROOT, DOT_PACKAGE, INLINE_PLAN, REBUILT_WITNESSES, SIZE_MEASUREMENT, SIZE_PACKAGE, SIZE_PREVIOUS,
     T08_PACKAGE,
+    ROBUST_IMAGE_PACKAGE,
     audit_inline, audit_rebuilt_witness, build_audit, selection_hash,
 )
 
@@ -19,6 +20,7 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         if not all((ROOT / path).is_file() for path in
                    (DOT_PACKAGE, INLINE_PLAN, SIZE_MEASUREMENT, SIZE_PACKAGE, SIZE_PREVIOUS,
                     T08_PACKAGE,
+                    ROBUST_IMAGE_PACKAGE,
                     *REBUILT_WITNESSES.values())):
             self.skipTest("local offline candidate artifacts unavailable")
         report = build_audit()
@@ -34,6 +36,10 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertEqual(6, report["subgroup_size_package"]["variant_count"])
         self.assertEqual(11, sum(r["phase"] == "native_validation" for r in report["rows"]))
         self.assertTrue(report["integer_dot_package"]["package_verified"])
+        self.assertTrue(report["robust_image_package"]["package_verified"])
+        self.assertEqual(11, report["robust_image_package"]["variant_count"])
+        self.assertEqual(8, report["robust_image_package"]["image_variants"])
+        self.assertFalse(report["robust_image_package"]["original_cts_prepared"])
         self.assertEqual({"compute": 42, "graphics": 252}, report["integer_dot_package"]["variants"])
         self.assertTrue(report["t08_package"]["witnesses_verified"])
         self.assertTrue(report["t08_package"]["compiler_census_verified"])
