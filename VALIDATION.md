@@ -121,8 +121,22 @@ restored.
   `5007bd4f8ac1a2a965fc4f09060f9239b511250f9a26908f6df06f1c23bd5cdc`.
 
 The host recorder now accepts that measured transition and logs image role,
-layout and access details at any subsequent barrier refusal. It has not yet
-been rerun on hardware.
+layout and access details at any subsequent barrier refusal. The fourth clean
+artifact, ps5vk `b0096931`, confirmed that the shader-read to transfer-source
+transition passed. The next two refused transitions were on the same RGBA8
+backbuffer with colour, sampled and transfer roles: transfer-destination to
+shader-read, then transfer-source to shader-read. Both were recorded with
+their exact stage and access masks. The run stopped in `Map` without an oracle
+or presented frame, reported no crash or suspected GPU hang, and restored the
+previous payload.
+
+- Fourth candidate eboot SHA-256: `1519b9897543f92480c04bbf093bb1979f1ebda488dc2b67327029382ca68f14`.
+- Run: `20260928T181335007Z_PPSA99994_ps5vk_0x3ee5bd8d1439`; log SHA-256:
+  `829d96aa92f01362110c110573d13a3d62055dda7aa292f8a6ef7674a31dcd96`.
+
+The host recorder now accepts those two measured return-to-sampling
+transitions for the bounded tiled backbuffer role. A new hardware artifact is
+needed before attributing any presentation or pixel result to this source.
 
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 

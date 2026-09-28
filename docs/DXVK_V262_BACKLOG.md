@@ -460,7 +460,10 @@ measured barrier and provides a tiled 2D sampled-colour descriptor with host
 tests. The third native artifact passed the render-to-sample handover and
 refused the following shader-read to transfer-source transition. That exact
 barrier has a host recorder test and is accepted by the next source slice;
-hardware presentation and the pixel oracle remain to be retested.
+the fourth native artifact confirmed it passed. That run then refused two
+return-to-sampling barriers on the same DXVK backbuffer. The host recorder
+accepts their exact measured forms in the next slice; hardware presentation
+and the pixel oracle remain to be retested.
 
 With the pinned DXVK checkout and its SDL2 native Meson build available:
 
