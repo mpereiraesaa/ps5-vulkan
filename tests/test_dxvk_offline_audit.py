@@ -8,14 +8,16 @@ import unittest
 from pathlib import Path
 
 from tools.audit_dxvk_offline import (
-    ROOT, INLINE_PLAN, SIZE_MEASUREMENT, SIZE_PREVIOUS, audit_inline, build_audit,
+    ROOT, INLINE_PLAN, REBUILT_WITNESSES, SIZE_MEASUREMENT, SIZE_PREVIOUS,
+    audit_inline, audit_rebuilt_witness, build_audit,
 )
 
 
 class DxvkOfflineAuditTests(unittest.TestCase):
     def test_current_audit_covers_all_17_and_checks_the_inline_artifacts(self):
         if not all((ROOT / path).is_file() for path in
-                   (INLINE_PLAN, SIZE_MEASUREMENT, SIZE_PREVIOUS)):
+                   (INLINE_PLAN, SIZE_MEASUREMENT, SIZE_PREVIOUS,
+                    *REBUILT_WITNESSES.values())):
             self.skipTest("local offline candidate artifacts unavailable")
         report = build_audit()
         self.assertEqual(17, len(report["rows"]))
@@ -26,7 +28,28 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertEqual(2, len(report["subgroup_size_selection"]["new_flagged_leaves"]))
         self.assertFalse(report["subgroup_size_selection"]["previous_candidate_covers_new_flags"])
         self.assertEqual(7, sum(r["phase"] == "native_validation" for r in report["rows"]))
+        self.assertEqual(2, sum(r["phase"] == "native_validation_with_cts_rebuild"
+                                for r in report["rows"]))
+        self.assertTrue(all(r["execution_prepared"] for r in report["rebuilt_witnesses"].values()))
         self.assertTrue(all(r["hardware_evidence_required"] for r in report["rows"]))
+
+    def test_rebuilt_witness_audit_fails_closed_on_corrupt_eboot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            (candidate / "PPSA99994").mkdir(parents=True)
+            artifact_path = candidate / "artifact.json"
+            eboot_path = candidate / "PPSA99994/eboot.bin"
+            eboot_path.write_bytes(b"payload")
+            digest = hashlib.sha256(eboot_path.read_bytes()).hexdigest()
+            artifact_path.write_text(json.dumps({"eboot_sha256": digest}))
+            record = {"candidate": "candidate", "source_commit": "a355320b",
+                      "native_executed": False, "eboot_sha256": digest,
+                      "artifact_sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest()}
+            (root / "record.json").write_text(json.dumps(record))
+            self.assertTrue(audit_rebuilt_witness(root, Path("record.json"))["artifact_verified"])
+            eboot_path.write_bytes(b"changed")
+            self.assertFalse(audit_rebuilt_witness(root, Path("record.json"))["execution_prepared"])
 
     def test_inline_audit_requires_all_eight_hashes_and_cts_selection(self):
         with tempfile.TemporaryDirectory() as directory:

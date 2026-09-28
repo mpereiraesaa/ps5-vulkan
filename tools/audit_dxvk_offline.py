@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = Path("conformance_inventory/dxvk_v262_matrix.json")
@@ -34,8 +35,12 @@ OFFLINE = {
     "shaderIntegerDotProduct": "Complete the integrated original-CTS and graphics numerical delivery candidate.",
 }
 REBUILD = {
-    "pipelineCreationCacheControl": "Rebuild the integrated SDK/CTS candidate from current source.",
-    "shaderZeroInitializeWorkgroupMemory": "Rebuild the SDK/CTS candidate from current source.",
+    "pipelineCreationCacheControl": "Run the rebuilt SDK witness and rebuild the original CTS candidate, then canonical acceptance.",
+    "shaderZeroInitializeWorkgroupMemory": "Run the rebuilt SDK witness and rebuild the original CTS candidate, then canonical acceptance.",
+}
+REBUILT_WITNESSES = {
+    "pipelineCreationCacheControl": Path("build/offline-dxvk-profile/cache-control/rebuild-a355320b.json"),
+    "shaderZeroInitializeWorkgroupMemory": Path("build/offline-dxvk-profile/zero-initialize-witness/rebuild-a355320b.json"),
 }
 POLICY = {"apiVersion": "Keep the truthful reported version until the required patch-level conformance is proven."}
 EXPECTED = INLINE | set(OFFLINE) | set(REBUILD) | set(POLICY)
@@ -94,6 +99,32 @@ def audit_size_selection(root: Path) -> dict:
             "new_flagged_leaves": new, "previous_candidate_covers_new_flags": not new}
 
 
+def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
+    path = root / record_path
+    if not path.is_file():
+        return {"artifact_verified": False, "source_current": False}
+    record = json.loads(path.read_text())
+    candidate = root / record["candidate"]
+    artifact_path = candidate / "artifact.json"
+    eboot_path = candidate / "PPSA99994/eboot.bin"
+    if not artifact_path.is_file() or not eboot_path.is_file():
+        return {"artifact_verified": False, "source_current": False}
+    artifact = json.loads(artifact_path.read_text())
+    artifact_verified = (
+        record.get("native_executed") is False and
+        hashlib.sha256(artifact_path.read_bytes()).hexdigest() == record["artifact_sha256"] and
+        hashlib.sha256(eboot_path.read_bytes()).hexdigest() == record["eboot_sha256"] and
+        artifact.get("eboot_sha256") == record["eboot_sha256"])
+    source_current = subprocess.run(
+        ["git", "diff", "--quiet", record["source_commit"], "--", "src", "native", "include",
+         "examples", "experiments", "tools/build_sdk.py", "tools/build_dxvk_render_witness.py",
+         "tools/build_zero_initialize_witness.py", "tools/build_integer_dot_witness.py"],
+        cwd=root, check=False, capture_output=True).returncode == 0
+    return {"artifact_verified": artifact_verified, "source_current": source_current,
+            "source_commit": record["source_commit"], "eboot_sha256": record["eboot_sha256"],
+            "execution_prepared": artifact_verified and source_current}
+
+
 def build_audit(root: Path = ROOT, matrix: dict | None = None,
                 inline_plan: dict | None = None) -> dict:
     if matrix is None:
@@ -107,6 +138,8 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
         inline_plan = json.loads((root / INLINE_PLAN).read_text())
     inline = audit_inline(inline_plan, root)
     size = audit_size_selection(root)
+    rebuilt = {name: audit_rebuilt_witness(root, path)
+               for name, path in REBUILT_WITNESSES.items()}
     rows = []
     for row in blockers:
         name = row["name"]
@@ -116,7 +149,8 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
         elif name in OFFLINE:
             phase, next_action = "offline_work", OFFLINE[name]
         elif name in REBUILD:
-            phase, next_action = "offline_rebuild", REBUILD[name]
+            phase = "native_validation_with_cts_rebuild" if rebuilt[name].get("execution_prepared") else "offline_rebuild"
+            next_action = REBUILD[name]
         else:
             phase, next_action = "version_policy", POLICY[name]
         rows.append({"id": row["id"], "name": name, "phase": phase,
@@ -126,7 +160,7 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
                      "hardware_evidence_required": True})
     return {"schema": "ps5vk-dxvk-offline-audit/1", "matrix": str(MATRIX),
             "matrix_summary": matrix["summary"], "rows": rows,
-            "inline_plan": inline, "subgroup_size_selection": size,
+            "inline_plan": inline, "subgroup_size_selection": size, "rebuilt_witnesses": rebuilt,
             "note": "Offline preparation only; no row is promoted by this audit."}
 
 
@@ -139,7 +173,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     counts = {phase: sum(r["phase"] == phase for r in report["rows"])
-              for phase in ("native_validation", "offline_work", "offline_rebuild", "version_policy")}
+              for phase in sorted({r["phase"] for r in report["rows"]})}
     print(f"DXVK offline audit: {len(report['rows'])} blockers; {counts}; "
           f"inline eboots {report['inline_plan']['checked_eboots']}/8 checked, "
           f"prepared={report['inline_plan']['execution_prepared']} -> {out}")
