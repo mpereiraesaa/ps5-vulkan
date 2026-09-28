@@ -149,8 +149,8 @@ enum ps5vk_feature_bits {
      * unset; a private measurement build may exercise the runtime path. It
      * is not a public Vulkan feature or subgroup-properties promise. */
     PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE = 1u << 29,
-    /* Independent private compute IAdd route; never a public ARITHMETIC
-     * operation or extended-types feature promise. */
+    /* Private compute arithmetic-family route, selected by the legacy IAdd
+     * diagnostic switch. Never a public ARITHMETIC or extended-types promise. */
     PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE = 1u << 30,
     /* Internal compute compiler probe only. Never maps to VkPhysicalDeviceFeatures. */
     PS5VK_FEATURE_SHADER_INT8_COMPUTE = 1u << 31,

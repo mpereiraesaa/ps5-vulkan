@@ -444,8 +444,8 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
     platform->supported_features |= PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
 #endif
 #if defined(PS5VK_SUBGROUP_IADD_DIAGNOSTIC) && PS5VK_SUBGROUP_IADD_DIAGNOSTIC
-    /* Private compute IAdd measurement only. This is narrower than the
-     * public ARITHMETIC operation bit and reports no subgroup properties. */
+    /* Private compute arithmetic-family measurement, using the existing
+     * IAdd switch. No public ARITHMETIC operation bit is reported. */
     platform->supported_features |= PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
 #endif
     /* Compute subgroup BASIC (Elect, subgroup barriers and the subgroup

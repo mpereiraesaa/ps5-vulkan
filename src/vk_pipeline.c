@@ -25,7 +25,7 @@ static int module_valid(const uint32_t *words, size_t count)
     return 1;
 }
 /* The shipping Vulkan 1.3 profile reports compute BASIC only. Private
- * compute-only builds may admit BALLOT-family and IAdd diagnostics. Each
+ * compute-only builds may admit BALLOT and arithmetic-family diagnostics. Each
  * operation needs its own SPIR-V capability; neither internal switch implies
  * a public subgroup operation or Vulkan 1.2 feature. */
 static int subgroup_module_unsupported(const uint32_t *words, size_t count,
@@ -38,9 +38,9 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
         !!(platform_features_t09 & PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE);
     const int broadcast_compute =
         !!(platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE);
-    const int iadd_compute =
+    const int arithmetic_compute =
         !!(platform_features & PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE);
-    int basic = 0, ballot = 0, arithmetic = 0, ballot_op = 0, iadd = 0;
+    int basic = 0, ballot = 0, arithmetic = 0, ballot_op = 0, arithmetic_op = 0;
     int compute_entry = 0;
     int other_entry = 0, subgroup = 0;
     for (size_t at = 5; at < count; at += words[at] >> 16) {
@@ -53,7 +53,7 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
                 capability == 5297u || capability == 6026u) {
                 subgroup = 1;
                 if ((capability != 61u && capability != 63u && capability != 64u) ||
-                    (capability == 63u && !iadd_compute) ||
+                    (capability == 63u && !arithmetic_compute) ||
                     (capability == 64u && !broadcast_compute)) return 1;
                 if (capability == 61u) basic = 1;
                 if (capability == 63u) arithmetic = 1;
@@ -70,14 +70,15 @@ static int subgroup_module_unsupported(const uint32_t *words, size_t count,
             subgroup = 1;
             if (opcode == 333u && basic_compute) continue;
             if (opcode >= 337u && opcode <= 344u && broadcast_compute) ballot_op = 1;
-            else if (opcode == 349u && iadd_compute) iadd = 1;
+            else if (opcode >= 349u && opcode <= 361u && arithmetic_compute) arithmetic_op = 1;
             else return 1;
         }
     }
     return subgroup && (!basic || !compute_entry || other_entry ||
-                        (!ballot_op && !iadd && !(basic_compute && !ballot && !arithmetic)) ||
+                        (!ballot_op && !arithmetic_op &&
+                         !(basic_compute && !ballot && !arithmetic)) ||
                         (ballot_op != ballot) ||
-                        (iadd != arithmetic));
+                        (arithmetic_op != arithmetic));
 }
 static int declares_integer_dot(const uint32_t *words, size_t count)
 {

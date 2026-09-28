@@ -482,7 +482,13 @@ static void diagnostic_compute_iadd_gate(void)
     vkDestroyPipeline(&device, pipeline, NULL);
     vkDestroyShaderModule(&device, module, NULL);
 
-    words[20] = (5u << 16) | 351u; /* IMul is outside the diagnostic gate. */
+    for (uint32_t opcode = 349u; opcode <= 361u; ++opcode) {
+        words[20] = (5u << 16) | opcode;
+        assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+        vkDestroyShaderModule(&device, module, NULL);
+        module = VK_NULL_HANDLE;
+    }
+    words[20] = (5u << 16) | 362u; /* No opcode beyond the arithmetic family. */
     assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
            VK_ERROR_FEATURE_NOT_PRESENT && !module);
     words[20] = (5u << 16) | 349u;
