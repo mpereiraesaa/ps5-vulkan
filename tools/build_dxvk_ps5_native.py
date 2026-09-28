@@ -332,7 +332,7 @@ def compile_dxvk(variant: str, dxvk: Path, build: Path, work: Path, cc: Path, cx
     registered = overlays / "wsi_platform_ps5.cpp"
     registered.write_text(wsi.replace(anchor, "extern WsiBootstrap Ps5WSI;\n  " + anchor +
                                       "\n    &Ps5WSI,").replace('#include "../util/', '#include "'))
-    units.append(overlay_entry(platform, registered))
+    units.append(overlay_entry(platform, registered, dxvk / "src/util"))
     units.append(overlay_entry(platform, ROOT / "tools/dxvk_ps5_wsi.cpp"))
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         results = list(pool.map(lambda unit: cached_compile(unit, build, cache, cc, cxx, compat),
