@@ -208,7 +208,7 @@ the earlier D3D10 x64 and D3D11 x64/x86 controls need rechecking on that
 combined hash. D3D9 additionally exercised a
 two-command-buffer transfer batch, its colour clear and a sampled BGRA8 view
 with constant-one alpha. The x86 clear-only controls made no actual
-`vkMapMemory` call, leaving the below-4-GiB mapping question untested. An
+`vkMapMemory` call, leaving the x86 PE mapping contract untested. An
 independent PE backbuffer or scanout pixel oracle remains pending for every
 frontend.
 
@@ -238,6 +238,69 @@ The strict verifier reported `lifecycle_ok=true`; the prior payload was
 restored and the console released. This directly witnesses the advertised
 BGRA8 colour-readback role, while the PE framebuffers remain separately
 unread.
+
+A temporary diagnostic variant of that SDK-linked witness also measured four
+successful `vkMapMemory` staging-buffer calls on hardware. Every returned
+native mapping lay above 4 GiB; the same strict BGRA8 pixel oracle and clean
+lifecycle passed. The diagnostic eboot SHA-256 was
+`5ed4b4d6ae96371e4038f51fe7a147e2e29f5e03e24c1b12443bdb7d2eea4ba3`,
+SDK archive SHA-256
+`83f91b0eeeaaafe21cae1955f8d8b448edadd4d056b9ec85e711ed894684c661`,
+run `20260928T222814633Z_PPSA99994_ps5vk_0x4ccb41f4e72f`, log SHA-256
+`b276ed9fac26d9330128df3165b0351dcfeffe6d6106492543308abff464c498`.
+The prior payload was restored and the console released. The 32-bit Wine
+Vulkan thunk would narrow such a pointer, but an x86 PE `vkMapMemory` call
+has not yet been observed; this native measurement identifies the placement
+problem without claiming an end-to-end x86 failure.
+
+A second temporary probe requested a 64-KiB direct-memory mapping with a
+sub-4-GiB address hint and zero mapping flags. The native kernel returned a
+usable address below 4 GiB, though not the exact hint; unmap and physical
+release both succeeded. The strict BGRA8 oracle and lifecycle passed again:
+run `20260928T223440455Z_PPSA99994_ps5vk_0x4d2516632588`, eboot SHA-256
+`65139d6d8f6e6dd3b1c7b22416ec222d8f672dc51d2a1357ba4773c8144293d8`,
+log SHA-256 `01642684c0cc91ba52d0a71a1d4b7acc04c47fa5bcddc1dc3c7d4170b277b8a5`.
+The prior payload was restored and the console released. This shows a low
+direct-memory mapping is possible in the ps5vk test title; it does not prove
+that Prospero Win can reserve enough low virtual address space alongside an
+x86 guest or that ps5vk's default allocation path uses it.
+
+The ps5vk candidate now keeps the GPU allocation's original mapping and
+creates a second, bounded CPU alias below 4 GiB on the first `vkMapMemory`.
+Failure to obtain a low alias returns `VK_ERROR_MEMORY_MAP_FAILED` instead
+of exposing a high pointer to a 32-bit thunk. A public-SDK BGRA8 witness
+on SDK archive SHA-256
+`ef68ba3a378469aa0ca2195ae42aa8f00e95e0d9ef521f3455d85368540aa12d`
+reported four successful low CPU aliases; its strict three-draw GPU pixel
+oracle and resource retirement passed. Run
+`20260928T224222797Z_PPSA99994_ps5vk_0x4d90bbabf3aa`, eboot SHA-256
+`de8facae41b015062bfbea2d6011788908c1da6db0525e4a4061e3cc9a7c3d40`,
+log SHA-256 `8cad21c77d699a50df241ae91322e547f1487868a8703fcb77340dfea50dda26`.
+The previous payload was restored and the console released. This verifies
+CPU writes and GPU access through the two virtual addresses in the ps5vk
+title, not low-range availability or `vkMapMemory` in Prospero Win's x86
+process.
+
+The current frozen CTS selection was rebuilt from this candidate and run on
+hardware: 878/879 passed, with only
+`dEQP-VK.info.device_mandatory_features` failing because the experimental
+Vulkan 1.3 report does not enable all mandatory 1.3 features. Candidate eboot
+SHA-256 `1a4ee40a1b1d5eadf92243ea0643e78da1939a1689f981079c2db25cd1e4ea76`,
+selection SHA-256 `31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28`,
+run `20260928T225105922Z_PPSA99994_upstream-cts_0x4e0a880b2824`, log SHA-256
+`bbdd5da22dbf7d7434a9f0150f02f2f9d5f8f30978921c5f485891d89efa34c2`.
+The runner's receipt write initially missed its output directory, but the
+captured QPA was verified offline against the exact eboot and selection; the
+title had closed and the prior payload was restored. A separate hardware run
+of that prior payload (eboot SHA-256
+`aafab072dbe86ce622e5d2e8e896bc7874b2b23d88d1a6fa28d8fd6a0695943e`)
+reported 1102/1103 passes and the same mandatory-feature failure (run
+`20260928T225337976Z_PPSA99994_upstream-cts_0x4e2def09ab38`, log SHA-256
+`cc6424419260fa87781a92b809c68ac68404b3bc1dacd9c724c52d5f3fc691f3`).
+The selections differ by 224 leaves; every one of the candidate's 879 leaves
+had the same status in the prior run. Thus the low-CPU-alias change showed no
+CTS regression on the common selection, but the current acceptance result is
+not 879/879. Full Vulkan 1.3 conformance is outside this DXVK execution gate.
 
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 

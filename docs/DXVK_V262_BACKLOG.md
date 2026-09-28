@@ -490,7 +490,24 @@ three-backbuffer barriers and clears, then samples its X8R8G8B8 backbuffer
 through a BGRA8 view with alpha mapped to constant one. Recorder,
 native-prelude and descriptor host tests cover these measured forms. The x86
 clear-only controls made no actual `vkMapMemory` call, so the below-4-GiB
-mapping range remains untested. An independent PE pixel oracle is still
+mapping contract remains untested in PE. A separate native ps5vk witness
+did map four staging buffers, and every returned pointer lay above 4 GiB
+(run `20260928T222814633Z_PPSA99994_ps5vk_0x4ccb41f4e72f`, eboot SHA-256
+`5ed4b4d6ae96371e4038f51fe7a147e2e29f5e03e24c1b12443bdb7d2eea4ba3`).
+The pinned Wine x86 `vkMapMemory` thunk narrows the native pointer to 32 bits,
+so this placement needs an explicit low-address mapping or bridge strategy
+before x86 mapped-memory workloads can be accepted. A separate 64-KiB
+native direct-memory probe accepted a sub-4-GiB address hint and returned a
+low mapping with clean unmap/release (run
+`20260928T223440455Z_PPSA99994_ps5vk_0x4d2516632588`). A candidate
+ps5vk backend now creates a low CPU alias on `vkMapMemory` while retaining
+the GPU's original mapping; four alias creations and the strict three-draw
+BGRA8 GPU pixel oracle passed on hardware (run
+`20260928T224222797Z_PPSA99994_ps5vk_0x4d90bbabf3aa`, eboot SHA-256
+`de8facae41b015062bfbea2d6011788908c1da6db0525e4a4061e3cc9a7c3d40`).
+These tests do not cover the Prospero Win process's occupied x86 address
+space. An independent PE pixel
+oracle is still
 required for every frontend. A separate public-SDK BGRA8 mutable-view witness
 on this SDK passed an independent 1024-byte GPU pixel oracle for BGRA channel
 order and constant-one alpha, plus an SRGB-view comparison with a separate
