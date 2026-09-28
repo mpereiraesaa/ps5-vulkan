@@ -1227,7 +1227,12 @@
       "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_ss_v4i8_out32",
       "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_su_v4i8_out32",
       "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_us_v4i8_out32",
-      "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_uu_v4i8_out32"
+      "dEQP-VK.spirv_assembly.instruction.compute.opudotkhr.small_packed_uu_v4i8_out32",
+      "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_nonconst_uint",
+      "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_uint16_t",
+      "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int16_t",
+      "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_float16_t",
+      "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int64_t"
     ],
     "manifest": "cts/upstream/manifest.json",
     "note": "Only original upstream cases whose prerequisites the reported profile satisfies belong here; anything else stays a diagnostic."

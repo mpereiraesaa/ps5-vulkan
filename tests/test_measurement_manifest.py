@@ -90,7 +90,7 @@ class MeasurementManifestTests(unittest.TestCase):
         self.assertEqual(8, derived["measurement"]["moved"])
         self.assertEqual(887, len(derived["cases"]))
         self.assertEqual(frozen["cases"], derived["cases"][:879])
-        self.assertEqual(338, len(derived["diagnostics"]))
+        self.assertEqual(343, len(derived["diagnostics"]))
 
     def test_inline_uniform_measurement_selects_original_limit_oracles(self):
         frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
@@ -103,13 +103,32 @@ class MeasurementManifestTests(unittest.TestCase):
         self.assertEqual(2, derived["measurement"]["moved"])
         self.assertEqual(frozen["cases"], derived["cases"][:len(frozen["cases"])])
 
+    def test_t08_subgroup_categories_select_original_leaves_separately(self):
+        frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
+        categories = {
+            "t08-subgroup-dynamic-id-pending": 1,
+            "t08-subgroup-extended-int16-pending": 2,
+            "t08-subgroup-extended-float16-pending": 1,
+            "t08-subgroup-extended-int64-pending": 1,
+        }
+        for category, count in categories.items():
+            with self.subTest(category=category):
+                derived = build_measurement_manifest(frozen, {category})
+                moved = derived["cases"][len(frozen["cases"]):]
+                self.assertEqual(count, len(moved))
+                self.assertTrue(all(c["path"].startswith("dEQP-VK.subgroups.")
+                                    for c in moved))
+                self.assertTrue(all(c["measurement_origin"] ==
+                                    f"diagnostic:{category}" for c in moved))
+                self.assertEqual(frozen["cases"], derived["cases"][:len(frozen["cases"])])
+
     def test_zero_initialize_measurement_preserves_acceptance(self):
         frozen = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
         derived = build_measurement_manifest(frozen, {"zero-initialize-workgroup-pending"})
         self.assertEqual(42, derived["measurement"]["moved"])
         self.assertEqual(921, len(derived["cases"]))
         self.assertEqual(frozen["cases"], derived["cases"][:879])
-        self.assertEqual(304, len(derived["diagnostics"]))
+        self.assertEqual(309, len(derived["diagnostics"]))
         self.assertTrue(all(c["measurement_origin"] == "diagnostic:zero-initialize-workgroup-pending"
                             for c in derived["cases"][879:]))
 
@@ -122,7 +141,7 @@ class MeasurementManifestTests(unittest.TestCase):
                     if c["category"] == "t08-buffer-device-address-base"]
         self.assertEqual(expected, {c["path"] for c in selected})
         self.assertEqual(879, len(frozen["cases"]))
-        self.assertEqual(346, len(frozen["diagnostics"]))
+        self.assertEqual(351, len(frozen["diagnostics"]))
         self.assertEqual("31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28",
                          selection_hash(frozen["cases"]))
         self.assertFalse(expected & {d["path"] for d in frozen["diagnostics"]})

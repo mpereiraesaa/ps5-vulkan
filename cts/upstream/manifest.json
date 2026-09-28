@@ -12510,6 +12510,73 @@
         "shaderIntegerDotProduct"
       ],
       "rationale": "UNMEASURED: original upstream 32-bit integer-dot numerical oracle. Requires the default-off integer-dot measurement build; host compiler and SDK witnesses do not prove GPU arithmetic or acceptance."
+    },
+    {
+      "path": "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_nonconst_uint",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp:514",
+      "category": "t08-subgroup-dynamic-id-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "subgroupBroadcastDynamicId",
+        "subgroup:compute",
+        "subgroup:BALLOT"
+      ],
+      "rationale": "UNMEASURED: original compute Broadcast oracle with a runtime-selected ID. Host compiler and API contracts do not prove native execution; select only with a diagnostic build advertising the truthful feature and operation bits."
+    },
+    {
+      "path": "dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_uint16_t",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsBallotBroadcastTests.cpp:514",
+      "category": "t08-subgroup-extended-int16-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderSubgroupExtendedTypes",
+        "shaderInt16",
+        "storageBuffer16BitAccess",
+        "subgroup:compute",
+        "subgroup:BALLOT"
+      ],
+      "rationale": "UNMEASURED: original 16-bit integer Broadcast oracle. Requires truthful extended-type, shader, storage and subgroup reporting plus native result evidence."
+    },
+    {
+      "path": "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int16_t",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp:541",
+      "category": "t08-subgroup-extended-int16-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderSubgroupExtendedTypes",
+        "shaderInt16",
+        "storageBuffer16BitAccess",
+        "subgroup:compute",
+        "subgroup:ARITHMETIC"
+      ],
+      "rationale": "UNMEASURED: original 16-bit integer arithmetic reduction oracle; native arithmetic and CTS acceptance remain unverified."
+    },
+    {
+      "path": "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_float16_t",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp:541",
+      "category": "t08-subgroup-extended-float16-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderSubgroupExtendedTypes",
+        "shaderFloat16",
+        "storageBuffer16BitAccess",
+        "subgroup:compute",
+        "subgroup:ARITHMETIC"
+      ],
+      "rationale": "UNMEASURED: original 16-bit float arithmetic reduction oracle; host compiler coverage does not establish GPU numerical correctness."
+    },
+    {
+      "path": "dEQP-VK.subgroups.arithmetic.compute.subgroupadd_int64_t",
+      "source": "external/vulkancts/modules/vulkan/subgroups/vktSubgroupsArithmeticTests.cpp:541",
+      "category": "t08-subgroup-extended-int64-pending",
+      "expected_status": "Pass",
+      "features_required": [
+        "shaderSubgroupExtendedTypes",
+        "shaderInt64",
+        "subgroup:compute",
+        "subgroup:ARITHMETIC"
+      ],
+      "rationale": "UNMEASURED: original 64-bit integer arithmetic reduction oracle; native lane semantics and CTS acceptance remain unverified."
     }
   ]
 }

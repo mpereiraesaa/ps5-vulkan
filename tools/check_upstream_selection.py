@@ -397,6 +397,41 @@ def _table_composed_leaf_names(text: str, function_text: str) -> set[str]:
             for capability in capabilities for type_name in type_names}
 
 
+@_memoized
+def _subgroup_compute_leaf_names(text: str, family: str) -> set[str]:
+    """Derive compute leaves from the pinned subgroup factory and format table."""
+    utils = _read_source(UPSTREAM / "external/vulkancts/modules/vulkan/subgroups/"
+                         "vktSubgroupsTestsUtils.cpp")
+    fmt_match = re.search(r"getFormatNameForGLSL\(VkFormat format\)\s*\{(.*?)\n\}",
+                          utils, re.DOTALL)
+    if not fmt_match:
+        return set()
+    formats = set(re.findall(r'return "([a-zA-Z0-9_]+)";', fmt_match.group(1)))
+    if family == "ballot_broadcast":
+        if ('getOpTypeCaseName(opType) + "_" + '
+                'subgroups::getFormatNameForGLSL(format)' not in text or
+                'addFunctionCaseWithPrograms(testGroup, name, supportedCheck' not in text):
+            return set()
+        op_match = re.search(r"getOpTypeCaseName\(OpType opType\)\s*\{(.*?)\n\}",
+                             text, re.DOTALL)
+        operations = (set(re.findall(r'return "([a-zA-Z0-9_]+)";', op_match.group(1)))
+                      if op_match else set())
+    elif family == "arithmetic":
+        scan = _read_source(UPSTREAM / "external/vulkancts/modules/vulkan/subgroups/"
+                            "vktSubgroupsScanHelpers.cpp")
+        if ('de::toLower(getOpTypeName(op, st)) + "_" + formatName' not in text or
+                'getScanOpName("subgroup", "", op, scanType)' not in text or
+                'addFunctionCaseWithPrograms(computeGroup.get(), testName' not in text or
+                'case SCAN_REDUCE:\n        n = "";' not in scan):
+            return set()
+        operations = {"subgroup" + op.lower() for op in
+                      re.findall(r'n \+= "([A-Za-z]+)";', scan)}
+    else:
+        return set()
+    return {f"dEQP-VK.subgroups.{family}.compute.{op}_{fmt}"
+            for op in operations for fmt in formats}
+
+
 def _multisample_factory(text: str) -> str:
     """Return the body of the pinned multisample factory.
 
@@ -2154,6 +2189,21 @@ def main() -> int:
                     "vkt::compute::createZeroInitializeWorkgroupMemoryTests(" not in integration_text or
                     "vktComputeZeroInitializeWorkgroupMemoryTests.cpp" not in _read_source(BDA_BUILD_SOURCE)):
                 failures.append(f"{path}: not produced by the registered zero-initialize factory")
+            continue
+
+        if case.get("category", "").startswith("t08-subgroup-"):
+            families = {
+                "vktSubgroupsBallotBroadcastTests.cpp":
+                    ("ballot_broadcast", "createSubgroupsBallotBroadcastTests"),
+                "vktSubgroupsArithmeticTests.cpp":
+                    ("arithmetic", "createSubgroupsArithmeticTests"),
+            }
+            family, factory = families.get(source_path.name, ("", ""))
+            if (not family or
+                    path not in _subgroup_compute_leaf_names(text, family) or
+                    f"vkt::subgroups::{factory}(" not in integration_text or
+                    source_path.name not in _read_source(BDA_BUILD_SOURCE)):
+                failures.append(f"{path}: not produced by a registered pinned subgroup factory")
             continue
 
         # Intermediate groups may come from the integration (package_ps5.cpp) or

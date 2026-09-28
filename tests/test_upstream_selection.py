@@ -32,6 +32,28 @@ def load_gate():
 
 
 class UpstreamSelectionTests(unittest.TestCase):
+    def test_t08_subgroup_diagnostics_follow_pinned_compute_factories(self):
+        pending = [d for d in self.current_manifest["diagnostics"]
+                   if d["category"].startswith("t08-subgroup-")]
+        self.assertEqual(5, len(pending))
+        self.assertFalse({d["path"] for d in pending} &
+                         {c["path"] for c in self.current_manifest["cases"]})
+        modules = {
+            "ballot_broadcast": "vktSubgroupsBallotBroadcastTests.cpp",
+            "arithmetic": "vktSubgroupsArithmeticTests.cpp",
+        }
+        for family, filename in modules.items():
+            source = (UPSTREAM / "external/vulkancts/modules/vulkan/subgroups" /
+                      filename)
+            names = self.gate._subgroup_compute_leaf_names(source.read_text(), family)
+            selected = [d for d in pending if f".subgroups.{family}." in d["path"]]
+            self.assertTrue(selected)
+            self.assertTrue({d["path"] for d in selected} <= names)
+            self.assertFalse(any("invented" in name for name in names))
+            self.assertEqual(set(), self.gate._subgroup_compute_leaf_names(
+                source.read_text().replace("addFunctionCaseWithPrograms", "registerNothing"),
+                family))
+
     def test_cache_control_leaves_are_original_and_unpromoted(self):
         manifest = json.loads((ROOT / "cts/upstream/manifest.json").read_text())
         source = ROOT / "third_party/vk-gl-cts/external/vulkancts/modules/vulkan/pipeline/vktPipelineCreationCacheControlTests.cpp"
@@ -146,10 +168,10 @@ class UpstreamSelectionTests(unittest.TestCase):
         # to acceptance. T07 adds 322 original BC, gather, precise-query and
         # cube-array cases. T09 adds 50 original timeline-semaphore,
         # renderpass2 write-mask and D32_SFLOAT_S8_UINT stencil/depth leaves
-        # (combined and separate-layouts); the 346 diagnostics record
+        # (combined and separate-layouts); the 351 diagnostics record
         # refusals, gaps and unmeasured zero-initialization and integer-dot cases. `leaves` counts every
         # attachment_write_mask leaf the pinned factory generates.
-        self.assertEqual((879, 346, 48),
+        self.assertEqual((879, 351, 48),
                          (len(manifest["cases"]), len(manifest["diagnostics"]), len(leaves)))
         volatile = [d for d in manifest["cases"] if
                     d["category"] == "t08-vulkan-memory-model-base"]
