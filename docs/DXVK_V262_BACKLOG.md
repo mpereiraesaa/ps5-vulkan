@@ -453,8 +453,12 @@ but failed during DXGI swapchain creation at a valid pixel-coordinate sampler
 request (`vkCreateSampler`, `unnormalizedCoordinates=1`). The exact artifact,
 refusal and run are in [VALIDATION.md](../VALIDATION.md#native-dxvk-presentation-candidate-sampler-refusal-2026-09-28).
 The driver now encodes the GFX10 S# unnormalized-coordinate bit for that
-bounded sampler form, with a host contract; hardware presentation and the
-pixel oracle remain to be retested on the new artifact.
+bounded sampler form, with a host contract. A second hardware artifact passed
+swapchain creation, draw and copy, then refused DXVK's colour-attachment to
+shader-read barrier while mapping the readback. The source now records the
+measured barrier and provides a tiled 2D sampled-colour descriptor with host
+tests; hardware presentation and the pixel oracle remain to be retested on
+that newer artifact.
 
 With the pinned DXVK checkout and its SDL2 native Meson build available:
 

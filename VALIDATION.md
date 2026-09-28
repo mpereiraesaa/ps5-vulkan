@@ -94,8 +94,23 @@ suspected GPU hang, and the original project payload was restored.
 
 The sampler implementation now encodes GFX10 S# `FORCE_UNNORMALIZED` for
 Vulkan-valid pixel-coordinate samplers, and a host contract reproduces the
-DXVK call. This source change still needs a fresh native presentation run;
-the failed artifact above contains the earlier implementation.
+DXVK call. A new native artifact from clean `41e426fd` confirmed that the
+sampler refusal moved: DXGI created its swapchain and backbuffer, the D3D11
+render target, staging resource, shaders, draw and copy all completed. Its
+readback `Map` then ended a command buffer with `VK_ERROR_UNKNOWN`. The first
+recorder refusal was an image barrier from colour attachment to shader-read
+layout for the rendered, sampled, transfer-capable backbuffer. No frame or
+pixel oracle passed; there was no crash or suspected GPU hang, and the
+original project payload was restored.
+
+- Second candidate eboot SHA-256: `a0bc87a9dc90fd42cb72a10da5203977b626519f308cce4a51258c59f6fb3537`.
+- Run: `20260928T174406278Z_PPSA99994_ps5vk_0x3d49ef299790`; log SHA-256:
+  `f837583cf727329a381c6c85f990c17340fc143a8e83954b2b6ad510e23fa459`.
+
+The next source slice records that exact render-to-sample dependency and
+encodes the single-layer tiled colour resource for sampling, with host
+barrier and descriptor tests. Native presentation still needs a fresh run
+against this slice.
 
 ## DXVK profile ledger on the Vulkan 1.3 probe (2026-09-26)
 

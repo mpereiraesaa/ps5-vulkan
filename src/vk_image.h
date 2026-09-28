@@ -52,6 +52,22 @@ static inline VkBool32 ps5vk_tiled_cube_sampled_image(VkImage image)
         image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
         image->info.mipLevels == 1 && image->info.arrayLayers >= 6;
 }
+/* DXVK's single-layer colour backbuffer is rendered, sampled by the display
+ * blit and copied for CPU readback. It has the same 64KB_R_X storage as a
+ * colour attachment, not the padded-linear sampled-image backing. */
+static inline VkBool32 ps5vk_tiled_2d_sampled_color_image(VkImage image)
+{
+    return image && image->info.format == VK_FORMAT_R8G8B8A8_UNORM &&
+        image->info.imageType == VK_IMAGE_TYPE_2D && !image->info.flags &&
+        image->info.tiling == VK_IMAGE_TILING_OPTIMAL &&
+        image->info.usage == (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                              VK_IMAGE_USAGE_SAMPLED_BIT |
+                              VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                              VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
+        image->info.samples == VK_SAMPLE_COUNT_1_BIT &&
+        image->info.mipLevels == 1 && image->info.arrayLayers == 1 &&
+        image->info.extent.depth == 1;
+}
 struct VkImageView_T {
     VkDevice device;
     VkAllocationCallbacks allocator;

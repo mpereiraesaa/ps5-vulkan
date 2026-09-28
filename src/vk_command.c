@@ -1556,6 +1556,17 @@ static int image_barrier_profile(const VkImageMemoryBarrier *b,
         b->dstAccessMask==VK_ACCESS_SHADER_READ_BIT &&
         src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
         dst_stage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    if(ps5vk_tiled_2d_sampled_color_image(image) &&
+       b->oldLayout==VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+       b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+       b->srcAccessMask==VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT &&
+       b->dstAccessMask==(VkAccessFlags)(VK_ACCESS_SHADER_READ_BIT |
+           VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+           VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT) &&
+       src_stage==VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
+       dst_stage==(VkPipelineStageFlags)(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT))
+        return 1;
     if(ps5vk_d32_gather_image(image))return ps5vk_d32_gather_barrier(b);
     if(ps5vk_bgra8_transfer_target(image))return
         ps5vk_bgra8_transfer_barrier(b) || ps5vk_color_discard_barrier(b);
