@@ -1722,7 +1722,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             if (features->multiviewGeometryShader || features->multiviewTessellationShader)
                 return VK_ERROR_FEATURE_NOT_PRESENT;
             if (features->multiview) {
-                if (!multiview_extension ||
+                if ((!multiview_extension && core_version < VK_API_VERSION_1_1) ||
                     !(p->platform.supported_features & PS5VK_FEATURE_MULTIVIEW))
                     return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features |= PS5VK_FEATURE_MULTIVIEW;

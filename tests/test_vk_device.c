@@ -945,6 +945,21 @@ static void lifecycle(void)
         mv_device = VK_NULL_HANDLE;
         assert(vkCreateDevice(dependency_physical, &no_extension, NULL, &mv_device) ==
                VK_ERROR_FEATURE_NOT_PRESENT && !mv_device);
+        /* The CTS omits VK_KHR_multiview once the instance and device expose
+         * Vulkan 1.1 or later. Its queried feature chain must still create a
+         * device with multiview enabled through the core route. */
+        {
+            const uint32_t saved_instance_version = p->instance->api_version;
+            const uint32_t saved_device_version = p->platform.properties.apiVersion;
+            p->instance->api_version = VK_API_VERSION_1_3;
+            p->platform.properties.apiVersion = VK_API_VERSION_1_3;
+            mv_device = VK_NULL_HANDLE;
+            assert(vkCreateDevice(dependency_physical, &no_extension, NULL, &mv_device) == VK_SUCCESS);
+            assert(mv_device->enabled_features & PS5VK_FEATURE_MULTIVIEW);
+            vkDestroyDevice(mv_device, NULL);
+            p->platform.properties.apiVersion = saved_device_version;
+            p->instance->api_version = saved_instance_version;
+        }
         requested.multiviewGeometryShader = VK_TRUE;
         mv_device = VK_NULL_HANDLE;
         assert(vkCreateDevice(p, &mv_info, NULL, &mv_device) ==
