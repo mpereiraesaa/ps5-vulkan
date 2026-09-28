@@ -20,7 +20,7 @@ MATRIX = Path("conformance_inventory/dxvk_v262_matrix.json")
 INLINE_PLAN = Path("build/offline-dxvk-profile/inline-integrated-d0d08ac0/hardware-validation-plan.json")
 SIZE_MEASUREMENT = Path("build/offline-dxvk-profile/subgroup-size-cts/measurement-current.json")
 SIZE_PREVIOUS = Path("build/offline-dxvk-profile/subgroup-size-cts/candidate-7e69fbb1/PPSA99994/cases.txt")
-SIZE_PACKAGE = Path("build/offline-dxvk-profile/subgroup-size-cts/rebuild-cb372781.json")
+SIZE_PACKAGE = Path("build/offline-dxvk-profile/subgroup-size-cts/rebuild-e7729b84.json")
 DOT_PACKAGE = Path("build/offline-dxvk-profile/integer-dot/current-c78057db/package.json")
 T08_PACKAGE = Path("build/offline-dxvk-profile/t08-current-468c730b/package.json")
 ROBUST_IMAGE_PACKAGE = Path("build/offline-dxvk-profile/robust-image-current-3010012d/package.json")
@@ -722,7 +722,8 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
             if name in {"subgroupSizeControl", "computeFullSubgroups"} and size_execution_prepared:
                 phase = "native_validation"
                 next_action = ("Run six occupancy witnesses and the combined six-leaf original CTS "
-                               "selection, then canonical acceptance.")
+                               "selection; establish stage bounds and complete truthful BALLOT "
+                               "reporting before canonical acceptance.")
             else:
                 phase = ("native_validation" if name == "shaderIntegerDotProduct" and
                          integer_dot_package.get("package_verified") else "offline_work")

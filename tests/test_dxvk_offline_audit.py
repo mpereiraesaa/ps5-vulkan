@@ -44,6 +44,8 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertEqual(2, len(report["subgroup_size_selection"]["new_flagged_leaves"]))
         self.assertFalse(report["subgroup_size_selection"]["previous_candidate_covers_new_flags"])
         self.assertTrue(report["subgroup_size_package"]["artifact_verified"])
+        self.assertTrue(report["subgroup_size_package"]["package_verified"])
+        self.assertTrue(report["subgroup_size_package"]["combined_cts_prepared"])
         self.assertEqual(report["subgroup_size_package"]["source_current"],
                          report["subgroup_size_package"]["package_verified"])
         self.assertEqual(6, report["subgroup_size_package"]["variant_count"])
