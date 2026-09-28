@@ -374,6 +374,18 @@ static void diagnostic_compute_broadcast_gate(void)
     vkDestroyPipeline(&device, pipeline, NULL);
     vkDestroyShaderModule(&device, module, NULL);
 
+    struct VkPhysicalDevice_T physical = {0};
+    device.physical = &physical;
+    device.platform_features = 0;
+    physical.platform.supported_features_v13 = PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+
     /* The private compute gate admits the complete BALLOT opcode family;
      * the public supportedOperations bit remains independent and off. */
     for (uint32_t opcode = 337u; opcode <= 344u; ++opcode) {
@@ -482,6 +494,18 @@ static void diagnostic_compute_iadd_gate(void)
     vkDestroyPipeline(&device, pipeline, NULL);
     vkDestroyShaderModule(&device, module, NULL);
 
+    struct VkPhysicalDevice_T physical = {0};
+    device.physical = &physical;
+    device.platform_features = 0;
+    physical.platform.supported_features_v13 = PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE;
+
     for (uint32_t opcode = 349u; opcode <= 361u; ++opcode) {
         words[20] = (5u << 16) | opcode;
         assert(vkCreateShaderModule(&device, &shader_info, NULL, &module) == VK_SUCCESS);
@@ -501,6 +525,45 @@ static void diagnostic_compute_iadd_gate(void)
            VK_ERROR_FEATURE_NOT_PRESENT && !module);
     vkDestroyPipelineLayout(&device, pipeline_layout, NULL);
     assert(!device.pipeline_objects && !device.descriptor_objects);
+}
+static void subgroup_dynamic_id_gate(void)
+{
+    uint32_t words[30];
+    memcpy(words, module_a, 5 * sizeof(uint32_t));
+    words[3] = 3;
+    words[5] = words[7] = (2u << 16) | 17u;
+    words[6] = 61u;
+    words[8] = 64u;
+    memcpy(words + 9, module_a + 5, 11 * sizeof(uint32_t));
+    words[20] = (4u << 16) | 43u; /* Constant source lane, result id 2. */
+    words[21] = 1u; words[22] = 2u; words[23] = 7u;
+    words[24] = (6u << 16) | 337u;
+    words[25] = words[26] = words[27] = words[28] = 1u;
+    words[29] = 2u;
+    struct VkPhysicalDevice_T physical = {0};
+    physical.platform.supported_features_t09 = PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    physical.platform.supported_features_v13 =
+        PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+        PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+    struct VkDevice_T device = {.physical = &physical};
+    VkShaderModuleCreateInfo info = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(words), .pCode = words};
+    VkShaderModule module = VK_NULL_HANDLE;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    words[29] = 1u; /* Runtime ID has no constant defining instruction. */
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) ==
+           VK_ERROR_FEATURE_NOT_PRESENT && !module);
+    device.enabled_features_v13 = PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    module = VK_NULL_HANDLE;
+    device.enabled_features_v13 = 0;
+    device.platform_features = PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE;
+    assert(vkCreateShaderModule(&device, &info, NULL, &module) == VK_SUCCESS);
+    vkDestroyShaderModule(&device, module, NULL);
+    assert(!device.pipeline_objects);
 }
 static void unadvertised_int16_gate(void)
 {
@@ -656,6 +719,7 @@ int main(void)
     diagnostic_compute_basic_gate();
     int8_compute_probe_gate();
     diagnostic_compute_broadcast_gate(); diagnostic_compute_iadd_gate();
+    subgroup_dynamic_id_gate();
     unadvertised_int16_gate();
     unadvertised_wide_type_gate();
     puts("Shader/pipeline contracts: pass (synthetic, no GPU execution)");

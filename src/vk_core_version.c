@@ -134,7 +134,15 @@ static void fill_vulkan12_features(VkPhysicalDevice p, VkPhysicalDeviceVulkan12F
     out->vulkanMemoryModelDeviceScope = f.memory_model.vulkanMemoryModelDeviceScope;
     out->vulkanMemoryModelAvailabilityVisibilityChains =
         f.memory_model.vulkanMemoryModelAvailabilityVisibilityChains;
-    /* Subgroup, descriptor-indexing, float16/int8, int64-atomic, scalar
+    const uint32_t subgroup = ps5vk_subgroup_public_bits(
+        p->platform.supported_features,
+        p->platform.supported_features_t09,
+        p->platform.supported_features_v13);
+    out->shaderSubgroupExtendedTypes = !!(
+        subgroup & PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES);
+    out->subgroupBroadcastDynamicId = !!(
+        subgroup & PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID);
+    /* Descriptor-indexing, float16/int8, int64-atomic, scalar
      * layout, minmax, draw-indirect-count and viewport-layer members stay
      * false: no such route is reported. */
 }
@@ -461,6 +469,12 @@ struct core_enable {
 /* The same enabled bits the per-extension structures set. A reported member
  * without an entry enables no gate of its own. */
 static const struct core_enable core_enables[] = {
+    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        offsetof(VkPhysicalDeviceVulkan12Features, shaderSubgroupExtendedTypes),
+        0, 0, PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES},
+    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        offsetof(VkPhysicalDeviceVulkan12Features, subgroupBroadcastDynamicId),
+        0, 0, PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID},
     {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
         offsetof(VkPhysicalDeviceVulkan13Features, robustImageAccess), 0, 0, PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS},
     {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,

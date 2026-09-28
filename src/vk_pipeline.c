@@ -30,16 +30,21 @@ static int module_valid(const uint32_t *words, size_t count)
  * a public subgroup operation or Vulkan 1.2 feature. */
 static int subgroup_module_unsupported(const uint32_t *words, size_t count,
                                        uint32_t platform_features,
-                                       uint32_t platform_features_t09)
+                                       uint32_t platform_features_t09,
+                                       uint32_t platform_features_v13)
 {
     /* A private build may also admit BASIC alone: OpGroupNonUniformElect,
      * subgroup-scope barriers and the subgroup built-ins, compute only. */
     const int basic_compute =
         !!(platform_features_t09 & PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE);
+    const uint32_t public_bits = ps5vk_subgroup_public_bits(
+        platform_features, platform_features_t09, platform_features_v13);
     const int broadcast_compute =
-        !!(platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE);
+        !!((platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE) ||
+           (public_bits & PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE));
     const int arithmetic_compute =
-        !!(platform_features & PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE);
+        !!((platform_features & PS5VK_FEATURE_SUBGROUP_IADD_COMPUTE) ||
+           (public_bits & PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE));
     int basic = 0, ballot = 0, arithmetic = 0, ballot_op = 0, arithmetic_op = 0;
     int compute_entry = 0;
     int other_entry = 0, subgroup = 0;
@@ -105,6 +110,26 @@ static int declares_private_wide_type(const uint32_t *words, size_t count)
             (words[at] >> 16) == 2u &&
             (words[at + 1] == 9u || words[at + 1] == 11u))
             return 1;
+    return 0;
+}
+static int dynamic_broadcast_without_optin(const uint32_t *words, size_t count)
+{
+    for (size_t at = 5; at < count; at += words[at] >> 16) {
+        if ((words[at] & 0xffffu) != 337u || (words[at] >> 16) != 6u)
+            continue;
+        const uint32_t id = words[at + 5];
+        int constant = 0;
+        for (size_t def = 5; def < count; def += words[def] >> 16) {
+            const uint32_t opcode = words[def] & 0xffffu;
+            const uint32_t length = words[def] >> 16;
+            if (length >= 3u && words[def + 2] == id &&
+                (opcode == 43u || opcode == 46u || opcode == 50u || opcode == 52u)) {
+                constant = 1;
+                break;
+            }
+        }
+        if (!constant) return 1;
+    }
     return 0;
 }
 VkBool32 ps5vk_shader_entry(VkShaderModule module, VkShaderStageFlagBits stage,
@@ -863,7 +888,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateShaderModule(VkDevice d, const VkShaderMo
     if (subgroup_module_unsupported(info->pCode, info->codeSize / 4,
                                     d->platform_features,
                                     d->physical ?
-                                    d->physical->platform.supported_features_t09 : 0u))
+                                    d->physical->platform.supported_features_t09 : 0u,
+                                    d->physical ?
+                                    d->physical->platform.supported_features_v13 : 0u))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (!(d->platform_features & PS5VK_FEATURE_SUBGROUP_BROADCAST_COMPUTE) &&
+        !(d->enabled_features_v13 & PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID) &&
+        dynamic_broadcast_without_optin(info->pCode, info->codeSize / 4))
         return VK_ERROR_FEATURE_NOT_PRESENT;
     /* Shader modules may be shared across graphics and compute entries, so
      * the Int16 capability must require the logical-device opt-in before

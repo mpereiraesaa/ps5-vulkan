@@ -368,7 +368,33 @@ enum ps5vk_v13_feature_bits {
     PS5VK_V13_FEATURE_COMPUTE_FULL_SUBGROUPS = 1u << 1,
     PS5VK_V13_FEATURE_SHADER_INTEGER_DOT_PRODUCT = 1u << 2,
     PS5VK_V13_FEATURE_ROBUST_IMAGE_ACCESS = 1u << 3,
+    /* Public T08 contracts are separate from the private compiler switches.
+     * No shipping platform sets these bits before native subgroup evidence. */
+    PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE = 1u << 4,
+    PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE = 1u << 5,
+    PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES = 1u << 6,
+    PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID = 1u << 7,
 };
+
+static inline uint32_t ps5vk_subgroup_public_bits(uint32_t features,
+                                                  uint32_t t09, uint32_t v13)
+{
+    if (!(t09 & PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE)) return 0;
+    uint32_t bits = v13 & (PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+                            PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE);
+    if ((bits & (PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+                 PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE)) ==
+        (PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+         PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE) &&
+        (v13 & PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES) &&
+        (features & (PS5VK_FEATURE_SHADER_INT16 | PS5VK_FEATURE_STORAGE_BUFFER_16BIT)) ==
+            (PS5VK_FEATURE_SHADER_INT16 | PS5VK_FEATURE_STORAGE_BUFFER_16BIT))
+        bits |= PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
+    if ((bits & PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE) &&
+        (v13 & PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID))
+        bits |= PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+    return bits;
+}
 
 /* Link-selected platform implementation. Production must query/configure its
  * native backend; test binaries provide explicit mock implementations. */

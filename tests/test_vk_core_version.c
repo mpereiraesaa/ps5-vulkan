@@ -454,6 +454,81 @@ static void cache_control_negotiation(void)
     }
 }
 
+static void subgroup_vulkan12_negotiation(void)
+{
+    VkInstance instance;
+    VkPhysicalDevice p = physical(&instance, VK_API_VERSION_1_3);
+    p->platform.properties.apiVersion = VK_API_VERSION_1_3;
+    VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures ext = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES};
+    VkPhysicalDeviceVulkan12Features core = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .pNext = &ext};
+    VkPhysicalDeviceFeatures2 query = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &core};
+    VkPhysicalDeviceSubgroupProperties subgroup = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+    VkPhysicalDeviceProperties2 properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &subgroup};
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && !core.subgroupBroadcastDynamicId &&
+           !ext.shaderSubgroupExtendedTypes);
+    const uint32_t feature_bits = PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES |
+        PS5VK_V13_FEATURE_SUBGROUP_BROADCAST_DYNAMIC_ID;
+    const uint32_t operation_bits = PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE |
+        PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE;
+    p->platform.supported_features_v13 |= feature_bits | operation_bits;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && !core.subgroupBroadcastDynamicId);
+    vkGetPhysicalDeviceProperties2(p, &properties);
+    assert(!subgroup.supportedOperations && !subgroup.supportedStages);
+    p->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+    p->platform.supported_features_v13 &= ~operation_bits;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && !core.subgroupBroadcastDynamicId);
+    p->platform.supported_features_v13 |= PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && core.subgroupBroadcastDynamicId);
+    vkGetPhysicalDeviceProperties2(p, &properties);
+    assert(subgroup.subgroupSize == 32 &&
+           subgroup.supportedStages == VK_SHADER_STAGE_COMPUTE_BIT &&
+           subgroup.supportedOperations ==
+           (VK_SUBGROUP_FEATURE_BASIC_BIT | VK_SUBGROUP_FEATURE_BALLOT_BIT));
+    p->platform.supported_features_v13 |= PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(!core.shaderSubgroupExtendedTypes && core.subgroupBroadcastDynamicId);
+    p->platform.supported_features |= PS5VK_FEATURE_SHADER_INT16;
+    vkGetPhysicalDeviceFeatures2(p, &query);
+    assert(core.shaderSubgroupExtendedTypes && core.subgroupBroadcastDynamicId &&
+           ext.shaderSubgroupExtendedTypes);
+    vkGetPhysicalDeviceProperties2(p, &properties);
+    assert(subgroup.supportedOperations ==
+           (VK_SUBGROUP_FEATURE_BASIC_BIT | VK_SUBGROUP_FEATURE_BALLOT_BIT |
+            VK_SUBGROUP_FEATURE_ARITHMETIC_BIT));
+
+    memset(&core, 0, sizeof(core));
+    core.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    core.shaderSubgroupExtendedTypes = core.subgroupBroadcastDynamicId = VK_TRUE;
+    VkDevice d = VK_NULL_HANDLE;
+    assert(create(p, &core, &d) == VK_SUCCESS);
+    assert((d->enabled_features_v13 & feature_bits) == feature_bits);
+    vkDestroyDevice(d, NULL);
+    ext.shaderSubgroupExtendedTypes = VK_TRUE;
+    assert(create(p, &ext, &d) == VK_SUCCESS);
+    assert(d->enabled_features_v13 & PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES);
+    vkDestroyDevice(d, NULL);
+    core.pNext = &ext;
+    assert(create(p, &core, &d) == VK_ERROR_UNKNOWN && !d);
+    core.pNext = NULL;
+    ext.shaderSubgroupExtendedTypes = 2;
+    assert(create(p, &ext, &d) == VK_ERROR_UNKNOWN && !d);
+    ext.shaderSubgroupExtendedTypes = VK_TRUE;
+    p->platform.supported_features_v13 &= ~PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE;
+    assert(create(p, &core, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    assert(create(p, &ext, &d) == VK_ERROR_FEATURE_NOT_PRESENT && !d);
+    vkDestroyInstance(instance, NULL);
+}
+
 static void inline_uniform_negotiation(void)
 {
     const uint32_t versions[]={VK_API_VERSION_1_0,VK_API_VERSION_1_1,VK_API_VERSION_1_2,VK_API_VERSION_1_3};
@@ -859,6 +934,7 @@ int main(void)
     graphics_core13_negotiation();
     zero_initialize_negotiation();
     cache_control_negotiation();
+    subgroup_vulkan12_negotiation();
     inline_uniform_negotiation();
     puts("vk core version: dormant on 1.0, projections and core names on raised versions");
     return 0;

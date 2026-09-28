@@ -658,6 +658,14 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice p,
             ((VkPhysicalDeviceShaderDrawParametersFeatures *)next)->shaderDrawParameters =
                 !!(p->platform.supported_features & PS5VK_FEATURE_SHADER_DRAW_PARAMETERS);
         } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES) {
+            ((VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures *)next)
+                ->shaderSubgroupExtendedTypes = !!(ps5vk_subgroup_public_bits(
+                    p->platform.supported_features,
+                    p->platform.supported_features_t09,
+                    p->platform.supported_features_v13) &
+                    PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES);
+        } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES) {
             /* The queried feature follows the internal capability exactly, and
              * only the multiview core feature: geometry and tessellation
@@ -787,17 +795,24 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice p,
     for (VkBaseOutStructure *next = (VkBaseOutStructure *)out->pNext; next;
          next = next->pNext) {
         if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES) {
-            /* Only what the platform measured: compute BASIC on the fixed
-             * wave32 compute dispatch, or nothing at all. Every field is
-             * answered so no caller value survives as an apparent
-             * capability. */
+            /* The shipping platform reports only wave32 compute BASIC.
+             * BALLOT and ARITHMETIC require independent public platform
+             * bits, never the private diagnostic compiler switches. */
             VkPhysicalDeviceSubgroupProperties *properties =
                 (VkPhysicalDeviceSubgroupProperties *)next;
             const int basic = !!(p->platform.supported_features_t09 &
                                  PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE);
             properties->subgroupSize = basic ? 32u : 0u;
             properties->supportedStages = basic ? VK_SHADER_STAGE_COMPUTE_BIT : 0u;
+            const uint32_t public_bits = ps5vk_subgroup_public_bits(
+                p->platform.supported_features,
+                p->platform.supported_features_t09,
+                p->platform.supported_features_v13);
             properties->supportedOperations = basic ? VK_SUBGROUP_FEATURE_BASIC_BIT : 0u;
+            if (public_bits & PS5VK_V13_FEATURE_SUBGROUP_BALLOT_COMPUTE)
+                properties->supportedOperations |= VK_SUBGROUP_FEATURE_BALLOT_BIT;
+            if (public_bits & PS5VK_V13_FEATURE_SUBGROUP_ARITHMETIC_COMPUTE)
+                properties->supportedOperations |= VK_SUBGROUP_FEATURE_ARITHMETIC_BIT;
             properties->quadOperationsInAllStages = VK_FALSE;
         } else if (next->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES) {
             /* ONLY the floors this profile measured, and zero when the platform
@@ -1576,6 +1591,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     VkBool32 saw_features2 = VK_FALSE, saw8 = VK_FALSE, saw16 = VK_FALSE;
     VkBool32 saw_draw_parameters = VK_FALSE, saw_multiview = VK_FALSE;
     VkBool32 saw_memory_model = VK_FALSE;
+    VkBool32 saw_subgroup_extended_types = VK_FALSE;
     VkBool32 saw_buffer_address = VK_FALSE;
     VkBool32 saw_device_group = VK_FALSE;
     VkBool32 saw_uniform_buffer_standard_layout = VK_FALSE;
@@ -1770,6 +1786,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
             if (features->shaderDrawParameters) {
                 if (!draw_parameters) return VK_ERROR_FEATURE_NOT_PRESENT;
                 enabled_features |= PS5VK_FEATURE_SHADER_DRAW_PARAMETERS;
+            }
+        } else if (next->sType ==
+                   VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES) {
+            if (saw_subgroup_extended_types) return INVALID;
+            saw_subgroup_extended_types = VK_TRUE;
+            const VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures *features =
+                (const VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures *)next;
+            if (!valid_bool(features->shaderSubgroupExtendedTypes)) return INVALID;
+            if (features->shaderSubgroupExtendedTypes) {
+                if (core_version < VK_API_VERSION_1_2 ||
+                    !(ps5vk_subgroup_public_bits(p->platform.supported_features,
+                        p->platform.supported_features_t09,
+                        p->platform.supported_features_v13) &
+                      PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES))
+                    return VK_ERROR_FEATURE_NOT_PRESENT;
+                enabled_features_v13 |= PS5VK_V13_FEATURE_SHADER_SUBGROUP_EXTENDED_TYPES;
             }
         } else if (next->sType ==
                    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR) {
