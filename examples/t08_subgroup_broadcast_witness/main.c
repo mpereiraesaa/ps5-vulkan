@@ -8,6 +8,13 @@
 #define WITNESS_RESULT "T08_SUBGROUP_BALLOT_RESULT"
 #define WITNESS_RETIRED "T08_SUBGROUP_BALLOT_RETIRED"
 #define WITNESS_FAILURE "T08_SUBGROUP_BALLOT_FAILURE"
+#elif defined(T08_SUBGROUP_IADD_INT16_WITNESS)
+#include "t08_subgroup_iadd_int16_shader.h"
+#define WITNESS_SPIRV t08_subgroup_iadd_int16_spirv
+#define WITNESS_START "T08_SUBGROUP_IADD_INT16_START"
+#define WITNESS_RESULT "T08_SUBGROUP_IADD_INT16_RESULT"
+#define WITNESS_RETIRED "T08_SUBGROUP_IADD_INT16_RETIRED"
+#define WITNESS_FAILURE "T08_SUBGROUP_IADD_INT16_FAILURE"
 #elif defined(T08_SUBGROUP_IADD_INT8_WITNESS)
 #include "t08_subgroup_iadd_int8_shader.h"
 #define WITNESS_SPIRV t08_subgroup_iadd_int8_spirv
@@ -259,7 +266,12 @@ static int witness(void)
         guards += words[i] != sentinel;
     for (uint32_t i = 0; i < OUTPUTS; ++i) {
         uint32_t subgroup = i / 32;
-#if defined(T08_SUBGROUP_IADD_INT8_WITNESS)
+#if defined(T08_SUBGROUP_IADD_INT16_WITNESS)
+        uint32_t total = 32u * source_lanes[subgroup] * 97u + 496u * 13u;
+        int32_t signed_value = (int32_t)(total & 0xffffu);
+        if (signed_value >= 0x8000) signed_value -= 0x10000;
+        uint32_t expected = (uint32_t)signed_value;
+#elif defined(T08_SUBGROUP_IADD_INT8_WITNESS)
         uint32_t expected = (32u * source_lanes[subgroup] + 496u) & 0xffu;
 #elif defined(T08_SUBGROUP_IADD_WITNESS)
         uint32_t expected = 32u * source_lanes[subgroup] + 496u;

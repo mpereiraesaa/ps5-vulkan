@@ -19,8 +19,9 @@ from build_t08_subgroup_broadcast_witness import checked_spirv, diagnostic_envir
 def profile(operation):
     return tessellation_build_profile({
         "PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC": "1" if operation in ("broadcast", "ballot") else "0",
-        "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in ("iadd", "iadd_int8") else "0",
-        "PS5VK_SHADER_INT8_DIAGNOSTIC": "1" if operation == "iadd_int8" else "0"})
+        "PS5VK_SUBGROUP_IADD_DIAGNOSTIC": "1" if operation in ("iadd", "iadd_int8", "iadd_int16") else "0",
+        "PS5VK_SHADER_INT8_DIAGNOSTIC": "1" if operation == "iadd_int8" else "0",
+        "PS5VK_SHADER_INT16_DIAGNOSTIC": "1" if operation == "iadd_int16" else "0"})
 
 
 class SubgroupWitnessTests(unittest.TestCase):
@@ -218,6 +219,48 @@ class SubgroupWitnessTests(unittest.TestCase):
         artifact = dict(self.artifact,
                         profile="t08-subgroup-iadd_int8-diagnostic-witness",
                         operation="iadd_int8", build_profile=profile("iadd_int8"))
+        self.assertEqual(verify(log, receipt, artifact)["digest"], f"{digest:08x}")
+        wrong = log.replace(f"digest={digest:08x}".encode(),
+                            f"digest={expected_digest('iadd'):08x}".encode())
+        with self.assertRaisesRegex(ValueError, "subgroup data"):
+            verify(wrong, dict(receipt, sha256=hashlib.sha256(wrong).hexdigest()),
+                   artifact)
+
+    @unittest.skipUnless(shutil.which("glslangValidator"), "glslangValidator unavailable")
+    def test_int16_iadd_signed_wraparound_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "int16.spv"
+            subprocess.run(["glslangValidator", "-V", "--target-env", "vulkan1.2",
+                            str(ROOT / "experiments/compute/t08_subgroup_int16_iadd_runtime.comp"),
+                            "-o", str(binary)], check=True, capture_output=True)
+            payload = binary.read_bytes()
+            checked_spirv(payload, "iadd_int16")
+            with self.assertRaisesRegex(ValueError, "iadd"):
+                checked_spirv(payload, "iadd")
+            words = list(struct.unpack(f"<{len(payload) // 4}I", payload))
+            offset = 5
+            while offset < len(words):
+                size, opcode = words[offset] >> 16, words[offset] & 0xffff
+                if opcode == 21 and words[offset + 2] == 16 and words[offset + 3] == 1:
+                    words[offset + 3] = 0
+                    break
+                offset += size
+            else:
+                self.fail("signed Int16 type missing")
+            with self.assertRaisesRegex(ValueError, "iadd_int16"):
+                checked_spirv(struct.pack(f"<{len(words)}I", *words), "iadd_int16")
+        digest = expected_digest("iadd_int16")
+        self.assertNotEqual(digest, expected_digest("iadd"))
+        log = (
+            b"T08_SUBGROUP_IADD_INT16_START subgroups=4 outputs=128 ids=7,19,31,1 api=1.3 public=off\n"
+            + ("T08_SUBGROUP_IADD_INT16_RESULT outputs=128 mismatches=0 guards=0 "
+               f"digest={digest:08x} fence=complete\n").encode()
+            + b"T08_SUBGROUP_IADD_INT16_RETIRED resources=clean\n"
+        )
+        receipt = dict(self.receipt, sha256=hashlib.sha256(log).hexdigest())
+        artifact = dict(self.artifact,
+                        profile="t08-subgroup-iadd_int16-diagnostic-witness",
+                        operation="iadd_int16", build_profile=profile("iadd_int16"))
         self.assertEqual(verify(log, receipt, artifact)["digest"], f"{digest:08x}")
         wrong = log.replace(f"digest={digest:08x}".encode(),
                             f"digest={expected_digest('iadd'):08x}".encode())
