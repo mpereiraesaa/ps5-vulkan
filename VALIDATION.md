@@ -29,6 +29,30 @@ now uses the ordinary SDK, with no diagnostic switches, API-version bypass
 or external core-name/query translation.
 Do not rewrite older receipts to describe the newly promoted configuration.
 
+## Low CPU mappings for 32-bit Vulkan callers (2026-09-29)
+
+The native direct-memory allocation can have a CPU address above 4 GiB. A
+32-bit Vulkan caller cannot represent that address when `vkMapMemory` returns
+through its thunk. The native memory backend now creates a second CPU mapping
+of the same physical allocation below 4 GiB on first use, while GPU resource
+addresses keep their original mapping. If the complete mapped range cannot
+fit below 4 GiB, `vkMapMemory` fails instead of returning a truncated pointer.
+The alias is released with the allocation.
+
+Host tests cover selecting a distinct CPU address and rejecting a failed or
+empty alias. The ordinary public-SDK coherent-memory witness ran on hardware
+with this change: two allocations logged successful low CPU aliases, all
+three GPU/CPU data cases had zero mismatches, strict verification passed and
+resource retirement and title closure were clean. SDK archive SHA-256
+`f9705620a055f9eb5b1822da17edfdec80301070eeedefd3a2eb70e1c16d0d2e`,
+eboot SHA-256
+`1d650fb2f403f44e49aee3523e78baf64c111274f33eb73a7952b610c6ecfe86`,
+run `20260928T231037330Z_PPSA99994_ps5vk_0x4f1b44613d6a`, log SHA-256
+`157c01416d5268b25f34f0b6d1f6f251aacddd59f8a9f30ac6af231278136c58`.
+The previous payload was restored and the console released. A 32-bit
+Prospero Win PE still needs its own `vkMapMemory` test: this run does not
+establish low-address availability inside the Wine process.
+
 ## Experimental Vulkan 1.3 native DXVK
 
 On 2026-09-26, pinned DXVK 2.6.2 (`9d6f54a1ade20d1d27dd421024717a636f3d8c68`)

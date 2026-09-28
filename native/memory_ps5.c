@@ -7,9 +7,11 @@
 
 struct native_allocation {
     void *address;
+    void *cpu_alias;
     VkDeviceAddress gpu_address;
     int64_t physical;
     size_t mapped_size;
+    size_t alignment;
     VkDeviceSize requested_size;
 };
 
@@ -36,7 +38,7 @@ static VkResult allocate_aligned(void *context, VkDeviceSize size, void **addres
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     struct native_allocation *a = calloc(1, sizeof(*a));
     if (!a) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    a->physical = -1; a->requested_size = size;
+    a->physical = -1; a->requested_size = size; a->alignment = alignment;
     a->mapped_size = ((size_t)size + alignment - 1) & ~(alignment - 1);
     if (budget && (budget->used > budget->limit || a->mapped_size > budget->limit - budget->used)) {
         free(a); return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -83,6 +85,10 @@ static void release(void *context, void *backing)
 {
     struct ps5vk_native_memory_budget *budget = context;
     struct native_allocation *a = backing;
+    if (a->cpu_alias) {
+        int alias_result = sceKernelMunmap(a->cpu_alias, a->mapped_size);
+        if (alias_result) retain("cpu-alias-unmap", alias_result);
+    }
     int result = sceKernelMunmap(a->address, a->mapped_size);
     if (result) retain("unmap", result);
     result = sceKernelReleaseDirectMemory(a->physical, a->mapped_size);
@@ -107,13 +113,61 @@ VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out
     return VK_SUCCESS;
 }
 
+/* Vulkan's CPU mapping may be returned to a 32-bit Wine guest. Keep the GPU's
+ * original direct mapping intact and map the same physical pages a second
+ * time below 4 GiB only when vkMapMemory is actually called. An unavailable
+ * low range is a map failure, never a successful pointer truncated by the
+ * guest thunk. This does not reserve space in Prospero Win's x86 process; its
+ * actual workload still has to prove availability there. */
+VkResult ps5vk_memory_backend_cpu_map(void *backing, void **out)
+{
+    if (!out) return VK_ERROR_MEMORY_MAP_FAILED;
+    *out = NULL;
+    struct native_allocation *a = backing;
+    if (!a || !a->address || !a->mapped_size) return VK_ERROR_MEMORY_MAP_FAILED;
+    const uintptr_t ceiling = UINT64_C(1) << 32;
+    if ((uintptr_t)a->address < ceiling &&
+        a->mapped_size <= ceiling - (uintptr_t)a->address) {
+        *out = a->address;
+        return VK_SUCCESS;
+    }
+    if (a->cpu_alias) {
+        *out = a->cpu_alias;
+        return VK_SUCCESS;
+    }
+    const uintptr_t hints[] = {UINT32_C(0x80000000), UINT32_C(0x40000000),
+                               UINT32_C(0xc0000000)};
+    for (unsigned n = 0; n < sizeof(hints) / sizeof(hints[0]); ++n) {
+        void *candidate = (void *)hints[n];
+        int rc = sceKernelMapDirectMemory(&candidate, a->mapped_size, 0x33, 0,
+                                          a->physical, a->alignment);
+        if (rc) continue;
+        /* A duplicate map must never unmap the GPU's original VA. */
+        if (candidate == a->address) return VK_ERROR_MEMORY_MAP_FAILED;
+        if (candidate && (uintptr_t)candidate < ceiling &&
+            a->mapped_size <= ceiling - (uintptr_t)candidate &&
+            !((uintptr_t)candidate & (a->alignment - 1))) {
+            a->cpu_alias = candidate;
+            *out = candidate;
+            ps5log_printf(PS5LOG_MARK, "PS5VK_MEMORY_CPU_ALIAS bytes=%zu low=1",
+                          a->mapped_size);
+            return VK_SUCCESS;
+        }
+        rc = sceKernelMunmap(candidate, a->mapped_size);
+        if (rc) retain("cpu-alias-reject-unmap", rc);
+    }
+    ps5log_printf(PS5LOG_INFO, "PS5VK_MEMORY_CPU_ALIAS_FAILED bytes=%zu",
+                  a->mapped_size);
+    return VK_ERROR_MEMORY_MAP_FAILED;
+}
+
 static VkResult host_cache(void *context, void *backing, VkDeviceSize offset, VkDeviceSize size)
 {
     (void)context;
     struct native_allocation *a = backing;
     if (!size || offset >= a->requested_size || size > a->requested_size - offset)
         return VK_ERROR_UNKNOWN;
-    uintptr_t start = (uintptr_t)a->address + offset;
+    uintptr_t start = (uintptr_t)(a->cpu_alias ? a->cpu_alias : a->address) + offset;
     uintptr_t end = start + size;
     for (uintptr_t line = start & ~(uintptr_t)63; line < end; line += 64)
         __asm__ volatile("clflush (%0)" : : "r"(line) : "memory");

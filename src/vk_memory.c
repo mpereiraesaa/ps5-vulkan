@@ -91,6 +91,13 @@ __attribute__((weak)) VkResult ps5vk_memory_backend_device_address(
     return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
+__attribute__((weak)) VkResult ps5vk_memory_backend_cpu_map(void *backing, void **out)
+{
+    (void)backing;
+    if (out) *out = NULL;
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
 /* The profile's memory types: type 0, plus type 1 when the physical profile
  * carries the driver-maintained HOST_COHERENT variant. A hand-built device
  * without a physical device has type 0 only. */
@@ -247,6 +254,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory(VkDevice d, VkDeviceMemory m,
     VkDeviceSize length;
     if (!d || !m || m->device != d || flags || m->mapped ||
         !range_in(m->size, offset, size, &length)) return VK_ERROR_MEMORY_MAP_FAILED;
+    void *cpu_address = NULL;
+    VkResult map_result = ps5vk_memory_backend_cpu_map(m->backing, &cpu_address);
+    if (map_result == VK_ERROR_FEATURE_NOT_PRESENT)
+        cpu_address = m->address;
+    else if (map_result != VK_SUCCESS || !cpu_address)
+        return map_result == VK_SUCCESS ? VK_ERROR_MEMORY_MAP_FAILED : map_result;
     /* Coherent memory: drop any CPU cache line left from an earlier mapping,
      * so the first host read sees what the device last made available. */
     if (m->coherent) {
@@ -254,7 +267,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkMapMemory(VkDevice d, VkDeviceMemory m,
         if (result != VK_SUCCESS) return result;
     }
     m->mapped = VK_TRUE; m->map_offset = offset; m->map_size = length;
-    *out = (unsigned char *)m->address + offset;
+    *out = (unsigned char *)cpu_address + offset;
     return VK_SUCCESS;
 }
 

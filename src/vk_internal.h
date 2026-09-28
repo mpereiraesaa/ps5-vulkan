@@ -41,6 +41,10 @@ struct ps5vk_memory_backend ps5vk_native_graphics_memory_backend(void);
 /* Resolve a direct-memory allocation's GPU virtual address. The host default
  * refuses this; native memory provides the address used by GPU descriptors. */
 VkResult ps5vk_memory_backend_device_address(void *backing, VkDeviceAddress *out);
+/* A native backend may map the same physical allocation at a separate CPU
+ * address. The GPU and bound resources keep the original address. The host
+ * default has no alias and returns VK_ERROR_FEATURE_NOT_PRESENT. */
+VkResult ps5vk_memory_backend_cpu_map(void *backing, void **out);
 /* HOST_COHERENT maintenance at queue boundaries: CPU writeback of every mapped
  * coherent allocation before a GPU submission launches, CPU invalidate after
  * its completion is observed. Both are no-ops without such an allocation. */
