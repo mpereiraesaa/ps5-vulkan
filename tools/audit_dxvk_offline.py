@@ -21,6 +21,7 @@ SIZE_MEASUREMENT = Path("build/offline-dxvk-profile/subgroup-size-cts/measuremen
 SIZE_PREVIOUS = Path("build/offline-dxvk-profile/subgroup-size-cts/candidate-7e69fbb1/PPSA99994/cases.txt")
 SIZE_PACKAGE = Path("build/offline-dxvk-profile/subgroup-size-cts/rebuild-cb372781.json")
 DOT_PACKAGE = Path("build/offline-dxvk-profile/integer-dot/current-c78057db/package.json")
+T08_PACKAGE = Path("build/offline-dxvk-profile/t08-current-468c730b/package.json")
 DEFAULT_OUT = Path("build/offline-dxvk-profile/audit-17/current.json")
 
 INLINE = {
@@ -241,6 +242,69 @@ def audit_integer_dot_package(root: Path) -> dict:
             "cts_eboot_sha256": cts["eboot_sha256"]}
 
 
+def audit_t08_package(root: Path) -> dict:
+    path = root / T08_PACKAGE
+    if not path.is_file():
+        return {"witnesses_verified": False, "compiler_census_verified": False}
+    record = json.loads(path.read_text())
+    expected = {"ballot", "broadcast", "iadd", "iadd_int8", "iadd_int16",
+                "iadd_int64", "fadd_float16", "arithmetic21"}
+    witnesses = record["witnesses"]
+    valid = (record.get("native_executed") is False and len(witnesses) == 8 and
+             {item["operation"] for item in witnesses} == expected)
+    for item in witnesses:
+        artifact_path = root / item["candidate"] / "artifact.json"
+        eboot_path = root / item["candidate"] / "PPSA99994/eboot.bin"
+        if not artifact_path.is_file() or not eboot_path.is_file():
+            valid = False
+            break
+        artifact = json.loads(artifact_path.read_text())
+        operation = item["operation"]
+        switches = artifact["build_profile"]["switches"]
+        family = ("PS5VK_SUBGROUP_BROADCAST_DIAGNOSTIC" if operation in ("ballot", "broadcast")
+                  else "PS5VK_SUBGROUP_IADD_DIAGNOSTIC")
+        valid = valid and (
+            hashlib.sha256(artifact_path.read_bytes()).hexdigest() == item["artifact_sha256"] and
+            hashlib.sha256(eboot_path.read_bytes()).hexdigest() == item["eboot_sha256"] and
+            artifact.get("eboot_sha256") == item["eboot_sha256"] and
+            (operation == "arithmetic21" or artifact.get("operation") == operation) and
+            (operation != "arithmetic21" or artifact.get("operations") == 21) and
+            switches.get(family) == "1" and
+            (operation != "iadd_int8" or switches.get("PS5VK_SHADER_INT8_DIAGNOSTIC") == "1") and
+            (operation != "iadd_int16" or switches.get("PS5VK_SHADER_INT16_DIAGNOSTIC") == "1"))
+    census_path = root / record["compiler_census"]
+    if not census_path.is_file():
+        return {"witnesses_verified": False, "compiler_census_verified": False}
+    census = json.loads(census_path.read_text())
+    arithmetic_source = (root / "third_party/vk-gl-cts/external/vulkancts/modules/"
+                         "vulkan/subgroups/vktSubgroupsArithmeticTests.cpp")
+    compiler_verified = (
+        hashlib.sha256(census_path.read_bytes()).hexdigest() == record["compiler_census_sha256"] and
+        census["cts_source_sha256"] == hashlib.sha256(arithmetic_source.read_bytes()).hexdigest() and
+        census["probe_source_sha256"] == hashlib.sha256((root / "tests/t08_compile_probe.c").read_bytes()).hexdigest() and
+        census["psbc_archive_sha256"] == hashlib.sha256((root / "build/libpsbc.host.a").read_bytes()).hexdigest() and
+        len(census["operation_enum"]) == 21 and len(census["rows"]) == 118 and
+        len([row for row in census["rows"] if row["name"].startswith("ballot_")]) == 10 and
+        all(row["glslang_exit"] == row["psbc_exit"] == 0 and row["group_opcodes"]
+            for row in census["rows"]))
+    selection = json.loads((root / record["original_cts_selection"]).read_text())
+    frozen = json.loads((root / "cts/upstream/manifest.json").read_text())
+    selection_verified = (
+        selection["cases"][:len(frozen["cases"])] == frozen["cases"] and
+        selection["measurement"]["moved"] == 5 and
+        selection["measurement"]["selection_hash"] == selection_hash(selection["cases"]) and
+        record["original_cts_eligible_on_current_report"] is False)
+    source_current = subprocess.run(
+        ["git", "diff", "--quiet", record["source_commit"], "--", "src", "native", "include",
+         "examples", "experiments", "tools/build_sdk.py", "tools/build_t08_subgroup_broadcast_witness.py",
+         "tools/build_t08_subgroup_arithmetic_witness.py", "tests/t08_compile_probe.c"],
+        cwd=root, check=False, capture_output=True).returncode == 0
+    return {"witnesses_verified": valid and source_current,
+            "compiler_census_verified": compiler_verified, "cts_selection_verified": selection_verified,
+            "source_current": source_current, "witness_count": len(witnesses),
+            "original_cts_eligible": False}
+
+
 def audit_rebuilt_witness(root: Path, record_path: Path) -> dict:
     path = root / record_path
     if not path.is_file():
@@ -332,6 +396,7 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
     size = audit_size_selection(root)
     subgroup_package = audit_subgroup_size_package(root)
     integer_dot_package = audit_integer_dot_package(root)
+    t08_package = audit_t08_package(root)
     rebuilt = {name: audit_rebuilt_witness(root, path)
                for name, path in REBUILT_WITNESSES.items()}
     rows = []
@@ -358,6 +423,7 @@ def build_audit(root: Path = ROOT, matrix: dict | None = None,
             "matrix_summary": matrix["summary"], "rows": rows,
             "inline_plan": inline, "subgroup_size_selection": size,
             "subgroup_size_package": subgroup_package, "integer_dot_package": integer_dot_package,
+            "t08_package": t08_package,
             "rebuilt_witnesses": rebuilt,
             "note": "Offline preparation only; no row is promoted by this audit."}
 
