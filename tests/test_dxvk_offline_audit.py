@@ -37,6 +37,7 @@ class DxvkOfflineAuditTests(unittest.TestCase):
         self.assertTrue(report["t08_package"]["witnesses_verified"])
         self.assertTrue(report["t08_package"]["compiler_census_verified"])
         self.assertTrue(report["t08_package"]["cts_selection_verified"])
+        self.assertTrue(report["t08_package"]["diagnostic_cts_prepared"])
         self.assertFalse(report["t08_package"]["original_cts_eligible"])
         self.assertTrue(all(r["execution_prepared"] and r["cts_verified"]
                             for r in report["rebuilt_witnesses"].values()))

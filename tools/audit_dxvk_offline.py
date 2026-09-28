@@ -351,12 +351,35 @@ def audit_t08_package(root: Path) -> dict:
         selection["measurement"]["moved"] == 5 and
         selection["measurement"]["selection_hash"] == selection_hash(selection["cases"]) and
         record["original_cts_eligible_on_current_report"] is False)
+    cts = record.get("diagnostic_cts", {})
+    cts_dist = root / cts.get("candidate", "") / "PPSA99994"
+    cts_eboot = cts_dist / "eboot.bin"
+    cts_manifest = cts_dist / "build_manifest.json"
+    diagnostic_cts_prepared = False
+    if cts_eboot.is_file() and cts_manifest.is_file():
+        build = json.loads(cts_manifest.read_text())
+        switches = build["tessellation_build_profile"]["switches"]
+        diagnostic_cts_prepared = (
+            hashlib.sha256(cts_eboot.read_bytes()).hexdigest() == cts.get("eboot_sha256") and
+            hashlib.sha256(cts_manifest.read_bytes()).hexdigest() == cts.get("build_manifest_sha256") and
+            build["eboot_sha256"] == cts.get("eboot_sha256") and
+            build["selection_hash"] == cts.get("selection_hash") == selection_hash(selection["cases"]) and
+            build["selected_cases"] == [case["path"] for case in selection["cases"]] and
+            build["measurement"] == selection["measurement"] and
+            build["measurement"]["moved"] == cts.get("moved") == 5 and
+            set(cts.get("required_switches", [])) == set(T08_COMBINED_SWITCHES) and
+            {name for name, value in switches.items() if value == "1"} == set(T08_COMBINED_SWITCHES) and
+            source_unchanged(root, cts["source_commit"],
+                ["src", "native", "include", "cts", "tools/build_sdk.py",
+                 "tools/build_upstream_cts.py"], [build["tessellation_build_profile"]]))
     source_current = source_unchanged(root, record["source_commit"],
         ["src", "native", "include", "examples", "experiments", "tools/build_sdk.py",
          "tools/build_t08_subgroup_broadcast_witness.py",
          "tools/build_t08_subgroup_arithmetic_witness.py", "tests/t08_compile_probe.c"], profiles)
     return {"witnesses_verified": valid and source_current,
             "compiler_census_verified": compiler_verified, "cts_selection_verified": selection_verified,
+            "diagnostic_cts_prepared": diagnostic_cts_prepared,
+            "diagnostic_cts_eboot_sha256": cts.get("eboot_sha256"),
             "source_current": source_current, "witness_count": len(witnesses),
             "original_cts_eligible": False}
 
