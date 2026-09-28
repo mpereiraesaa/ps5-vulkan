@@ -34,6 +34,40 @@ The matrix below tracks Vulkan feature evidence, not PE loading or per-API game
 compatibility. Focused CTS is useful when it diagnoses a real dependency; full
 CTS acceptance and 62/62 are not frontend release gates.
 
+### Offline PE dependency checkpoint (2026-09-28)
+
+All five x64 PE modules built from the pinned, clean DXVK 2.6.2 commit with its
+unmodified Windows Meson targets and the local MinGW cross-compiler. The
+ignored `build/dxvk-pe-x64/inventory.json` records their full SHA-256 hashes,
+sizes, architecture and static import modules. This is a build/import inventory,
+not PE execution or proof that Prospero Win can load them. Reproduce the build
+with the pinned source checkout (`DXVK_DIR`) and its `build-win64.txt` cross
+file:
+
+```sh
+meson setup build/dxvk-pe-x64 "$DXVK_DIR" --cross-file "$DXVK_DIR/build-win64.txt" --wrap-mode=nodownload -Dbuildtype=release
+ninja -C build/dxvk-pe-x64 -j 8 src/dxgi/dxgi.dll src/d3d11/d3d11.dll src/d3d10/d3d10core.dll src/d3d9/d3d9.dll src/d3d8/d3d8.dll
+```
+
+| PE module | SHA-256 of this build |
+| --- | --- |
+| `dxgi.dll` | `1925aa0196ee108b2bcc3ad07646ef81d178ace60688abb200f6bcf8ec98ccc6` |
+| `d3d11.dll` | `ac4e32181df36444ed2fa55c1694876c83adaed620820b7a292c97082abb91fd` |
+| `d3d10core.dll` | `57c8557522babc750a97ed5b3ec851e85fc2c207b67f3e8a4f1d46506be69903` |
+| `d3d9.dll` | `1e5cee2ff035139dc42a92c161394295f02d13bd0323dba9c90ec201f4be441e` |
+| `d3d8.dll` | `3fdf76908e3fd784a84152ca0d4e77a2a7544a72e9df70fe976de23d3634eab6` |
+
+The actual static import chain is `d3d8.dll` → `d3d9.dll`, and
+`d3d10core.dll` → `d3d11.dll` → `dxgi.dll`. `d3d9.dll` and `dxgi.dll` have no
+other DXVK DLL in their static import table. Across the modules, the external
+PE imports are from `ADVAPI32.dll`, `GDI32.dll`, `KERNEL32.dll`, `msvcrt.dll`,
+`SETUPAPI.dll` and `USER32.dll`. The pinned DXVK source loads
+`winevulkan.dll` or `vulkan-1.dll` dynamically and resolves
+`vkGetInstanceProcAddr`; a static import listing alone would miss that bridge.
+The immediate integration contract is therefore PE module override/search,
+these imports and Win32 WSI, followed by a working Vulkan entrypoint into
+ps5vk. The x64 build does not cover 32-bit applications.
+
 ## Current integration target (2026-09-26)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,
