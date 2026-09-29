@@ -848,6 +848,32 @@ int main(void)
             &handover_at,handover_words+64,flush)==VK_ERROR_FEATURE_NOT_PRESENT &&
             handover_at==handover_words);
         backbuffer.info.format=VK_FORMAT_B8G8R8A8_UNORM;
+        /* The PE D3D9 pixel readback copies the sampled backbuffer, then
+         * restores it with HOST added to the same broad destination scope.
+         * The image barrier has no source access because the preceding
+         * aggregate dependency publishes the transfer work. */
+        struct ps5vk_operation d3d9_restore={.type=PS5VK_IMAGE_BARRIER,
+            .src_stage=VK_PIPELINE_STAGE_TRANSFER_BIT,
+            .dst_stage=d3d9_stages | VK_PIPELINE_STAGE_HOST_BIT,
+            .image_barrier={.image=&backbuffer,
+                .oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .dstAccessMask=d3d9_access}};
+        backbuffer.layout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        handover_at=handover_words;
+        handover_state=(struct ps5vk_layout_state){0};
+        assert(ps5vk_upload_commands(&device,&d3d9_restore,1,NULL,&handover_state,
+            &handover_at,handover_words+64,flush)==VK_SUCCESS);
+        assert(handover_at-handover_words==PS5VK_GRAPHICS_ACQUIRE_WORDS);
+        assert(ps5vk_layout_require(&handover_state,&backbuffer,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)==VK_SUCCESS);
+        backbuffer.info.format=VK_FORMAT_R8G8B8A8_UNORM;
+        handover_at=handover_words;
+        handover_state=(struct ps5vk_layout_state){0};
+        assert(ps5vk_upload_commands(&device,&d3d9_restore,1,NULL,&handover_state,
+            &handover_at,handover_words+64,flush)==VK_ERROR_FEATURE_NOT_PRESENT &&
+            handover_at==handover_words);
+        backbuffer.info.format=VK_FORMAT_B8G8R8A8_UNORM;
         initial[0].src_stage=VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         uint32_t words[64]={0},*at=words;
         struct ps5vk_layout_state state={0};

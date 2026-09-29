@@ -194,7 +194,7 @@ static inline int ps5vk_precise_query_colour_barrier(const VkImageMemoryBarrier 
             src_stage == VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT &&
             dst_stage == VK_PIPELINE_STAGE_TRANSFER_BIT);
 }
-/* DXVK 2.6.2's tiled RGBA8 backbuffer is rendered, sampled and copied in
+/* DXVK 2.6.2's tiled colour backbuffer is rendered, sampled and copied in
  * separate submissions. The recorder and native upload prelude must accept
  * the same measured layout transitions, or submit fails after record succeeds.
  * The queue serializes jobs and the prelude performs a conservative acquire;
@@ -233,10 +233,15 @@ static inline int ps5vk_dxvk_tiled_backbuffer_barrier(const VkImageMemoryBarrier
              (b->image->info.format==VK_FORMAT_B8G8R8A8_UNORM &&
               dst_stage==d3d9_stages))) ||
            (b->oldLayout==VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
-            b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
-            !b->srcAccessMask && b->dstAccessMask==next &&
-            src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
-            dst_stage==(VkPipelineStageFlags)(stages |
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT));
+           b->newLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+           !b->srcAccessMask && b->dstAccessMask==next &&
+           src_stage==VK_PIPELINE_STAGE_TRANSFER_BIT &&
+           (dst_stage==(VkPipelineStageFlags)(stages |
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT) ||
+            /* D3D9's GetRenderTargetData return names vertex and geometry
+             * readers as well as the host publication in this one barrier. */
+            (b->image->info.format==VK_FORMAT_B8G8R8A8_UNORM &&
+             dst_stage==(VkPipelineStageFlags)(d3d9_stages |
+                 VK_PIPELINE_STAGE_HOST_BIT))));
 }
 #endif

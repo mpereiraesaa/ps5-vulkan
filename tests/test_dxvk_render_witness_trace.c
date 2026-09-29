@@ -383,6 +383,100 @@ int main(void)
         }
     for (uint32_t b = 0; b < FULL_OFFSET; ++b) assert(bytes[b] == 0xcd);
 
+    /* Reproduce the measured PE D3D9 GetRenderTargetData sequence through
+     * the public recorder: a sampled BGRA8 backbuffer becomes a transfer
+     * source, is copied into staging, and returns to shader-read layout in
+     * the same call that publishes the copy to HOST for LockRect. */
+    VkImageCreateInfo pe_image_info = image_info;
+    pe_image_info.format = VK_FORMAT_B8G8R8A8_UNORM;
+    pe_image_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkImage pe_image = VK_NULL_HANDLE;
+    assert(vkCreateImage(device, &pe_image_info, NULL, &pe_image) == VK_SUCCESS);
+    vkGetImageMemoryRequirements(device, pe_image, &requirements);
+    allocation.allocationSize = requirements.size;
+    VkDeviceMemory pe_memory = VK_NULL_HANDLE;
+    assert(vkAllocateMemory(device, &allocation, NULL, &pe_memory) == VK_SUCCESS);
+    assert(vkBindImageMemory(device, pe_image, pe_memory, 0) == VK_SUCCESS);
+    VkCommandBuffer pe_command = VK_NULL_HANDLE;
+    assert(vkAllocateCommandBuffers(device, &command_info, &pe_command) == VK_SUCCESS);
+    assert(vkBeginCommandBuffer(pe_command, &begin) == VK_SUCCESS);
+    const VkImageSubresourceRange pe_full = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    const VkPipelineStageFlags pe_readers = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+        VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+    const VkAccessFlags pe_access = VK_ACCESS_SHADER_READ_BIT |
+        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+        VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    VkImageMemoryBarrier pe_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = pe_image, .subresourceRange = pe_full};
+    vkCmdPipelineBarrier(pe_command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &pe_barrier);
+    assert(pe_command->state == PS5VK_RECORDING);
+    const VkClearColorValue pe_zero = {{0.0f, 0.0f, 0.0f, 0.0f}};
+    vkCmdClearColorImage(pe_command, pe_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        &pe_zero, 1, &pe_full);
+    pe_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    pe_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    pe_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    pe_barrier.dstAccessMask = pe_access;
+    vkCmdPipelineBarrier(pe_command, VK_PIPELINE_STAGE_TRANSFER_BIT, pe_readers,
+        0, 0, NULL, 0, NULL, 1, &pe_barrier);
+    assert(pe_command->state == PS5VK_RECORDING);
+    pe_barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    pe_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    pe_barrier.srcAccessMask = 0;
+    pe_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    vkCmdPipelineBarrier(pe_command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &pe_barrier);
+    assert(pe_command->state == PS5VK_RECORDING);
+    VkBufferImageCopy pe_copy = {.bufferOffset = FULL_OFFSET,
+        .bufferRowLength = EXTENT, .bufferImageHeight = EXTENT,
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .imageExtent = {EXTENT, EXTENT, 1}};
+    vkCmdCopyImageToBuffer(pe_command, pe_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        staging, 1, &pe_copy);
+    assert(pe_command->state == PS5VK_RECORDING);
+    VkMemoryBarrier pe_publish = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_HOST_READ_BIT};
+    pe_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    pe_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    pe_barrier.srcAccessMask = 0;
+    pe_barrier.dstAccessMask = pe_access;
+    vkCmdPipelineBarrier(pe_command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        pe_readers | VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &pe_publish,
+        0, NULL, 1, &pe_barrier);
+    assert(pe_command->state == PS5VK_RECORDING);
+    assert(vkEndCommandBuffer(pe_command) == VK_SUCCESS);
+    struct ps5vk_layout_state pe_layouts = {0};
+    assert(ps5vk_layout_transition(&pe_layouts, pe_image, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) == VK_SUCCESS);
+    unsigned pe_first = 0;
+    while (pe_first < pe_command->operation_count &&
+           pe_command->operations[pe_first].type != PS5VK_COPY_IMAGE_BUFFER)
+        ++pe_first;
+    assert(pe_first < pe_command->operation_count);
+    --pe_first; /* SHADER_READ_ONLY -> TRANSFER_SRC handover. */
+    struct ps5vk_readback_regions pe_regions;
+    unsigned pe_site = 0;
+    assert(ps5vk_readback_regions_commands(device,
+        &pe_command->operations[pe_first], pe_command->operation_count - pe_first,
+        &pe_layouts, &pe_regions, &pe_site) == VK_SUCCESS);
+    assert(pe_regions.count == 1 && pe_regions.target[0].region.bufferOffset == FULL_OFFSET);
+    assert(ps5vk_layout_current(&pe_layouts, pe_image, VK_IMAGE_ASPECT_COLOR_BIT,
+        &final_layout) == VK_SUCCESS && final_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    vkFreeCommandBuffers(device, pool, 1, &pe_command);
+    vkDestroyImage(device, pe_image, NULL);
+    vkFreeMemory(device, pe_memory, NULL);
+
     vkFreeCommandBuffers(device, pool, 1, &command);
     vkFreeCommandBuffers(device, pool, 1, &init_barriers);
     vkFreeCommandBuffers(device, pool, 1, &init_buffer);
