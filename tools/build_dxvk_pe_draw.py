@@ -19,19 +19,36 @@ SOURCE = ROOT / "examples/dxvk_pe_frontends/d3d11_draw.cpp"
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dll-variant", choices=("unmodified", "ps5-wsi"),
+                        default="unmodified",
+                        help="Win32 WSI for Prospero Win, or experimental PS5 display WSI")
     parser.add_argument("--overlay-dir", type=Path,
                         default=ROOT / "build/dxvk-pe-ps5-wsi")
+    parser.add_argument("--unmodified-dir", type=Path, default=ROOT / "build",
+                        help="directory containing pinned dxvk-pe-x64/x86 builds")
+    parser.add_argument("--dxvk-source", type=Path,
+                        default=ROOT / "third_party/dxvk-v2.6.2",
+                        help="clean pinned DXVK source for DirectX headers")
     parser.add_argument("--output-dir", type=Path,
                         default=ROOT / "build/dxvk-pe-d3d11-draw")
     args = parser.parse_args()
     overlay = args.overlay_dir.resolve()
+    unmodified = args.unmodified_dir.resolve()
+    source = args.dxvk_source.resolve()
     output = args.output_dir.resolve()
     try:
         pinned = json.loads((ROOT / "conformance_inventory/dxvk_v262_profile.json")
                             .read_text())["source"]["commit"]
         builds, modules, adapter_sha = load_dll_builds(
-            "ps5-wsi", overlay, ROOT / "build", pinned)
-        source_headers = overlay / "source/include/native/directx"
+            args.dll_variant, overlay, unmodified, pinned)
+        if args.dll_variant == "unmodified":
+            if (command(["git", "-C", source, "rev-parse", "HEAD"]).strip() != pinned or
+                    command(["git", "-C", source, "status", "--porcelain",
+                             "--untracked-files=no"]).strip()):
+                raise ValueError("DXVK source checkout is not clean at the pin")
+        source_headers = source / "include/native/directx"
+        if args.dll_variant == "ps5-wsi":
+            source_headers = overlay / "source/include/native/directx"
         if not source_headers.is_dir():
             raise ValueError("pinned DXVK 2.6.2 DirectX headers missing")
         results = {}
@@ -72,13 +89,15 @@ def main() -> int:
         receipt = {
             "schema": "ps5vk-dxvk-v262-pe-d3d11-draw/1",
             "dxvk_commit": pinned,
-            "wsi_adapter_sha256": adapter_sha,
+            "dll_variant": args.dll_variant,
             "source_sha256": sha256(SOURCE),
             "expected_center_bgra": "0000ffff",
             "expected_corner_bgra": ["844c1cff", "1c4c84ff"],
             "architectures": results,
             "scope": "PE build identities only; hardware pixel oracle pending",
         }
+        if adapter_sha:
+            receipt["wsi_adapter_sha256"] = adapter_sha
         output.mkdir(parents=True, exist_ok=True)
         (output / "receipt.json").write_text(
             json.dumps(receipt, indent=2, sort_keys=True) + "\n")
