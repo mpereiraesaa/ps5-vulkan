@@ -1863,7 +1863,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice p, const VkDevice
     d->max_allocation = p->platform.max_allocation;
     d->submit_backend = p->platform.queue_backend;
     d->progress = p->platform.progress;
-    d->pipeline_cache = ps5vk_compilation_cache_create(64, 4 * 1024 * 1024);
+    /* Room for a complete FSR4 graph (28 programs, their SPIR-V and ISA) and more. */
+    d->pipeline_cache = ps5vk_compilation_cache_create(256, 64 * 1024 * 1024);
     if (p->platform.configure) {
         p->platform.configure(d);
     }
@@ -1907,6 +1908,9 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice d, const VkAllocationCallbac
         ps5vk_compilation_cache_destroy(d->pipeline_cache);
         d->pipeline_cache = NULL;
     }
+    if (d->queue_teardown) d->queue_teardown(d);
+    if (d->compute_scratch.backing) d->memory.release(d->memory.context, d->compute_scratch.backing);
+    if (d->compute_tables.backing) d->memory.release(d->memory.context, d->compute_tables.backing);
     d->physical->platform.close(&d->memory);
     pthread_mutex_destroy(&d->queue_lock);
     --d->physical->instance->devices;

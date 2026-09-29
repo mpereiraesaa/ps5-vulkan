@@ -153,6 +153,21 @@ static void stage_access_scopes(void)
     vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,NULL,0,NULL);
     assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
+        vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    b.srcAccessMask=VK_ACCESS_HOST_WRITE_BIT|VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT;
+    b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_UNIFORM_READ_BIT;
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_HOST_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0,1,&b,0,NULL,0,NULL);
+    assert(c->state==PS5VK_RECORDING && c->operation_count==1);
+    assert(vkEndCommandBuffer(c)==VK_SUCCESS);
+    /* Shader access still needs a shader stage, even in a mixed barrier. */
+    assert(vkResetCommandBuffer(c,0)==VK_SUCCESS &&
+        vkBeginCommandBuffer(c,&begin_info)==VK_SUCCESS);
+    vkCmdPipelineBarrier(c,VK_PIPELINE_STAGE_HOST_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&b,0,NULL,0,NULL);
+    assert(c->state==PS5VK_INVALID && !c->operation_count);
     vkDestroyCommandPool(&d,p,NULL);
 }
 static void recording_and_invalidation(void)

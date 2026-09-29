@@ -37,7 +37,8 @@ VkResult ps5vk_runtime_compile_compute_features(
     uint32_t **out_code
 );
 
-/* Adapter matching struct ps5vk_compiler.compile signature */
+/* Adapter matching struct ps5vk_compiler.compile signature; wave_size is the
+ * compute wave (32 or 64) the dispatch will launch. */
 VkResult ps5vk_compiler_adapter_compile(
     void *context,
     const uint32_t *spirv,
@@ -46,6 +47,7 @@ VkResult ps5vk_compiler_adapter_compile(
     VkPipelineLayout layout,
     const VkSpecializationInfo *specialization,
     uint32_t feature_mask,
+    uint32_t wave_size,
     struct ps5vk_compiled_program *out_program,
     uint32_t **out_code
 );

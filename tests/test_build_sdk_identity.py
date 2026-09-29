@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from tools.build_sdk import validate_compiler_archive
+from tools.build_sdk import source_patch_digest, validate_compiler_archive
 
 
 class NativeCompilerIdentityTests(unittest.TestCase):
@@ -16,6 +16,7 @@ class NativeCompilerIdentityTests(unittest.TestCase):
             "schema": 1,
             "target": "ps5",
             "source_commit": "a" * 40,
+            "source_patch_sha256": source_patch_digest(),
             "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
         }
         archive.with_suffix(".json").write_text(json.dumps(identity))

@@ -37,6 +37,18 @@ Current derived or adapted files are:
 | `src/texture_layout.c` | `src/gallium/ps5/ps5_screen.c`, linear sampled-resource allocation | Descending, 256-byte-aligned GFX1013 mip-level packing and complete-chain-per-layer layout; ps5-vulkan supplies Vulkan mip bounds, transfer planning and memory-overflow gates |
 | `native/runtime_graphics_compiler.c`, `native/runtime_shader.c`, `native/runtime_draw_abi.h`, `native/draw_emit_ps5.c`, `src/graphics_formats.h` | `src/gallium/ps5/ps5_screen.c`, bounded PSBC texture-descriptor ABI, `ps5_integer_vertex_format` and `ps5_packed_vertex_format` | Vulkan-to-PSBC GFX1013 vertex formats plus the exact fragment set-0 combined-sampler metadata/user-SGPR bridge; unsupported descriptor profiles fail closed and explicit mip LOD has public-SDK-linked hardware readback |
 
+## Public AGC and logger support
+
+The SDK builder fetches
+[mpereiraesaa/ps5-agc-gears](https://github.com/mpereiraesaa/ps5-agc-gears)
+at commit `1ae1f9182abd2770c131b97419034fb85173c2dc` into ignored
+`third_party/ps5-agc-gears`. Its source-level AGC helpers and
+`native/ps5log/ps5log.c`, `ps5log_ps5_net.c` and headers are built into the
+native Vulkan archive. The pinned logger header is byte-identical to this
+repository's existing `cts/ps5log.h`. The dependency retains its GPL-3.0-or-later
+license and original copyright notices; distributed linked binaries require
+its corresponding source as part of the GPL distribution.
+
 ## BC block decoder
 
 [`third_party/bcdec/bcdec.h`](third_party/bcdec/bcdec.h) is vendored from

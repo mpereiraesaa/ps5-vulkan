@@ -16,6 +16,7 @@
  */
 #include "vk_pipeline_cache.h"
 #include "compilation_cache.h"
+#include "physical_device_profile.h"
 #include <string.h>
 
 #define INVALID VK_ERROR_UNKNOWN
@@ -29,7 +30,7 @@ enum { PS5VK_PIPELINE_CACHE_HEADER_BYTES = 32, PS5VK_PIPELINE_CACHE_HEADER_VERSI
 
 /* The exported blob carries only the header today. Any record format added
  * later must bump the format counter below and keep this parser total. */
-_Static_assert(PS5VK_COMPILER_VERSION_1 == 1, "uuid derivation input drifted");
+_Static_assert(PS5VK_COMPILER_VERSION == PS5VK_COMPILER_IDENTITY_VERSION, "uuid derivation input drifted");
 _Static_assert(PS5VK_CACHE_ABI_VERSION_1 == 1, "uuid derivation input drifted");
 
 static void store_u32le(uint8_t *out, uint32_t value)
@@ -106,10 +107,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineCache(VkDevice d,
     cache->custom_allocator = custom;
     for (unsigned i = 0; i < VK_UUID_SIZE; ++i)
         cache->uuid[i] = properties->pipelineCacheUUID[i];
-    /* Untrusted initial data: recognized headers round-trip, everything else is
-     * ignored. Nothing is allocated from the blob and no pointer is adopted. */
-    (void)ps5vk_pipeline_cache_header_recognized(cache, info->pInitialData,
-                                                (size_t)info->initialDataSize);
+    /* Untrusted initial data: a recognized header admits the compiled-program
+     * records behind it into the device compilation cache (validated, copied,
+     * never adopted as pointers); everything else is ignored. */
+    if (ps5vk_pipeline_cache_header_recognized(cache, info->pInitialData, (size_t)info->initialDataSize) &&
+        info->initialDataSize > PS5VK_PIPELINE_CACHE_HEADER_BYTES)
+        (void)ps5vk_compilation_cache_import(d->pipeline_cache,
+            (const uint8_t *)info->pInitialData + PS5VK_PIPELINE_CACHE_HEADER_BYTES,
+            (size_t)info->initialDataSize - PS5VK_PIPELINE_CACHE_HEADER_BYTES);
     cache->next = d->pipeline_caches;
     d->pipeline_caches = cache;
     *out = cache;
@@ -133,7 +138,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(VkDevice d, VkPipelineCach
     size_t *data_size, void *data)
 {
     if (!d || !cache || cache->device != d || !data_size) return INVALID;
-    if (!data) { *data_size = PS5VK_PIPELINE_CACHE_HEADER_BYTES; return VK_SUCCESS; }
+    size_t written = 0;
+    const size_t records = ps5vk_compilation_cache_export(d->pipeline_cache, NULL, 0, &written);
+    if (!data) { *data_size = PS5VK_PIPELINE_CACHE_HEADER_BYTES + records; return VK_SUCCESS; }
     if (*data_size < PS5VK_PIPELINE_CACHE_HEADER_BYTES) {
         /* Contract: nothing is written and the required size is reported as 0. */
         *data_size = 0;
@@ -142,8 +149,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(VkDevice d, VkPipelineCach
     uint8_t header[PS5VK_PIPELINE_CACHE_HEADER_BYTES];
     ps5vk_pipeline_cache_write_header(cache, header);
     memcpy(data, header, sizeof(header));
-    *data_size = PS5VK_PIPELINE_CACHE_HEADER_BYTES;
-    return VK_SUCCESS;
+    /* Whole records only; a short buffer receives a valid, smaller cache. */
+    const size_t total = ps5vk_compilation_cache_export(d->pipeline_cache,
+        (uint8_t *)data + PS5VK_PIPELINE_CACHE_HEADER_BYTES,
+        *data_size - PS5VK_PIPELINE_CACHE_HEADER_BYTES, &written);
+    *data_size = PS5VK_PIPELINE_CACHE_HEADER_BYTES + written;
+    return written == total ? VK_SUCCESS : VK_INCOMPLETE;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkMergePipelineCaches(VkDevice d, VkPipelineCache dst,

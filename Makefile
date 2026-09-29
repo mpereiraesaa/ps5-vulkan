@@ -122,6 +122,8 @@ vulkan-headers:
 	$(PYTHON) tools/prepare_vulkan_headers.py
 compiler-deps:
 	$(PYTHON) tools/prepare_compiler_deps.py
+native-deps:
+	$(PYTHON) tools/prepare_native_deps.py
 test-shaders:
 	$(PYTHON) tools/prepare_test_shaders.py
 # ThreadSanitizer for the timeline/queue lock runs as part of the sanitizer

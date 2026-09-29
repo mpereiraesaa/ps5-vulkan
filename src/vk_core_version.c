@@ -139,6 +139,8 @@ static void fill_vulkan13_features(VkPhysicalDevice p, VkPhysicalDeviceVulkan13F
     out->maintenance4 = f.maintenance4.maintenance4;
     out->synchronization2 = f.synchronization2.synchronization2;
     out->dynamicRendering = f.dynamic_rendering.dynamicRendering;
+    out->subgroupSizeControl =
+        !!(p->platform.supported_features_t09 & PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL);
 }
 
 int ps5vk_core_version_features(VkPhysicalDevice p, VkBaseOutStructure *next)
@@ -303,6 +305,14 @@ static void fill_vulkan13_properties(VkPhysicalDevice p, VkPhysicalDeviceVulkan1
             p->platform.properties.limits.maxComputeWorkGroupInvocations /
                 e.subgroup.subgroupSize : 0;
     }
+    if (p->platform.supported_features_t09 & PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL) {
+        /* Compute pipelines may require wave32 or wave64. */
+        out->minSubgroupSize = 32;
+        out->maxSubgroupSize = 64;
+        out->maxComputeWorkgroupSubgroups =
+            p->platform.properties.limits.maxComputeWorkGroupInvocations / 32;
+        out->requiredSubgroupSizeStages = VK_SHADER_STAGE_COMPUTE_BIT;
+    }
     /* Texel-buffer offsets follow the 1.0 alignment; no single-texel rule. */
     out->storageTexelBufferOffsetAlignmentBytes =
         p->platform.properties.limits.minTexelBufferOffsetAlignment;
@@ -450,6 +460,7 @@ static const struct core_enable core_enables[] = {
     V13(maintenance4, 0, PS5VK_T09_FEATURE_MAINTENANCE4),
     V13(synchronization2, 0, PS5VK_T09_FEATURE_SYNCHRONIZATION2),
     V13(dynamicRendering, 0, PS5VK_T09_FEATURE_DYNAMIC_RENDERING),
+    V13(subgroupSizeControl, 0, PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL),
 };
 #undef V11
 #undef V12

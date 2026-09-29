@@ -120,6 +120,8 @@ $(PS5_PLATFORM_OBJS): $(PS5VK_ROOT)/src/ps5_compiler_shims.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(LIBPSBC_OBJS): $(PS5VK_ROOT)/tools/psbc-compute-buffer-spills.patch $(PS5VK_ROOT)/tools/psbc-compute-wave-size.patch
+
 libpsbc: $(LIBPSBC)
 
 $(LIBPSBC): $(LIBPSBC_OBJS)

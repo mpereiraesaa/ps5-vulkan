@@ -87,5 +87,45 @@ int main(void)
     legacy.descriptor_set_sgpr[0]=2;assert(!ps5vk_dispatch_encode(words,128,&d));
     legacy.descriptor_set_sgpr[0]=1;d.addresses.descriptor_table+=16;
     assert(!ps5vk_dispatch_encode(words,128,&d));
-    puts("Multi-set dispatch SGPR encoding: pass (host packets only)");
+    /* Real scratch ABI: raw address at s0:1, odd KiB stride, bounded ring. */
+    d.program=&p;d.addresses.descriptor_table=d.descriptor_tables[0];
+    d.descriptor_tables[2]=0x20000a000;d.push_constants=0x20000c000;
+    p.scratch_bytes_per_wave=16384;
+    d.scratch=0x201000000;
+    d.scratch_bytes=17408u*(uint64_t)PS5VK_COMPUTE_SCRATCH_WAVES;
+    n=ps5vk_dispatch_encode(words,128,&d);assert(n);
+    user=find_sh(words,n,0xb900);assert(user<n);
+    assert(words[user+2]==(uint32_t)d.scratch && words[user+3]==0x80000002u);
+    size_t ring=find_sh(words,n,0xb860);assert(ring<n);
+    assert(words[ring+2]==(1152u|(17u<<12)));
+    size_t resource=find_sh(words,n,0xb848);assert(resource<n);
+    assert(words[resource+3]&1u);
+    memcpy(saved,words,sizeof(saved));
+    d.scratch_bytes--;assert(!ps5vk_dispatch_encode(words,128,&d));
+    assert(!memcmp(words,saved,sizeof(saved)));
+    d.scratch_bytes++;d.scratch=d.addresses.code;
+    assert(!ps5vk_dispatch_encode(words,128,&d));
+    d.scratch=0x201000001;assert(!ps5vk_dispatch_encode(words,128,&d));
+    d.scratch=0x201000000;p.scratch_bytes_per_wave=16385;
+    assert(!ps5vk_dispatch_encode(words,128,&d));
+    p.scratch_bytes_per_wave=0;d.scratch=0;d.scratch_bytes=0;
+    n=ps5vk_dispatch_encode(words,128,&d);assert(n);
+    ring=find_sh(words,n,0xb860);resource=find_sh(words,n,0xb848);
+    assert(words[ring+2]==0 && !(words[resource+3]&1u));
+    /* The dispatch is followed by a CP DMA prefetch of its code into GL2. */
+    size_t prefetch=n;
+    for(size_t i=0;i<n;i+=((words[i]>>16)&0x3fff)+2)
+        if(((words[i]>>8)&0xff)==0x15){prefetch=i+5;break;}
+    assert(prefetch<n && words[prefetch]==0xc0055000u && words[prefetch+1]==0x60200000u);
+    assert(words[prefetch+2]==0x00004000u && words[prefetch+3]==2 && words[prefetch+4]==0x00004000u);
+    assert(words[prefetch+5]==2 && words[prefetch+6]==(0x80000000u|640u));
+    /* Placement: prefetch mode 3, a branch to the program, s_code_end padding. */
+    uint32_t program[80],placed[160];
+    for(unsigned i=0;i<80;++i)program[i]=0x7e000200u+i;
+    assert(ps5vk_placed_code_bytes(80)==sizeof(placed));
+    ps5vk_place_code(placed,program,80);
+    assert(placed[0]==0xbfa00003u && placed[1]==0xbf82000eu && placed[15]==0xbf9f0000u);
+    assert(!memcmp(placed+16,program,sizeof(program)));
+    assert(placed[96]==0xbf9f0000u && placed[159]==0xbf9f0000u);
+    puts("Multi-set and scratch dispatch encoding: pass (host packets only)");
 }

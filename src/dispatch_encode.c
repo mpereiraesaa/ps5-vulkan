@@ -5,6 +5,18 @@
 static int overlap(uint64_t a, uint64_t an, uint64_t b, uint64_t bn)
 { return a < b + bn && b < a + an; }
 
+void ps5vk_place_code(void *destination, const uint32_t *code, size_t code_words)
+{
+    enum { PREFIX = PS5VK_CODE_PREFIX_BYTES / 4, TAIL = PS5VK_CODE_TAIL_BYTES / 4 };
+    const uint32_t code_end = UINT32_C(0xbf9f0000);
+    uint32_t *words = destination;
+    for (size_t i = 2; i < PREFIX; ++i) words[i] = code_end;
+    words[0] = UINT32_C(0xbfa00003);                 /* s_inst_prefetch 0x3 */
+    words[1] = UINT32_C(0xbf820000) | (PREFIX - 2);  /* s_branch to the program */
+    memcpy(words + PREFIX, code, code_words * 4);
+    for (size_t i = 0; i < TAIL; ++i) words[PREFIX + code_words + i] = code_end;
+}
+
 size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
                             const struct ps5vk_dispatch_encoding *d)
 {
@@ -12,7 +24,8 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         !d->completion_value) return 0;
     const struct ps5vk_compiled_program *p = d->program;
     const struct ps5vk_compute_addresses *a = &d->addresses;
-    if (p->gfx != 1013 || p->wave_size != 32 || !p->code_words || p->code_words > 1024 * 1024 ||
+    if (p->gfx != 1013 || (p->wave_size != 32 && p->wave_size != 64) ||
+        !p->code_words || p->code_words > 1024 * 1024 ||
         !p->vgprs || p->vgprs > 256 || !p->sgprs || p->sgprs > 106 ||
         p->user_sgprs < 2 || p->user_sgprs > 10 || p->lds_size > 128 ||
         p->float_mode > 255 || p->ieee_mode > 1 || p->mem_ordered > 1 || p->tg_size > 1 ||
@@ -20,6 +33,14 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         (p->descriptor_set_mask & ~((1u << PS5VK_MAX_SETS) - 1)) ||
         (!!p->descriptor_count != !!p->descriptor_set_mask) ||
         p->push_constant_size > PS5VK_MAX_PUSH_CONSTANT_BYTES)
+        return 0;
+    uint32_t scratch_stride = p->scratch_bytes_per_wave ?
+        (p->scratch_bytes_per_wave | 1024u) : 0;
+    uint64_t scratch_bytes = (uint64_t)scratch_stride * PS5VK_COMPUTE_SCRATCH_WAVES;
+    if ((p->scratch_bytes_per_wave & 1023u) || scratch_stride > 8191u * 1024u ||
+        d->scratch_bytes != scratch_bytes ||
+        (scratch_bytes ? (!d->scratch || (d->scratch & 16383u) ||
+         d->scratch > (UINT64_C(1) << 48) - scratch_bytes) : !!d->scratch))
         return 0;
     uint64_t local = 1, table_bytes[PS5VK_MAX_SETS] = {0};
     for (unsigned j = 0; j < 3; ++j) {
@@ -51,6 +72,7 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         p->descriptor_set_sgpr[0] == 1 && !p->push_constant_size &&
         !p->push_constant_sgpr && !p->grid_size_sgpr;
     if (legacy) {
+        if (scratch_bytes) return 0;
         if (!d->descriptor_tables[0] || d->descriptor_tables[0] != a->descriptor_table ||
             d->push_constants) return 0;
         for (uint32_t set = 1; set < PS5VK_MAX_SETS; ++set)
@@ -81,12 +103,12 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         }
         if (p->user_sgprs != next_sgpr) return 0;
     }
-    uint64_t code_bytes = p->code_words * 4;
+    uint64_t code_bytes = ps5vk_placed_code_bytes(p->code_words);
     if (a->code > (UINT64_C(1) << 48) - code_bytes ||
         a->completion > (UINT64_C(1) << 48) - 8 || a->readback > (UINT64_C(1) << 48) - 16 ||
         (a->code >> 32) != ((a->code + code_bytes - 1) >> 32)) return 0;
-    uint64_t bases[4 + PS5VK_MAX_SETS] = {a->code, a->completion, a->readback};
-    uint64_t sizes[4 + PS5VK_MAX_SETS] = {code_bytes, 8, 16};
+    uint64_t bases[5 + PS5VK_MAX_SETS] = {a->code, a->completion, a->readback};
+    uint64_t sizes[5 + PS5VK_MAX_SETS] = {code_bytes, 8, 16};
     unsigned regions = 3;
     for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set)
         if (p->descriptor_set_mask & (1u << set)) {
@@ -95,22 +117,24 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
     if (p->push_constant_size) {
         bases[regions] = d->push_constants; sizes[regions++] = p->push_constant_size;
     }
+    if (scratch_bytes) {
+        bases[regions] = d->scratch; sizes[regions++] = scratch_bytes;
+    }
     for (unsigned j = 0; j < regions; ++j)
         for (unsigned k = 0; k < j; ++k)
             if (overlap(bases[j], sizes[j], bases[k], sizes[k])) return 0;
 
-    /* Reuse bootstrap compute profile's proven preamble/cache/completion sequence unchanged, then
-     * substitute every shader/dispatch-dependent field by decoded packet tags.
-     * No shader ISA is embedded in the template. bootstrap compute profile remains independently
-     * buildable and is the byte-for-byte reference for its original parameters. */
+    /* Reuse the bootstrap cache/completion sequence, substitute shader fields,
+     * and explicitly reset or configure scratch for every dispatch.
+     * No shader ISA is embedded in the template. */
     uint32_t packet[PS5VK_COMPUTE_COMMAND_CAPACITY];
     size_t n = ps5vk_compute_commands(packet, PS5VK_COMPUTE_COMMAND_CAPACITY, a);
     if (!n) return 0;
     /* gfx10.json COMPUTE_PGM_RSRC1/2 and RADV's wave32 allocation granule.
-     * SGPRS field is unused for this GFX10 ABI; scratch remains disabled. */
-    uint32_t rsrc1 = ((p->vgprs - 1) / 8) | (p->float_mode << 12) |
+     * SGPRS field is unused for this GFX10 ABI. */
+    uint32_t rsrc1 = ((p->vgprs - 1) / (p->wave_size == 64 ? 4 : 8)) | (p->float_mode << 12) |
         (p->ieee_mode << 23) | (p->wgp_mode << 29) | (p->mem_ordered << 30);
-    uint32_t rsrc2 = (p->user_sgprs << 1) | (p->tgid[0] << 7) | (p->tgid[1] << 8) |
+    uint32_t rsrc2 = (!!scratch_bytes) | (p->user_sgprs << 1) | (p->tgid[0] << 7) | (p->tgid[1] << 8) |
         (p->tgid[2] << 9) | (p->tg_size << 10) | (p->tidig_components << 11) |
         (p->lds_size << 15);
     unsigned found = 0;
@@ -137,6 +161,15 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
                 words[out] = packet[i]; words[out + 1] = packet[i + 1];
                 words[out + 2] = rsrc1; words[out + 3] = rsrc2;
                 out += 4; found |= 2;
+            } else if (reg == 0xb854) {
+                if (total != 3 || (found & 64) || out + 6 > capacity) return 0;
+                memcpy(words + out, packet + i, total * sizeof(uint32_t));
+                out += total;
+                words[out++] = UINT32_C(0xc0017600);
+                words[out++] = (0xb860 - 0xb000) / 4;
+                words[out++] = scratch_bytes ? PS5VK_COMPUTE_SCRATCH_WAVES |
+                    ((scratch_stride / 1024u) << 12) : 0;
+                found |= 64;
             } else if (reg == 0xb900 && !legacy) {
                 size_t count = p->user_sgprs + 2;
                 if (total != 4 || (found & 16) || out + count > capacity) return 0;
@@ -145,6 +178,12 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
                 words[out + 2] = 0;
                 words[out + 3] = 0;
                 memset(words + out + 2, 0, p->user_sgprs * sizeof(uint32_t));
+                if (scratch_bytes) {
+                    /* ACO's compute scratch resource takes the raw address at s0:1.
+                     * GFX10 high bit enables the scratch swizzle. */
+                    words[out + 2] = (uint32_t)d->scratch;
+                    words[out + 3] = (uint32_t)(d->scratch >> 32) | UINT32_C(0x80000000);
+                }
                 for (uint32_t set = 0; set < PS5VK_MAX_SETS; ++set)
                     if (p->descriptor_set_mask & (1u << set))
                         words[out + 2 + p->descriptor_set_sgpr[set]] = (uint32_t)d->descriptor_tables[set];
@@ -162,8 +201,22 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
             if (total != 5 || (found & 4) || out + 5 > capacity) return 0;
             words[out] = packet[i];
             memcpy(words + out + 1, d->groups, 12);
-            words[out + 4] = packet[i + 4];
+            /* DISPATCH_INITIATOR CS_W32_EN (bit 15) selects wave32. */
+            words[out + 4] = p->wave_size == 64 ? packet[i + 4] & ~UINT32_C(0x8000) : packet[i + 4];
             out += 5; found |= 4;
+            /* RADV's radv_after_dispatch L2 prefetch of the program once the
+             * dispatch has started: a CP DMA_DATA read (SRC_SEL SRC_ADDR_USING_L2,
+             * DST_SEL NOWHERE, no write confirm) of the 32-byte aligned placed
+             * code, so the waves' instruction misses hit GL2 instead of memory. */
+            const uint64_t first = a->code & ~UINT64_C(31);
+            const uint64_t bytes = ((a->code + code_bytes + 31) & ~UINT64_C(31)) - first;
+            if (out + 7 > capacity) return 0;
+            words[out] = UINT32_C(0xc0055000);
+            words[out + 1] = UINT32_C(0x60200000);
+            words[out + 2] = words[out + 4] = (uint32_t)first;
+            words[out + 3] = words[out + 5] = (uint32_t)(first >> 32);
+            words[out + 6] = (uint32_t)bytes | UINT32_C(0x80000000);
+            out += 7;
         } else if (opcode == 0x49) {
             if (total != 8 || (found & 8) || packet[i + 1] != 0x0070f528 || out + 8 > capacity) return 0;
             memcpy(words + out, packet + i, 5 * sizeof(uint32_t));
@@ -178,7 +231,7 @@ size_t ps5vk_dispatch_encode(uint32_t *words, size_t capacity,
         }
         i += total;
     }
-    unsigned expected_mask = legacy ? 47 : 63;
+    unsigned expected_mask = (legacy ? 47 : 63) | 64;
     if (found != expected_mask) return 0;
     return out;
 }

@@ -37,7 +37,7 @@ static inline int ps5vk_profile_power_of_two(VkDeviceSize value)
 #define PS5VK_GFX_TARGET 1013u
 #define PS5VK_DRIVER_VERSION 1u
 #define PS5VK_COMPILER_IDENTITY 0x50534243u /* "PSBC" */
-#define PS5VK_COMPILER_IDENTITY_VERSION 1u
+#define PS5VK_COMPILER_IDENTITY_VERSION 2u
 #define PS5VK_CACHE_ABI_IDENTITY 1u
 
 /* Experimental, non-conformant consumer API profile. Feature/property answers

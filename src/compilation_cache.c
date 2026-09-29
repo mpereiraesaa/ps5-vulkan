@@ -100,7 +100,7 @@ bool ps5vk_cache_build_stage_key(const uint32_t *spirv, size_t spirv_words,
     out_key->target_gfx = 1013;
     out_key->stage = stages;
     out_key->compiler_id = PS5VK_COMPILER_ID_PSBC_ACO;
-    out_key->compiler_version = PS5VK_COMPILER_VERSION_1;
+    out_key->compiler_version = PS5VK_COMPILER_VERSION;
     out_key->abi_version = PS5VK_CACHE_ABI_VERSION_1;
     out_key->flags = flags;
     strncpy(out_key->entry_name, entry_name, sizeof(out_key->entry_name) - 1);
@@ -441,4 +441,86 @@ void ps5vk_compilation_cache_destroy(struct ps5vk_compilation_cache *cache)
     pthread_mutex_unlock(&cache->mutex);
     pthread_mutex_destroy(&cache->mutex);
     free(cache);
+}
+
+/* Pipeline-cache records: a fixed header, the key, the program with process
+ * pointers cleared, then the SPIR-V and ISA words. Same-ABI data only: the
+ * pipeline cache UUID binds exported data to this driver and compiler. */
+#define PS5VK_CACHE_RECORD_MAGIC UINT32_C(0x31435350) /* "PSC1" */
+struct cache_record {
+    uint32_t magic, version;
+    uint64_t bytes, spirv_words, code_words;
+};
+
+static size_t record_bytes(size_t spirv_words, size_t code_words)
+{
+    return sizeof(struct cache_record) + sizeof(struct ps5vk_cache_key) +
+           sizeof(struct ps5vk_compiled_program) + (spirv_words + code_words) * sizeof(uint32_t);
+}
+
+size_t ps5vk_compilation_cache_export(struct ps5vk_compilation_cache *cache,
+                                      void *out, size_t capacity, size_t *written)
+{
+    size_t total = 0, used = 0;
+    if (written) *written = 0;
+    if (!cache) return 0;
+    pthread_mutex_lock(&cache->mutex);
+    for (struct ps5vk_cache_entry *e = cache->lru_tail; e; e = e->prev_lru) {
+        if (!e->code_copy || e->payload_copy) continue;
+        const size_t bytes = record_bytes(e->key.spirv_words, e->program.code_words);
+        total += bytes;
+        if (!out || bytes > capacity - used) continue;
+        unsigned char *p = (unsigned char *)out + used;
+        const struct cache_record header = {PS5VK_CACHE_RECORD_MAGIC, PS5VK_CACHE_ABI_VERSION_1, bytes,
+                                            e->key.spirv_words, e->program.code_words};
+        struct ps5vk_compiled_program program = e->program;
+        program.spirv = program.code = NULL;
+        program.entry = NULL;
+        memcpy(p, &header, sizeof(header)); p += sizeof(header);
+        memcpy(p, &e->key, sizeof(e->key)); p += sizeof(e->key);
+        memcpy(p, &program, sizeof(program)); p += sizeof(program);
+        memcpy(p, e->spirv_copy, e->key.spirv_words * sizeof(uint32_t)); p += e->key.spirv_words * sizeof(uint32_t);
+        memcpy(p, e->code_copy, e->program.code_words * sizeof(uint32_t));
+        used += bytes;
+    }
+    pthread_mutex_unlock(&cache->mutex);
+    if (written) *written = used;
+    return total;
+}
+
+unsigned ps5vk_compilation_cache_import(struct ps5vk_compilation_cache *cache,
+                                        const void *data, size_t bytes)
+{
+    unsigned added = 0;
+    const unsigned char *p = data;
+    if (!cache || !data) return 0;
+    while (bytes >= sizeof(struct cache_record)) {
+        struct cache_record header;
+        memcpy(&header, p, sizeof(header));
+        if (header.magic != PS5VK_CACHE_RECORD_MAGIC || header.version != PS5VK_CACHE_ABI_VERSION_1 ||
+            !header.spirv_words || !header.code_words || header.spirv_words > (1u << 26) ||
+            header.code_words > (1u << 26) || header.bytes > bytes ||
+            header.bytes != record_bytes(header.spirv_words, header.code_words))
+            break;
+        struct ps5vk_cache_key key;
+        struct ps5vk_compiled_program program;
+        const unsigned char *q = p + sizeof(header);
+        memcpy(&key, q, sizeof(key)); q += sizeof(key);
+        memcpy(&program, q, sizeof(program)); q += sizeof(program);
+        const uint32_t *spirv = (const void *)q;
+        const uint32_t *code = (const void *)(q + header.spirv_words * sizeof(uint32_t));
+        if (key.spirv_words != header.spirv_words || program.spirv_words != header.spirv_words ||
+            program.code_words != header.code_words || !memchr(key.entry_name, 0, sizeof(key.entry_name)) ||
+            ((uintptr_t)spirv & 3u) || ((uintptr_t)code & 3u))
+            break;
+        program.spirv = program.code = NULL;
+        program.entry = NULL;
+        struct ps5vk_cache_entry *entry = ps5vk_compilation_cache_lookup(cache, &key, spirv);
+        if (!entry && (entry = ps5vk_compilation_cache_insert(cache, &key, spirv, &program, code)))
+            ++added;
+        if (entry) ps5vk_cache_entry_release(cache, entry);
+        p += header.bytes;
+        bytes -= header.bytes;
+    }
+    return added;
 }

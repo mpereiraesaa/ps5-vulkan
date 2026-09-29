@@ -901,6 +901,28 @@ static VkResult emit_render_pass_segment(VkDevice d, VkCommandBuffer command,
     return VK_SUCCESS;
 }
 
+/* The backend a queue-router segment needs (vk_queue_router.c): compute
+ * dispatches and graphics-routed work cannot share one segment, so a run of
+ * backend operations is also cut where it switches between them. Barriers
+ * and child naming are neutral and join whichever run they are in. */
+enum { ROUTE_NEUTRAL, ROUTE_COMPUTE, ROUTE_GRAPHICS };
+static unsigned operation_route(const struct ps5vk_operation *op)
+{
+    switch (op->type) {
+    case PS5VK_DISPATCH: case PS5VK_DISPATCH_INDIRECT: return ROUTE_COMPUTE;
+    case PS5VK_BARRIER: case PS5VK_EXECUTE_COMMANDS: return ROUTE_NEUTRAL;
+    default: return ROUTE_GRAPHICS;
+    }
+}
+static VkBool32 mixes_routes(const struct ps5vk_submission *record)
+{
+    unsigned seen = 0;
+    for (uint32_t b = 0; b < record->count; ++b)
+        for (uint32_t k = 0; k < record->buffers[b]->operation_count; ++k)
+            seen |= 1u << operation_route(&record->buffers[b]->operations[k]);
+    return (seen & (1u << ROUTE_COMPUTE)) && (seen & (1u << ROUTE_GRAPHICS));
+}
+
 /* Walk ONE command buffer's operations and emit its ordered segments.
  *
  * Shared by a primary and, recursively, by every secondary it names, so a
@@ -940,10 +962,18 @@ static VkResult segment_operations(VkDevice d, VkCommandBuffer command, size_t r
         VkBool32 execute = execute_boundary(command->operations[operation].type);
         VkResult rc;
         if (frontend || deferred || execute) ++operation;
-        else while (operation < command->operation_count &&
-            !frontend_record(&command->operations[operation]) &&
-            !execute_boundary(command->operations[operation].type) &&
-            !deferred_boundary(command->operations[operation].type)) ++operation;
+        else {
+            unsigned route = ROUTE_NEUTRAL;
+            while (operation < command->operation_count &&
+                   !frontend_record(&command->operations[operation]) &&
+                   !execute_boundary(command->operations[operation].type) &&
+                   !deferred_boundary(command->operations[operation].type)) {
+                const unsigned next = operation_route(&command->operations[operation]);
+                if (next != ROUTE_NEUTRAL && route != ROUTE_NEUTRAL && next != route) break;
+                if (next != ROUTE_NEUTRAL) route = next;
+                ++operation;
+            }
+        }
         if (execute) {
             const struct ps5vk_operation *ex = &command->operations[begin];
             VkCommandBuffer const *children = (VkCommandBuffer const *)ex->owned_payload;
@@ -983,7 +1013,7 @@ static VkResult expand_records(VkDevice d, struct ps5vk_submission *original,
     VkResult result = VK_SUCCESS;
     for (struct ps5vk_submission *record = original; record; record = record->next) {
         size_t refs = (size_t)record->wait_count + record->signal_count;
-        VkBool32 contains_special = VK_FALSE;
+        VkBool32 contains_special = mixes_routes(record);
         for (uint32_t b = 0; b < record->count; ++b)
             for (uint32_t k = 0; k < record->buffers[b]->operation_count; ++k)
                 contains_special |= frontend_record(&record->buffers[b]->operations[k]) ||

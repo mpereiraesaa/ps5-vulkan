@@ -1,0 +1,43 @@
+diff --git a/libpsbc/psbc_compile.c b/libpsbc/psbc_compile.c
+--- a/libpsbc/psbc_compile.c
++++ b/libpsbc/psbc_compile.c
+@@ -2662,6 +2662,8 @@
+         return PSBC_RESULT_INTERNAL_ERROR;
+ 
+     memset(out, 0, sizeof(*out));
++    if (opts->compute_wave_size && opts->compute_wave_size != 32 && opts->compute_wave_size != 64)
++        return PSBC_RESULT_INTERNAL_ERROR;
+     if ((opts->enable_uniform_and_storage_buffer_8bit_access &&
+          !opts->enable_storage_buffer_8bit_access) ||
+         (opts->enable_uniform_and_storage_buffer_16bit_access &&
+@@ -2851,11 +2853,14 @@
+     compiler_info.key.cs_wave_size = (gfxlevel >= GFX10_3) ? 32 : 64;
+     compiler_info.key.rt_wave_size = 64;
+     if (opts->target == PSBC_TARGET_PS5 && opts->stage == PSBC_STAGE_COMPUTE) {
+-        /* Dispatch uses wave32. Keep NIR's subgroup arithmetic and ACO's
+-         * selected wave size in agreement even for wide subgroup intrinsics. */
+-        compiler_info.subgroup_size = 32;
+-        compiler_info.min_subgroup_size = 32;
+-        compiler_info.max_subgroup_size = 32;
++        /* The dispatch selects wave32 (default) or wave64 per program. Keep
++         * NIR's subgroup arithmetic and ACO's selected wave size in agreement
++         * even for wide subgroup intrinsics. */
++        const unsigned wave_size = opts->compute_wave_size == 64 ? 64 : 32;
++        compiler_info.key.cs_wave_size = wave_size;
++        compiler_info.subgroup_size = wave_size;
++        compiler_info.min_subgroup_size = wave_size;
++        compiler_info.max_subgroup_size = wave_size;
+     }
+     compiler_info.key.family = chipfamily;
+     compiler_info.key.ps5_buffer_scratch = opts->compute_buffer_spills;
+diff --git a/libpsbc/psbc_compile.h b/libpsbc/psbc_compile.h
+--- a/libpsbc/psbc_compile.h
++++ b/libpsbc/psbc_compile.h
+@@ -458,6 +458,7 @@
+     uint32_t    fragment_clip_distance_count;
+     bool        ps5_global_streamout; /* No-GDS NGG GS counters */
+     bool        compute_buffer_spills; /* PS5 compute register spills via MUBUF. */
++    uint32_t    compute_wave_size; /* PS5 compute: 0 or 32 for wave32, 64 for wave64. */
+     bool        force_accelerated_dot; /* Diagnostic only: emit native dot ISA */
+     uint32_t    primitive_type; /* GFX10 DI primitive type: 0, 1..6, 10..13 */
+     bool        provoking_vtx_last; /* Select the final flat-shaded vertex */

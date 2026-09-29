@@ -8,7 +8,7 @@
 struct ps5vk_compute_addresses {
     uint64_t code, descriptor_table, completion, readback;
 };
-enum { PS5VK_COMPUTE_COMMAND_CAPACITY = 96 };
+enum { PS5VK_COMPUTE_COMMAND_CAPACITY = 128 };
 /* All addresses must already be mapped/owned. This only validates encoding
  * constraints, never proves mapping, visibility, execution or completion. */
 size_t ps5vk_compute_commands(uint32_t *words, size_t capacity,

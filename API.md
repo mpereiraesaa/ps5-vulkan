@@ -66,6 +66,19 @@ and `quadOperationsInAllStages=false`. Elect, subgroup barriers and built-ins
 have a native witness. This does not report BALLOT, ARITHMETIC,
 `shaderSubgroupExtendedTypes` or `subgroupBroadcastDynamicId`.
 
+A build with `PS5VK_SUBGROUP_SIZE_CONTROL_DIAGNOSTIC=1` also reports the
+Vulkan 1.3 `subgroupSizeControl` feature for compute:
+
+- `minSubgroupSize=32`, `maxSubgroupSize=64` and
+  `requiredSubgroupSizeStages=COMPUTE`.
+- A compute pipeline on a device that enabled the feature may chain
+  `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` with 32 or 64. It is
+  then compiled for and dispatched as wave32 or wave64, and cached under its
+  own key.
+- Without the structure, compute stays wave32.
+- `computeFullSubgroups` and varying subgroup sizes are not reported, and the
+  stage flags that request them are refused.
+
 - `robustBufferAccess` is reported true. Device creation accepts it through
   either `pEnabledFeatures` or the `VkPhysicalDeviceFeatures2` chain, rejects
   malformed booleans, and rejects every unreported core feature. Other
@@ -419,6 +432,14 @@ smaller incompatible layer pitches. The graphics profile reports
   storage buffers, but this does not expose general narrow arithmetic.
 - Compute pipelines compiled from SPIR-V at runtime through PSBC/ACO for
   GFX1013, with a bounded in-memory compilation cache.
+- Each compute program is placed after a 64-byte prefix that sets instruction
+  prefetch mode 3 (`s_inst_prefetch 0x3`) and branches to it, and is followed
+  by 256 bytes of `s_code_end`. PS5 waves otherwise start without the forward
+  instruction prefetch that Linux enables on GFX10
+  (`SH_MEM_CONFIG.INITIAL_INST_PREFETCH`). After each dispatch starts, the
+  queue also reads the program into GL2 with a CP DMA prefetch, as RADV does.
+  Together these took a 28-dispatch FSR4 frame (1280×720 to 1920×1080) from
+  7.07 ms to 3.81 ms.
 - Up to four descriptor sets in the compute ABI. The native acceptance fixture
   uses three sets simultaneously.
 - Storage buffers, uniform buffers and uniform texel buffers. A direct native
@@ -451,6 +472,23 @@ smaller incompatible layer pitches. The graphics profile reports
 - Pipeline specialization supports up to 64 uniquely numbered scalar constants
   of at most 8 bytes each. Map-entry order does not affect cache identity.
 - Command-buffer dispatch and fences.
+- The dispatches of a submission run as one chained command stream per
+  128 KiB command region, ordered the way RADV orders a compute-to-compute
+  dependency: each dispatch ends with a CS partial flush, and the next one's
+  acquire invalidates the per-CU instruction, scalar, L0 and L1 caches. GL2 is
+  coherent for all CUs, so only a chain's first dispatch invalidates it and
+  only its last writes it back and publishes the completion token. Shader code
+  becomes resident per pipeline; descriptor tables, push constants and scratch
+  come from device arenas that every job reuses, and a queue segment never
+  mixes compute dispatches with graphics work. Jobs are synchronous: the device
+  keeps one mapped command region for them, and a submission polls its
+  completion label before it sleeps, because one sleep can last a whole
+  15.6 ms kernel timer tick.
+- Programs that spill registers run with scratch: PSBC places the spills in a
+  scratch buffer (`tools/psbc-compute-buffer-spills.patch`), which a device
+  arena backs for the GPU's 1152 wave32 slots between guard regions that every
+  job checks. Scratch is not cleared per dispatch, because spilled values are
+  written before they are read.
 - Exact GPU completion and checked readback, including guard validation.
 - A single serial native queue with Vulkan 1.0 binary semaphore signal, wait
   and consumption across ordered `VkSubmitInfo` records. Signals become visible
@@ -488,7 +526,9 @@ smaller incompatible layer pitches. The graphics profile reports
 - Host/compute buffer barriers validate ranges and lifetimes, using stronger
   global cache/completion dependencies. Host-write dependencies accept shader
   and uniform reads; compute shader-write dependencies can feed later compute
-  reads or explicit host reads. The supported stage/access subset is checked
+  reads or explicit host reads. A barrier that mixes host, transfer and compute
+  stages accepts shader and uniform access when its stage mask includes the
+  compute shader. The supported stage/access subset is checked
   when recording, malformed or unsupported combinations fail closed, and
   queue-family transfers are rejected because the profile exposes one family.
 - `vkFlushMappedMemoryRanges` and `vkInvalidateMappedMemoryRanges` operate on
@@ -669,8 +709,8 @@ Compute shaders are compiled at runtime using a pinned PSBC/NIR/ACO fork. The
 supported profile currently covers storage, uniform and uniform-texel buffer
 descriptors across at most four independent sets. Each shader-used set receives
 a distinct, compiler-selected direct user-SGPR table pointer. Descriptor arrays
-remain a bounded implementation contract without native acceptance coverage;
-scratch is rejected. The compiler adapter conservatively includes every
+remain a bounded implementation contract without native acceptance coverage.
+Programs that spill registers get scratch (see [Compute](#compute)). The compiler adapter conservatively includes every
 compute-visible layout binding in execution metadata, so applications must
 define those bindings even when static shader use could eliminate one.
 Compiler LDS allocation (up to 64 KiB) and the pinned inline workgroup-count ABI
@@ -682,7 +722,7 @@ shared atomic permutation and counter across four wave32 waves. Focused upstream
 these results establishes broad compute conformance, Vulkan memory-model support
 or narrow arithmetic in other storage classes.
 Cache keys include the complete SPIR-V digest, entry point, compiler/ABI
-versions and pipeline-layout state, and entries are constrained by count and
+versions, the compute wave size and pipeline-layout state, and entries are constrained by count and
 byte budgets. Cache identity includes canonical specialization values and the
 complete push-range stage signature. Specialization-dependent `LocalSizeId`
 workgroup dimensions are not yet supported; local size must remain literal.
@@ -727,16 +767,22 @@ corrupt, wrong-vendor/device/version/UUID or oversized blob is ignored and cache
 creation still succeeds with an empty cache, and a header-only blob round-trips
 byte for byte. `vkMergePipelineCaches` requires at least one source and validates
 the destination and every source (the destination is forbidden as a source,
-duplicate sources are legal and foreign handles are rejected). It is a no-op
-because the cache stores no records.
+duplicate sources are legal and foreign handles are rejected). It is a no-op:
+compiled programs live in the device's compilation cache, which every pipeline
+cache of the device exports.
 
-No compiled-code record is serialized and no restored cache hit is reported.
-The digest-addressed key schema that a later record format must carry already
-exists for the in-process cache (SPIR-V SHA-256, entry point, compiler/ABI
-version, target, layout, specialization and push-range state), and
+After the header, `vkGetPipelineCacheData` writes the device's compiled compute
+programs as pointer-free records, keyed like the in-process cache (SPIR-V
+SHA-256, entry point, compiler/ABI version, target, layout, specialization,
+push-range state and wave size). A short buffer receives whole records only, a
+valid smaller cache, and `VK_INCOMPLETE`. A recognized header in `pInitialData`
+admits the records behind it into the device's compilation cache: they are
+validated and copied, never adopted as pointers, and a malformed record ends
+the import. A pipeline created afterwards from the same inputs reuses the
+program instead of compiling it. Graphics pairs are not serialized.
 `pipelineCacheUUID` is derived deterministically from public compatibility
 inputs (vendor/device, GFX1013 target, driver version, compiler identity and
-cache ABI revision) so any change invalidates previously exported data.
+cache ABI revision), so any change invalidates previously exported data.
 
 The runtime backend accepts combined-image sampler arrays visible to vertex,
 fragment or both stages across four sets and sparse binding numbers, within

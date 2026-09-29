@@ -1413,12 +1413,12 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
      * attribute read happens. */
     if((access & VK_ACCESS_INDEX_READ_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
-    /* A uniform buffer read happens in a shader stage; this scope's stage mask
-     * names the two the profile compiles, and the compute scope carries the
-     * compute one. */
+    /* Mixed graphics/compute/transfer barriers share this scope. Uniform
+     * reads still require a supported shader stage in the mask. */
     if((access & VK_ACCESS_UNIFORM_READ_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     /* Vulkan reads an input attachment with subpassLoad, which exists only in
      * the fragment shader, so an input-attachment read cannot be ordered by a
      * stage mask that leaves the fragment shader out. ALL_GRAPHICS stands for
@@ -1441,10 +1441,12 @@ static int texture_scope(VkPipelineStageFlags stages, VkAccessFlags access)
      * authorize a shader to write anything. */
     if((access & (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & VK_ACCESS_SHADER_WRITE_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     if((access & VK_ACCESS_INDIRECT_COMMAND_READ_BIT) &&
         !(stages & (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)))return 0;
     /* Depth/stencil attachment access happens in the fragment tests, which is

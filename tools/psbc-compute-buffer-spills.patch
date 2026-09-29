@@ -1,0 +1,189 @@
+diff --git a/libpsbc/psbc_compile.c b/libpsbc/psbc_compile.c
+index 80d50de..b57de9d 100644
+--- a/libpsbc/psbc_compile.c
++++ b/libpsbc/psbc_compile.c
+@@ -2858,6 +2858,7 @@ static PsbcResult psbc_compile_impl(
+         compiler_info.max_subgroup_size = 32;
+     }
+     compiler_info.key.family = chipfamily;
++    compiler_info.key.ps5_buffer_scratch = opts->compute_buffer_spills;
+     compiler_info.key.load_grid_size_from_user_sgpr = (gfxlevel >= GFX10_3);
+     compiler_info.key.use_ngg = opts->ngg;
+     compiler_info.key.ps5_global_streamout = opts->ps5_global_streamout;
+@@ -2896,6 +2897,14 @@ static PsbcResult psbc_compile_impl(
+         psbc_shutdown();
+         return PSBC_RESULT_COMPILE_NIR;
+     }
++    /* This path covers register spills, not NIR private-memory arrays. */
++    if (opts->compute_buffer_spills &&
++        (opts->target != PSBC_TARGET_PS5 || opts->stage != PSBC_STAGE_COMPUTE ||
++         nir->scratch_size)) {
++        ralloc_free(nir);
++        psbc_shutdown();
++        return PSBC_RESULT_UNSUPPORTED_CAPABILITY;
++    }
+     debug_stage(input_nir ? "import-nir-end" : "import-spirv-end");
+     debug_shader_io(input_nir ? "input-NIR" : "SPIR-V", nir, NULL);
+     debug_shader_io("lowered-io", nir, NULL);
+diff --git a/libpsbc/psbc_compile.h b/libpsbc/psbc_compile.h
+index fb8babb..ee23ddb 100644
+--- a/libpsbc/psbc_compile.h
++++ b/libpsbc/psbc_compile.h
+@@ -457,6 +457,7 @@ typedef struct {
+     bool        fragment_distance_layout_valid; /* Link cull inputs to the producer's packed clip prefix. */
+     uint32_t    fragment_clip_distance_count;
+     bool        ps5_global_streamout; /* No-GDS NGG GS counters */
++    bool        compute_buffer_spills; /* PS5 compute register spills via MUBUF. */
+     bool        force_accelerated_dot; /* Diagnostic only: emit native dot ISA */
+     uint32_t    primitive_type; /* GFX10 DI primitive type: 0, 1..6, 10..13 */
+     bool        provoking_vtx_last; /* Select the final flat-shaded vertex */
+diff --git a/src/amd/compiler/aco_ir.cpp b/src/amd/compiler/aco_ir.cpp
+index 1955bf7..5773324 100644
+--- a/src/amd/compiler/aco_ir.cpp
++++ b/src/amd/compiler/aco_ir.cpp
+@@ -171,6 +171,7 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
+    }
+ 
+    program->wgp_mode = options->wgp_mode;
++   program->buffer_scratch = options->buffer_scratch;
+ 
+    program->progress = CompilationProgress::after_isel;
+ 
+diff --git a/src/amd/compiler/aco_ir.h b/src/amd/compiler/aco_ir.h
+index 4082a95..89ddd30 100644
+--- a/src/amd/compiler/aco_ir.h
++++ b/src/amd/compiler/aco_ir.h
+@@ -2350,6 +2350,7 @@ public:
+ 
+    std::vector<uint8_t> constant_data;
+    /* Private segment buffers and scratch offsets. One entry per start/resume block */
++   bool buffer_scratch = false;
+    aco::small_vec<Temp, 2> private_segment_buffers;
+    aco::small_vec<Temp, 2> scratch_offsets;
+    Temp stack_ptr;
+diff --git a/src/amd/compiler/aco_shader_info.h b/src/amd/compiler/aco_shader_info.h
+index e2819a5..6caa2e9 100644
+--- a/src/amd/compiler/aco_shader_info.h
++++ b/src/amd/compiler/aco_shader_info.h
+@@ -156,6 +156,7 @@ struct aco_compiler_options {
+    enum radeon_family family;
+    enum amd_gfx_level gfx_level;
+    uint32_t address32_hi;
++   bool buffer_scratch;
+ };
+ 
+ enum aco_statistic {
+diff --git a/src/amd/compiler/aco_spill.cpp b/src/amd/compiler/aco_spill.cpp
+index 3e238f1..fea62c2 100644
+--- a/src/amd/compiler/aco_spill.cpp
++++ b/src/amd/compiler/aco_spill.cpp
+@@ -1225,7 +1225,7 @@ setup_vgpr_spill_reload(spill_ctx& ctx, Block& block,
+    uint32_t scratch_size = ctx.program->config->scratch_bytes_per_wave / ctx.program->wave_size;
+ 
+    uint32_t offset_range;
+-   if (ctx.program->gfx_level >= GFX9) {
++   if (ctx.program->gfx_level >= GFX9 && !ctx.program->buffer_scratch) {
+       offset_range =
+          ctx.program->dev.scratch_global_offset_max - ctx.program->dev.scratch_global_offset_min;
+    } else {
+@@ -1243,7 +1243,8 @@ setup_vgpr_spill_reload(spill_ctx& ctx, Block& block,
+    unsigned bld_block = block.index;
+    if (block.kind & block_kind_top_level) {
+       rsrc_bld.reset(&instructions);
+-   } else if (ctx.scratch_rsrc == Temp() && (!overflow || ctx.program->gfx_level < GFX9)) {
++   } else if (ctx.scratch_rsrc == Temp() &&
++              (!overflow || ctx.program->gfx_level < GFX9 || ctx.program->buffer_scratch)) {
+       Block* tl_block = nullptr;
+       for (int i = block.index; i >= 0; i--) {
+          if (ctx.program->blocks[i].kind & block_kind_contains_call)
+@@ -1281,7 +1282,7 @@ setup_vgpr_spill_reload(spill_ctx& ctx, Block& block,
+       offset_bld.reset(&instructions);
+ 
+    *offset = spill_slot * 4;
+-   if (ctx.program->gfx_level >= GFX9) {
++   if (ctx.program->gfx_level >= GFX9 && !ctx.program->buffer_scratch) {
+       *offset += ctx.program->dev.scratch_global_offset_min;
+ 
+       if (ctx.scratch_rsrc == Temp() || overflow) {
+@@ -1396,7 +1397,7 @@ spill_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& inst
+          if (i < lds_slots) {
+             bld.ds(aco_opcode::ds_write_addtid_b32, bld.m0(ctx.lds_m0_zero), elem, lds_offset);
+             lds_offset += workgroup_size * 4;
+-         } else if (ctx.program->gfx_level >= GFX9) {
++         } else if (ctx.program->gfx_level >= GFX9 && !ctx.program->buffer_scratch) {
+             bld.scratch(aco_opcode::scratch_store_dword, Operand(v1), ctx.scratch_rsrc, elem,
+                         offset, memory_sync_info(storage_vgpr_spill, semantic_private));
+             offset += 4;
+@@ -1410,7 +1411,7 @@ spill_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& inst
+       }
+    } else if (lds_slots) {
+       bld.ds(aco_opcode::ds_write_addtid_b32, bld.m0(ctx.lds_m0_zero), temp, lds_offset);
+-   } else if (ctx.program->gfx_level >= GFX9) {
++   } else if (ctx.program->gfx_level >= GFX9 && !ctx.program->buffer_scratch) {
+       bld.scratch(aco_opcode::scratch_store_dword, Operand(v1), ctx.scratch_rsrc, temp, offset,
+                   memory_sync_info(storage_vgpr_spill, semantic_private));
+    } else {
+@@ -1460,7 +1461,7 @@ reload_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& ins
+             bld.ds(aco_opcode::ds_read_addtid_b32, Definition(tmp), bld.m0(ctx.lds_m0_zero),
+                    lds_offset);
+             lds_offset += workgroup_size * 4;
+-         } else if (ctx.program->gfx_level >= GFX9) {
++         } else if (ctx.program->gfx_level >= GFX9 && !ctx.program->buffer_scratch) {
+             bld.scratch(aco_opcode::scratch_load_dword, Definition(tmp), Operand(v1),
+                         ctx.scratch_rsrc, offset,
+                         memory_sync_info(storage_vgpr_spill, semantic_private));
+@@ -1477,7 +1478,7 @@ reload_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& ins
+       bld.insert(vec);
+    } else if (lds_slots) {
+       bld.ds(aco_opcode::ds_read_addtid_b32, def, bld.m0(ctx.lds_m0_zero), lds_offset);
+-   } else if (ctx.program->gfx_level >= GFX9) {
++   } else if (ctx.program->gfx_level >= GFX9 && !ctx.program->buffer_scratch) {
+       bld.scratch(aco_opcode::scratch_load_dword, def, Operand(v1), ctx.scratch_rsrc, offset,
+                   memory_sync_info(storage_vgpr_spill, semantic_private));
+    } else {
+@@ -1916,7 +1917,7 @@ spill(Program* program)
+       extra_vgprs = DIV_ROUND_UP(sgpr_spills * 2, program->wave_size) + 1;
+    /* add extra SGPRs required for spilling VGPRs */
+    if (demand.vgpr + extra_vgprs > limit.vgpr || program->max_call_spills.vgpr) {
+-      if (program->gfx_level >= GFX9)
++      if (program->gfx_level >= GFX9 && !program->buffer_scratch)
+          extra_sgprs =
+             program->stack_ptr.id() ? 2 : 1; /* SADDR + scc for stack pointer additions */
+       else
+diff --git a/src/amd/compiler/instruction_selection/aco_isel_helpers.cpp b/src/amd/compiler/instruction_selection/aco_isel_helpers.cpp
+index 2da2f1f..b99bd90 100644
+--- a/src/amd/compiler/instruction_selection/aco_isel_helpers.cpp
++++ b/src/amd/compiler/instruction_selection/aco_isel_helpers.cpp
+@@ -784,7 +784,7 @@ add_startpgm(struct isel_context* ctx, bool is_callee)
+ 
+    /* epilog has no scratch */
+    if (ctx->args->scratch_offset.used) {
+-      if (ctx->program->gfx_level < GFX9) {
++      if (ctx->program->gfx_level < GFX9 || ctx->program->buffer_scratch) {
+          /* Stash these in the program so that they can be accessed later when
+           * handling spilling.
+           */
+diff --git a/src/amd/vulkan/radv_shader.c b/src/amd/vulkan/radv_shader.c
+index e463204..d3d9b0a 100644
+--- a/src/amd/vulkan/radv_shader.c
++++ b/src/amd/vulkan/radv_shader.c
+@@ -3480,6 +3480,7 @@ radv_aco_fill_compiler_options(struct aco_compiler_options *aco_info, const stru
+    aco_info->gfx_level = compiler_info->ac->gfx_level;
+    aco_info->family = compiler_info->debug.family;
+    aco_info->address32_hi = compiler_info->hw.address32_hi;
++   aco_info->buffer_scratch = compiler_info->key.ps5_buffer_scratch;
+ }
+ 
+ void
+diff --git a/src/amd/vulkan/radv_shader.h b/src/amd/vulkan/radv_shader.h
+index 6f06ed3..75059c3 100644
+--- a/src/amd/vulkan/radv_shader.h
++++ b/src/amd/vulkan/radv_shader.h
+@@ -570,6 +570,7 @@ struct radv_compiler_info {
+       uint32_t lower_terminate_to_discard : 1;
+       uint32_t no_implicit_varying_subgroup_size : 1;
+       uint32_t nir_debug_info : 1;
++      uint32_t ps5_buffer_scratch : 1;
+       uint32_t ps5_global_streamout : 1;
+       uint32_t ps5_fragment_view_index : 1;
+       /* PS5 only: deliver the ring descriptor table as user data instead of

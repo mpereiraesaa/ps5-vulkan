@@ -2,8 +2,9 @@
 
 ## Host checks
 
-Install Python 3, Make, a C11 compiler, Git and `glslangValidator`, then prepare the pinned Vulkan
-headers, compiler dependencies and run the contract suite:
+Install Python 3 with Mako and PyYAML, Make, a C11 compiler, Git and
+`glslangValidator`, then prepare the pinned Vulkan headers, compiler dependencies
+and run the contract suite:
 
 ```sh
 make vulkan-headers
@@ -37,7 +38,22 @@ python3 tools/run_python_tests.py -v -j 1        # serial, verbose
 
 ## Companion repositories
 
-Native builds currently consume source-level support from `ps5-agc-gears` and
+The reusable SDK builder needs no sibling checkout: `make native-deps` fetches
+the public AGC support, with its byte-identical `ps5log/1` header and PS5
+network adapter, at one pinned revision into `third_party/`:
+
+```sh
+make vulkan-headers compiler-deps native-deps
+export PS5_PAYLOAD_SDK=/absolute/path/to/ps5-payload-sdk
+python3 tools/build_psbc.py --target ps5
+python3 tools/build_sdk.py
+```
+
+This builds the native archive and checks an independent native consumer; it
+does not run on a console. It fails before staging when a native dependency is
+missing and never substitutes the host test archive for the native library.
+
+Native samples currently consume source-level support from `ps5-agc-gears` and
 the `ps5log/1` client from `logging_server`. Keep the repositories as siblings:
 
 ```text

@@ -427,6 +427,10 @@ VkResult ps5vk_platform_query(struct ps5vk_platform *platform)
      * witness checked all 896 outputs. VkPhysicalDeviceSubgroupProperties
      * reports exactly this: size 32, the compute stage, the BASIC operation. */
     platform->supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_BASIC_COMPUTE;
+#if defined(PS5VK_SUBGROUP_SIZE_CONTROL_DIAGNOSTIC) && PS5VK_SUBGROUP_SIZE_CONTROL_DIAGNOSTIC
+    /* Per-pipeline wave32/wave64 compute: requiredSubgroupSize 32 or 64. */
+    platform->supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL;
+#endif
 #if defined(PS5VK_SHADER_INT8_DIAGNOSTIC) && PS5VK_SHADER_INT8_DIAGNOSTIC
     /* Compiler-only probe; public shaderInt8 and subgroup features stay false. */
     platform->supported_features |= PS5VK_FEATURE_SHADER_INT8_COMPUTE;

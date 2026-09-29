@@ -14,6 +14,8 @@ DIST_SDK = ROOT / "dist-sdk"
 
 sys.path.insert(0, str(ROOT / "tools"))
 from lab import lab_root  # noqa: E402
+from prepare_native_deps import GEARS  # noqa: E402
+from build_psbc import source_patch_digest  # noqa: E402
 
 
 def validate_compiler_archive(archive: Path, expected_revision: str) -> None:
@@ -24,6 +26,7 @@ def validate_compiler_archive(archive: Path, expected_revision: str) -> None:
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     if (identity.get("schema") != 1 or identity.get("target") != "ps5" or
             identity.get("source_commit") != expected_revision or
+            identity.get("source_patch_sha256") != source_patch_digest() or
             identity.get("archive_sha256") != digest):
         raise RuntimeError("native PSBC archive identity is stale or inconsistent")
 
@@ -37,17 +40,25 @@ def archive(tool, output, objects):
         fresh.replace(output)
 
 
-def get_ps5_toolchain():
+def get_public_ps5_toolchain():
     sdk_env = os.environ.get("PS5_PAYLOAD_SDK")
     if sdk_env:
         sdk = Path(sdk_env).resolve()
     else:
         lab = lab_root()
         sdk = lab / "third_party/ps5-native-app-boilerplate/.deps/native/ps5-payload-sdk"
-    wrapper = lab_root() / "third_party/ps5-native-app-boilerplate/tooling/prospero-clang18"
-    if (sdk / "bin/prospero-lld").is_file() and wrapper.is_file():
-        return sdk, wrapper
+    compiler = sdk / "bin/prospero-clang"
+    if ((sdk / "bin/prospero-lld").is_file() and
+            (sdk / "target/lib/crt1.o").is_file() and compiler.is_file()):
+        return sdk, compiler
     return None, None
+
+
+def get_ps5_toolchain():
+    """Compatibility for native witness scripts using the foundation sh wrapper."""
+    sdk, _ = get_public_ps5_toolchain()
+    wrapper = lab_root() / "third_party/ps5-native-app-boilerplate/tooling/prospero-clang18"
+    return (sdk, wrapper) if sdk and wrapper.is_file() else (None, None)
 
 
 def tess_ring_flags(environment):
@@ -70,6 +81,40 @@ def tess_ring_flags(environment):
 
 def main():
     ring_flags = tess_ring_flags(os.environ)
+    sdk, clang_wrapper = get_public_ps5_toolchain()
+    lab = lab_root()
+    gears = GEARS["dest"]
+    logger = gears / "native/ps5log"
+    missing = []
+    if not sdk or not clang_wrapper:
+        missing.append("PS5 payload SDK compiler")
+    if not gears.is_dir():
+        missing.append("pinned ps5-agc-gears (run make native-deps)")
+    else:
+        try:
+            gears_revision = subprocess.check_output(
+                ["git", "-C", str(gears), "rev-parse", "HEAD"],
+                text=True, stderr=subprocess.DEVNULL).strip()
+        except subprocess.CalledProcessError:
+            gears_revision = ""
+        if gears_revision != GEARS["pin"]:
+            missing.append("ps5-agc-gears revision mismatch (run make native-deps)")
+    if not logger.is_dir():
+        missing.append("public PS5 logger in ps5-agc-gears")
+    if missing:
+        raise SystemExit("Native PS5 SDK dependencies missing: " + ", ".join(missing))
+    compiler_source = ROOT / "build/libpsbc.ps5.a"
+    try:
+        expected_revision = subprocess.check_output(
+            ["git", "-C", str(ROOT / "third_party/psbc-reference"),
+             "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
+    except subprocess.CalledProcessError:
+        raise SystemExit("Pinned PSBC source missing; run make compiler-deps")
+    try:
+        validate_compiler_archive(compiler_source, expected_revision)
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
+        raise SystemExit(f"{error}; run tools/build_psbc.py --target ps5")
+
     include_dir = DIST_SDK / "include"
     lib_dir = DIST_SDK / "lib"
     for d in (include_dir / "ps5vk", include_dir / "vulkan", lib_dir):
@@ -90,12 +135,7 @@ def main():
             for hdr in src.glob("*.h"):
                 shutil.copyfile(hdr, dst / hdr.name)
 
-    sdk, clang_wrapper = get_ps5_toolchain()
-    lab = lab_root()
-    gears = lab / "projects/ps5-agc-gears"
-    logger = lab / "projects/logging_server/client"
-
-    # 3. Build native PS5 runtime if toolchain is available
+    # 3. Build native PS5 runtime.
     has_native_sdk = False
     if sdk and clang_wrapper and gears.is_dir() and logger.is_dir():
         print(f"PS5 toolchain detected: building native PS5 runtime archive...")
@@ -269,6 +309,11 @@ def main():
             raise SystemExit("PS5VK_SUBGROUP_IADD_DIAGNOSTIC must be 0 or 1")
         if subgroup_iadd_diagnostic == "1":
             native_cflags.append("-DPS5VK_SUBGROUP_IADD_DIAGNOSTIC=1")
+        subgroup_size_control_diagnostic = os.environ.get("PS5VK_SUBGROUP_SIZE_CONTROL_DIAGNOSTIC", "0")
+        if subgroup_size_control_diagnostic not in ("0", "1"):
+            raise SystemExit("PS5VK_SUBGROUP_SIZE_CONTROL_DIAGNOSTIC must be 0 or 1")
+        if subgroup_size_control_diagnostic == "1":
+            native_cflags.append("-DPS5VK_SUBGROUP_SIZE_CONTROL_DIAGNOSTIC=1")
         shader_int16_diagnostic = os.environ.get("PS5VK_SHADER_INT16_DIAGNOSTIC", "0")
         if shader_int16_diagnostic not in ("0", "1"):
             raise SystemExit("PS5VK_SHADER_INT16_DIAGNOSTIC must be 0 or 1")
@@ -290,7 +335,7 @@ def main():
         native_objs = []
         for src_p, extra in native_sources:
             obj_p = obj_dir / (src_p.stem + ".o")
-            subprocess.run(["sh", str(clang_wrapper), *native_cflags, *extra, "-c", str(src_p), "-o", str(obj_p)],
+            subprocess.run([str(clang_wrapper), *native_cflags, *extra, "-c", str(src_p), "-o", str(obj_p)],
                            env=env, check=True)
             native_objs.append(str(obj_p))
 
@@ -303,7 +348,7 @@ def main():
         consumer_obj = ROOT / "build/tests/test_sdk_consumer_native.o"
         consumer_obj.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run([
-            "sh", str(clang_wrapper), "-std=c11", "-Wall", "-Wextra", "-Werror",
+            str(clang_wrapper), "-std=c11", "-Wall", "-Wextra", "-Werror",
             "-I" + str(include_dir),
             "-c", str(ROOT / "tests/test_sdk_consumer_native.c"),
             "-o", str(consumer_obj)
@@ -315,7 +360,7 @@ def main():
         app_crt_cpp = lab / "third_party/ps5-native-app-boilerplate/tooling/native/app_crt.cpp"
         crt = lib_dir / "crt.o"
         if app_crt_cpp.is_file():
-            subprocess.run(["sh", str(clang_wrapper), "-std=c++20", "-O2", "-fno-exceptions", "-fno-rtti",
+            subprocess.run([str(clang_wrapper) + "++", "-std=c++20", "-O2", "-fno-exceptions", "-fno-rtti",
                             "-c", str(app_crt_cpp), "-o", str(crt)], env=env, check=True)
         else:
             crt = sdk / "target/lib/crt1.o"
@@ -324,29 +369,21 @@ def main():
         stub_objects = []
         for source in (gears / "native/stubs/libSceAgc.c", ROOT / "native/index_import_stub.c"):
             obj = obj_dir / (source.stem + "_stub.o")
-            subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c", str(source), "-o", str(obj)],
+            subprocess.run([str(clang_wrapper), "-fPIC", "-c", str(source), "-o", str(obj)],
                            env=env, check=True)
             stub_objects.append(str(obj))
         subprocess.run([str(linker), "--shared", "-soname", "libSceAgc.prx", "-o", str(stub),
                         *stub_objects], check=True)
         driver_obj = obj_dir / "driver_stub.o"
-        subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c",
+        subprocess.run([str(clang_wrapper), "-fPIC", "-c",
                         str(gears / "native/stubs/libSceAgcDriver.c"), "-o", str(driver_obj)],
                        env=env, check=True)
         tess_driver_obj = obj_dir / "tess_driver_stub.o"
-        subprocess.run(["sh", str(clang_wrapper), "-fPIC", "-c",
+        subprocess.run([str(clang_wrapper), "-fPIC", "-c",
                         str(ROOT / "native/tess_driver_import_stub.c"), "-o", str(tess_driver_obj)],
                        env=env, check=True)
         subprocess.run([str(linker), "--shared", "-soname", "libSceAgcDriver.prx",
                         "-o", str(driver), str(driver_obj), str(tess_driver_obj)], check=True)
-        compiler_source = ROOT / "build/libpsbc.ps5.a"
-        expected_revision = subprocess.check_output(
-            ["git", "-C", str(ROOT / "third_party/psbc-reference"),
-             "rev-parse", "HEAD"], text=True).strip()
-        try:
-            validate_compiler_archive(compiler_source, expected_revision)
-        except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
-            raise SystemExit(f"{error}; run tools/build_psbc.py --target ps5")
         psbc_lib = lib_dir / "libpsbc.a"
         shutil.copyfile(compiler_source, psbc_lib)
         out_elf = ROOT / "build/tests/test_sdk_consumer_native.elf"
@@ -368,7 +405,8 @@ def main():
                 str(sdk / "target/lib/libc++.a"),
                 str(sdk / "target/lib/libc++abi.a"),
                 str(sdk / "target/lib/libunwind.a"),
-                str(sdk / "target/lib/libpthread.a"),
+                *([str(sdk / "target/lib/libpthread.a")]
+                  if (sdk / "target/lib/libpthread.a").is_file() else []),
                 str(sdk / "target/lib/libc.a"),
                 "--as-needed",
                 *sorted(str(p) for p in (sdk / "target/lib").glob("*.so")),
@@ -410,9 +448,6 @@ def main():
 
     host_lib = lib_dir / "libps5vk_host.a"
     archive("ar", host_lib, host_objs)
-    if not has_native_sdk:
-        shutil.copyfile(host_lib, lib_dir / "libps5vk.a")
-
     # 5. Generate SDK README
     readme_text = """# PS5 Vulkan (ps5vk) SDK
 
@@ -444,8 +479,8 @@ in-process cache retains compiled pairs. This is not a Vulkan-conformant driver.
 This SDK is licensed under GPL-3.0-or-later. `libps5vk.a` is a static library;
 an application distributed after linking it must comply with the GNU GPL and
 provide the corresponding source of the combined work. See the included
-`LICENSE` file. Separately supplied console system modules are not part of this
-SDK.
+`LICENSE` and `LICENSING.md` files for the public AGC/logger source pin and
+notices. Separately supplied console system modules are not part of this SDK.
 
 ## Usage
 Include `<ps5vk/ps5vk.h>` and `<ps5vk/ps5vk_present.h>` and compile with:
@@ -454,18 +489,19 @@ prospero-clang -Iinclude consumer.c -Llib -lps5vk -lpsbc ...
 ```
 No private internal headers (`vk_internal.h`, `command_arena_ps5.h`, etc.) are required.
 Native applications still need the native-app scaffold, PS5 C/C++ runtime link
-dependencies and the AGC import facades. Initialize the lab's TCP logger before
+dependencies and the AGC import facades. Initialize the bundled TCP logger before
 device creation; do not add filesystem/USB logging. Use normal system Close
 Game with the existing GPU suspension protocol. The SDK does not own app main,
 telemetry configuration, deployment or the application's event loop.
 
 Native consumer validation performed by this script is a cross-compile/link
 check, not a hardware run. Host consumer execution uses a mock backend and
-does not certify GPU output. If no native toolchain is available, libps5vk.a
-contains the host validation backend instead; no native capability is implied.
+does not certify GPU output. Missing native dependencies stop the SDK build
+before staging; the host archive is never substituted for libps5vk.a.
 """
     (DIST_SDK / "README.md").write_text(readme_text)
     shutil.copyfile(ROOT / "LICENSE", DIST_SDK / "LICENSE")
+    shutil.copyfile(ROOT / "LICENSING.md", DIST_SDK / "LICENSING.md")
 
     # 6. Build and run host consumer test
     consumer_bin = ROOT / "build/tests/test_sdk_consumer"

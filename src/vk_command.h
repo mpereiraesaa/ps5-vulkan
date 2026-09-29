@@ -45,7 +45,9 @@ enum ps5vk_operation_scope {
     PS5VK_OPERATION_INSIDE_RENDER_PASS,
     PS5VK_OPERATION_ANYWHERE
 };
-enum { PS5VK_MAX_OPERATIONS = 64 };
+/* A complete FSR4 frame alone records 55 compute operations (28 dispatches, 27
+ * barriers) besides the application's own transfers. */
+enum { PS5VK_MAX_OPERATIONS = 256 };
 enum { PS5VK_MAX_VERTEX_BINDINGS = 16 };
 /* stride/stride_valid: the stride vkCmdBindVertexBuffers2EXT named through
  * pStrides, which a pipeline with a dynamic binding stride draws with.

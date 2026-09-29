@@ -12,7 +12,9 @@ extern "C" {
 #endif
 
 #define PS5VK_COMPILER_ID_PSBC_ACO  UINT32_C(0x50534243) /* "PSBC" */
-#define PS5VK_COMPILER_VERSION_1    UINT32_C(1)
+/* Bump with any change to generated code so persisted programs are rejected.
+ * 2: compute programs and their cache keys carry the wave size. */
+#define PS5VK_COMPILER_VERSION      UINT32_C(2)
 #define PS5VK_CACHE_ABI_VERSION_1   UINT32_C(1)
 #define PS5VK_MAX_SPECIALIZATION_CONSTANTS 64u
 #define PS5VK_MAX_SPECIALIZATION_BYTES 8u
@@ -31,6 +33,7 @@ struct ps5vk_cache_key {
     uint32_t compiler_version;  /* Compiler implementation version */
     uint32_t abi_version;       /* ABI version */
     uint32_t flags;             /* Optimization / compilation flags */
+    uint32_t wave_size;         /* Compute wave size (32 or 64); 0 outside compute */
     char entry_name[64];        /* Entry point string */
     uint32_t set_count;
     struct {
@@ -153,6 +156,19 @@ void ps5vk_cache_entry_release(
     struct ps5vk_compilation_cache *cache,
     struct ps5vk_cache_entry *entry
 );
+
+/* Serialize compiled compute entries as pointer-free records for
+ * vkGetPipelineCacheData. Returns the bytes all records need; writes whole
+ * records while they fit in capacity (out may be NULL) and stores the bytes
+ * written in *written. */
+size_t ps5vk_compilation_cache_export(struct ps5vk_compilation_cache *cache,
+                                      void *out, size_t capacity, size_t *written);
+
+/* Import records produced by ps5vk_compilation_cache_export. The data is
+ * untrusted: malformed records end the import and nothing from the blob is
+ * adopted as a pointer. Returns the number of entries added. */
+unsigned ps5vk_compilation_cache_import(struct ps5vk_compilation_cache *cache,
+                                        const void *data, size_t bytes);
 
 /* Query current statistics. */
 void ps5vk_compilation_cache_get_stats(

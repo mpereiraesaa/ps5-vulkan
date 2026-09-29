@@ -283,6 +283,82 @@ int main(void)
         device->enabled_features = 0;
     }
 
+    /* subgroupSizeControl: the required-size structure is refused until the
+     * device enables the feature. Then wave64 compiles under its own cache key,
+     * wave32 matches the default key, and no other size is accepted. */
+    {
+        VkPipelineShaderStageRequiredSubgroupSizeCreateInfo required = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
+            .requiredSubgroupSize = 64};
+        cpci.stage.pNext = &required;
+        VkPipeline wave64 = VK_NULL_HANDLE;
+        assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                        &wave64) == VK_ERROR_UNKNOWN);
+        assert(!wave64);
+
+        physical->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL;
+        VkPhysicalDeviceVulkan13Properties v13 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
+        VkPhysicalDeviceProperties2 properties = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &v13};
+        vkGetPhysicalDeviceProperties2(physical, &properties);
+        assert(v13.minSubgroupSize == 32 && v13.maxSubgroupSize == 64 &&
+               v13.requiredSubgroupSizeStages == VK_SHADER_STAGE_COMPUTE_BIT);
+        VkPhysicalDeviceVulkan13Features f13 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+        VkPhysicalDeviceFeatures2 features = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &f13};
+        vkGetPhysicalDeviceFeatures2(physical, &features);
+        assert(f13.subgroupSizeControl);
+        /* Enabling the feature needs a Vulkan 1.3 instance. */
+        VkApplicationInfo app13 = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+                                   .apiVersion = VK_API_VERSION_1_3};
+        VkInstanceCreateInfo instance13_info = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+                                                .pApplicationInfo = &app13};
+        VkInstance instance13;
+        assert(vkCreateInstance(&instance13_info, NULL, &instance13) == VK_SUCCESS);
+        VkPhysicalDevice physical13;
+        uint32_t one = 1;
+        assert(vkEnumeratePhysicalDevices(instance13, &one, &physical13) == VK_SUCCESS);
+        physical13->platform.supported_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL;
+        VkPhysicalDeviceVulkan13Features enable = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            .subgroupSizeControl = VK_TRUE};
+        VkDeviceCreateInfo sized_info = dci;
+        sized_info.pNext = &enable;
+        VkDevice sized;
+        assert(vkCreateDevice(physical13, &sized_info, NULL, &sized) == VK_SUCCESS);
+        assert(sized->enabled_features_t09 & PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL);
+        vkDestroyDevice(sized, NULL);
+        vkDestroyInstance(instance13, NULL);
+
+        device->enabled_features_t09 |= PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL;
+        ps5vk_compilation_cache_get_stats(device->pipeline_cache, &stats);
+        const uint64_t compiles = stats.compiles, hits = stats.hits;
+        assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                        &wave64) == VK_SUCCESS);
+        assert(wave64->program.wave_size == 64);
+        ps5vk_compilation_cache_get_stats(device->pipeline_cache, &stats);
+        assert(stats.compiles == compiles + 1);
+        required.requiredSubgroupSize = 32;
+        VkPipeline wave32 = VK_NULL_HANDLE;
+        assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                        &wave32) == VK_SUCCESS);
+        assert(wave32->program.wave_size == 32);
+        ps5vk_compilation_cache_get_stats(device->pipeline_cache, &stats);
+        assert(stats.compiles == compiles + 1 && stats.hits == hits + 1);
+        required.requiredSubgroupSize = 16;
+        VkPipeline refused = VK_NULL_HANDLE;
+        assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpci, NULL,
+                                        &refused) == VK_ERROR_UNKNOWN);
+        assert(!refused);
+        vkDestroyPipeline(device, wave64, NULL);
+        vkDestroyPipeline(device, wave32, NULL);
+        cpci.stage.pNext = NULL;
+        device->enabled_features_t09 &= ~PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL;
+        physical->platform.supported_features_t09 &= ~PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL;
+    }
+
     /* Teardown */
     vkDestroyPipeline(device, pipeline3, NULL);
     vkDestroyShaderModule(device, module, NULL);
@@ -292,6 +368,6 @@ int main(void)
     vkDestroyInstance(instance, NULL);
     free(spv);
 
-    puts("Runtime pipeline compilation and cache lifecycle: pass (cold compile, warm hit, refcounting)");
+    puts("Runtime pipeline compilation and cache lifecycle: pass (cold compile, warm hit, refcounting, subgroup size)");
     return 0;
 }

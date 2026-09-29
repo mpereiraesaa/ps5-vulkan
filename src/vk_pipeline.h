@@ -19,6 +19,8 @@ struct ps5vk_compiled_program {
     /* Pinned PSBC compute ABI: optional inline grid dimensions at s3..s5.
      * LDS_SIZE is in the compiler's 512-byte allocation units. */
     uint32_t grid_size_sgpr, lds_size;
+    /* GFX10 wave32 scratch, compiler bytes before odd-1KiB stride padding. */
+    uint32_t scratch_bytes_per_wave;
     uint32_t push_constant_size, push_constant_sgpr;
     uint32_t descriptor_set_mask;
     uint32_t descriptor_set_sgpr[PS5VK_MAX_SETS];
@@ -120,6 +122,9 @@ struct VkPipeline_T {
     uint32_t push_constant_size;
     VkShaderStageFlags push_constant_stages[PS5VK_MAX_PUSH_CONSTANT_DWORDS];
     struct ps5vk_compiled_program program;
+    /* GPU-resident copy of program.code, uploaded by the native compute queue
+     * on first execution and released with the pipeline. */
+    void *native_code, *native_code_backing;
     void *cache_entry;
     VkBool32 graphics;
     VkBool32 dispatch_base_enabled;

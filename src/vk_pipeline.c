@@ -282,7 +282,8 @@ static int spirv_narrow_requirements(const uint32_t *words, size_t count,
 static int program_valid(const struct ps5vk_compiled_program *p, VkShaderModule m,
                          VkPipelineLayout layout, const char *entry, const uint32_t dims[3])
 {
-    if (!p || !p->spirv || !p->code || !p->entry || p->gfx != 1013 || p->wave_size != 32 ||
+    if (!p || !p->spirv || !p->code || !p->entry || p->gfx != 1013 ||
+        (p->wave_size != 32 && p->wave_size != 64) ||
         !p->code_words || p->code_words > 1024 * 1024 || p->spirv_words != m->word_count ||
         strcmp(p->entry, entry) || memcmp(p->spirv, m->words, m->word_count * 4) ||
         memcmp(p->local_size, dims, 3 * sizeof(*dims)) || !p->vgprs || p->vgprs > 256 ||
@@ -357,9 +358,21 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
         !info->stage.module || info->stage.module->device != d || !info->stage.pName) return INVALID;
     if (info->pNext ||
         (info->flags & ~VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR) ||
-        info->stage.pNext || info->stage.flags ||
+        info->stage.flags ||
         info->stage.stage != VK_SHADER_STAGE_COMPUTE_BIT)
         return VK_ERROR_UNKNOWN;
+    /* subgroupSizeControl: the only accepted stage extension selects wave32
+     * or wave64 for this pipeline; everything else stays refused. */
+    uint32_t wave_size = 32;
+    if (info->stage.pNext) {
+        const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *required = info->stage.pNext;
+        if (required->sType != VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO ||
+            required->pNext ||
+            !(d->enabled_features_t09 & PS5VK_T09_FEATURE_SUBGROUP_SIZE_CONTROL) ||
+            (required->requiredSubgroupSize != 32 && required->requiredSubgroupSize != 64))
+            return VK_ERROR_UNKNOWN;
+        wave_size = required->requiredSubgroupSize;
+    }
     if ((info->flags & VK_PIPELINE_CREATE_DISPATCH_BASE_BIT_KHR) &&
         !d->device_group_extension_enabled)
         return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -390,6 +403,7 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
                                info->stage.pName, info->layout,
                                info->stage.pSpecializationInfo, compile_features,
                                &key)) return INVALID;
+    key.wave_size = wave_size;
     if (d->pipeline_cache) {
             entry = ps5vk_compilation_cache_lookup(d->pipeline_cache, &key, info->stage.module->words);
             if (entry) {
@@ -398,7 +412,7 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
                 VkResult cr = d->compiler.compile(d->compiler.context,
                     info->stage.module->words, info->stage.module->word_count,
                     info->stage.pName, info->layout, info->stage.pSpecializationInfo,
-                    compile_features,
+                    compile_features, wave_size,
                     &compiled_storage, &compiled_code);
                 COMPUTE_MARK("PS5VK_COMPUTE_PIPELINE phase=compiled rc=%d descriptors=%u code_words=%zu",
                              (int)cr, compiled_storage.descriptor_count, compiled_storage.code_words);
@@ -438,7 +452,8 @@ static VkResult create_pipeline_inner(struct ps5vk_compiled_program *compiled_he
         return VK_ERROR_UNKNOWN;
     }
     COMPUTE_MARK("PS5VK_COMPUTE_PIPELINE phase=validate cached=%d", entry != NULL);
-    if (!program_valid(program, info->stage.module, info->layout, info->stage.pName, dims)) {
+    if (!program_valid(program, info->stage.module, info->layout, info->stage.pName, dims) ||
+        program->wave_size != wave_size) {
         if (compiled_code) free(compiled_code);
         if (entry) ps5vk_cache_entry_release(d->pipeline_cache, entry);
         return INVALID;
@@ -512,6 +527,10 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(VkDevice d, VkPipeline p, const VkA
     if (p->cache_entry) {
         ps5vk_cache_entry_release(d->pipeline_cache, p->cache_entry);
         p->cache_entry = NULL;
+    }
+    if (p->native_code_backing) {
+        d->memory.release(d->memory.context, p->native_code_backing);
+        p->native_code = p->native_code_backing = NULL;
     }
     for (VkPipeline variant = p->topology_variant, next; variant; variant = next) {
         next = variant->topology_variant;
