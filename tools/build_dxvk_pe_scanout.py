@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build bounded D3D9/D3D11 visual scanout PE controls with pinned DXVK 2.6.2."""
+"""Build bounded D3D9/D3D11 scanout and resize PE controls with DXVK 2.6.2."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCES = {
     "d3d9": ROOT / "examples/dxvk_pe_frontends/d3d9_scanout.cpp",
     "d3d11": ROOT / "examples/dxvk_pe_frontends/d3d11_scanout.cpp",
+    "d3d11-resize": ROOT / "examples/dxvk_pe_frontends/d3d11_resize.cpp",
 }
 
 
@@ -47,10 +48,11 @@ def main() -> int:
                 ("x64", "x86_64-w64-mingw32", "pei-x86-64"),
                 ("x86", "i686-w64-mingw32", "pei-i386")):
             results[arch] = {}
-            for api in ("d3d9", "d3d11"):
+            for api in SOURCES:
                 target = output / arch
                 target.mkdir(parents=True, exist_ok=True)
-                executable = target / f"{api}-scanout.exe"
+                executable = target / (f"{api}.exe" if api.endswith("resize")
+                                       else f"{api}-scanout.exe")
                 chain = ("d3d9",) if api == "d3d9" else ("d3d11", "dxgi")
                 imports = [builds[arch] / "src" / name / f"{name}.dll.a"
                            for name in chain]
@@ -90,6 +92,11 @@ def main() -> int:
             "source_sha256": {api: sha256(path) for api, path in SOURCES.items()},
             "duration": "30 bounded frames with 250 ms message-pump waits plus Present pacing",
             "pattern": "TL red, TR green, BL blue, BR yellow",
+            "controls": {
+                "d3d9": "30 bounded quadrant frames at 1920x1080",
+                "d3d11": "30 bounded quadrant frames at 1920x1080",
+                "d3d11-resize": "3 red frames at 1920x1080, ResizeBuffers, then 3 green frames at 3840x2160",
+            },
             "architectures": results,
             "scope": "PE build identities; host and visual scanout evidence separate",
         }
