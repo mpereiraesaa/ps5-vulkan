@@ -6800,3 +6800,25 @@ The frozen acceptance selection on this tree (eboot
 `83557ae2d7a2c3dafd1edd851ea785321e810820bc83cbc667a5e1d3808a7ea6`: API 1.0.0,
 32 device extensions, 43/62. `VK_EXT_extended_dynamic_state` is not a DXVK
 requirement row, so the matrix stays at **41/62 ready and 21 blockers**.
+
+## Pinned DXVK 2.6.2 native presentation oracle on the current SDK (2026-09-29)
+
+The SDK-linked native witness uses the pinned DXVK 2.6.2 source without DXVK
+patches. It presents three 64x64 D3D11 frames and checks all 4096 backbuffer
+pixels in each frame against a CPU oracle. A clean build at ps5vk
+`7d7b3e2f28cd9f8f3ef2be5688fd087ed704137f` produced eboot SHA-256
+`6fbe929c121b4281cf02c96cf16894e88fd0b28a4ea01c3f6e4728e84608fc1e`.
+Runs `20260929T012011558Z_PPSA99994_ps5vk_0x562d521e4bc0` and
+`20260929T012059525Z_PPSA99994_ps5vk_0x56387d038da6` both reached
+`dxgi.present`: all three Presents returned `S_OK`, each frame had zero pixel
+mismatches, and checksums were `6e17a4c5`, `8052d0c5`, `c0bc44c5` in order.
+Both receipts report clean lifecycle, zero remaining swapchain/device/context
+references, and no first Vulkan refusal or identity mismatch.
+
+The preceding clean build refused DXVK's pixel-coordinate blit sampler at
+`vkCreateSampler`. The SDK now accepts the Vulkan-constrained unnormalized
+sampler shape and encodes its hardware coordinate bit; the host sampler test
+checks the accepted descriptor and nearby invalid combinations. This witness
+exercises native DXVK against ps5vk. Execution of the PE DXVK DLLs through
+Prospero Win, including the x86 memory-map path, remains a separate integration
+check. No DXVK matrix row was promoted by this witness.
