@@ -1,11 +1,14 @@
-/* D3D11CreateDevice at feature level 11_0 (no swapchain), a 64x64
- * R8G8B8A8_UNORM render target, clear, one fullscreen-triangle draw through a
- * 48x64 viewport, CopyResource to a staging texture, Map(READ) and a CPU
- * oracle over every pixel. Everything is released before returning. */
+/* D3D11 FL11_0 workload: either a 64x64 offscreen target or a 1920x1080
+ * DXGI swapchain. Draw a 48x64 pattern, read back the top-left 64x64 region
+ * and compare every sampled pixel. Presentation runs three frames with
+ * distinct clear markers and requires Present to return S_OK each time.
+ * The oracle checks backbuffer contents before Present, not external scanout.
+ * Everything is released before returning. */
 #include "workload.h"
 #include "dxvk_shaders.h"
 
 #include <d3d11.h>
+#include <dxgi1_2.h>
 
 #include <cstdio>
 #include <cstring>
@@ -46,12 +49,17 @@ void release(T *&object) {
 
 } // namespace
 
-int dxvk_native_run_workload(const DxvkNativeHooks &hooks, DxvkNativeSummary *summary)
+int dxvk_native_run_workload(const DxvkNativeHooks &hooks, DxvkNativeSummary *summary,
+                             void *presentation_window)
 {
     std::memset(summary, 0, sizeof(*summary));
     summary->outcome = DXVK_NATIVE_REFUSED;
     Stages stages(hooks, summary);
 
+    IDXGISwapChain1 *swapchain = nullptr;
+    IDXGIDevice *dxgi_device = nullptr;
+    IDXGIAdapter *adapter = nullptr;
+    IDXGIFactory2 *factory = nullptr;
     ID3D11Device *device = nullptr;
     ID3D11DeviceContext *context = nullptr;
     ID3D11Texture2D *target = nullptr, *staging = nullptr;
@@ -93,9 +101,37 @@ int dxvk_native_run_workload(const DxvkNativeHooks &hooks, DxvkNativeSummary *su
         desc.SampleDesc.Count = 1;
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-        stages.begin("resource.render_target");
-        if (!stages.check("resource.render_target", device->CreateTexture2D(&desc, nullptr, &target)))
-            goto cleanup;
+        if (presentation_window) {
+            stages.begin("dxgi.device");
+            if (!stages.check("dxgi.device", device->QueryInterface(
+                    __uuidof(IDXGIDevice), reinterpret_cast<void **>(&dxgi_device)))) goto cleanup;
+            stages.begin("dxgi.adapter");
+            if (!stages.check("dxgi.adapter", dxgi_device->GetAdapter(&adapter))) goto cleanup;
+            stages.begin("dxgi.factory");
+            if (!stages.check("dxgi.factory", adapter->GetParent(
+                    __uuidof(IDXGIFactory2), reinterpret_cast<void **>(&factory)))) goto cleanup;
+            DXGI_SWAP_CHAIN_DESC1 sc = {};
+            sc.Width = DXVK_PRESENT_WIDTH;
+            sc.Height = DXVK_PRESENT_HEIGHT;
+            sc.Format = desc.Format;
+            sc.SampleDesc.Count = 1;
+            sc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+            sc.BufferCount = 2;
+            sc.Scaling = DXGI_SCALING_STRETCH;
+            sc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+            sc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+            stages.begin("dxgi.swapchain");
+            if (!stages.check("dxgi.swapchain", factory->CreateSwapChainForHwnd(
+                    device, static_cast<HWND>(presentation_window), &sc,
+                    nullptr, nullptr, &swapchain))) goto cleanup;
+            stages.begin("dxgi.backbuffer");
+            if (!stages.check("dxgi.backbuffer", swapchain->GetBuffer(
+                    0, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&target)))) goto cleanup;
+        } else {
+            stages.begin("resource.render_target");
+            if (!stages.check("resource.render_target", device->CreateTexture2D(&desc, nullptr, &target)))
+                goto cleanup;
+        }
         stages.begin("resource.render_target_view");
         if (!stages.check("resource.render_target_view",
                           device->CreateRenderTargetView(target, nullptr, &view)))
@@ -117,9 +153,9 @@ int dxvk_native_run_workload(const DxvkNativeHooks &hooks, DxvkNativeSummary *su
             dxvk_native_ps_dxbc, sizeof(dxvk_native_ps_dxbc), nullptr, &ps)))
         goto cleanup;
 
-    {
+    for (uint32_t frame = 0; frame < (presentation_window ? DXVK_PRESENT_FRAMES : 1u); ++frame) {
         stages.begin("clear");
-        const float clear[4] = {DXVK_ORACLE_CLEAR_R / 255.0f, DXVK_ORACLE_CLEAR_G / 255.0f,
+        const float clear[4] = {(DXVK_ORACLE_CLEAR_R + 16u * frame) / 255.0f, DXVK_ORACLE_CLEAR_G / 255.0f,
                                 DXVK_ORACLE_CLEAR_B / 255.0f, DXVK_ORACLE_CLEAR_A / 255.0f};
         context->OMSetRenderTargets(1, &view, nullptr);
         context->ClearRenderTargetView(view, clear);
@@ -139,7 +175,12 @@ int dxvk_native_run_workload(const DxvkNativeHooks &hooks, DxvkNativeSummary *su
         stages.ok("draw", "vertices=3 viewport=48x64");
 
         stages.begin("copy");
-        context->CopyResource(staging, target);
+        if (presentation_window) {
+            const D3D11_BOX region = {0, 0, 0, DXVK_ORACLE_WIDTH, DXVK_ORACLE_HEIGHT, 1};
+            context->CopySubresourceRegion(staging, 0, 0, 0, 0, target, 0, &region);
+        } else {
+            context->CopyResource(staging, target);
+        }
         stages.ok("copy");
 
         stages.begin("map");
@@ -150,22 +191,33 @@ int dxvk_native_run_workload(const DxvkNativeHooks &hooks, DxvkNativeSummary *su
 
         stages.begin("oracle");
         dxvk_oracle_result oracle;
-        int verdict = dxvk_oracle_check(static_cast<const uint8_t *>(map.pData),
-                                        map.RowPitch, &oracle);
+        int verdict = dxvk_oracle_check_frame(static_cast<const uint8_t *>(map.pData),
+                                               map.RowPitch, frame, &oracle);
         context->Unmap(staging, 0);
         mapped = false;
-        if (hooks.oracle) hooks.oracle(&oracle);
+        if (!presentation_window && hooks.oracle) hooks.oracle(&oracle);
         char detail[96];
         std::snprintf(detail, sizeof(detail), "mismatches=%u checksum=%08x row_pitch=%u",
                       oracle.mismatches, oracle.checksum, static_cast<unsigned>(map.RowPitch));
         if (verdict == 0) {
             stages.ok("oracle", detail);
-            summary->outcome = DXVK_NATIVE_RENDERED;
         } else {
             stages.fail("oracle", detail);
             summary->outcome = DXVK_NATIVE_ORACLE_MISMATCH;
+            if (presentation_window && hooks.frame) hooks.frame(frame, &oracle, 0x80004005u);
+            goto cleanup;
+        }
+        if (presentation_window) {
+            stages.begin("dxgi.present");
+            hr = swapchain->Present(1, 0);
+            if (hooks.frame) hooks.frame(frame, &oracle, static_cast<uint32_t>(hr));
+            // DXGI_STATUS_OCCLUDED is a success HRESULT, but no displayed frame.
+            if (hr != S_OK) { stages.fail("dxgi.present", "Present did not return S_OK"); goto cleanup; }
+            stages.ok("dxgi.present");
+            ++summary->presented_frames;
         }
     }
+    summary->outcome = DXVK_NATIVE_RENDERED;
 
 cleanup:
     stages.begin("shutdown");
@@ -179,6 +231,10 @@ cleanup:
     release(view);
     release(staging);
     release(target);
+    if (swapchain) summary->swapchain_refs_at_release = swapchain->Release();
+    release(factory);
+    release(adapter);
+    release(dxgi_device);
     if (context) summary->context_refs_at_release = context->Release();
     context = nullptr;
     if (device) summary->device_refs_at_release = device->Release();

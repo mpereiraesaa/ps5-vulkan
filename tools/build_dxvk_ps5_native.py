@@ -188,7 +188,8 @@ def c_string(value: str) -> str:
 
 def identity_header(variant: str, dxvk_commit: str, ps5vk_commit: str,
                     ps5vk_dirty: bool, vs_sha: str, ps_sha: str,
-                    integration: str = "none", sdk_switches: str = "none") -> str:
+                    integration: str = "none", sdk_switches: str = "none",
+                    presentation: bool = False) -> str:
     if variant not in VARIANTS:
         raise ValueError(f"unknown variant {variant}")
     config = VARIANTS[variant]
@@ -198,6 +199,7 @@ def identity_header(variant: str, dxvk_commit: str, ps5vk_commit: str,
         "#ifndef DXVK_NATIVE_BUILD_IDENTITY_H",
         "#define DXVK_NATIVE_BUILD_IDENTITY_H",
         f"#define DXVK_NATIVE_VARIANT {c_string(variant)}",
+        f"#define DXVK_NATIVE_PRESENTATION {int(presentation)}",
         f"#define DXVK_NATIVE_DIAGNOSTIC {1 if config['diagnostic'] else 0}",
         f"#define DXVK_NATIVE_COMPAT_LAYER {1 if config.get('compat_layer') else 0}",
         f"#define DXVK_NATIVE_DXVK_COMMIT {c_string(dxvk_commit)}",
@@ -332,6 +334,8 @@ def compile_dxvk(variant: str, dxvk: Path, build: Path, work: Path, cc: Path, cx
     registered = overlays / "wsi_platform_ps5.cpp"
     registered.write_text(wsi.replace(anchor, "extern WsiBootstrap Ps5WSI;\n  " + anchor +
                                       "\n    &Ps5WSI,").replace('#include "../util/', '#include "'))
+    # The generated WSI copy lives outside DXVK's source tree, while Meson
+    # builds may live outside it too; its shortened util includes need this.
     units.append(overlay_entry(platform, registered, dxvk / "src/util"))
     units.append(overlay_entry(platform, ROOT / "tools/dxvk_ps5_wsi.cpp"))
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -404,7 +408,7 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
     shaders = embedded_shaders(header)
     ps5vk_commit, ps5vk_dirty = git_identity()
 
-    work = args.output_dir.resolve() / variant
+    work = args.output_dir.resolve() / (variant + ("-present" if args.present else ""))
     dist = work / "dist/PPSA99994"
     shutil.rmtree(work, ignore_errors=True)
     for directory in (work, dist / "sce_sys", dist / "sce_module"):
@@ -430,7 +434,7 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
     (work / "build_identity.h").write_text(identity_header(
         variant, dxvk_commit, ps5vk_commit, ps5vk_dirty,
         sha256_bytes(shaders["vs"]), sha256_bytes(shaders["ps"]),
-        integration_label(args), ",".join(switches) or "none"))
+        integration_label(args), ",".join(switches) or "none", args.present))
     logger = lab / "projects/logging_server/client"
     payload_objects = []
     for source in ("ps5_main.cpp", "workload.cpp", "vk_trace.cpp", "compat_layer.cpp"):
@@ -483,6 +487,7 @@ def build_variant(args: argparse.Namespace, variant: str) -> dict:
     config = VARIANTS[variant]
     artifact = {
         "profile": PROFILE,
+        "workload": "present" if args.present else "offscreen",
         "variant": variant,
         "label": ("DIAGNOSTIC-INTEGRATION" if integration_label(args) != "none" else
                   "DIAGNOSTIC" if config["diagnostic"] else "UNMODIFIED"),
@@ -528,9 +533,10 @@ def integration_label(args: argparse.Namespace) -> str:
 def host_check(args: argparse.Namespace) -> dict:
     """Run the workload through the host DXVK build on a host Vulkan driver."""
     dxvk = args.dxvk_dir.resolve()
+    dxvk_commit = dxvk_identity(dxvk)
     build = (args.build_dir or dxvk / "build-native").resolve()
     d3d11 = build / "src/d3d11/libdxvk_d3d11.so.0.20602"
-    out = args.output_dir.resolve() / "host-check"
+    out = args.output_dir.resolve() / ("host-present" if args.present else "host-check")
     out.mkdir(parents=True, exist_ok=True)
     executable = out / "workload"
     run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", f"-I{SOURCE}",
@@ -541,19 +547,36 @@ def host_check(args: argparse.Namespace) -> dict:
          f"-Wl,-rpath,{d3d11.parent}", f"-Wl,-rpath,{build / 'src/dxgi'}", "-o", executable])
     env = dict(os.environ, DXVK_WSI_DRIVER="SDL2", DXVK_LOG_PATH="none",
                DXVK_STATE_CACHE="disable")
-    result = subprocess.run([str(executable)], env=env, text=True, capture_output=True,
+    result = subprocess.run([str(executable)] + (["--present"] if args.present else []), env=env, text=True, capture_output=True,
                             timeout=120)
+    (out / "stdout.log").write_text(result.stdout)
+    (out / "stderr.log").write_text(result.stderr)
     oracle = re.search(r"DXVK_ORACLE checked=(\d+) mismatches=(\d+) checksum=([0-9a-f]{8}) "
                        r"expected_checksum=([0-9a-f]{8})", result.stdout)
     receipt = {
         "profile": PROFILE + "-host-check",
+        "workload": "present" if args.present else "offscreen",
+        "dxvk_commit": dxvk_commit,
+        "executable_sha256": sha256_file(executable),
+        "dxvk_libraries": {
+            "d3d11_sha256": sha256_file(d3d11),
+            "dxgi_sha256": sha256_file(build / "src/dxgi/libdxvk_dxgi.so.0.20602"),
+        },
         "driver": "host Vulkan driver; no ps5vk or PS5 execution",
         "exit": result.returncode,
         "oracle": ({"checked": int(oracle.group(1)), "mismatches": int(oracle.group(2)),
                     "checksum": oracle.group(3), "expected_checksum": oracle.group(4)}
                    if oracle else None),
     }
-    if result.returncode or not oracle or oracle.group(2) != "0":
+    from run_dxvk_ps5_native import presentation_evidence
+    if args.present:
+        receipt["presentation"] = presentation_evidence(result.stdout)
+        valid = receipt["presentation"]["passed"]
+    else:
+        valid = bool(oracle and oracle.groups() == ("4096", "0", "6e17a4c5", "6e17a4c5"))
+    receipt["passed"] = result.returncode == 0 and valid
+    (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    if not receipt["passed"]:
         print(result.stdout[-4000:], result.stderr[-2000:], file=sys.stderr)
         raise ValueError("host workload did not render the expected image")
     return receipt
@@ -578,6 +601,10 @@ def main() -> int:
                              "DIAGNOSTIC-INTEGRATION and record the switches")
     parser.add_argument("--skip-sdk", action="store_true",
                         help="Reuse the staged dist-sdk instead of rebuilding it")
+    parser.add_argument("--present", action="store_true",
+                        help="Build the three-frame DXGI presentation workload (separate artifact)")
+    parser.add_argument("--host-only", action="store_true",
+                        help="Only run the host workload; do not build a PS5 payload")
     parser.add_argument("--host-check", action="store_true",
                         help="Also run the workload through host DXVK on a host Vulkan driver")
     parser.add_argument("--emit-shader-header", nargs=2, type=Path, metavar=("VS", "PS"),
@@ -591,8 +618,11 @@ def main() -> int:
         if args.jobs < 1:
             raise ValueError("--jobs must be positive")
         results = {}
-        if args.host_check:
+        if args.host_check or args.host_only:
             results["host-check"] = host_check(args)
+        if args.host_only:
+            print(json.dumps(results, indent=2, sort_keys=True))
+            return 0
         for variant in args.variant or ["unmodified"]:
             results[variant] = build_variant(args, variant)
             args.skip_sdk = True

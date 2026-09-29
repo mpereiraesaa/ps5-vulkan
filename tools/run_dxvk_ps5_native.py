@@ -155,6 +155,8 @@ def fields(text: str) -> dict[str, str]:
 
 def is_refusal_line(level: str | None, text: str) -> bool:
     """The payload's rule for DXVK log lines that refuse something."""
+    if text == "DXGI: Failed to parse display metadata + colorimetry info, using blank.":
+        return False
     return (level == "err" or (level == "warn" and text.startswith("Skipping")) or
             (text.startswith("Required ") and " not supported" in text))
 
@@ -274,7 +276,46 @@ def parse_log(log: str) -> dict:
             summary["ps5vk_diagnostics"].append({"seq": seq, "level": level, "text": text})
         if "VK_ERROR_DEVICE_LOST" in text or "DeviceLost" in text:
             summary["gpu_hang_suspected"] = True
+    summary["presentation"] = presentation_evidence(log)
     return summary
+
+
+def presentation_evidence(log: str) -> dict:
+    """Three distinct readback oracles plus successful DXGI Present and retirement.
+
+    This witnesses the calls and backbuffer contents, not external scanout.
+    The host and native wrappers emit identical records; prefix text is ignored.
+    """
+    frames = [fields(line.split("DXVK_PRESENT_FRAME ", 1)[1])
+              for line in log.splitlines() if "DXVK_PRESENT_FRAME " in line]
+    results = [fields(line.split("DXVK_PRESENT_RESULT ", 1)[1])
+               for line in log.splitlines() if "DXVK_PRESENT_RESULT " in line]
+    problems = []
+    if len(frames) != 3:
+        problems.append("exactly three presentation frames required")
+    for stage, count in (("dxgi.swapchain", 1), ("dxgi.backbuffer", 1), ("dxgi.present", 3)):
+        if len(re.findall(r"DXVK_NATIVE_STAGE stage=" + re.escape(stage) + r" state=ok\b", log)) != count:
+            problems.append(f"{stage} completion missing or duplicated")
+    for index, frame in enumerate(frames):
+        # Independent CPU contract: shader covers 48 columns, clear survives
+        # in the last 16 and changes its red channel on every frame.
+        checksum = 2166136261
+        for y in range(64):
+            for x in range(64):
+                rgba = ((x * 4, y * 4, (x * 7 + y * 13) & 255, 255) if x < 48
+                        else (64 + index * 16, 128, 192, 255))
+                for byte in rgba:
+                    checksum = ((checksum ^ byte) * 16777619) & 0xffffffff
+        expected = {"index": str(index), "checked": "4096", "mismatches": "0",
+                    "checksum": f"{checksum:08x}", "expected_checksum": f"{checksum:08x}",
+                    "present_hr": "0x00000000"}
+        if any(frame.get(key) != value for key, value in expected.items()):
+            problems.append(f"frame {index} oracle or Present failed")
+    if len(results) != 1 or any(results[0].get(key) != value for key, value in {
+            "frames": "3", "swapchain_refs": "0", "device_refs": "0", "context_refs": "0"}.items()):
+        problems.append("presentation resource retirement missing or incomplete")
+    return {"passed": not problems, "problems": problems, "frames": frames,
+            "retirement": results[0] if len(results) == 1 else None}
 
 
 def check_identity(summary: dict, artifact: dict) -> list[str]:
@@ -284,14 +325,18 @@ def check_identity(summary: dict, artifact: dict) -> list[str]:
     for key in ("variant", "label", "dxvk_commit", "ps5vk_commit", "eboot_sha256"):
         if identity.get(key) != str(artifact.get(key)):
             problems.append(f"{key}: run={identity.get(key)} artifact={artifact.get(key)}")
+    if identity.get("workload", "offscreen") != artifact.get("workload", "offscreen"):
+        problems.append("workload identity mismatch")
     return problems
 
 
 def vulkan13_acceptance(summary: dict, artifact: dict, finalized: bool,
                         lifecycle_ok: bool) -> dict:
-    """Consumer acceptance, not a Vulkan conformance claim or presentation test."""
+    """Artifact-specific consumer acceptance, never Vulkan conformance."""
     problems = check_identity(summary, artifact)
     identity = summary.get("identity") or {}
+    if artifact.get("workload", "offscreen") not in ("offscreen", "present"):
+        problems.append("unknown workload")
     if (artifact.get("variant") != "unmodified" or artifact.get("diagnostic") is not False or
             artifact.get("label") != "UNMODIFIED" or artifact.get("dxvk_source_patches") != [] or
             artifact.get("sdk_switches") != [] or artifact.get("integration") is not None or
@@ -310,11 +355,15 @@ def vulkan13_acceptance(summary: dict, artifact: dict, finalized: bool,
             "outcome": "rendered", "create_hr": "0x00000000", "feature_level": "0xb000",
             "device_refs": "0", "context_refs": "0"}.items()):
         problems.append("D3D11 FL11_0 render and release did not complete")
-    oracle = summary.get("oracle") or {}
-    if any(oracle.get(key) != value for key, value in {
-            "checked": 4096, "mismatches": 0, "checksum": "6e17a4c5",
-            "expected_checksum": "6e17a4c5"}.items()):
-        problems.append("4096-pixel oracle did not match the fixed workload")
+    if artifact.get("workload", "offscreen") == "present":
+        if not summary.get("presentation", {}).get("passed"):
+            problems.append("three-frame presentation evidence did not pass")
+    else:
+        oracle = summary.get("oracle") or {}
+        if any(oracle.get(key) != value for key, value in {
+                "checked": 4096, "mismatches": 0, "checksum": "6e17a4c5",
+                "expected_checksum": "6e17a4c5"}.items()):
+            problems.append("4096-pixel oracle did not match the fixed workload")
     if not any(stage["stage"] == "shutdown" and stage["state"] == "ok"
                for stage in summary.get("stages", [])):
         problems.append("shutdown completion missing")
@@ -352,6 +401,8 @@ def receipt_for(summary: dict, artifact: dict, run_receipt: dict | None,
         "first_refusal": summary["first_refusal"] or summary["first_refusal_candidate"],
         "fl_gate": feature_level_gate(summary, list(artifact.get("dxvk_source_patches", []))),
         "oracle": summary["oracle"],
+        "workload": artifact.get("workload", "offscreen"),
+        "presentation": summary.get("presentation"),
         "vk_first_call": summary["vk_first_call"],
         "vk_last_call": summary["vk_last_call"],
         "shutdown": next((s["detail"] for s in summary["stages"]
@@ -393,11 +444,15 @@ def main() -> int:
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument("--require-presentation", action="store_true",
+                        help="Require three presented frames and strict Vulkan 1.3 acceptance")
     parser.add_argument("--require-vulkan13", action="store_true",
                         help="Require unmodified DXVK on the shipping SDK, Vulkan 1.3, "
                              "the fixed pixel oracle and clean lifecycle")
     args = parser.parse_args()
     artifact = json.loads(args.artifact.read_text())
+    if args.require_presentation and artifact.get("workload") != "present":
+        raise RuntimeError("presentation acceptance requires a presentation artifact")
     eboot = args.dist / "eboot.bin"
     if (artifact.get("profile") != PROFILE or
             hashlib.sha256(eboot.read_bytes()).hexdigest() != artifact.get("eboot_sha256")):
@@ -435,13 +490,16 @@ def main() -> int:
     args.out.write_text(json.dumps(receipt, indent=2) + "\n")
     brief = {key: receipt.get(key) for key in (
         "variant", "label", "run_id", "outcome", "last_stage", "first_refusal",
-        "oracle", "crash", "gpu_hang_suspected", "lifecycle_ok", "identity_mismatches")}
+        "oracle", "presentation", "workload", "crash", "gpu_hang_suspected",
+        "lifecycle_ok", "identity_mismatches")}
     if receipt.get("fl_gate"):
         brief["fl_gate_failing"] = receipt["fl_gate"]["failing"]
     print(json.dumps(brief, indent=2))
     if not lifecycle_ok:
         raise RuntimeError("payload title did not stop")
-    if args.require_vulkan13:
+    if args.require_presentation and receipt.get("workload") != "present":
+        return 1
+    if args.require_vulkan13 or args.require_presentation:
         return 0 if receipt.get("vulkan13_acceptance", {}).get("passed") else 1
     return 0 if log_path is not None and not receipt.get("identity_mismatches") else 1
 

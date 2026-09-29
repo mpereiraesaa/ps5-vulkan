@@ -6,10 +6,23 @@
 #define DXVK_NATIVE_TELEMETRY_H
 
 #include <stdarg.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* DXVK 2.6.2 explicitly falls back to SDR defaults when EDID is absent
+ * (dxgi_output.cpp::InitMonitorData). Keep that error-level log visible,
+ * but do not classify that exact nonfatal fallback as a rendering refusal. */
+static inline int dxvk_log_is_refusal(const char *level, const char *text)
+{
+    if (!strcmp(text, "DXGI: Failed to parse display metadata + colorimetry info, using blank."))
+        return 0;
+    return !strcmp(level, "err") ||
+        (!strcmp(level, "warn") && !strncmp(text, "Skipping", 8)) ||
+        (!strncmp(text, "Required ", 9) && strstr(text, " not supported"));
+}
 
 void dxvk_telemetry_lock(void);
 void dxvk_telemetry_unlock(void);

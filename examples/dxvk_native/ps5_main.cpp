@@ -3,7 +3,7 @@
  * The pinned DXVK D3D11/DXGI objects and ps5vk are linked statically into
  * this executable. The entry point opens the ps5log/1 channel, reports the
  * build identity (including the SHA-256 of the running eboot), routes DXVK's
- * logger into ps5log records, runs the offscreen D3D11 workload, reports the
+ * logger into ps5log records, runs the selected D3D11 workload, reports the
  * first refusal and waits for Close Game. Nothing is written to the console's
  * filesystem: DXVK file logging and the state cache are disabled through the
  * process environment seen by DXVK. */
@@ -123,8 +123,7 @@ private:
          * "Skipping ..."), and a missing required extension, which DXVK logs
          * at info level ("Required Vulkan extension X not supported") before
          * the generic err line. */
-        if (!strcmp(level, "err") || (!strcmp(level, "warn") && !strncmp(text, "Skipping", 8)) ||
-            (!strncmp(text, "Required ", 9) && strstr(text, " not supported")))
+        if (dxvk_log_is_refusal(level, text))
             dxvk_telemetry_refusal("dxvk_log", level, 0, text);
         m_line.clear();
     }
@@ -192,7 +191,7 @@ void emit_identity()
     dxvk_telemetry_emit("MARK",
         "DXVK_NATIVE_IDENTITY variant=%s label=%s diagnostic=%d dxvk_commit=%s ps5vk_commit=%s "
         "ps5vk_dirty=%d patches=%s eboot_sha256=%s eboot_bytes=%llu vs_sha256=%s ps_sha256=%s "
-        "oracle_expected_checksum=%08x compat_layer=%d integration=%s sdk_switches=%s",
+        "oracle_expected_checksum=%08x compat_layer=%d integration=%s sdk_switches=%s workload=%s",
         DXVK_NATIVE_VARIANT,
         strcmp(DXVK_NATIVE_INTEGRATION, "none") ? "DIAGNOSTIC-INTEGRATION" :
             DXVK_NATIVE_DIAGNOSTIC ? "DIAGNOSTIC" : "UNMODIFIED",
@@ -200,7 +199,8 @@ void emit_identity()
         DXVK_NATIVE_PS5VK_DIRTY, DXVK_NATIVE_PATCHES, eboot, bytes, DXVK_NATIVE_VS_SHA256_BUILD,
         DXVK_NATIVE_PS_SHA256_BUILD, dxvk_oracle_expected_checksum(),
         DXVK_NATIVE_COMPAT_LAYER ? DXVK_NATIVE_COMPAT_LAYER_VERSION : 0,
-        DXVK_NATIVE_INTEGRATION, DXVK_NATIVE_SDK_SWITCHES);
+        DXVK_NATIVE_INTEGRATION, DXVK_NATIVE_SDK_SWITCHES,
+        DXVK_NATIVE_PRESENTATION ? "present" : "offscreen");
     std::string env;
     for (const auto &entry : g_environment)
         env += std::string(env.empty() ? "" : ",") + entry[0] + "=" + entry[1];
@@ -226,6 +226,13 @@ void on_oracle(const dxvk_oracle_result *r)
     dxvk_telemetry_emit(r->mismatches ? "ERR" : "MARK",
         "DXVK_ORACLE checked=%u mismatches=%u checksum=%08x expected_checksum=%08x first=%s",
         r->checked, r->mismatches, r->checksum, r->expected_checksum, used ? first : "none");
+}
+
+void on_frame(uint32_t index, const dxvk_oracle_result *r, uint32_t hr)
+{
+    dxvk_telemetry_emit("MARK",
+        "DXVK_PRESENT_FRAME index=%u checked=%u mismatches=%u checksum=%08x expected_checksum=%08x present_hr=0x%08x",
+        index, r->checked, r->mismatches, r->checksum, r->expected_checksum, hr);
 }
 
 } // namespace
@@ -360,9 +367,15 @@ int main(void)
     std::cerr.rdbuf(&g_sink);
 
     emit_identity();
-    DxvkNativeHooks hooks = {on_stage, on_oracle};
+    DxvkNativeHooks hooks = {on_stage, on_oracle, on_frame};
     DxvkNativeSummary summary;
-    int outcome = dxvk_native_run_workload(hooks, &summary);
+    int outcome = dxvk_native_run_workload(hooks, &summary,
+        DXVK_NATIVE_PRESENTATION ? reinterpret_cast<void *>(uintptr_t(1)) : nullptr);
+    if (DXVK_NATIVE_PRESENTATION)
+        dxvk_telemetry_emit("MARK",
+            "DXVK_PRESENT_RESULT frames=%u swapchain_refs=%u device_refs=%u context_refs=%u",
+            summary.presented_frames, summary.swapchain_refs_at_release,
+            summary.device_refs_at_release, summary.context_refs_at_release);
     if (summary.create_hresult & 0x80000000u) {
         char detail[64];
         snprintf(detail, sizeof(detail), "hr=0x%08x", summary.create_hresult);
