@@ -10,26 +10,29 @@ dependency. The 15-tranche assignment in
 original 61 blockers, not a serial work schedule or the acceptance test for
 DXVK execution.
 
-## Current integration target (2026-09-26)
+## Current integration target (2026-09-29)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,
 non-conformant implementation. Core aggregate queries, feature opt-in and
 promoted command dispatch replace the payload's old core/KHR translation.
 Maintenance4 is an ordinary driver route, not an SDK diagnostic override.
 The acceptance workload uses pinned DXVK's original version and feature-level
-checks with no driver capability override. The definitive clean-build result
-belongs to the [artifact-bound native receipt](../VALIDATION.md#experimental-vulkan-13-native-dxvk),
-not to an assumption based on the version label. This does not claim universal
-game support, a presented DXVK frame, or Vulkan conformance.
+checks with no driver capability override. The current clean-build result is
+the [artifact-bound native presentation oracle](../VALIDATION.md#pinned-dxvk-262-native-presentation-oracle-on-the-current-sdk-2026-09-29):
+three frames with 4096 verified pixels each, repeated twice on PS5. This
+establishes that bounded native DXVK path, not universal game support, PE DLL
+execution through Prospero Win, or Vulkan conformance.
 
-The current backbuffer candidate covers bounded tiled colour handovers,
-BGRA8 readback and display release. Its SDK BGRA8 GPU oracle, pinned native
-DXVK D3D11 offscreen oracle and three-frame public-SDK WSI control passed on
-the same source; their artifact-bound receipts are in
+The backbuffer path covers bounded tiled colour handovers, BGRA8 readback and
+display release. Its SDK BGRA8 GPU oracle, pinned native DXVK D3D11 offscreen
+oracle and three-frame public-SDK WSI control passed on the same source;
+their artifact-bound receipts are in
 [VALIDATION.md](../VALIDATION.md#dxvk-backbuffer-and-bgra8-runtime-path-2026-09-29).
-An x64/x86 Prospero Win PE presentation run and an x86 guest `vkMapMemory`
-call remain the integration tests for this path. These execution changes do
-not alter the 45/62 requirement ledger.
+The native DXVK presentation and pixel oracle then passed on a clean build.
+The remaining integration tests are PE D3D8/9/10/11 backbuffer readback and
+presentation on the combined current SDK, plus an x86 guest `vkMapMemory`
+call with a GPU-copy oracle. These execution changes do not alter the 45/62
+requirement ledger.
 
 The standalone PE map control at
 [`examples/dxvk_pe_vkmap_probe/main.c`](../examples/dxvk_pe_vkmap_probe/main.c)
@@ -198,12 +201,13 @@ identified separately from changes to rendering or feature negotiation.
    stage. Maintenance4 still rejects compound LocalSizeId specialization
    expressions and wider producer/narrower consumer varying vectors. These
    are explicit profile limits, not reasons to restore the old 1.0 gate.
-3. **Connect the rendered workload to presentation.** The offscreen D3D11
-   pixel oracle and the native swapchain witnesses are separate results.
-   Combine them into acquire/draw/present/readback/teardown with the actual
-   DXVK libraries, then bounded relaunch and resource-accounting checks.
-   Broaden resources and shaders as the executable requires them. Neither
-   the old profile score nor a full core/CTS programme is this goal's gate.
+3. **Validate the PE path on the combined SDK.** Native DXVK now passes
+   acquire/draw/present/readback/teardown with pixel and resource-accounting
+   checks. Run the x86 memory-map/GPU-copy probe and the D3D8/9/10/11 PE pixel
+   controls through Prospero Win against one current SDK identity, then bounded
+   relaunch and closure checks. Broaden resources and shaders as those
+   executables require them. Neither the old profile score nor a full
+   core/CTS programme is this goal's gate.
 
 Independent host-only work on WSI, compiler, synchronization and resource
 contracts may run in parallel in separate branches/worktrees. Coordinate only
