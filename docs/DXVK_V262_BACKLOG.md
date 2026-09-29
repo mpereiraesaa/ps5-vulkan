@@ -84,6 +84,10 @@ target. A readback failure is a useful next driver frontier; it must not be
 silently counted as a presentation failure. This oracle checks the rendered
 backbuffer, not the physical display scanout, and no executable build receipt
 is hardware evidence.
+The D3D9 pixel variant flushes a `DXVK_PE_D3D9_PIXEL_STAGE` marker immediately
+before and after each copy, lock and Present call. If a guest run terminates
+before its final result line, the last stage marker and the first native
+driver refusal identify which part of the readback/presentation path stopped.
 
 ## Profile ledger on the Vulkan 1.3 probe
 

@@ -5,6 +5,12 @@
 #include <cstdio>
 #ifdef PS5VK_PE_PIXEL_ORACLE
 #include "pixel_oracle.h"
+
+static void pe_d3d9_stage(unsigned frame, const char* stage, HRESULT result) {
+  std::printf("DXVK_PE_D3D9_PIXEL_STAGE frame=%u stage=%s hr=0x%08x\n",
+              frame, stage, unsigned(result));
+  std::fflush(stdout);
+}
 #endif
 
 int main() {
@@ -48,21 +54,31 @@ int main() {
       clear[frame] = device->Clear(0, nullptr, D3DCLEAR_TARGET, colors[frame], 1.0f, 0);
 #ifdef PS5VK_PE_PIXEL_ORACLE
       if (SUCCEEDED(clear[frame]) && SUCCEEDED(staging_hr) && staging) {
+        pe_d3d9_stage(unsigned(frame), "copy-enter", clear[frame]);
         copy_hr[frame] = device->GetRenderTargetData(backbuffer, staging);
+        pe_d3d9_stage(unsigned(frame), "copy-return", copy_hr[frame]);
         if (SUCCEEDED(copy_hr[frame])) {
           D3DLOCKED_RECT locked = {};
+          pe_d3d9_stage(unsigned(frame), "lock-enter", copy_hr[frame]);
           lock_hr[frame] = staging->LockRect(&locked, nullptr, D3DLOCK_READONLY);
+          pe_d3d9_stage(unsigned(frame), "lock-return", lock_hr[frame]);
           if (SUCCEEDED(lock_hr[frame])) {
             const auto* pixel = static_cast<const unsigned char*>(locked.pBits) +
                 (PE_HEIGHT / 2) * locked.Pitch + (PE_WIDTH / 2) * 4;
             mismatches[frame] = pe_log_pixel("D3D9", unsigned(frame), pixel, false);
+            std::fflush(stdout);
             staging->UnlockRect();
           }
         }
       }
+      if (SUCCEEDED(clear[frame]))
+        pe_d3d9_stage(unsigned(frame), "present-enter", clear[frame]);
 #endif
       present[frame] = SUCCEEDED(clear[frame]) ?
           device->Present(nullptr, nullptr, nullptr, nullptr) : clear[frame];
+#ifdef PS5VK_PE_PIXEL_ORACLE
+      pe_d3d9_stage(unsigned(frame), "present-return", present[frame]);
+#endif
       if (SUCCEEDED(present[frame])) pe_visible_frame();
     }
   }
