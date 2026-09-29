@@ -31,6 +31,18 @@ An x64/x86 Prospero Win PE presentation run and an x86 guest `vkMapMemory`
 call remain the integration tests for this path. These execution changes do
 not alter the 45/62 requirement ledger.
 
+The standalone PE map control at
+[`examples/dxvk_pe_vkmap_probe/main.c`](../examples/dxvk_pe_vkmap_probe/main.c)
+can be built for x86 and x64 with `python3 tools/build_dxvk_pe_vkmap_probe.py`.
+It loads Wine's `vulkan-1.dll` dynamically, prints each `vkMapMemory` result
+and guest pointer before dereferencing it, then uses a 300 ms fence to check a
+1024-byte GPU buffer copy through two mapped allocations. The offline receipt
+records both PE architectures, imports and hashes with `executed=false`.
+On Prospero Win, success requires two `PS5VK_PE_VKMAP_MAP` lines with result
+zero and usable pointers, a `PS5VK_PE_VKMAP_RESULT` at `gpu-copy-oracle` with
+zero mismatches, and corresponding native low-alias markers for x86. A build
+receipt alone is not guest or GPU evidence.
+
 ## Profile ledger on the Vulkan 1.3 probe
 
 `tools/check_dxvk_profile.py --check` reports **45/62 ready, 17 blockers**.
