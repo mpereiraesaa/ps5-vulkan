@@ -131,7 +131,14 @@ int main(void)
     uint32_t family = family_count;
     for (uint32_t n = 0; n < family_count; ++n)
         if (families[n].queueCount &&
-            (families[n].queueFlags & VK_QUEUE_TRANSFER_BIT)) { family = n; break; }
+            (families[n].queueFlags & (VK_QUEUE_TRANSFER_BIT |
+                                       VK_QUEUE_GRAPHICS_BIT |
+                                       VK_QUEUE_COMPUTE_BIT))) {
+            /* Graphics and compute queues support transfers even when the
+             * driver does not set the optional TRANSFER capability bit. */
+            family = n;
+            break;
+        }
     if (family == family_count) {
         stage = "transfer-queue"; rc = VK_ERROR_INITIALIZATION_FAILED; goto done;
     }
