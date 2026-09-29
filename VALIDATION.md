@@ -6848,3 +6848,26 @@ independently queried for these runs; the most recent owner report is 12.02.
 `make check` passed on this source. This is
 native Vulkan evidence for the stream-output pipeline shape, not a PE D3D11
 pixel or application result; the DXVK requirement ledger remains 45/62.
+
+## Full-size BGRA8 GPU readback witness for DXVK D3D8/9 (2026-09-29)
+
+An SDK-linked witness uses the current ps5vk archive (SHA-256
+`165ebfcbae419626ffc0619c3854d1ea7821884407a4f515965fc99c5e6ef8dc`)
+to clear the same 1920x1080 mutable BGRA8 image twice, transition it to a
+transfer source, and copy all 8,294,400 bytes to a host-visible buffer on each
+frame. It checks every BGRA texel, a 64-byte guard, and clean resource
+retirement. Its first-use barrier and attachment layout match the accepted
+DXVK clear-only form. The exact final eboot SHA-256 was
+`5534009ade826c6493aea08e117fa4d4b1c61750c23f37fc0370e36eecdc558b`.
+Run `20260929T025407577Z_PPSA99994_ps5vk_0x5b4d8a1cac7b` passed strict:
+zero mismatches and guard changes on both frames; digests `856805c5` and
+`b815bdc5`; log SHA-256
+`c41320732968aed47b48c16d50c26eaa76205d2392394a9d2cd56f009c67e259`.
+The same call shape passed twice on the immediately preceding source revision.
+The prior payload was restored and the console was idle. Firmware was not
+independently queried; the latest owner report was 12.02.
+
+This is full-surface native Vulkan readback evidence, not a PE D3D9 or D3D8
+application pixel result. The PE controls and x86 mapped-memory probe still
+need execution through Prospero Win against one exact SDK identity. The DXVK
+requirement ledger remains 45/62.

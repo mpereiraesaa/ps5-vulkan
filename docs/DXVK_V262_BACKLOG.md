@@ -39,6 +39,13 @@ presentation on the combined current SDK, plus an x86 guest `vkMapMemory`
 call with a GPU-copy oracle. These execution changes do not alter the 45/62
 requirement ledger.
 
+An independent 1920x1080 BGRA8 public-SDK witness now passed two complete
+image-to-buffer GPU readbacks with exact texel and guard-byte oracles. Its
+artifact-bound run is in
+[VALIDATION.md](../VALIDATION.md#full-size-bgra8-gpu-readback-witness-for-dxvk-d3d89-2026-09-29).
+It narrows the native D3D8/9 readback risk; PE pixel output still needs its
+own Prospero Win run.
+
 The standalone PE map control at
 [`examples/dxvk_pe_vkmap_probe/main.c`](../examples/dxvk_pe_vkmap_probe/main.c)
 can be built for x86 and x64 with `python3 tools/build_dxvk_pe_vkmap_probe.py`.
