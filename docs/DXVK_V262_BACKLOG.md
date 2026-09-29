@@ -1,8 +1,10 @@
 # DXVK v2.6.2 runtime backlog
 
 The objective is to run pinned DXVK v2.6.2 D3D8, D3D9, D3D10 and D3D11 through
-Prospero Win and ps5vk, render and verify pixels, present, and close and
-relaunch cleanly. Work follows the next observed refusal in those paths. A
+Prospero Win, render and verify pixels, present, and close and relaunch cleanly.
+RADV is currently the leading Vulkan route for physical display; ps5vk remains
+an independent backend and diagnostic route. Work follows the next observed
+refusal in a real application path. A
 tranche number, profile score, Vulkan version
 label or missing CTS leaf is **not** permission to stop implementing a needed
 dependency. The 15-tranche assignment in
@@ -10,7 +12,7 @@ dependency. The 15-tranche assignment in
 original 61 blockers, not a serial work schedule or the acceptance test for
 DXVK execution.
 
-## Current integration target (2026-09-29)
+## ps5vk native integration checkpoint (2026-09-29)
 
 The ordinary instance and device now report **Vulkan 1.3.0**, as an experimental,
 non-conformant implementation. Core aggregate queries, feature opt-in and
@@ -96,6 +98,30 @@ The D3D9 pixel variant flushes a `DXVK_PE_D3D9_PIXEL_STAGE` marker immediately
 before and after each copy, lock and Present call. If a guest run terminates
 before its final result line, the last stage marker and the first native
 driver refusal identify which part of the readback/presentation path stopped.
+
+## RADV physical-display checkpoint (2026-09-29)
+
+The separate 30-frame visual controls in `examples/dxvk_pe_frontends/` use the
+unmodified pinned DXVK DLL chains and display red, green, blue and yellow
+quadrants at 1920×1080. D3D8 and D3D10 were added in
+[PR #614](https://github.com/mpereiraesaa/ps5-vulkan/pull/614), completing the
+D3D8/9/10/11 set. All four x64 controls reported four correct backbuffer
+samples, 30 successful Presents and `pass=1` through Prospero Win and RADV.
+The owner saw full-screen quadrants on the physical 4K TV for each API. The
+D3D11 control also passed a same-process 1920×1080 to 3840×2160
+`ResizeBuffers` sequence with Presents at both sizes. The D3D8 and D3D10
+visual controls passed host Wine on x64 and x86; their 30-frame native display
+runs were x64 only.
+
+Those four physical-display runs used the tested RADV VideoOut PRX with SHA-256
+prefix `1c3191e8` (functional Mesa source commit `13931b32`), and Prospero Win
+restored its stable payload after each short run. A separately rebuilt RADV PRX
+with SHA-256 prefix `190bd6c9` passed D3D11 visual and D3D9 x86 draw
+regressions, but the D3D8/D3D10 visual controls were not run on that artifact.
+The 30-frame receipts prove bounded frontend rendering and scanout, not a
+game's resource, shader, mapping or lifetime behavior. A real application is
+the next acceptance workload. The ps5vk 45/62 ledger below applies only to
+ps5vk and is not a RADV readiness score or a DXVK release gate.
 
 ## Profile ledger on the Vulkan 1.3 probe
 
@@ -240,9 +266,10 @@ identified separately from changes to rendering or feature negotiation.
 3. **Extend the proven PE path from observed game calls.** The eight
    D3D8/9/10/11 PE pixel controls pass on the combined SDK with clean
    relaunch. The x86 map/GPU-copy control passed on that combined identity.
-   Use the next actual game workload to find any missing resource or shader
-   path. Neither the old profile score nor a full core/CTS programme is this
-   goal's gate.
+   RADV also passed the bounded four-API physical-display controls above. Use
+   the next actual game workload on the selected backend to find any missing
+   resource or shader path. Neither the old profile score nor a full core/CTS
+   programme is this goal's gate.
 
 Independent host-only work on WSI, compiler, synchronization and resource
 contracts may run in parallel in separate branches/worktrees. Coordinate only
