@@ -1,9 +1,9 @@
 # DXVK v2.6.2 runtime backlog
 
-The objective is to build and run our pinned DXVK v2.6.2 D3D11/DXGI stack on
-PS5 through ps5vk, create a feature-level 11_0 device, render and read back a
-representative workload, and close and relaunch cleanly. Work follows the next
-observed refusal in that path. A tranche number, profile score, Vulkan version
+The objective is to run pinned DXVK v2.6.2 D3D8, D3D9, D3D10 and D3D11 through
+Prospero Win and ps5vk, render and verify pixels, present, and close and
+relaunch cleanly. Work follows the next observed refusal in those paths. A
+tranche number, profile score, Vulkan version
 label or missing CTS leaf is **not** permission to stop implementing a needed
 dependency. The 15-tranche assignment in
 `conformance_inventory/dxvk_v262_backlog.json` remains an inventory of the
@@ -42,6 +42,22 @@ On Prospero Win, success requires two `PS5VK_PE_VKMAP_MAP` lines with result
 zero and usable pointers, a `PS5VK_PE_VKMAP_RESULT` at `gpu-copy-oracle` with
 zero mismatches, and corresponding native low-alias markers for x86. A build
 receipt alone is not guest or GPU evidence.
+
+The PE frontends at `examples/dxvk_pe_frontends/` have ordinary two-frame
+presentation controls and separate `-pixels` variants for D3D8/9/10/11 in
+both x64 and x86. Build against the pinned, unmodified DXVK PE DLLs with
+`python3 tools/build_dxvk_pe_frontends.py --dll-variant unmodified`; the
+builder checks each executable's PE architecture and imports and writes a
+hash receipt with `executed=false`. The pixel variants read the centre pixel
+through their own D3D API **before** each Present: D3D8 `CopyRects`, D3D9
+`GetRenderTargetData`, and D3D10/11 staging-texture copy and map. They compare
+both fixed RGB values and log the copy/map stage plus two Present results.
+`DXVK_PE_D3D*_PIXEL_RESULT ... mismatches=0` together with both successful
+Presents and native GPU/presentation completion is the bounded PE acceptance
+target. A readback failure is a useful next driver frontier; it must not be
+silently counted as a presentation failure. This oracle checks the rendered
+backbuffer, not the physical display scanout, and no executable build receipt
+is hardware evidence.
 
 ## Profile ledger on the Vulkan 1.3 probe
 
