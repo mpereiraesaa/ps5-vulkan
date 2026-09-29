@@ -19,9 +19,10 @@ Maintenance4 is an ordinary driver route, not an SDK diagnostic override.
 The acceptance workload uses pinned DXVK's original version and feature-level
 checks with no driver capability override. The current clean-build result is
 the [artifact-bound native presentation oracle](../VALIDATION.md#pinned-dxvk-262-native-presentation-oracle-on-the-current-sdk-2026-09-29):
-three frames with 4096 verified pixels each, repeated twice on PS5. This
-establishes that bounded native DXVK path, not universal game support, PE DLL
-execution through Prospero Win, or Vulkan conformance.
+three frames with 4096 verified pixels each, repeated twice on PS5. That
+native witness alone establishes its bounded DXVK path; the separate PE
+results below establish the corresponding application controls. Neither is
+universal game support or Vulkan conformance.
 
 The backbuffer path covers bounded tiled colour handovers, BGRA8 readback and
 display release. Its SDK BGRA8 GPU oracle, pinned native DXVK D3D11 offscreen
@@ -34,24 +35,28 @@ stage now passes a separate two-stage native capture oracle twice, with the
 ordinary three-stage capture witness still passing on the same source. Its
 artifact-bound result is in
 [VALIDATION.md](../VALIDATION.md#dxvk-stream-output-without-a-fragment-stage-2026-09-29).
-The remaining integration tests are PE D3D8/9/10/11 backbuffer readback and
-presentation on the combined current SDK, plus an x86 guest `vkMapMemory`
-call with a GPU-copy oracle. These execution changes do not alter the 45/62
-requirement ledger.
+The [combined PE hardware receipt](../VALIDATION.md#dxvk-262-pe-pixel-path-through-prospero-win-2026-09-29)
+now covers D3D8/9/10/11 in x64 and x86 on one SDK identity: each rendered
+and read back two expected backbuffer pixels, completed both Presents and
+matching VideoOut handovers, then returned to the launcher. The x86 guest
+`vkMapMemory` control passed a below-4-GiB CPU alias and a 1,024-byte GPU
+copy on that same combined SDK. These execution results do not alter the
+45/62 requirement ledger or prove arbitrary game compatibility.
 
 An independent 1920x1080 BGRA8 public-SDK witness now passed two complete
 image-to-buffer GPU readbacks with exact texel and guard-byte oracles. Its
 artifact-bound run is in
 [VALIDATION.md](../VALIDATION.md#full-size-bgra8-gpu-readback-witness-for-dxvk-d3d89-2026-09-29).
-It narrows the native D3D8/9 readback risk; PE pixel output still needs its
-own Prospero Win run.
+It narrowed the native D3D8/9 readback risk before the later PE pixel runs
+recorded above.
 The full-size copy to a nonzero staging-buffer offset initially refused at
 the native postlude: the strict whole-surface executor was selected for a
 region it cannot address. The selector now routes that shape to the general
 region executor. Its 4,096-byte-offset, two-frame GPU oracle passed twice with
 zero pixel, prefix or guard mismatches; the exact failure and accepted runs
 are in [VALIDATION.md](../VALIDATION.md#dxvk-full-size-bgra8-readback-at-a-staging-offset-2026-09-29).
-This still does not establish a PE D3D8/9 readback or alter the 45/62 ledger.
+The later PE D3D8/9 runs establish the bounded application readback noted
+above; neither result alters the 45/62 ledger.
 The current frozen 879-case CTS selection has 49 failures on both this change
 and the exact main baseline, with no fixed, broken or moved cases in the
 side-by-side receipt comparison. That neutral result is recorded in the same
@@ -64,10 +69,12 @@ It loads Wine's `vulkan-1.dll` dynamically, prints each `vkMapMemory` result
 and guest pointer before dereferencing it, then uses a 300 ms fence to check a
 1024-byte GPU buffer copy through two mapped allocations. The offline receipt
 records both PE architectures, imports and hashes with `executed=false`.
-On Prospero Win, success requires two `PS5VK_PE_VKMAP_MAP` lines with result
-zero and usable pointers, a `PS5VK_PE_VKMAP_RESULT` at `gpu-copy-oracle` with
-zero mismatches, and corresponding native low-alias markers for x86. A build
-receipt alone is not guest or GPU evidence.
+Prospero Win produced two successful x86 guest map pointers below 4 GiB,
+corresponding native low-alias markers and a `gpu-copy-oracle` result with
+zero mismatches on the preceding SDK. The original PE rejected ps5vk's valid
+graphics/compute queue because it required an explicit transfer bit; the
+corrected control is merged in #606. A build receipt alone is not guest or
+GPU evidence. The same control later passed again on the combined SDK.
 
 The PE frontends at `examples/dxvk_pe_frontends/` have ordinary two-frame
 presentation controls and separate `-pixels` variants for D3D8/9/10/11 in
@@ -80,10 +87,11 @@ through their own D3D API **before** each Present: D3D8 `CopyRects`, D3D9
 both fixed RGB values and log the copy/map stage plus two Present results.
 `DXVK_PE_D3D*_PIXEL_RESULT ... mismatches=0` together with both successful
 Presents and native GPU/presentation completion is the bounded PE acceptance
-target. A readback failure is a useful next driver frontier; it must not be
-silently counted as a presentation failure. This oracle checks the rendered
+target; all eight variants met it on the combined SDK. A readback failure in
+a later workload is a useful next driver frontier and must not be silently
+counted as a presentation failure. This oracle checks the rendered
 backbuffer, not the physical display scanout, and no executable build receipt
-is hardware evidence.
+alone is hardware evidence.
 The D3D9 pixel variant flushes a `DXVK_PE_D3D9_PIXEL_STAGE` marker immediately
 before and after each copy, lock and Present call. If a guest run terminates
 before its final result line, the last stage marker and the first native
@@ -229,13 +237,12 @@ identified separately from changes to rendering or feature negotiation.
    rejects compound LocalSizeId specialization expressions and wider
    producer/narrower consumer varying vectors. These
    are explicit profile limits, not reasons to restore the old 1.0 gate.
-3. **Validate the PE path on the combined SDK.** Native DXVK now passes
-   acquire/draw/present/readback/teardown with pixel and resource-accounting
-   checks. Run the x86 memory-map/GPU-copy probe and the D3D8/9/10/11 PE pixel
-   controls through Prospero Win against one current SDK identity, then bounded
-   relaunch and closure checks. Broaden resources and shaders as those
-   executables require them. Neither the old profile score nor a full
-   core/CTS programme is this goal's gate.
+3. **Extend the proven PE path from observed game calls.** The eight
+   D3D8/9/10/11 PE pixel controls pass on the combined SDK with clean
+   relaunch. The x86 map/GPU-copy control passed on that combined identity.
+   Use the next actual game workload to find any missing resource or shader
+   path. Neither the old profile score nor a full core/CTS programme is this
+   goal's gate.
 
 Independent host-only work on WSI, compiler, synchronization and resource
 contracts may run in parallel in separate branches/worktrees. Coordinate only

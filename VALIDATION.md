@@ -6917,3 +6917,54 @@ both completed cleanly with **830 Pass, 49 Fail**. The 49 failures were the
 mandatory-feature check and 48 multiview cases refusing device creation;
 `decode_run.py --against` found **0 fixed, 0 broke, 0 moved**. This is a neutral
 delta, not a passing acceptance run. Neither receipt promotes a matrix row.
+
+## DXVK 2.6.2 PE pixel path through Prospero Win (2026-09-29)
+
+On PS5 firmware 12.02, the pinned, unmodified DXVK 2.6.2 DLLs
+(source commit `9d6f54a1ade20d1d27dd421024717a636f3d8c68`) ran through
+Prospero Win and ps5vk on the combined `main` source
+`972f056f0bdaaeda813162b424c9e44a7f29946a`. The native SDK archive
+SHA-256 was
+`98f8a17c3a00a55ff75311edbe9c0a90fa02115f8bf68b857753ef15ed4bf589`.
+The frozen PE/DLL identity manifest has SHA-256
+`b7557f8ea72028d2b05e0a368d798cc41c84d4b97171aa24d5d743ea7f357d60`.
+The private, artifact-bound receipt for the eight Wine and native log pairs
+has SHA-256
+`1f92139ed5f0aec1e753e8932adf368df0206c89158a5b9095b4761ac957ef25`;
+it verifies each PE hash against that manifest and records each log hash.
+
+| PE control | x64 | x86 | Pixel and presentation result |
+| --- | --- | --- | --- |
+| D3D8 | Pass | Pass | Two D3D backbuffer readbacks, both Presents and two matching VideoOut events. |
+| D3D9 | Pass | Pass | Two `GetRenderTargetData`/`LockRect` readbacks, both Presents and two matching VideoOut events. |
+| D3D10 | Pass | Pass | Two staging-texture maps, both Presents and two matching VideoOut events. |
+| D3D11 | Pass | Pass | Two staging-texture maps, both Presents and two matching VideoOut events. |
+
+Every control read centre BGRA `844c1cff` on frame 0 and `1c4c84ff` on
+frame 1, with zero channel mismatches. Each reported success for its two
+Presents; the native logs recorded two completed readbacks, two matching
+VideoOut handovers and no driver refusal. Wine exited and returned to the
+launcher after each run. The D3D9 pixel control
+initially stopped before `LockRect` because ps5vk refused the
+`TRANSFER_SRC_OPTIMAL` to `SHADER_READ_ONLY_OPTIMAL` handback with DXVK's
+broader destination stage scope. A host test reproduced that exact call;
+the bounded BGRA8 handback admission in #607 passed the same host route and
+then both x64 and x86 PE pixel controls on hardware.
+
+A separate x86 PE `vkMapMemory` control succeeded through Prospero Win on
+the **same SDK archive** as the eight pixel controls. It returned two guest
+pointers below 4 GiB, two native low CPU aliases and a 1,024-byte GPU buffer
+copy with zero mismatches. Both allocations were released and the native
+platform closed with zero allocation bytes; Wine exited and relaunched the
+launcher. The corrected PE executable SHA-256 was
+`ab4238cf9f5e34969a3d5a56a4877063fcbc38a6b7f63fd28439c7c3ee25ece0`.
+The earlier run on the preceding SDK archive
+`195e1c65e1e7b69e74837eecaa6eb8c14cb54685be65fafd3f538c475dbfde80`
+also passed, but the combined-SDK repeat is the acceptance evidence here.
+
+These checks establish the bounded two-frame PE render, readback, Present,
+VideoOut and lifecycle path for all four D3D APIs in both architectures.
+They read the D3D backbuffer, not the physical display scanout, and do not
+establish arbitrary game compatibility or Vulkan conformance. The DXVK
+requirement ledger remains **45/62 ready, 17 blockers**; no row was promoted
+from these runtime results.
