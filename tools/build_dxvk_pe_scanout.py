@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Build bounded D3D9/D3D11 visual scanout PE controls with pinned DXVK 2.6.2."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+from build_dxvk_pe_frontends import command, load_dll_builds, sha256
+
+ROOT = Path(__file__).resolve().parents[1]
+SOURCES = {
+    "d3d9": ROOT / "examples/dxvk_pe_frontends/d3d9_scanout.cpp",
+    "d3d11": ROOT / "examples/dxvk_pe_frontends/d3d11_scanout.cpp",
+}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--unmodified-dir", type=Path, default=ROOT / "build")
+    parser.add_argument("--dxvk-source", type=Path,
+                        default=ROOT / "third_party/dxvk-v2.6.2")
+    parser.add_argument("--output-dir", type=Path,
+                        default=ROOT / "build/dxvk-pe-scanout")
+    args = parser.parse_args()
+    source = args.dxvk_source.resolve()
+    output = args.output_dir.resolve()
+    try:
+        pinned = json.loads((ROOT / "conformance_inventory/dxvk_v262_profile.json")
+                            .read_text())["source"]["commit"]
+        builds, modules, _ = load_dll_builds(
+            "unmodified", ROOT / "build/dxvk-pe-ps5-wsi",
+            args.unmodified_dir.resolve(), pinned)
+        if (command(["git", "-C", source, "rev-parse", "HEAD"]).strip() != pinned or
+                command(["git", "-C", source, "status", "--porcelain",
+                         "--untracked-files=no"]).strip()):
+            raise ValueError("DXVK source checkout is not clean at the pin")
+        headers = source / "include/native/directx"
+        if not headers.is_dir():
+            raise ValueError("pinned DirectX headers missing")
+        results = {}
+        for arch, prefix, expected_format in (
+                ("x64", "x86_64-w64-mingw32", "pei-x86-64"),
+                ("x86", "i686-w64-mingw32", "pei-i386")):
+            results[arch] = {}
+            for api in ("d3d9", "d3d11"):
+                target = output / arch
+                target.mkdir(parents=True, exist_ok=True)
+                executable = target / f"{api}-scanout.exe"
+                chain = ("d3d9",) if api == "d3d9" else ("d3d11", "dxgi")
+                imports = [builds[arch] / "src" / name / f"{name}.dll.a"
+                           for name in chain]
+                if any(not library.is_file() for library in imports):
+                    raise ValueError(f"{arch} {api} pinned DXVK import library missing")
+                compiler = f"{prefix}-g++"
+                command([compiler, "-std=c++17", "-O2", "-Wall", "-Wextra",
+                         "-Werror", "-isystem", headers, SOURCES[api], *imports,
+                         *(["-ld3dcompiler_47"] if api == "d3d11" else []),
+                         "-luser32", "-static-libgcc", "-static-libstdc++",
+                         "-o", executable])
+                header = command([f"{prefix}-objdump", "-f", executable])
+                imported = sorted(set(re.findall(
+                    r"DLL Name: ([^\s]+)",
+                    command([f"{prefix}-objdump", "-p", executable]))),
+                    key=str.casefold)
+                required = {f"{name}.dll" for name in chain}
+                if api == "d3d11":
+                    required.add("d3dcompiler_47.dll")
+                if f"file format {expected_format}" not in header:
+                    raise ValueError(f"{arch} {api} PE format mismatch")
+                if not required.issubset({name.casefold() for name in imported}):
+                    raise ValueError(f"{arch} {api} PE imports mismatch")
+                results[arch][api] = {
+                    "path": str(executable),
+                    "exe_sha256": sha256(executable),
+                    "pe_imports": imported,
+                    "dxvk_dll_sha256": {
+                        name: modules[arch][name]["sha256"] for name in chain},
+                    "executed": False,
+                }
+        output.mkdir(parents=True, exist_ok=True)
+        receipt = {
+            "schema": "ps5vk-dxvk-v262-pe-scanout/1",
+            "dxvk_commit": pinned,
+            "dll_variant": "unmodified",
+            "source_sha256": {api: sha256(path) for api, path in SOURCES.items()},
+            "duration": "30 bounded frames with 250 ms message-pump waits plus Present pacing",
+            "pattern": "TL red, TR green, BL blue, BR yellow",
+            "architectures": results,
+            "scope": "PE build identities; host and visual scanout evidence separate",
+        }
+        (output / "receipt.json").write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+        print(json.dumps(receipt, indent=2, sort_keys=True))
+    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+        print(f"DXVK PE scanout build failed: {error}", file=sys.stderr)
+        if isinstance(error, subprocess.CalledProcessError):
+            print(error.stdout[-1200:], file=sys.stderr)
+            print(error.stderr[-1200:], file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
