@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build bounded D3D9/D3D11 scanout and resize PE controls with DXVK 2.6.2."""
+"""Build bounded D3D8-11 scanout and resize PE controls with DXVK 2.6.2."""
 
 from __future__ import annotations
 
@@ -14,9 +14,36 @@ from build_dxvk_pe_frontends import command, load_dll_builds, sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = {
+    "d3d8": ROOT / "examples/dxvk_pe_frontends/d3d8_scanout.cpp",
     "d3d9": ROOT / "examples/dxvk_pe_frontends/d3d9_scanout.cpp",
+    "d3d10": ROOT / "examples/dxvk_pe_frontends/d3d10_scanout.cpp",
     "d3d11": ROOT / "examples/dxvk_pe_frontends/d3d11_scanout.cpp",
     "d3d11-resize": ROOT / "examples/dxvk_pe_frontends/d3d11_resize.cpp",
+}
+LINK_MODULES = {
+    "d3d8": ("d3d8",),
+    "d3d9": ("d3d9",),
+    "d3d10": (),  # Wine's d3d10.dll wrapper loads DXVK D3D10 core.
+    "d3d11": ("d3d11", "dxgi"),
+    "d3d11-resize": ("d3d11", "dxgi"),
+}
+DLL_IDENTITIES = {
+    "d3d8": ("d3d8", "d3d9"),
+    "d3d9": ("d3d9",),
+    "d3d10": ("d3d10core", "d3d11", "dxgi"),
+    "d3d11": ("d3d11", "dxgi"),
+    "d3d11-resize": ("d3d11", "dxgi"),
+}
+EXTRA_LIBRARIES = {
+    "d3d10": ("-ld3d10", "-ld3dcompiler_47"),
+    "d3d11": ("-ld3dcompiler_47",),
+}
+REQUIRED_IMPORTS = {
+    "d3d8": {"d3d8.dll"},
+    "d3d9": {"d3d9.dll"},
+    "d3d10": {"d3d10.dll", "d3dcompiler_47.dll"},
+    "d3d11": {"d3d11.dll", "dxgi.dll", "d3dcompiler_47.dll"},
+    "d3d11-resize": {"d3d11.dll", "dxgi.dll"},
 }
 
 
@@ -53,15 +80,14 @@ def main() -> int:
                 target.mkdir(parents=True, exist_ok=True)
                 executable = target / (f"{api}.exe" if api.endswith("resize")
                                        else f"{api}-scanout.exe")
-                chain = ("d3d9",) if api == "d3d9" else ("d3d11", "dxgi")
                 imports = [builds[arch] / "src" / name / f"{name}.dll.a"
-                           for name in chain]
+                           for name in LINK_MODULES[api]]
                 if any(not library.is_file() for library in imports):
                     raise ValueError(f"{arch} {api} pinned DXVK import library missing")
                 compiler = f"{prefix}-g++"
                 command([compiler, "-std=c++17", "-O2", "-Wall", "-Wextra",
                          "-Werror", "-isystem", headers, SOURCES[api], *imports,
-                         *(["-ld3dcompiler_47"] if api == "d3d11" else []),
+                         *EXTRA_LIBRARIES.get(api, ()),
                          "-luser32", "-static-libgcc", "-static-libstdc++",
                          "-o", executable])
                 header = command([f"{prefix}-objdump", "-f", executable])
@@ -69,9 +95,7 @@ def main() -> int:
                     r"DLL Name: ([^\s]+)",
                     command([f"{prefix}-objdump", "-p", executable]))),
                     key=str.casefold)
-                required = {f"{name}.dll" for name in chain}
-                if api == "d3d11":
-                    required.add("d3dcompiler_47.dll")
+                required = REQUIRED_IMPORTS[api]
                 if f"file format {expected_format}" not in header:
                     raise ValueError(f"{arch} {api} PE format mismatch")
                 if not required.issubset({name.casefold() for name in imported}):
@@ -81,7 +105,8 @@ def main() -> int:
                     "exe_sha256": sha256(executable),
                     "pe_imports": imported,
                     "dxvk_dll_sha256": {
-                        name: modules[arch][name]["sha256"] for name in chain},
+                        name: modules[arch][name]["sha256"]
+                        for name in DLL_IDENTITIES[api]},
                     "executed": False,
                 }
         output.mkdir(parents=True, exist_ok=True)
@@ -93,7 +118,9 @@ def main() -> int:
             "duration": "30 bounded frames with 250 ms message-pump waits plus Present pacing",
             "pattern": "TL red, TR green, BL blue, BR yellow",
             "controls": {
+                "d3d8": "30 bounded quadrant frames at 1920x1080",
                 "d3d9": "30 bounded quadrant frames at 1920x1080",
+                "d3d10": "30 bounded quadrant frames at 1920x1080",
                 "d3d11": "30 bounded quadrant frames at 1920x1080",
                 "d3d11-resize": "3 red frames at 1920x1080, ResizeBuffers, then 3 green frames at 3840x2160",
             },
