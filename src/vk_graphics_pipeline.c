@@ -5,6 +5,7 @@
 #include "vk_pipeline_cache.h"
 #include "color_attachment_contract.h"
 #include "vk_transform_feedback.h"
+#include "dxvk_discard_fragment_spirv.h"
 #if (defined(PS5VK_TESS_PROBE) && PS5VK_TESS_PROBE) || (defined(PS5VK_GEOMETRY_KEY_DIAG) && PS5VK_GEOMETRY_KEY_DIAG)
 #define PS5VK_PIPELINE_DIAGNOSTICS 1
 #endif
@@ -380,12 +381,11 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     /* The pipeline is created for ONE subpass, which must exist in the pass it
      * names. A nonzero index is no longer refused outright: it identifies the
      * scope this pipeline may draw in. */
-    /* Two stages are the vertex+fragment profile every earlier tranche used;
-     * three through five add the optional tessellation control/evaluation pair
-     * and geometry after evaluation. Nothing else is accepted, so a
-     * mesh or task stage still fails here. */
+    /* The pinned DXVK omits its fragment stage for stream output with no
+     * rasterized stream. Every rasterizing pipeline still needs it; the
+     * one-stage minimum only reaches the narrow discard/capture gate below. */
     if ((in->pNext && in->renderPass) || in->flags || in->subpass >= render_pass->subpass_count ||
-        (in->stageCount < 2 || in->stageCount > 5) || !in->pStages ||
+        (in->stageCount < 1 || in->stageCount > 5) || !in->pStages ||
         in->layout->set_count>PS5VK_MAX_SETS)
         return refuse(2);
     VkBool32 dynamic_viewport,dynamic_scissor,dynamic_depth_bias,dynamic_stencil[3];
@@ -416,8 +416,8 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
     }
     /* Vulkan requires the control and evaluation stages to appear together, and
      * the stage count to name exactly the stages that were provided. */
-    if (!vs || !fs || (!!tcs != !!tes) ||
-        in->stageCount != (unsigned)(2 + (tcs?2:0) + (gs?1:0)))
+    if (!vs || (!!tcs != !!tes) ||
+        in->stageCount != (unsigned)(1 + (fs?1:0) + (tcs?2:0) + (gs?1:0)))
         return VK_ERROR_UNKNOWN;
     /* A geometry pipeline needs the feature the logical device enabled. The
      * private witness build keeps its own gate, exactly as the multiview
@@ -473,6 +473,10 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
      * of the two must be present; that check is below, where the subpass is
      * resolved. */
     if (!v || !ia || !r || !m || !vp) return VK_ERROR_UNKNOWN;
+    /* The only no-fragment shape we can run is DXVK's captured stream whose
+     * rasterization is discarded. A private empty fragment program lets the
+     * existing linker retain its paired-shader ABI; no pixel can execute. */
+    if (!fs && (!r->rasterizerDiscardEnable || !capture.buffers_mask)) return refuse(20);
     if (v->sType != VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO ||
         ia->sType != VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO ||
         r->sType != VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO ||
@@ -657,7 +661,12 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         return refuse(16);
     struct ps5vk_graphics_key key={
         .vertex={.words=vs->module->words,.word_count=vs->module->word_count,.entry=vs->pName},
-        .fragment={.words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName},
+        .fragment=fs ? (struct ps5vk_graphics_module_key){
+            .words=fs->module->words,.word_count=fs->module->word_count,.entry=fs->pName} :
+            (struct ps5vk_graphics_module_key){
+                .words=ps5vk_dxvk_discard_fragment_spirv,
+                .word_count=sizeof(ps5vk_dxvk_discard_fragment_spirv)/sizeof(uint32_t),
+                .entry="main"},
         .geometry=gs? (struct ps5vk_graphics_module_key){
             .words=gs->module->words,.word_count=gs->module->word_count,.entry=gs->pName} :
             (struct ps5vk_graphics_module_key){0},
@@ -714,10 +723,15 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
         /* An integer colour target is not blended into and its lanes are not
          * converted, so a blend state on it describes a shape this profile
          * cannot program. */
-        if(ps5vk_color_target_format_is_integer(key.color_format[attachment]) &&
+        if(fs && ps5vk_color_target_format_is_integer(key.color_format[attachment]) &&
            b->pAttachments[attachment].blendEnable) return refuse(15);
-        key.color_write_mask[attachment] = b->pAttachments[attachment].colorWriteMask;
-        key.blend_enable[attachment] = a->blendEnable;
+        /* Vulkan ignores fragment output state while rasterization is
+         * discarded. Canonicalize it to no writes for the internal empty
+         * stage, regardless of the D3D blend state DXVK left in the key. */
+        key.color_write_mask[attachment] = fs ?
+            b->pAttachments[attachment].colorWriteMask : 0;
+        key.blend_enable[attachment] = fs ? a->blendEnable : VK_FALSE;
+        if (!fs) continue;
         if (!a->blendEnable) continue;
         any_blend = 1;
         key.src_color_blend_factor[attachment] = a->srcColorBlendFactor;
@@ -743,7 +757,7 @@ static VkResult create_one(VkDevice d, const VkGraphicsPipelineCreateInfo *in,
                 return refuse(18);
     }
     if(!specialization_key(vs->pSpecializationInfo,&key.vertex) ||
-       !specialization_key(fs->pSpecializationInfo,&key.fragment) ||
+       (fs && !specialization_key(fs->pSpecializationInfo,&key.fragment)) ||
        (gs && !specialization_key(gs->pSpecializationInfo,&key.geometry)) ||
        (tcs && !specialization_key(tcs->pSpecializationInfo,&key.tess_control)) ||
        (tes && !specialization_key(tes->pSpecializationInfo,&key.tess_eval)))

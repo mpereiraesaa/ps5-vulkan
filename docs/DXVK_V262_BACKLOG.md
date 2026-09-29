@@ -29,6 +29,11 @@ oracle and three-frame public-SDK WSI control passed on the same source;
 their artifact-bound receipts are in
 [VALIDATION.md](../VALIDATION.md#dxvk-backbuffer-and-bgra8-runtime-path-2026-09-29).
 The native DXVK presentation and pixel oracle then passed on a clean build.
+DXVK's D3D11 stream-output pipeline with rasterizer discard and no fragment
+stage now passes a separate two-stage native capture oracle twice, with the
+ordinary three-stage capture witness still passing on the same source. Its
+artifact-bound result is in
+[VALIDATION.md](../VALIDATION.md#dxvk-stream-output-without-a-fragment-stage-2026-09-29).
 The remaining integration tests are PE D3D8/9/10/11 backbuffer readback and
 presentation on the combined current SDK, plus an x86 guest `vkMapMemory`
 call with a GPU-copy oracle. These execution changes do not alter the 45/62

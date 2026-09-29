@@ -11,7 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from build_t14_xfb_witness import CASES, PROFILE  # noqa: E402
+from build_t14_xfb_witness import CASES, PROFILE, NO_FRAGMENT_PROFILE  # noqa: E402
 from run_consumer import close_and_confirm, control, running, wait_for_log  # noqa: E402
 
 START = re.compile(r"T14_XFB_WITNESS_START feature=(\d+) streams_feature=(\d+) geometry=(\d+) "
@@ -24,6 +24,7 @@ CASE = re.compile(r"T14_XFB_WITNESS_CASE name=(\w+) points=(\d+) ok=(\d+) mismat
                   r"digest=([0-9a-f]{8}) "
                   r"fence=complete")
 RESULT = re.compile(r"T14_XFB_WITNESS_RESULT cases=(\d+) passed=(\d+) submissions=(\d+)")
+PIPELINES = re.compile(r"T14_XFB_WITNESS_PIPELINES created=(\d+) stages=(\d+)")
 RETIRED = re.compile(r"T14_XFB_WITNESS_RETIRED resources=(\w+)")
 # The oracle the payload applies, restated so a payload that reports ok=1
 # with inconsistent numbers is still refused.
@@ -35,7 +36,10 @@ EXPECTED = {
 
 
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
-    if (artifact.get("profile") != PROFILE or artifact.get("diagnostic_switch") is not None or
+    profile = artifact.get("profile")
+    if (profile not in (PROFILE, NO_FRAGMENT_PROFILE) or
+            bool(artifact.get("no_fragment", False)) != (profile == NO_FRAGMENT_PROFILE) or
+            artifact.get("diagnostic_switch") is not None or
             artifact.get("cases") != list(CASES)):
         raise ValueError("unexpected transform feedback witness artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
@@ -46,7 +50,9 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     text = log.decode("utf-8", errors="replace")
     start, cases = START.findall(text), CASE.findall(text)
     results, retired = RESULT.findall(text), RETIRED.findall(text)
+    pipelines = PIPELINES.findall(text)
     if (len(start) != 1 or len(results) != 1 or len(retired) != 1 or
+            pipelines != [("2", "2" if profile == NO_FRAGMENT_PROFILE else "3")] or
             "T14_XFB_WITNESS_FAILURE" in text):
         raise ValueError("missing, repeated or failed witness phase")
     (feature, streams_feature, geometry, streams, buffers, stride, data, stream_data,
@@ -100,7 +106,9 @@ def main() -> int:
         raise RuntimeError("refusing to launch while a title is active")
     artifact = json.loads(args.artifact.read_text())
     eboot = args.dist / "eboot.bin"
-    if (artifact.get("profile") != PROFILE or
+    if (artifact.get("profile") not in (PROFILE, NO_FRAGMENT_PROFILE) or
+            bool(artifact.get("no_fragment", False)) !=
+            (artifact.get("profile") == NO_FRAGMENT_PROFILE) or
             hashlib.sha256(eboot.read_bytes()).hexdigest() != artifact.get("eboot_sha256")):
         raise RuntimeError("artifact identity mismatch")
     known = {path.name for path in args.runs_dir.glob("*_PPSA99994_ps5vk_*.log")}

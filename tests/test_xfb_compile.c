@@ -5,6 +5,7 @@
  * draw. Real modules, real pinned compiler, host target. */
 #include "runtime_graphics_compiler.h"
 #include "spirv_graphics_interface.h"
+#include "dxvk_discard_fragment_spirv.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,6 +68,26 @@ int main(void)
     abi=p->arguments;abi.streamout_valid=0;abi.streamout_slot=0;abi.streamout_low=16u;
     assert(ps5vk_runtime_draw_values_sets(&abi,0,0,0,0,0,0,tables,vertex,pixel));
     ps5vk_runtime_graphics_free(NULL,out);
+
+    /* DXVK omits the fragment stage for capture with no rasterized stream.
+     * The Vulkan front end inserts this empty private linker stage and clears
+     * the write mask. Compile the resulting exact key, not just an API mock. */
+    free((void *)key.fragment.words);
+    key.fragment=(struct ps5vk_graphics_module_key){
+        .words=ps5vk_dxvk_discard_fragment_spirv,
+        .word_count=sizeof(ps5vk_dxvk_discard_fragment_spirv)/sizeof(uint32_t),
+        .entry="main"};
+    key.color_write_mask[0]=0;
+    assert(ps5vk_spirv_graphics_interface(&key));
+    out=NULL;
+    assert(ps5vk_runtime_graphics_compile(NULL,&key,&out)==VK_SUCCESS && out);
+    p=out;
+    assert(p->vertex.metadata.streamout_valid);
+    assert(p->vertex.metadata.streamout_enabled_stream_buffers_mask==1u);
+    ps5vk_runtime_graphics_free(NULL,out);
+    /* Restore the exporting stage so the existing negative controls still
+     * exercise capture metadata rather than an absent linker input. */
+    key.fragment=read_module("build/runtime-graphics/xfb_capture.frag.spv");
 
     /* The same capture module under a key that declares no capture compiles
      * with the compiler's default (GDS-ordered) lowering, whose streamout the

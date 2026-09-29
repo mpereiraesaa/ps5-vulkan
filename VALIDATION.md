@@ -6822,3 +6822,29 @@ checks the accepted descriptor and nearby invalid combinations. This witness
 exercises native DXVK against ps5vk. Execution of the PE DXVK DLLs through
 Prospero Win, including the x86 memory-map path, remains a separate integration
 check. No DXVK matrix row was promoted by this witness.
+
+## DXVK stream output without a fragment stage (2026-09-29)
+
+Pinned DXVK 2.6.2 creates a graphics pipeline with vertex and geometry stages,
+no fragment stage, and rasterizer discard when stream output has no rasterized
+stream. The public pipeline entry now accepts that shape only with transform
+feedback capture. An internal no-output fragment module supplies the existing
+compiler link ABI; its color write masks are zero and rasterization is
+discarded. Other pipelines without a fragment stage remain refused.
+
+The SDK-linked T14 variant uses exactly two public shader stages and the same
+nine bounded capture cases as the shipping three-stage witness. Signed eboot
+SHA-256 `1754ef7083ee4eedbd856ffc5832ddfb8c85316d36213b952e883d75322175f1`
+passed strict 9/9 twice: runs
+`20260929T022604765Z_PPSA99994_ps5vk_0x59c5bc3b8cc6` and
+`20260929T022625484Z_PPSA99994_ps5vk_0x59ca8f3086ba`. Both logs report
+`stages=2`, zero captured-data mismatches, exact counters, clean completion and
+resource retirement. The unchanged three-stage control on the final source,
+eboot SHA-256 `9da7a887e134356d32ac412ff2aef383940331e337f2719528fa9b6594fc5f40`,
+passed strict 9/9 in run
+`20260929T022644132Z_PPSA99994_ps5vk_0x59cee6ae7185`. The prior payload
+was restored after each run and the console was idle. Firmware was not
+independently queried for these runs; the most recent owner report is 12.02.
+`make check` passed on this source. This is
+native Vulkan evidence for the stream-output pipeline shape, not a PE D3D11
+pixel or application result; the DXVK requirement ledger remains 45/62.

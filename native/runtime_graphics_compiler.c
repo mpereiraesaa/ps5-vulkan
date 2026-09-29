@@ -925,7 +925,12 @@ static VkResult runtime_graphics_compile(const struct ps5vk_graphics_key *key,co
              * removes the unreachable store. The interface policy already ties
              * the declaration to the key, so the export has to agree with it
              * and carry no secondary. */
-            const unsigned expected=key->color_attachment_count?1u:0u;
+            /* DXVK's stream-output-only pipeline may omit the fragment
+             * stage while rasterizer discard is enabled. Its internal empty
+             * stage has no export even when the render pass names colour;
+             * the interface check requires every write mask to be zero. */
+            const unsigned expected=key->rasterizer_discard?0u:
+                (key->color_attachment_count?1u:0u);
             if(secondary || primary_mask!=expected)goto failed;
         } else if(fragment_export==PS5VK_RUNTIME_FRAGMENT_EXPORT_DUAL) {
             /* The pinned compiler publishes 0x44/0xff for both shapes. The

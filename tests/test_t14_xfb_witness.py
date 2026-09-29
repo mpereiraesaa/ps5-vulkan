@@ -7,7 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from build_t14_xfb_witness import CASES, PROFILE, RETIRED_SWITCH, checked_spirv  # noqa: E402
+from build_t14_xfb_witness import (CASES, PROFILE, NO_FRAGMENT_PROFILE,
+                                   RETIRED_SWITCH, checked_spirv)  # noqa: E402
 from run_t14_xfb_witness import EXPECTED, verify  # noqa: E402
 
 
@@ -30,10 +31,10 @@ def case_line(name, *, ok=1, mismatches=0, counter0=None):
             f" digest=1234abcd fence=complete")
 
 
-def log(*, streams=4, override=None, retired=True, failure=False):
+def log(*, streams=4, stages=3, override=None, retired=True, failure=False):
     lines = [f"T14_XFB_WITNESS_START feature=1 streams_feature=1 geometry=1 streams={streams}"
              " buffers=4 stride=2048 data=512 stream_data=512 queries=1 draw=1",
-             "T14_XFB_WITNESS_PIPELINES created=2"]
+             f"T14_XFB_WITNESS_PIPELINES created=2 stages={stages}"]
     passed = 0
     for name in CASES:
         line = override.get(name) if override and name in override else case_line(name)
@@ -61,6 +62,14 @@ class TransformFeedbackWitness(unittest.TestCase):
         self.assertTrue(result["strict_verified"])
         self.assertEqual(result["cases"]["order"]["counter0"], 192000)
         self.assertEqual(result["cases"]["resume"]["counter0"], 224)
+
+    def test_no_fragment_variant_requires_two_stages(self):
+        candidate = artifact(profile=NO_FRAGMENT_PROFILE, no_fragment=True)
+        payload = log(stages=2)
+        self.assertTrue(verify(payload, receipt(payload), candidate)["strict_verified"])
+        for wrong in (log(stages=3), log(stages=1)):
+            with self.assertRaises(ValueError):
+                verify(wrong, receipt(wrong), candidate)
 
     def test_a_disordered_or_miscounted_case_is_not_verified(self):
         for override in ({"order": case_line("order", ok=0, mismatches=40)},

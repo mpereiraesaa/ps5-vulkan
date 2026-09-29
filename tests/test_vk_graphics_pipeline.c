@@ -3,9 +3,11 @@
 #include "graphics_program.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 static unsigned created, released;
 static unsigned acquired, compiled_released, compile_fail, backend_fail;
 static unsigned expect_five_stages;
+static unsigned expect_no_fragment;
 static unsigned expect_blend_state;
 static unsigned expect_dual_blend_state;
 /* 1 = independentBlend enabled on the device, 2 = not enabled: the second
@@ -22,7 +24,14 @@ static VkResult backend(VkDevice d,const void *data,uint32_t primitive_type,void
 static void release(VkDevice d,void *data) { (void)d; ++released; free(data); }
 static VkResult acquire(void *context,const struct ps5vk_graphics_key *key,const void **out)
 {
-    assert(context==&acquired && key->vertex.word_count==10 && key->fragment.word_count==10);
+    assert(context==&acquired);
+    if(expect_no_fragment) {
+        assert(key->vertex.word_count==10 && key->fragment.word_count>10);
+        assert(key->rasterizer_discard && key->transform_feedback_buffers==1u);
+        assert(key->color_attachment_count==1 && key->color_write_mask[0]==0 &&
+               !key->blend_enable[0]);
+        assert(!strcmp(key->fragment.entry,"main"));
+    } else assert(key->vertex.word_count==10 && key->fragment.word_count==10);
     if(expect_two_targets) {
         assert(key->color_attachment_count==2);
         assert(key->color_format[0]==VK_FORMAT_B8G8R8A8_UNORM &&
@@ -818,6 +827,26 @@ int main(void)
         assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)==VK_SUCCESS &&
                pipeline && pipeline->rasterizer_discard);
         vkDestroyPipeline(&d,pipeline,NULL);
+        /* The pinned DXVK omits FS entirely for stream output without a
+         * rasterized stream. The private empty stage is a compiler detail;
+         * the Vulkan call has only VS+GS and no colour writes can execute. */
+        gs_info.stageCount=2;
+        pipeline=NULL;
+        gs_info.pRasterizationState=&r;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)==
+               VK_ERROR_FEATURE_NOT_PRESENT && !pipeline &&
+               ps5vk_pipeline_refusal_site()==20);
+        gs_info.pRasterizationState=&discard;
+        d.graphics_library=NULL;d.graphics_compiler_context=&acquired;
+        d.graphics_acquire=acquire;d.graphics_compiled_release=compiled_release;
+        expect_no_fragment=1;
+        assert(vkCreateGraphicsPipelines(&d,0,1,&gs_info,NULL,&pipeline)==VK_SUCCESS &&
+               pipeline && pipeline->xfb.buffers_mask==1u && pipeline->rasterizer_discard);
+        vkDestroyPipeline(&d,pipeline,NULL);
+        expect_no_fragment=0;
+        d.graphics_acquire=NULL;d.graphics_compiled_release=NULL;
+        d.graphics_compiler_context=NULL;d.graphics_library=&capture_library;
+        gs_info.stageCount=3;
         VkGraphicsPipelineCreateInfo plain_discard=info;
         plain_discard.pRasterizationState=&discard;
         pipeline=NULL;

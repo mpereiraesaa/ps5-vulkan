@@ -7,6 +7,7 @@ VK_EXT_transform_feedback; the measurement switch that exposed it before the
 promotion is retired (RETIRED_SWITCH, which a test forbids)."""
 
 import hashlib
+import argparse
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,7 @@ from lab import lab_root  # noqa: E402
 from prepare_consumer_sync_shaders import emit_array  # noqa: E402
 
 PROFILE = "t14-transform-feedback-public-sdk-witness"
+NO_FRAGMENT_PROFILE = "t14-transform-feedback-no-fragment-witness"
 RETIRED_SWITCH = "PS5VK_TRANSFORM_FEEDBACK_DIAGNOSTIC"
 CASES = ("inactive", "small", "order", "resume", "overflow", "streams", "instanced",
          "drawauto", "query")
@@ -60,6 +62,10 @@ def run(*command: str, env: dict | None = None) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--no-fragment", action="store_true",
+                        help="build a separate rasterizer-discard pipeline without a fragment stage")
+    args = parser.parse_args()
     lab = lab_root()
     foundation = lab / "third_party/ps5-native-app-boilerplate"
     sdk, clang_wrapper = get_ps5_toolchain()
@@ -70,7 +76,8 @@ def main() -> None:
     if not glslang or not builder.is_file():
         raise SystemExit("glslangValidator and ps5-native-tool are required")
     logger = lab / "projects/logging_server/client"
-    build = ROOT / "build/t14-xfb-witness"
+    build = ROOT / ("build/t14-xfb-no-fragment-witness" if args.no_fragment else
+                    "build/t14-xfb-witness")
     dist = build / "dist/PPSA99994"
     for directory in (build, dist / "sce_sys", dist / "sce_module"):
         directory.mkdir(parents=True, exist_ok=True)
@@ -96,6 +103,7 @@ def main() -> None:
     dep = build / "main.d"
     run("sh", str(clang_wrapper), "-std=c11", "-O2", "-g", "-Wall",
         "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
+        f"-DPS5VK_T14_NO_FRAGMENT={int(args.no_fragment)}",
         "-MD", "-MP", "-MF", str(dep),
         "-I" + str(staged / "include"), "-I" + str(build),
         "-I" + str(logger), "-c", str(source), "-o", str(obj), env=sdk_env)
@@ -145,7 +153,9 @@ def main() -> None:
     if (ROOT / "dev.conf").is_file():
         shutil.copyfile(ROOT / "dev.conf", dist / "dev.conf")
     artifact = {
-        "profile": PROFILE, "diagnostic_switch": None, "cases": list(CASES),
+        "profile": NO_FRAGMENT_PROFILE if args.no_fragment else PROFILE,
+        "no_fragment": args.no_fragment,
+        "diagnostic_switch": None, "cases": list(CASES),
         "eboot_sha256": hashlib.sha256(eboot.read_bytes()).hexdigest(),
         "shader_sha256": shader_hashes,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),

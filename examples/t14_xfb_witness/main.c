@@ -34,6 +34,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef PS5VK_T14_NO_FRAGMENT
+#define PS5VK_T14_NO_FRAGMENT 0
+#endif
+
 enum { EXTENT = 16, ORDER_POINTS = 6000, CAPTURE_BYTES = 262144, COUNTER_BYTES = 64 };
 #define SENTINEL UINT32_C(0xdeadbeef)
 static const uint64_t fence_timeout = UINT64_C(300000000);
@@ -325,7 +329,8 @@ static int run_witness(void)
     };
     VkGraphicsPipelineCreateInfo pipeline_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .stageCount = 3, .pStages = stages, .pVertexInputState = &vertex_input,
+        .stageCount = PS5VK_T14_NO_FRAGMENT ? 2 : 3, .pStages = stages,
+        .pVertexInputState = &vertex_input,
         .pInputAssemblyState = &assembly, .pViewportState = &viewport_state,
         .pRasterizationState = &raster, .pMultisampleState = &multisample,
         .pColorBlendState = &blend, .layout = layout, .renderPass = pass, .subpass = 0,
@@ -333,7 +338,8 @@ static int run_witness(void)
     TRY(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &capture));
     stages[1].module = streams_geometry;
     TRY(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &streams));
-    ps5log_printf(PS5LOG_MARK, "T14_XFB_WITNESS_PIPELINES created=2");
+    ps5log_printf(PS5LOG_MARK, "T14_XFB_WITNESS_PIPELINES created=2 stages=%u",
+                  pipeline_info.stageCount);
 
     const VkBufferUsageFlags capture_usage = VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
     TRY(make_buffer(device, CAPTURE_BYTES, capture_usage, &buffer0));
