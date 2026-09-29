@@ -28,18 +28,21 @@
 #include "readback_commands_ps5.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum { W = 64, H = 64, SOURCE = 256 * 1024, BUFFER = 64 * 1024 };
 static unsigned char source[SOURCE], buffer_bytes[BUFFER];
+static unsigned char *source_ptr = source, *buffer_ptr = buffer_bytes;
+static size_t source_size = SOURCE;
 static VkDeviceSize buffer_size = BUFFER;
 VkResult ps5vk_image_span(VkDevice d, VkImage i, void **p, VkDeviceSize *n)
-{ (void)d; (void)i; *p = source; *n = SOURCE; return VK_SUCCESS; }
+{ (void)d; (void)i; *p = source_ptr; *n = source_size; return VK_SUCCESS; }
 VkResult ps5vk_buffer_span(VkDevice d, VkBuffer b, VkDeviceSize offset, VkDeviceSize size,
     void **p, VkDeviceSize *n)
 {
     (void)d; (void)b; assert(!offset && size == VK_WHOLE_SIZE);
-    *p = buffer_bytes; *n = buffer_size; return VK_SUCCESS;
+    *p = buffer_ptr; *n = buffer_size; return VK_SUCCESS;
 }
 
 static uint32_t texel(uint32_t x, uint32_t y) { return 0xff000000u | (y << 8) | x; }
@@ -93,6 +96,69 @@ static VkResult plan(const struct ps5vk_operation *ops, unsigned count,
 {
     struct ps5vk_layout_state layouts = {0};
     return ps5vk_readback_regions_commands(&device, ops, count, &layouts, out, site);
+}
+
+static void full_pe_backbuffer_readback(void)
+{
+    /* D3D8 CopyRects and D3D9 GetRenderTargetData both call DXVK's
+     * copyImageToBuffer over the full 1920x1080 backbuffer. Unlike the 64x64
+     * control, its last row ends inside a 128-pixel-high tile. Use a unique
+     * texel at every coordinate so a wrong tile or pitch cannot pass. */
+    enum { WIDTH = 1920, HEIGHT = 1080, PREFIX = 4096, GUARD = 64 };
+    const size_t surface = ps5vk_color_64k_rx_surface_size(4, WIDTH, HEIGHT);
+    assert(surface != SIZE_MAX && surface <= SIZE_MAX - 131071u);
+    const size_t source_bytes = (surface + 131071u) & ~(size_t)131071u;
+    const size_t pixels_bytes = (size_t)WIDTH * HEIGHT * 4u;
+    const size_t destination_bytes = PREFIX + pixels_bytes + GUARD;
+    unsigned char *tiled = malloc(source_bytes), *linear = malloc(destination_bytes);
+    assert(tiled && linear);
+    memset(tiled, 0xa5, source_bytes);
+    memset(linear, 0xcd, destination_bytes);
+    for (uint32_t y = 0; y < HEIGHT; ++y)
+        for (uint32_t x = 0; x < WIDTH; ++x) {
+            const uint32_t value = 0xff000000u | (y * WIDTH + x);
+            const size_t at = ps5vk_rgba8_64k_rx_offset(x, y, WIDTH);
+            assert(at <= source_bytes - 4u);
+            memcpy(tiled + at, &value, sizeof(value));
+        }
+    const struct VkImage_T saved_image = image;
+    image.info.format = VK_FORMAT_B8G8R8A8_UNORM;
+    image.info.extent = (VkExtent3D){WIDTH, HEIGHT, 1};
+    image.info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    source_ptr = tiled; source_size = source_bytes;
+    buffer_ptr = linear; buffer_size = destination_bytes;
+    struct ps5vk_operation ops[5] = {
+        global(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+        layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
+        copy(PREFIX, WIDTH, HEIGHT, 0, 0, WIDTH, HEIGHT),
+        global(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_HOST_READ_BIT),
+        layout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+    };
+    struct ps5vk_readback_regions regions;
+    unsigned site = 0;
+    assert(plan(ops, 5, &regions, &site) == VK_SUCCESS && regions.count == 1);
+    assert(regions.target[0].layer_stride == source_bytes);
+    assert(!ps5vk_readback_region_detile(&image, regions.target[0].layer_stride,
+        &regions.target[0].region, linear, destination_bytes, tiled, source_bytes));
+    for (uint32_t y = 0; y < HEIGHT; ++y)
+        for (uint32_t x = 0; x < WIDTH; ++x) {
+            uint32_t actual;
+            memcpy(&actual, linear + PREFIX + ((size_t)y * WIDTH + x) * 4u,
+                sizeof(actual));
+            assert(actual == (0xff000000u | (y * WIDTH + x)));
+        }
+    for (size_t b = 0; b < PREFIX; ++b) assert(linear[b] == 0xcd);
+    for (size_t b = PREFIX + pixels_bytes; b < destination_bytes; ++b)
+        assert(linear[b] == 0xcd);
+    image = saved_image;
+    source_ptr = source; source_size = SOURCE;
+    buffer_ptr = buffer_bytes; buffer_size = BUFFER;
+    free(linear); free(tiled);
 }
 
 int main(void)
@@ -300,6 +366,7 @@ int main(void)
         b.srcAccessMask = 0; b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         assert(!ps5vk_colour_readback_dependency_barrier(&b));
     }
+    full_pe_backbuffer_readback();
     puts("readback regions: pass (host tiled surface, no GPU execution)");
     return 0;
 }
