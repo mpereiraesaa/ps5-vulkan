@@ -45,6 +45,17 @@ artifact-bound run is in
 [VALIDATION.md](../VALIDATION.md#full-size-bgra8-gpu-readback-witness-for-dxvk-d3d89-2026-09-29).
 It narrows the native D3D8/9 readback risk; PE pixel output still needs its
 own Prospero Win run.
+The full-size copy to a nonzero staging-buffer offset initially refused at
+the native postlude: the strict whole-surface executor was selected for a
+region it cannot address. The selector now routes that shape to the general
+region executor. Its 4,096-byte-offset, two-frame GPU oracle passed twice with
+zero pixel, prefix or guard mismatches; the exact failure and accepted runs
+are in [VALIDATION.md](../VALIDATION.md#dxvk-full-size-bgra8-readback-at-a-staging-offset-2026-09-29).
+This still does not establish a PE D3D8/9 readback or alter the 45/62 ledger.
+The current frozen 879-case CTS selection has 49 failures on both this change
+and the exact main baseline, with no fixed, broken or moved cases in the
+side-by-side receipt comparison. That neutral result is recorded in the same
+validation entry; it is not a clean CTS acceptance claim.
 
 The standalone PE map control at
 [`examples/dxvk_pe_vkmap_probe/main.c`](../examples/dxvk_pe_vkmap_probe/main.c)

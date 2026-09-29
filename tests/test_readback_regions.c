@@ -143,6 +143,25 @@ static void full_pe_backbuffer_readback(void)
     unsigned site = 0;
     assert(plan(ops, 5, &regions, &site) == VK_SUCCESS && regions.count == 1);
     assert(regions.target[0].layer_stride == source_bytes);
+    /* The same four-op postlude as the native two-frame witness must choose
+     * the region executor when DXVK's staging slice begins after a prefix.
+     * The strict whole-surface executor only accepts a zero buffer offset. */
+    struct ps5vk_operation postlude[4] = {
+        layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
+        copy(PREFIX, 0, 0, 0, 0, WIDTH, HEIGHT),
+        global(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT),
+        global(VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+            VK_PIPELINE_STAGE_HOST_BIT, 0)
+    };
+    postlude[2].buffer_barrier.buffer = staging;
+    struct ps5vk_readback_partition partition;
+    assert(!ps5vk_readback_postlude_strict_shape(postlude, 4, &partition));
+    assert(plan(postlude, 4, &regions, &site) == VK_SUCCESS &&
+        regions.count == 1 && regions.target[0].region.bufferOffset == PREFIX);
+    postlude[1].copy_region.bufferOffset = 0;
+    assert(ps5vk_readback_postlude_strict_shape(postlude, 4, &partition));
     assert(!ps5vk_readback_region_detile(&image, regions.target[0].layer_stride,
         &regions.target[0].region, linear, destination_bytes, tiled, source_bytes));
     for (uint32_t y = 0; y < HEIGHT; ++y)

@@ -17,6 +17,7 @@ from lab import lab_root  # noqa: E402
 
 PROFILE = "dxvk-bgra-full-readback-public-sdk-witness"
 WIDTH, HEIGHT, FRAMES = 1920, 1080, 2
+PREFIX = 4096
 
 
 def run(*command: str, env: dict | None = None) -> None:
@@ -99,6 +100,7 @@ def main() -> None:
     sha256 = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
     artifact = {"profile": PROFILE, "width": WIDTH, "height": HEIGHT,
                 "frames": FRAMES, "bytes_per_frame": WIDTH * HEIGHT * 4,
+                "buffer_offset": PREFIX,
                 "eboot_sha256": sha256(eboot), "source_sha256": sha256(source),
                 "libps5vk_sha256": sha256(archive)}
     artifact_path = dist.parent / "artifact.json"

@@ -11,13 +11,13 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from build_dxvk_bgra_full_readback import FRAMES, HEIGHT, PROFILE, WIDTH  # noqa: E402
+from build_dxvk_bgra_full_readback import FRAMES, HEIGHT, PREFIX, PROFILE, WIDTH  # noqa: E402
 from run_consumer import close_and_confirm, control, running, wait_for_log  # noqa: E402
 
 START = re.compile(r"DXVK_BGRA_FULL_READBACK_START width=(\d+) height=(\d+) bytes=(\d+) "
-                   r"usage=(\d+) frames=(\d+)")
+                   r"offset=(\d+) usage=(\d+) frames=(\d+)")
 FRAME = re.compile(r"DXVK_BGRA_FULL_READBACK_FRAME frame=(\d+) mismatches=(\d+) "
-                   r"guard=(\d+) digest=([0-9a-f]{8}) fence=complete")
+                   r"prefix=(\d+) guard=(\d+) digest=([0-9a-f]{8}) fence=complete")
 RESULT = re.compile(r"DXVK_BGRA_FULL_READBACK_RESULT frames=(\d+) passed=(\d+)")
 RETIRED = re.compile(r"DXVK_BGRA_FULL_READBACK_RETIRED resources=(\w+)")
 
@@ -34,7 +34,8 @@ def expected_digest(frame: int) -> str:
 def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     if (artifact.get("profile") != PROFILE or artifact.get("width") != WIDTH or
             artifact.get("height") != HEIGHT or artifact.get("frames") != FRAMES or
-            artifact.get("bytes_per_frame") != WIDTH * HEIGHT * 4):
+            artifact.get("bytes_per_frame") != WIDTH * HEIGHT * 4 or
+            artifact.get("buffer_offset") != PREFIX):
         raise ValueError("unexpected BGRA readback artifact")
     if (receipt.get("protocol") != "ps5log/1" or receipt.get("title") != "PPSA99994" or
             receipt.get("app") != "ps5vk" or receipt.get("transport") != "tcp" or
@@ -45,17 +46,19 @@ def verify(log: bytes, receipt: dict, artifact: dict) -> dict:
     starts, frames = START.findall(content), FRAME.findall(content)
     results, retired = RESULT.findall(content), RETIRED.findall(content)
     if (len(starts) != 1 or starts[0] != (str(WIDTH), str(HEIGHT),
-            str(WIDTH * HEIGHT * 4), "23", str(FRAMES)) or
+            str(WIDTH * HEIGHT * 4), str(PREFIX), "23", str(FRAMES)) or
             [int(frame[0]) for frame in frames] != list(range(FRAMES)) or
             results != [(str(FRAMES), str(FRAMES))] or retired != ["clean"] or
             "DXVK_BGRA_FULL_READBACK_FAILURE" in content):
         raise ValueError("missing, repeated or failed readback phase")
     checked = {}
-    for index, mismatches, guard, digest in frames:
+    for index, mismatches, prefix, guard, digest in frames:
         frame = int(index)
-        checked[index] = {"mismatches": int(mismatches), "guard": int(guard),
+        checked[index] = {"mismatches": int(mismatches), "prefix": int(prefix),
+                          "guard": int(guard),
                           "digest": digest,
-                          "passed": int(mismatches) == 0 and int(guard) == 0 and
+                          "passed": int(mismatches) == 0 and int(prefix) == 0 and
+                                    int(guard) == 0 and
                                     digest == expected_digest(frame)}
     return {"strict_verified": all(item["passed"] for item in checked.values()),
             "run_id": receipt["run_id"], "frames": checked,

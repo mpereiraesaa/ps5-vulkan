@@ -85,6 +85,26 @@ static inline VkResult ps5vk_readback_partition(
     return VK_SUCCESS;
 }
 
+/* The strict whole-surface executor writes its destination from byte zero.
+ * A copy into a DXVK staging slice at a nonzero offset belongs to the region
+ * executor, even when its four-operation barrier shape otherwise looks like
+ * the strict CTS sequence. Classify before either executor mutates layouts. */
+static inline int ps5vk_readback_postlude_strict_shape(
+    const struct ps5vk_operation *ops, unsigned count,
+    struct ps5vk_readback_partition *out)
+{
+    if (ps5vk_readback_partition(ops, count, out) != VK_SUCCESS ||
+        out->readback_count != 4)
+        return 0;
+    const unsigned first = out->readback_first;
+    return ops[first].type == PS5VK_IMAGE_BARRIER &&
+        ops[first + 1].type == PS5VK_COPY_IMAGE_BUFFER &&
+        ops[first + 1].copy_region.bufferOffset == 0 &&
+        ops[first + 2].type == PS5VK_BARRIER &&
+        ops[first + 3].type == PS5VK_BARRIER &&
+        ops[first + 2].buffer_barrier.buffer == ops[first + 1].copy_destination;
+}
+
 /* The same bounded full-color readback may follow a render pass or be a
  * separate submission. This only validates and stages the layout: the caller
  * must flush CB/DB caches and observe its exact GPU serial before detiling or

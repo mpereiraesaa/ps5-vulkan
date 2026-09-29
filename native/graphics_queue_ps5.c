@@ -1971,14 +1971,7 @@ static VkResult prepare_shape(VkDevice d,const struct ps5vk_submission *s,void *
          * of its operations is emitted. */
         struct ps5vk_readback_partition strict={0};
         const int strict_shape=readback &&
-            ps5vk_readback_partition(postlude,postlude_count,&strict)==VK_SUCCESS &&
-            strict.readback_count==4 &&
-            postlude[strict.readback_first].type==PS5VK_IMAGE_BARRIER &&
-            postlude[strict.readback_first+1].type==PS5VK_COPY_IMAGE_BUFFER &&
-            postlude[strict.readback_first+2].type==PS5VK_BARRIER &&
-            postlude[strict.readback_first+3].type==PS5VK_BARRIER &&
-            postlude[strict.readback_first+2].buffer_barrier.buffer==
-                postlude[strict.readback_first+1].copy_destination;
+            ps5vk_readback_postlude_strict_shape(postlude,postlude_count,&strict);
         if(readback && !strict_shape) {
             struct ps5vk_readback_regions regions;
             unsigned regions_site=0;

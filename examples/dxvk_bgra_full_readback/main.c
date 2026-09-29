@@ -13,7 +13,8 @@
 #include <time.h>
 #include <unistd.h>
 
-enum { WIDTH = 1920, HEIGHT = 1080, BYTES = WIDTH * HEIGHT * 4, GUARD = 64,
+enum { WIDTH = 1920, HEIGHT = 1080, BYTES = WIDTH * HEIGHT * 4,
+       PREFIX = 4096, GUARD = 64,
        FRAMES = 2 };
 static const uint64_t fence_timeout = UINT64_C(300000000);
 
@@ -112,7 +113,8 @@ static int run_witness(void)
 
     for (unsigned frame = 0; frame < FRAMES; ++frame) {
         VkBufferCreateInfo buffer_info = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .size = BYTES + GUARD, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            .size = PREFIX + BYTES + GUARD,
+            .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
         TRY(vkCreateBuffer(device, &buffer_info, NULL, &buffers[frame]));
         vkGetBufferMemoryRequirements(device, buffers[frame], &requirements);
@@ -121,7 +123,7 @@ static int run_witness(void)
         TRY(vkBindBufferMemory(device, buffers[frame], memories[frame], 0));
         TRY(vkMapMemory(device, memories[frame], 0, VK_WHOLE_SIZE, 0,
                         (void **)&mapped[frame]));
-        memset(mapped[frame], 0xcd, BYTES + GUARD);
+        memset(mapped[frame], 0xcd, PREFIX + BYTES + GUARD);
         VkMappedMemoryRange range = {.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
             .memory = memories[frame], .size = VK_WHOLE_SIZE};
         TRY(vkFlushMappedMemoryRanges(device, 1, &range));
@@ -137,8 +139,8 @@ static int run_witness(void)
     VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     TRY(vkCreateFence(device, &fence_info, NULL, &fence));
     ps5log_printf(PS5LOG_MARK,
-        "DXVK_BGRA_FULL_READBACK_START width=%u height=%u bytes=%u usage=%u frames=%u",
-        WIDTH, HEIGHT, BYTES, (unsigned)image_info.usage, FRAMES);
+        "DXVK_BGRA_FULL_READBACK_START width=%u height=%u bytes=%u offset=%u usage=%u frames=%u",
+        WIDTH, HEIGHT, BYTES, PREFIX, (unsigned)image_info.usage, FRAMES);
 
     for (unsigned frame = 0; frame < FRAMES; ++frame) {
         VkCommandBuffer command = commands[frame];
@@ -175,7 +177,8 @@ static int run_witness(void)
             .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
         vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &image_barrier);
-        VkBufferImageCopy copy = {.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        VkBufferImageCopy copy = {.bufferOffset = PREFIX,
+            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
             .imageExtent = {WIDTH, HEIGHT, 1}};
         vkCmdCopyImageToBuffer(command, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                buffers[frame], 1, &copy);
@@ -199,16 +202,20 @@ static int run_witness(void)
             .memory = memories[frame], .size = VK_WHOLE_SIZE};
         TRY(vkInvalidateMappedMemoryRanges(device, 1, &range));
         const uint8_t expected[4] = {0, frame ? 255 : 0, frame ? 0 : 255, 255};
-        unsigned mismatches = 0, guard_mismatches = 0;
+        unsigned mismatches = 0, prefix_mismatches = 0, guard_mismatches = 0;
+        for (size_t offset = 0; offset < PREFIX; ++offset)
+            prefix_mismatches += mapped[frame][offset] != 0xcd;
         for (size_t offset = 0; offset < BYTES; offset += 4)
             for (unsigned component = 0; component < 4; ++component)
-                mismatches += mapped[frame][offset + component] != expected[component];
-        for (size_t offset = BYTES; offset < BYTES + GUARD; ++offset)
+                mismatches += mapped[frame][PREFIX + offset + component] != expected[component];
+        for (size_t offset = PREFIX + BYTES; offset < PREFIX + BYTES + GUARD; ++offset)
             guard_mismatches += mapped[frame][offset] != 0xcd;
         ps5log_printf(PS5LOG_MARK,
-            "DXVK_BGRA_FULL_READBACK_FRAME frame=%u mismatches=%u guard=%u digest=%08x fence=complete",
-            frame, mismatches, guard_mismatches, digest(mapped[frame]));
-        REQUIRE(!mismatches && !guard_mismatches, "exact BGRA pixels and guard");
+            "DXVK_BGRA_FULL_READBACK_FRAME frame=%u mismatches=%u prefix=%u guard=%u digest=%08x fence=complete",
+            frame, mismatches, prefix_mismatches, guard_mismatches,
+            digest(mapped[frame] + PREFIX));
+        REQUIRE(!mismatches && !prefix_mismatches && !guard_mismatches,
+                "exact BGRA pixels, prefix and guard");
         ++passed;
     }
     ps5log_printf(PS5LOG_MARK, "DXVK_BGRA_FULL_READBACK_RESULT frames=%u passed=%u",

@@ -6871,3 +6871,49 @@ This is full-surface native Vulkan readback evidence, not a PE D3D9 or D3D8
 application pixel result. The PE controls and x86 mapped-memory probe still
 need execution through Prospero Win against one exact SDK identity. The DXVK
 requirement ledger remains 45/62.
+
+## DXVK full-size BGRA8 readback at a staging offset (2026-09-29)
+
+DXVK D3D8/9 can copy a full backbuffer into a slice that starts after a
+buffer prefix. The earlier native witness copied to offset zero, while the
+host region test already covered a 4,096-byte prefix. Changing the 1920x1080
+two-frame witness to copy at that offset exposed a driver refusal: eboot
+SHA-256 `53d9a9ad265947c89f6410b05b8292195a832e335e48558f966ed573c9d84f92`,
+run `20260929T031636300Z_PPSA99994_ps5vk_0x5c878f19564e`, log SHA-256
+`0e20f989e07bba49e89c0f32a97c1e0b0971408891d99181c09aba9ada7654be`.
+The postlude's four-operation shape selected the strict whole-surface
+executor, which requires buffer offset zero; `vkQueueSubmit` refused at
+`phase=postlude site=6` before the first frame.
+
+The postlude selector now chooses the general region executor when the copy
+has a nonzero buffer offset. A host regression checks that boundary and the
+full 1920x1080 detile at the same offset. With SDK archive SHA-256
+`195e1c65e1e7b69e74837eecaa6eb8c14cb54685be65fafd3f538c475dbfde80`,
+signed eboot SHA-256
+`427e675bd858713f78f81e9addeab568be2a3f8585bffed35b543eba6d41e811`
+passed two strict PS5 runs:
+`20260929T032044447Z_PPSA99994_ps5vk_0x5cc155c9199c` (log SHA-256
+`574cf656aab5254112030dd1a472734c4f8fd31546d5530b0ef362661bdffe54`)
+and `20260929T032109196Z_PPSA99994_ps5vk_0x5cc718d67cfe` (log SHA-256
+`def78888888d92b8cbd4e0fe4289515b4d396f813a20917b37647f6684812abd`).
+Both runs verified every BGRA texel on two frames, with zero prefix or guard
+changes, the expected digests `856805c5` and `b815bdc5`, clean retirement,
+and the prior payload restored. Firmware was not independently queried; the
+latest owner report was 12.02. This is native Vulkan evidence for the staging
+offset, not PE D3D8/9 pixel output. The DXVK ledger remains 45/62.
+
+The frozen 879-case acceptance selection was measured on both the candidate
+and an exact `dec886e9` main build with the same selection SHA-256
+`31ff8907185593bd9ae803e09ead776eee2c866a2c196ec279fbbf0e61451c28`.
+The candidate eboot SHA-256
+`6677aaa8f06f1cc85a42403f69d382e98913003d13deffaec9d3f6f3fd55ee69`
+(run `20260929T032752149Z_PPSA99994_upstream-cts_0x5d24ea8108fc`, log SHA-256
+`d3a8395eeee84c550841ab7d190205c5778f6820c4b4f92021bee044a03ab10f`)
+and the main eboot SHA-256
+`2edff5e86bb2c398448d875cbbe77c28915e81d29f4d48e8dc493b3d4fb8961c`
+(run `20260929T033201118Z_PPSA99994_upstream-cts_0x5d5ee1e97db0`, log SHA-256
+`1298de5e7f1a1ffd55a62bac555c67c9c0fb957ce9826dc20b681045295e0dc8`)
+both completed cleanly with **830 Pass, 49 Fail**. The 49 failures were the
+mandatory-feature check and 48 multiview cases refusing device creation;
+`decode_run.py --against` found **0 fixed, 0 broke, 0 moved**. This is a neutral
+delta, not a passing acceptance run. Neither receipt promotes a matrix row.
