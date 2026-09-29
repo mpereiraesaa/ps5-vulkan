@@ -198,6 +198,21 @@ int main(void)
             memcpy(&raw, buffer_bytes + 16384 + ((size_t)y * W + x) * 4, 4);
             assert(raw == texel(x, y));
         }
+    /* The PE D3D10/11 pixel oracle copies one centre texel from a sampled
+     * BGRA8 backbuffer to a one-texel staging texture. Its Vulkan region has
+     * zero row length/image height (tight), zero buffer offset, and a nonzero
+     * image offset. Prove both the colour and untouched staging guards. */
+    sampled[1] = copy(0, 0, 0, W / 2, H / 2, 1, 1);
+    assert(ps5vk_readback_region_bytes(&image, &sampled[1].copy_region) == 4);
+    assert(plan(sampled, 4, &regions, &site) == VK_SUCCESS && regions.count == 1);
+    memset(buffer_bytes, 0xcd, sizeof(buffer_bytes));
+    assert(!ps5vk_readback_region_detile(&image, regions.target[0].layer_stride,
+        &regions.target[0].region, buffer_bytes, sizeof(buffer_bytes), source, SOURCE));
+    uint32_t centre;
+    memcpy(&centre, buffer_bytes, sizeof(centre));
+    assert(centre == texel(W / 2, H / 2));
+    for (size_t b = sizeof(centre); b < sizeof(buffer_bytes); ++b)
+        assert(buffer_bytes[b] == 0xcd);
     image.info.format = VK_FORMAT_R8G8B8A8_UNORM;
     image.info.usage &= ~VK_IMAGE_USAGE_SAMPLED_BIT;
     image.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
