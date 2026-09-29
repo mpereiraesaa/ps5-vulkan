@@ -158,9 +158,9 @@ The completed negotiation work and remaining bounded contracts are:
    `transformFeedback` and `geometryStreams`; both are public through
    `VK_EXT_transform_feedback` with the geometry-stage capture path,
    counters, streams, DrawIndirectByteCount and stream queries, on the
-   public-SDK capture witness. A D3D11 stream-output shader with no pixel
-   shader bound still needs a pipeline without a fragment stage, which the
-   frontend refuses.
+   public-SDK capture witness. The D3D11 stream-output shape with no pixel
+   shader and rasterizer discard also passed its two-stage native capture
+   oracle twice; other no-fragment pipeline shapes remain outside that proof.
 3. **What is still behind a default-off switch, and why.** These measured
    routes now ship with their bounded native witnesses:
    extended dynamic state (including dynamic topology and stride),
@@ -220,9 +220,10 @@ identified separately from changes to rendering or feature negotiation.
 2. **Implement the next actual consumer dependency.** Capture the exact
    failing Vulkan call and requested shape. Complete it even if outside the
    old tranche labels; add a fast host regression and one bounded native
-   witness. A known outstanding shape is stream output without a fragment
-   stage. Maintenance4 still rejects compound LocalSizeId specialization
-   expressions and wider producer/narrower consumer varying vectors. These
+   witness. Stream output without a fragment stage has a bounded native
+   receipt; PE execution of that shape remains unverified. Maintenance4 still
+   rejects compound LocalSizeId specialization expressions and wider
+   producer/narrower consumer varying vectors. These
    are explicit profile limits, not reasons to restore the old 1.0 gate.
 3. **Validate the PE path on the combined SDK.** Native DXVK now passes
    acquire/draw/present/readback/teardown with pixel and resource-accounting
